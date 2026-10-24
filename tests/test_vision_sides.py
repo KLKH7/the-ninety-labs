@@ -103,3 +103,12 @@ def test_the_radar_gives_the_tactical_views_the_sides_the_events_do():
     near_him = [p for f in built["frames"] for p in f["players"]
                 if abs(p["x"] - 5.0) < 0.5 and abs(p["y"] - 60.0) < 0.5]
     assert near_him and all(p["team"] == "home" for p in near_him)
+
+
+def test_law_3_judges_the_sides_s_gives_too():
+    # Twelve blue players: S re-sides them, and Law 3 still makes no side sure.
+    twelve = ([(15 + 3 * k, 5.0 + 5 * k, BLUE) for k in range(12)]
+              + [(80 + 3 * k, 10.0 + 8 * k, RED) for k in range(5)])
+    tracks, info, r = sided(twelve)
+    sides.apply(tracks, info, r)
+    assert info["law3"] is not None and all(t.side_confidence == 0.0 for t in tracks if t.team is not None)

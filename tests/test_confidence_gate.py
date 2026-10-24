@@ -106,3 +106,123 @@ def test_no_template_cue_airs_on_an_unsure_detection(persona):
     confidence = {e["id"]: e["confidence"] for e in EVENTS}
     assert UNSURE["id"] not in shown and SURE["id"] in shown
     assert all(confidence[i] >= MIN_CONFIDENCE for i in shown)
+
+
+# Team claims on an unsure side (audit Q3) ----------------------------------------------------------
+
+M1 = detected.load(detected.m1_path(detected.M1_CLIP))  # the M1 clip's pixel-detected events
+
+
+def pass_on_side(side: float | None) -> dict:
+    e = {"id": "v1", "t": 61.0, "type": "pass", "team": "away", "player": None, "confidence": 0.9,
+         "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 30.0, "ball_speed_kmh": 40.0, "outcome": "success"}
+    return compact(e | ({} if side is None else {"team_confidence": side}))
+
+
+def test_the_agents_see_how_firmly_the_side_was_told():
+    rows = [compact(e) for e in M1 if e.get("team_confidence") is not None]
+    assert rows and all("team_confidence" in r for r in rows)
+
+
+@pytest.mark.parametrize("side", [0.529, 0.96, None])  # the M1 clip's; the measured wrong-side top; unknown
+def test_a_claim_naming_a_team_on_an_unsure_side_is_held_not_rejected(side):
+    known = {"v1": pass_on_side(side)}
+    claim = Claim("Away complete a pass of 12 m.", ["v1"])
+    assert check(claim, known).ok
+    gated = confidence_gate(claim, known)
+    assert not gated.ok and gated.category == "low_confidence" and status_for(gated) == "held"
+    assert "side was told" in gated.reasons[0]
+
+
+def test_a_claim_naming_a_team_on_a_sure_side_passes():
+    claim = Claim("Away complete a pass of 12 m.", ["v1"])
+    assert confidence_gate(claim, {"v1": pass_on_side(0.97)}).ok  # above every measured wrong side
+
+
+@pytest.mark.parametrize("text", ["A completed pass of 12 m.", "a-t9 finds a-t4 with a 12 m pass."])
+def test_a_claim_that_names_no_team_is_not_held_for_its_side(text):
+    known = {"v1": pass_on_side(0.529) | {"player": "a-t9", "receiver": "a-t4"}}
+    assert confidence_gate(Claim(text, ["v1"]), known).ok
+
+
+def test_a_ground_truth_event_has_no_side_to_doubt():
+    e = compact({"id": "e1", "t": 61.0, "type": "pass", "team": "home", "player": "h7", "x": 40.0,
+                 "y": 30.0, "end_x": 52.0, "end_y": 30.0, "ball_speed_kmh": 40.0, "outcome": "success"})
+    assert confidence_gate(Claim("Home complete a pass of 12 m.", ["e1"]), {"e1": e}).ok
+
+
+def test_the_m1_clip_s_team_claims_are_all_held_today():
+    # The measured consequence on the clip the demo started from: every side told at 0.529.
+    known = {compact(e)["id"]: compact(e) for e in M1}
+    for i, e in known.items():
+        side = "Away" if e["team"] == "away" else "Home"
+        verdict = confidence_gate(Claim(f"{side} on the ball.", [i]), known)
+        assert (not verdict.ok) == (e["team_confidence"] <= 0.96), i
+
+
+def nameless_pass(side: float | None) -> dict:
+    e = {"id": "v9", "t": 61.0, "frame": 1525, "type": "pass", "team": "away", "player": None,
+         "confidence": 0.9, "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 30.0, "ball_speed_kmh": 40.0,
+         "outcome": "success", "source": "vision"}
+    return e | ({} if side is None else {"team_confidence": side})
+
+
+@pytest.mark.parametrize(("side", "named"), [(0.529, False), (None, False), (0.97, True)])
+def test_a_template_graphic_names_a_side_only_when_it_was_told_firmly(side, named):
+    # Review of #249: a template airs without the gate; when the detector named nobody it fell back
+    # to the team, so "away plays a pass" aired at 0.529.
+    ledger = InMemoryLedger()
+    asyncio.run(load_match(ledger, [nameless_pass(side)], ()))
+    texts = [c["text"] for c in asyncio.run(template_cues(ledger))]
+    assert texts and all(("away" in t) == named for t in texts), texts
+
+
+@pytest.mark.parametrize("kind", ["pass", "shot", "interception"])
+@pytest.mark.parametrize(("side", "named"), [(0.529, False), (0.97, True)])
+def test_the_describer_s_own_line_names_a_side_only_when_it_was_told_firmly(side, named, kind):
+    from ninety.speech import describe
+
+    versions = describe.event_versions(nameless_pass(side) | {"type": kind})
+    assert versions and all(("away" in v) == named for v in versions), versions
+
+
+@pytest.mark.parametrize("text", ["Los visitantes completan un pase de 12 m.", "El equipo local juega.",
+                                  "The visitors complete a pass of 12 m.", "The hosts complete a pass.",
+                                  "The visiting side complete a pass of 12 m.", "Los de casa juegan."])
+def test_a_side_named_in_other_words_is_held_too(text):
+    gated = confidence_gate(Claim(text, ["v1"]), {"v1": pass_on_side(0.529)})
+    assert not gated.ok and gated.category == "low_confidence"
+
+
+def test_a_club_s_view_is_a_team_claim_whatever_its_words():
+    claim = Claim("Our side keep the ball moving.", ["v1"])
+    known = {"v1": pass_on_side(0.529)}
+    assert confidence_gate(claim, known).ok
+    assert not confidence_gate(claim, known, team_view=True).ok
+
+
+def test_no_club_variant_is_asked_for_when_the_side_is_unsure():
+    from ninety.personalizer.cues import profiles_for
+
+    assert not [p for p in profiles_for(nameless_pass(0.529)) if p.persona == "club"]
+    assert [p for p in profiles_for(nameless_pass(0.97)) if p.persona == "club"]
+
+
+def test_a_club_variant_written_anyway_is_held_where_the_side_is_unsure():
+    # The Personalizer's re-check holds a club's-side variant however it is worded (team_view), behind
+    # profiles_for not asking for one: a stale profile list must not air "our side" at 0.529.
+    from ninety.agents.contracts import Variant
+    from ninety.personalizer.cues import verify
+
+    known = {"v1": pass_on_side(0.529)}
+    claim = Claim("A completed pass of 12 m.", ["v1"])
+    variant = Variant("club", "en", "Our side keep it moving with a pass of 12 m.", ("v1",))
+    checked = asyncio.run(verify(claim, [variant], known, None))
+    assert not checked.shown and checked.refused[0][1] == "held"
+
+
+def test_an_unnamed_event_on_an_unsure_side_reads_as_a_pass_or_a_shot():
+    from ninety.agents.cues import _text
+
+    assert _text(nameless_pass(0.529), "analyst").startswith("a pass")
+    assert _text(nameless_pass(0.529) | {"type": "shot"}, "analyst").startswith("a shot")

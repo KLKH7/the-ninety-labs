@@ -256,6 +256,21 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     return round(steps[len(steps) // 2] * 3.6, 1)
 
 
+def plausible(start: BallPoint, end: BallPoint, speed_kmh: float | None) -> bool:
+    """Whether a pass from `start` to `end` is one the ball could have made. It must go further than
+    the ball at a player's feet (CONTROL_M, GROUNDING P6), and a struck ball only slows (rolling and
+    air drag), so it cannot cover the distance faster on average than it left the foot: its speed
+    at the strike must be at least the distance over the time, less what each end's position may be
+    wrong by (RIVAL_M, the players' measured position error) over that time."""
+    d = math.hypot(end.x - start.x, end.y - start.y)
+    if d <= CONTROL_M:
+        return False
+    dt = (end.frame - start.frame) / FPS
+    if speed_kmh is None or dt <= 0:
+        return True  # nothing to compare: the pass stands on its own evidence
+    return speed_kmh / 3.6 >= (d - 2 * RIVAL_M) / dt
+
+
 def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
     `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
@@ -308,6 +323,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
             continue
         if gone is not None:
             g = path[index[gone]]
+            if not plausible(path[i], g, speed):
+                conf = 0.0  # held: no pass the ball's own path could have made (`plausible`)
             event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, outcome="fail",
                   ball_speed_kmh=speed,
                   end_x=_clip(g.x, PITCH_X), end_y=_clip(g.y, PITCH_Y), player=who)
@@ -315,6 +332,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         j = index[b.first]
         mate = b.track.team == team
         next_who = attribute(b.track, path[j], tracks)
+        if not plausible(path[i], path[j], speed):
+            conf = 0.0  # held: no pass the ball's own path could have made (`plausible`)
         event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, ball_speed_kmh=speed,
               outcome="success" if mate else "fail", player=who,
               receiver=next_who if mate else None, interceptor=None if mate else next_who,

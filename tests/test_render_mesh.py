@@ -215,6 +215,13 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         # A keeper's dive part way (from standing), and getting up from one into a walk (dive_up).
         {**base, "action": "dive", "dive": -0.4},
         {**base, "action": "walk", "phase": 2.6, "speed": 1.2, "dive_up": 0.55},
+        # A foul's reactions (fouls.py, lesson 234): the fouler's hand up, part way and full, and a
+        # team-mate's head turned to the fouled player while he walks.
+        {**base, "action": "stand", "signal": {"side": "r", "at": [40.08, 29.8, 2.06], "w": 1.0}},
+        {**base, "action": "walk", "phase": 1.4, "speed": 1.1,
+         "signal": {"side": "r", "at": [40.08, 29.8, 2.06], "w": 0.5}},
+        {**base, "action": "walk", "phase": 4.1, "speed": 1.3, "look": {"yaw": 0.9, "w": 1.0}},
+        {**base, "action": "stand", "look": {"yaw": -1.2, "w": 0.6}},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4

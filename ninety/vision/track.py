@@ -269,6 +269,32 @@ def consistency(assigned: list[tuple[Track, tuple]], ca: tuple, cb: tuple, featu
 USE_CONSISTENCY = False  # set only by the amendment's rule on dataset v2's validation clips
 
 
+# Law 3: a team has at most 11 players on the pitch, its keeper included. More tracks of one side than
+# that in one frame cannot all be that side: the kits were not told apart (two kits read as one
+# colour, a keeper or referee as a team), and then no side in the clip is sure.
+MAX_PER_SIDE = 11
+
+
+def law3(tracks: list[Track]) -> dict | None:
+    """When some frame holds more than MAX_PER_SIDE tracks of one side, every track's side
+    confidence becomes 0 (nothing team-named may air) and the evidence is returned; else None."""
+    per: dict[int, dict[str, int]] = {}
+    for t in tracks:
+        if t.team is None:
+            continue
+        for f in t.frames:
+            per.setdefault(f, {}).setdefault(t.team, 0)
+            per[f][t.team] += 1
+    over = [f for f, c in per.items() if max(c.values()) > MAX_PER_SIDE]
+    if not over:
+        return None
+    for t in tracks:
+        if t.team is not None:
+            t.side_confidence = 0.0
+    return {"frames_over": len(over), "frames": len(per),
+            "most": max(max(c.values()) for c in per.values())}
+
+
 def assign_teams(tracks: list[Track]) -> dict:
     """Give each track a team (or None) and say how: the two kit colours, which one is home and
     why, and how many tracks were left unassigned. The decision is recorded, so a wrong side can
@@ -338,7 +364,9 @@ def assign_teams(tracks: list[Track]) -> dict:
         k.team = "away" if mx >= 52.5 else "home"
         k.side_confidence = round(min(1.0, abs(mx - 52.5) / 52.5), 3)
     kits = [[round(v, 3) for v in c] for c in (ca, cb)]
+    impossible = law3(tracks)
     return {
+        "law3": impossible,
         "feature": feature,
         "kits": {"home": kits[1 - away], "away": kits[away]},
         "reason": reason,

@@ -102,6 +102,8 @@ def apply(tracks: list[tr.Track], info: dict, rows: list[dict], weights=WEIGHTS)
         team = "home" if p >= 0.5 else "away"
         changed += team != t.team
         t.team, t.side_confidence = team, round(max(p, 1 - p), 3)
+    # Law 3 judges the sides S gives too: more than 11 of one side in a frame and none is sure.
+    info["law3"] = tr.law3(tracks)
     return changed
 
 
