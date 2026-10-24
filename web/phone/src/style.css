@@ -663,3 +663,7 @@ ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.18
 .more svg circle { fill: currentColor; stroke: none; }
 :root { --field-a: oklch(0.3 0.06 275); --field-b: oklch(0.3 0.075 10); }
 :root, :root.ios { --pitch: #2b3a31; --pitch-stripe: #2b3a31; }
+/* The pitch is the card itself: full width, radius 20, no frame (Coordinator, Oct 24). */
+.pitch-card { background: transparent; padding: 0; }
+.pitch-card .map { border-radius: 20px; }
+#live-summary .section-title { text-align: center; }

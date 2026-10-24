@@ -1938,6 +1938,10 @@ function renderStats(st: MatchData["stats"][number]) {
   }
   $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
+  // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
+  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
+  $("summary-rows").replaceChildren(...summary);
+  $("live-summary").hidden = summary.length === 0;
 }
 
 // --- the shot map: detected shots up to the clock, those the fact-checker would let through -----
