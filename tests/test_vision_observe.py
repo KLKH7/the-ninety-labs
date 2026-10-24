@@ -52,13 +52,31 @@ def test_players_a_camera_makes_too_tall_or_too_short_are_not_trusted_and_not_pl
         assert all(d["x"] is None for d in r["players"]) and r["ball"][0]["x"] is None
 
 
-def test_the_band_holds_its_ends_and_the_markings_no_longer_decide():
+def test_the_band_holds_its_ends_and_on_the_broadcast_the_markings_must_agree():
     lo, hi = observe.HEIGHT_BAND
-    assert observe.place(row(lo + 0.002, markings_ok=False))["camera"]["ok"]  # heights decide now
+    assert observe.place(row(lo + 0.002))["camera"]["ok"]
     assert observe.place(row(hi - 0.002))["camera"]["ok"]
     assert not observe.place(row(lo - 0.01))["camera"]["ok"]
     assert not observe.place(row(hi + 0.01))["camera"]["ok"]
-    assert observe.place(row(markings_ok=False))["camera"]["markings_ok"] is False  # kept, for the record
+    # Gate B3 (lesson 230): heights in the band and markings that do not fit is not a camera.
+    assert not observe.place(row(markings_ok=False))["camera"]["ok"]
+    assert observe.place(row(markings_ok=False))["camera"]["heights_ok"] is False
+    # A fixed lens is judged by its heights alone.
+    assert observe.place(row(markings_ok=False), markings=False)["camera"]["ok"]
+
+
+def test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted():
+    # Validation seed 2042's failure: every frame's camera 28 m wrong the same way, players the
+    # right height through it (the same camera, moved), the marking fit failing. The neighbours
+    # agree with each other, so only the markings can stop it.
+    rows = []
+    for f in range(11):
+        r = wrong_place_row(28.0, f)
+        r["camera"]["ok"] = False  # the marking fit's own verdict
+        rows.append(observe.place(r))
+    rows = observe.agree(rows)
+    assert not any(r["camera"]["ok"] for r in rows)
+    assert all(r["players"][0]["x"] is None for r in rows)
 
 
 def test_with_no_player_to_measure_the_markings_verdict_stands():
@@ -67,8 +85,9 @@ def test_with_no_player_to_measure_the_markings_verdict_stands():
 
 
 def test_the_band_is_the_committed_validation_measurement():
-    body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())
-    assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
+    body = json.loads((ROOT / "docs/eval/band-broadcast.json").read_text())
+    assert list(observe.HEIGHT_BAND) == body["broadcast"]["band"] == [0.966, 1.121]
+    assert not any(s >= 900000 for s in body["seeds"])  # validation clips only
 
 
 def view_at(dx: float) -> pitch.View:

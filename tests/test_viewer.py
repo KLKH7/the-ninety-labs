@@ -105,14 +105,15 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (ninety/agents/live.py)
+    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-e2" in on_air(page):
+        if "insight-m-e2" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    assert set(on_air(page)) == {"insight-e2", "cue-e2-analyst"}
+    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
+    assert set(on_air(page)) == {"insight-m-e2"}
     assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
@@ -179,8 +180,8 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     page.keyboard.press("3")
     play_to(page, 62.85)
     # mutation: say every line whose start is behind the clock (no SEEK_S guard) -> ad-e1 is said late
-    assert narrator(page)["spoken"] == ["ad-insight-e2"]
-    assert "ad-insight-e2" in on_air(page)
+    assert narrator(page)["spoken"] == ["ad-insight-m-e2"]
+    assert "ad-insight-m-e2" in on_air(page)
     assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
     assert not errors
 

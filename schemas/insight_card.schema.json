@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/insight_card.schema.json",
+  "title": "InsightCard",
+  "description": "A 'hidden stat' card the Insight Scout pushes to the phone (ninety/agents/scout.py). Only verified cards are written; text and why.answer.text passed the insight fact-check, and every number in them is a cited fact's, computed by code from tracked positions and detected events. Pitch coordinates are metres, x 0..105, y 0..68; home attacks toward x = 105.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "t",
+    "minute",
+    "team",
+    "club",
+    "kind",
+    "headline",
+    "text",
+    "status",
+    "source",
+    "evidence",
+    "visual",
+    "why",
+    "spoken"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "t": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Match time of the moment, seconds."
+    },
+    "minute": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "team": {
+      "enum": [
+        "home",
+        "away"
+      ],
+      "description": "For joins only; fans are shown club."
+    },
+    "club": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "line_break",
+        "overload",
+        "counter_press",
+        "pass_options",
+        "shape",
+        "counter"
+      ]
+    },
+    "headline": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "const": "verified"
+    },
+    "source": {
+      "enum": [
+        "code",
+        "model"
+      ],
+      "description": "Who worded text."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "visual": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/visual"
+        }
+      ]
+    },
+    "why": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "question",
+            "answer"
+          ],
+          "properties": {
+            "question": {
+              "type": "string"
+            },
+            "answer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "text",
+                "evidence",
+                "visual"
+              ],
+              "properties": {
+                "status": {
+                  "const": "verified"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "visual": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/visual"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "names": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "How to label each player the visual shows, by track id: a gated team-sheet name or a role, never an id."
+    },
+    "spoken": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The card as spoken to a screen-reader user and by the Describer: the text plus where it happened in words, fact-checked, with no visual reference."
+    },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3,
+      "description": "Suggested next questions for /api/ask."
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      ],
+      "description": "[x, y] or [x, y, track id]."
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/point"
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "fact",
+        "t",
+        "team",
+        "club",
+        "geometry"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "line_break",
+            "overload",
+            "pass_options",
+            "counter_press",
+            "shape",
+            "wind_map",
+            "channels",
+            "counter",
+            "one_two",
+            "offside"
+          ]
+        },
+        "fact": {
+          "type": "string"
+        },
+        "t": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "team": {
+          "enum": [
+            "home",
+            "away",
+            null
+          ]
+        },
+        "club": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "geometry": {
+          "type": "object",
+          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id]. channels: bands [{channel, y0, y1, share}], minute_from, minute_to. counter: from (regain), to (shot), seconds. one_two: from, via, to. offside: line_x (the offside line across the pitch), receiver, second_last, ball, attackers, defenders, verdict, margin_m; too_close and unsure are drawn as uncertain and never called.",
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/point"
+            },
+            "to": {
+              "$ref": "#/$defs/point"
+            },
+            "bypassed": {
+              "$ref": "#/$defs/points"
+            },
+            "zone": {
+              "type": "object",
+              "required": [
+                "x0",
+                "x1",
+                "y0",
+                "y1"
+              ],
+              "properties": {
+                "x0": {
+                  "type": "number"
+                },
+                "x1": {
+                  "type": "number"
+                },
+                "y0": {
+                  "type": "number"
+                },
+                "y1": {
+                  "type": "number"
+                }
+              }
+            },
+            "home": {
+              "$ref": "#/$defs/points"
+            },
+            "away": {
+              "$ref": "#/$defs/points"
+            },
+            "passer": {
+              "$ref": "#/$defs/point"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/point"
+                }
+              ]
+            },
+            "open": {
+              "$ref": "#/$defs/points"
+            },
+            "marked": {
+              "$ref": "#/$defs/points"
+            },
+            "radius_m": {
+              "type": "number"
+            },
+            "ball": {
+              "$ref": "#/$defs/point"
+            },
+            "pressers": {
+              "$ref": "#/$defs/points"
+            },
+            "minute": {
+              "type": "integer"
+            },
+            "t_from": {
+              "type": "number"
+            },
+            "t_to": {
+              "type": "number"
+            },
+            "for": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "against": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/points"
+              }
+            },
+            "players": {
+              "$ref": "#/$defs/points"
+            },
+            "bands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "channel",
+                  "y0",
+                  "y1",
+                  "share"
+                ],
+                "properties": {
+                  "channel": {
+                    "enum": [
+                      "left",
+                      "centre",
+                      "right"
+                    ]
+                  },
+                  "y0": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "share": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            },
+            "minute_from": {
+              "type": "integer"
+            },
+            "minute_to": {
+              "type": "integer"
+            },
+            "via": {
+              "$ref": "#/$defs/point"
+            },
+            "seconds": {
+              "type": "number"
+            },
+            "line_x": {
+              "type": "number"
+            },
+            "receiver": {
+              "$ref": "#/$defs/point"
+            },
+            "second_last": {
+              "$ref": "#/$defs/point"
+            },
+            "attackers": {
+              "$ref": "#/$defs/points"
+            },
+            "defenders": {
+              "$ref": "#/$defs/points"
+            },
+            "verdict": {
+              "enum": [
+                "onside",
+                "offside",
+                "too_close",
+                "unsure",
+                "restart"
+              ]
+            },
+            "margin_m": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  }
+}
