@@ -348,3 +348,18 @@ def test_the_measured_gates_ship_in_the_package():
     assert roles.CALIBRATION.is_relative_to(roles.Path(roles.__file__).parent)
     gates = roles.gates()
     assert all(gates[k] is not None for k in ("name", "role", "line")), gates
+
+
+def test_insights_are_built_from_tracked_frames_only():
+    from ninety.intel.match_insights import MatchInsights
+
+    f = frame(0, parked("home"), parked("away"))
+    with pytest.raises(ValueError, match="tracked"):
+        MatchInsights.build("x", [{**f, "source": "truth"}], [], teamsheet.Fixture(7, "OAK", "FEN"), {})
+
+
+def test_a_simulated_match_serves_no_insights():
+    from ninety.mcp import match_server
+
+    assert match_server.insights_of("seed7") is None
+    assert match_server.line_breaks("seed7", 1, 5)["tracked"] is False
