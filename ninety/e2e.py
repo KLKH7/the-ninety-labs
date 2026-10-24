@@ -245,7 +245,10 @@ async def explain_and_render(
                 "mode": "replay" if recording is not None else "live" if models is not None else "offline",
                 "text": outcome.claim.text,
                 "evidence": outcome.claim.evidence,
-                "steps": [trace_step(line, moment, recording is not None) for line in outcome.trace],
+                # A Judge answered when the run replayed one or called the published one (--agents
+                # live's fallback); only the offline stand-in has none to show.
+                "steps": [trace_step(line, moment, recording is not None or models is not None)
+                          for line in outcome.trace],
             }
         )
     return sorted(cues.values(), key=lambda c: (c["t_in"], c["id"])), claims, sorted(held)
