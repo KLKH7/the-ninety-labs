@@ -38,6 +38,8 @@ import {
   shirt,
   team,
   teams,
+  teamSheet,
+  type SheetEntry,
 } from "./types";
 import { describeVisual, drawVisual, drawable, fromScout, headline, title } from "./visual";
 
@@ -399,6 +401,11 @@ async function loadBundle() {
     }
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
+    // The team sheet: names, shirts and positions the line-up tool is confident of (never a guess).
+    for (const k of Object.keys(teamSheet)) delete teamSheet[k];
+    for (const e of ((match as { lineup?: (SheetEntry & { id: string; confident?: boolean })[] } | null)?.lineup ?? [])) {
+      if (e.confident !== false) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
+    }
     $("match-card").hidden = !state.match;
   } catch {
     // The minimap feed still draws the radar; only the cuts and the match are missing.
@@ -570,16 +577,18 @@ function renderRoster(roster: string[]) {
     // A tracked player without a team-sheet name has no shirt we know: no number, and his label is
     // where he plays ("Left midfielder") until the line-up names him.
     const at = avg.get(id);
+    const sheet = teamSheet[id];
     const unnamed = isTrack(id) && playerName(id) === playerLabel(id, teams);
     const num = document.createElement("span");
     num.className = "num";
-    num.textContent = unnamed ? "" : shirt(id);
+    num.textContent = sheet?.number !== undefined ? String(sheet.number) : unnamed ? "" : shirt(id);
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
+    // Apple Sports' line-up: the position after the name, quiet ("GK"); from the team sheet only.
     const where = document.createElement("span");
-    where.className = "where";
-    where.textContent = at && !unnamed ? spot(team(id), at[0], at[1]) : "";
+    where.className = sheet?.position ? "where pos" : "where";
+    where.textContent = sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
     b.append(num, name, where);
     b.setAttribute("aria-label", playerName(id));
     if (at) {
@@ -617,14 +626,15 @@ function renderRoster(roster: string[]) {
         const g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", `translate(${at[0].toFixed(1)} ${(68 - at[1]).toFixed(1)})`);
         g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
-        g.querySelector("text")!.textContent = isTrack(id) && playerName(id) === playerLabel(id, teams) ? "" : shirt(id);
+        g.querySelector("text")!.textContent = teamSheet[id]?.number !== undefined ? String(teamSheet[id].number) : isTrack(id) && playerName(id) === playerLabel(id, teams) ? "" : shirt(id);
         pitch.append(g);
       }
       const cols = document.createElement("p");
       cols.className = "roster-cols";
       cols.setAttribute("aria-hidden", "true");
+      const anySheet = ids.some((id) => teamSheet[id]?.position);
       const anyWhere = ids.some((id) => avg.has(id) && !(isTrack(id) && playerName(id) === playerLabel(id, teams)));
-      cols.innerHTML = anyWhere ? "<span>#</span><span>Name</span><span>Mostly</span>" : "<span>#</span><span>Player</span><span></span>";
+      cols.innerHTML = anySheet ? "<span>#</span><span>Name</span><span></span>" : anyWhere ? "<span>#</span><span>Name</span><span>Mostly</span>" : "<span>#</span><span>Player</span><span></span>";
       const row = document.createElement("div");
       row.className = "roster-row";
       row.append(...ids.map(button));

@@ -128,6 +128,23 @@ def read_team_stats(path: Path) -> dict:
     return out
 
 
+def read_lineup(path: Path) -> list[dict] | None:
+    """MatchInsights' team sheet (the line-up tool, insight-scout): per player id a name, shirt and
+    position, with whether the tool is confident of it. The phone shows only confident entries. A
+    row without an id, or with a name, shirt or position of the wrong type, stops the bundle."""
+    rows = json.loads(path.read_text()).get("lineup")
+    if rows is None:
+        return None
+    kinds = {"name": str, "number": int, "position": str, "confident": bool}
+    out = []
+    for r in rows:
+        wrong = [k for k, t in kinds.items() if k in r and not isinstance(r[k], t)]
+        if not isinstance(r.get("id"), str) or wrong:
+            raise SystemExit(f"{path}: a lineup row needs a string id; wrong types: {wrong}")
+        out.append({k: r[k] for k in ("id", *kinds) if k in r})
+    return out
+
+
 GROUPS = ("Attack", "Passing", "Pressing", "Shape", "Physical")
 
 
@@ -407,6 +424,9 @@ async def run(args: argparse.Namespace) -> dict:
             stats = read_stats(args.team_stats)
             if stats is not None:
                 body["insight_stats"] = stats  # match.json's own `stats` is the detected events' series
+            lineup = read_lineup(args.team_stats)
+            if lineup is not None:
+                body["lineup"] = lineup
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}

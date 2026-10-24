@@ -667,3 +667,5 @@ ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.18
 .pitch-card { background: transparent; padding: 0; }
 .pitch-card .map { border-radius: 20px; }
 #live-summary .section-title { text-align: center; }
+/* Line-up rows (Apple Sports): # in white, the name, the position in grey after it. */
+.roster .who .pos { color: var(--text-2); font-size: 15px; }

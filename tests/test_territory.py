@@ -94,3 +94,16 @@ def test_the_stats_block_keeps_rows_by_group_in_minute_order_and_refuses_a_row_w
     path.write_text(json.dumps({"stats": {"rows": [{**row, "group": "Vibes"}]}}))
     with pytest.raises(SystemExit):
         e2e.read_stats(path)
+
+
+def test_the_team_sheet_keeps_names_shirts_and_positions_and_refuses_a_row_without_an_id(tmp_path):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    path.write_text(json.dumps({"lineup": [{"id": "h1", "name": "A. Keeper", "number": 1, "position": "GK",
+                                            "confident": True, "extra": "dropped"}]}))
+    assert e2e.read_lineup(path) == [{"id": "h1", "name": "A. Keeper", "number": 1, "position": "GK",
+                                      "confident": True}]
+    path.write_text(json.dumps({"lineup": [{"name": "No Id"}]}))
+    with pytest.raises(SystemExit):
+        e2e.read_lineup(path)

@@ -225,10 +225,20 @@ export function shirt(player: string): string {
 /** The clubs on this phone's screen: the bundle's, or the default (viewer/src/teams.ts). */
 export const teams: TeamNames = { ...DEFAULT_TEAMS };
 
+/** The team sheet the bundle carries (match.json `lineup`, from the line-up tool): a player's name,
+ * shirt and position, for the players it is confident of. Empty until a bundle brings one. */
+export interface SheetEntry {
+  name?: string;
+  number?: number;
+  position?: string;
+}
+export const teamSheet: Record<string, SheetEntry> = {};
+
 /** How a fan reads a player (viewer/src/teams.ts, `playerLabel`): the name or role a payload
- * gives, else the club and shirt, or the club and the tracker's number. */
+ * gives, else the team sheet's name, else the club and shirt, or the club and the tracker's number. */
 export function playerName(player: string, names?: Record<string, string>): string {
-  return playerLabel(player, teams, names);
+  const sheet = teamSheet[player]?.name;
+  return playerLabel(player, teams, sheet && !names?.[player] ? { ...names, [player]: sheet } : names);
 }
 
 /** Match time as m:ss. */
