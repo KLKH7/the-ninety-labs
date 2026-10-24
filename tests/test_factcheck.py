@@ -532,6 +532,8 @@ def test_a_unit_glued_with_a_hyphen_is_read_as_its_field():
     ("h7 plays a 12 m, 70 km/h pass to h9.", "number 70 is not a cited ball_speed_kmh of h7"),
     ("h7 plays a delightful curling 30 m pass to h9.", "number 30 is not a cited distance_m of h7"),
     ("h7 plays a 12 m pass. His 70 km/h ball finds h9.", "number 70 is not a cited ball_speed_kmh of h7"),
+    # the dots of "k.p.h." end no clause (second review of #257)
+    ("h7 plays a 12 m pass at seventy k.p.h.", "number 70 is not a cited ball_speed_kmh of h7"),
 ])
 def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     # Each number is in the evidence, so the old check passed them all: it is the other pass's.
@@ -554,6 +556,12 @@ def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     "h7 juega un pase de 12 metros a h9.",
     "h7 plays a 12 m pass at 40 km/h to h9, and h4 plays a 30 m pass at 70 km/h to h7.",
     "h7 plays a delightful curling 12 m pass to h9.",
+    # second review of #257: a possessive binds its own noun phrase only, and a verb's clause ends at
+    # ";" and at "and"
+    "h4 receives h7's 12 m pass and plays a 30 m pass.",
+    "h9 meets h7's 12 m pass at the end of a 30 m move.",
+    "h7 plays a 12 m pass; a 30 m ball follows.",
+    "h7 plays a 12 m pass and then a 30 m ball comes back.",
 ])
 def test_a_number_bound_to_its_own_player_passes(text):
     assert check(Claim(text, ["p1", "p2"]), TWO).ok
