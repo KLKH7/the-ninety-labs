@@ -79,10 +79,10 @@
     "cue-v00001-casual",
     "cue-v00002-analyst",
     "cue-v00002-casual",
-    "cue-v00003-analyst",
-    "cue-v00003-casual",
-    "cue-v00005-analyst",
-    "cue-v00005-casual"
+    "cue-v00004-analyst",
+    "cue-v00004-casual",
+    "cue-v00006-analyst",
+    "cue-v00006-casual"
    ],
    "badges": [],
    "trace_fallbacks": [],
@@ -121,10 +121,10 @@
     "cue-v00001-casual",
     "cue-v00002-analyst",
     "cue-v00002-casual",
-    "cue-v00003-analyst",
-    "cue-v00003-casual",
-    "cue-v00005-analyst",
-    "cue-v00005-casual"
+    "cue-v00004-analyst",
+    "cue-v00004-casual",
+    "cue-v00006-analyst",
+    "cue-v00006-casual"
    ],
    "badges": [
     "held: timeout"
@@ -171,10 +171,10 @@
     "cue-v00001-casual",
     "cue-v00002-analyst",
     "cue-v00002-casual",
-    "cue-v00003-analyst",
-    "cue-v00003-casual",
-    "cue-v00005-analyst",
-    "cue-v00005-casual"
+    "cue-v00004-analyst",
+    "cue-v00004-casual",
+    "cue-v00006-analyst",
+    "cue-v00006-casual"
    ],
    "badges": [
     "held: service"
@@ -248,10 +248,10 @@
     "cue-v00001-casual",
     "cue-v00002-analyst",
     "cue-v00002-casual",
-    "cue-v00003-analyst",
-    "cue-v00003-casual",
-    "cue-v00005-analyst",
-    "cue-v00005-casual"
+    "cue-v00004-analyst",
+    "cue-v00004-casual",
+    "cue-v00006-analyst",
+    "cue-v00006-casual"
    ],
    "badges": [
     "personalizer: refused"
@@ -289,7 +289,7 @@
    "scenario": "low confidence",
    "match": "seed900001",
    "unsure": [
-    "v00005"
+    "v00006"
    ],
    "injected": "the detector reports the event the Tactician cites at confidence 0.3, below 0.5",
    "status": "held",
@@ -298,7 +298,7 @@
    ],
    "category": "low_confidence",
    "reasons": [
-    "event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection"
+    "event v00006 was detected with confidence 0.30, below 0.50: cite a confident detection"
    ],
    "judge_asked": 0,
    "insights": [],
@@ -307,8 +307,8 @@
     "cue-v00001-casual",
     "cue-v00002-analyst",
     "cue-v00002-casual",
-    "cue-v00003-analyst",
-    "cue-v00003-casual"
+    "cue-v00004-analyst",
+    "cue-v00004-casual"
    ],
    "badges": [
     "held: low_confidence"
@@ -317,7 +317,7 @@
     "producer: held: low_confidence"
    ],
    "fallback": [
-    "fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection",
+    "fact_checker hold: tactician's claim: event v00006 was detected with confidence 0.30, below 0.50: cite a confident detection",
     "producer template: cue-v00001-analyst stays: held"
    ],
    "variants_refused": [],

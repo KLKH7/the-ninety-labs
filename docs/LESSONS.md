@@ -2588,3 +2588,17 @@ short and actionable. This file is public: no research sources, product names or
   a separate look at the characters.
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 243. An id that is a place in an order moves when anything is added before it
+- **What happened:** adding possession changes to the detected events regenerated the M1 clip's
+  fixture, and every event after the first change moved up one id. The failure table pinned its
+  evidence pass as `SIDE = "v00005"`, "a second completed pass in the minute": that id became the
+  out of play, which the agents' view drops, and every CI shard failed with `KeyError: 'v00005'`.
+  The PR's local run covered the vision tests, not the workflow tests that read the same fixture.
+- **Rule:** an event is chosen by what it is (its type, outcome, minute, order among its kind),
+  never by a detected id, which is only its place in the clip. When a fixture is regenerated,
+  every reader of it is found (`grep -rn <fixture name>` and the modules those tests call) and
+  their tests are run in the same change (lesson 91).
+- **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
+  plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
+  the old fixed ids put back, the file fails to collect.
