@@ -54,7 +54,7 @@ WORD_NUMBER = re.compile(
 NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
-    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)"
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another|side)\b)"  # "one side's back line": no count
     r"|\b(?:one|two|three|four)[\s-](?:on|v(?:s\.?|\.)?)[\s-](?:one|two|three|four)\b"  # a two-on-one
     # Spanish: one-on-one ("uno contra uno", "un dos contra uno"), "one of", beating a man ("se va
     # de uno"), "a hundred per cent", "at full tilt" ("a mil por hora"), "with both feet"
@@ -251,7 +251,12 @@ TEAM_NAMED = re.compile(
 def side_known(event: Mapping) -> bool:
     """Whether a team may be named from this event: a ground-truth event (no detection confidence),
     or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
-    from an event (the template graphics, the Describer) asks this, as the confidence gate does."""
+    from an event (the template graphics, the Describer) asks this, as the confidence gate does. A
+    shape fact (ninety/intel/shape.py) carries the least sure side of the players it was computed
+    from, gated the same way."""
+    if event.get("type") == "shape":
+        side = event.get("team_confidence")
+        return side is not None and side > MIN_TEAM_CONFIDENCE
     if event.get("confidence") is None:
         return True
     side = event.get("team_confidence")
