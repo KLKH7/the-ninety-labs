@@ -58,7 +58,8 @@ TOOL_HELP = {
     "referee": "offside lines at each completed pass (onside, offside, or too close for the tracking to "
     "call), and the Laws explained: offside, fouls, handball, cards, VAR. The tracking cannot judge contact",
     "style": "how each club plays: passing channels (left, centre, right), how wide it plays against the "
-    "other club, crosses, the keeper going long or short, counter-attacks (regain to shot), one-twos",
+    "other club, crosses, the keeper going long or short, regains that led to a shot (seconds from "
+    "regain to shot), one-twos",
     "counter_press": (
         "turnovers in open play, how many players pressed the ball in the 5 s after, "
         "and how fast it was won back"
@@ -253,7 +254,7 @@ FOLLOW_UPS = {
         "Was anyone offside before the goal?",
     ),
     "players": ("Why did {club} score?", "Where are {club} outnumbering them?", "How are {club} playing?"),
-    "style": ("Do {club} counter-attack?", "Is the {club} keeper going long?", "Which passes cut through?"),
+    "style": ("How are {club} playing?", "Is the {club} keeper going long?", "Which passes cut through?"),
     "referee": ("What counts as a handball?", "Was anyone offside?", "Why did {club} score?"),
     "counter_press": (
         "Did {club} have options when they lost it?",

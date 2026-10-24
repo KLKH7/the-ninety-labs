@@ -85,13 +85,13 @@ UNIT_WORDS = {
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
+UNSOURCED = r"counter[- ]?attack\w*|on the break|break(?:s|ing)? at speed|fast break\w*"
 REGAIN = r"won (?:it|the ball) back|wins? (?:it|the ball) back|regain\w*"
 # A word another kind's facts also say: a counter-attack starts with a regain (GROUNDING I12, I4), so
 # "won the ball back" is a cited counter fact's own words too.
 ALSO_SAID_BY = {"counter_press": (REGAIN, {"counter"})}
 KIND_WORDS = {
     "one_two": r"one[- ]twos?|wall pass\w*",
-    "counter": r"counter[- ]attack\w*|on the break",
     "overload": (
         r"overload\w*|outnumber\w*|numbers? up|numerical (?:advantage|superiority)|extra (?:man|men|player)"
     ),
@@ -333,6 +333,11 @@ def check(
     held += direction_reasons(
         claim.text, cited, clubs, [*sheet_names, *(w.get("say", "") for w in people.values())]
     )
+
+    # No published definition with a time window was found for a counter-attack (GROUNDING I12), so
+    # whatever is cited, a sentence never calls a regain that led to a shot one.
+    if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
+        reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}

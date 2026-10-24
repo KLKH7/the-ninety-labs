@@ -40,7 +40,7 @@ MIN_SO_FAR = (
 GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
 DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
-    "counter": "{club} break at speed",
+    "counter": "{club} win it and shoot",
     "shape": "{club}'s back line moves",
     "line_break": "{club} slice through",
     "overload": "{club} have the extra man",
@@ -48,7 +48,7 @@ HEADLINES = {
     "pass_options": "A pass not taken",
 }
 WHY = {
-    "counter": "What makes a counter-attack?",
+    "counter": "Why does a quick shot matter?",
     "shape": "Why does the back line matter?",
     "line_break": "Why does a pass like that matter?",
     "overload": "Why does an overload matter?",
@@ -58,8 +58,8 @@ WHY = {
 # What the "why?" answer adds to the card's fact: the definition, in code's words. Each is checked
 # like any sentence, so it may state only the fact's own numbers with their units.
 WHY_TEXT = {
-    "counter": "A counter-attack is a quick break straight after winning the ball, before the other side "
-    "can get back: {club} had a shot {value} seconds after winning it.",
+    "counter": "The sooner a side shoots after winning the ball, the less time the other side has to get "
+    "back: {club} had a shot {value} seconds after winning it.",
     "shape": "A back line further from its own goal squeezes the space in midfield; one closer to it "
     "protects the space behind: in minute {minute} {club}'s was {value} {unit} from their own goal.",
     "line_break": "Analysts call it packing: every opponent a pass gets past no longer stands between the "

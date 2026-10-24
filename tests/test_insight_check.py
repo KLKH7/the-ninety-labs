@@ -945,3 +945,18 @@ def test_a_regain_that_led_to_a_shot_is_said_in_its_own_words_and_never_reversed
     # The counter-press's own words still need a counter-press fact.
     press = "In minute 2, London Athletic counter-pressed and had a shot 11.4 seconds later."
     assert status_for(run(press, [REGAIN_TO_SHOT["id"]], k)) == "rejected"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "In minute 2, London Athletic hit Lisbon Esportes on the counter-attack, a shot 11.4 seconds later.",
+        "In minute 2, London Athletic broke at speed: on the break, a shot 11.4 seconds later.",
+        "In minute 2, London Athletic counterattacked and had a shot 11.4 seconds later.",
+    ],
+)
+def test_a_regain_that_led_to_a_shot_is_never_called_a_counter_attack(text):
+    # No published definition with a time window was found (GROUNDING I12): the words are never said.
+    k = {REGAIN_TO_SHOT["id"]: REGAIN_TO_SHOT}
+    v = run(text, [REGAIN_TO_SHOT["id"]], k)
+    assert status_for(v) == "rejected" and any("no cited definition" in r for r in v.reasons), v.reasons

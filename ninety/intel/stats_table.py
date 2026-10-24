@@ -115,7 +115,7 @@ def _distance(mi) -> Callable[[int], dict]:
 def stats_table(mi) -> dict:
     """The Stats tab's rows, each with a series of "so far" values per BIN_MIN minutes."""
     rows = [
-        ("Attack", "counters", "Counter-attacks ending in a shot", "counters", _count(mi, "counter")),
+        ("Attack", "counters", "Regains that led to a shot", "regains", _count(mi, "counter")),
         ("Attack", "one_twos", "One-twos", "one-twos", _count(mi, "one_two")),
         ("Attack", "crosses", "Crosses", "crosses", _summary(mi.style, "crosses")),
         *[
