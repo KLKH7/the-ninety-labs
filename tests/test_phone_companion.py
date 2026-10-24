@@ -313,8 +313,9 @@ def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browse
     # The Scout's precomputed, fact-checked "why it matters" is in the sheet: no question is sent.
     page.locator("#how-body .stepper").wait_for()
     assert cards[0]["why"]["answer"]["text"] in page.inner_text("#how-body")  # why it matters, first
-    assert page.inner_text("#how-body .count-line") == "3 checks · all passed"
-    assert page.locator("#how-body .step").count() == 3
+    # Without the big screen's footage there is no frame to show: what was measured, and the check.
+    assert page.inner_text("#how-body .count-line") == "2 checks · all passed"
+    assert page.locator("#how-body .step").count() == 2
     assert not [u for u in requests if "/api/ask" in u]
     assert not errors
 
@@ -468,7 +469,8 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     page.wait_for_function(f"({seen} || '').includes('percent')")
     words = page.get_attribute("#how-body canvas.seen", "aria-label")
     assert words.startswith("The broadcast picture at 1:01")
-    assert "no AI wrote it" in page.inner_text("#how-body")  # a code answer: no Judge to claim
+    # a code answer: no Judge to claim
+    assert "Checked by code before it was shown" in page.inner_text("#how-body")
     assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
 

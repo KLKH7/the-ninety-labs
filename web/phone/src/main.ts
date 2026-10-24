@@ -1217,7 +1217,13 @@ async function ask(text: string) {
   }
   if (input.value.trim() === q) input.value = "";
   pending.replaceWith(renderAnswer(q, at, answer, failed));
-  requestAnimationFrame(() => void ($("ask-content") as HTMLElement & { scrollToBottom(ms?: number): Promise<void> }).scrollToBottom(reduceMotion.matches ? 0 : 300));
+  // The new question at the top, whole, with its answer under it (Messages scrolls a new thread
+  // turn into view; it never leaves the question cut under the bar).
+  requestAnimationFrame(() => {
+    const turn = $("answers").lastElementChild as HTMLElement | null;
+    const content = $("ask-content") as HTMLElement & { scrollToPoint(x: number, y: number, ms?: number): Promise<void> };
+    if (turn) void content.scrollToPoint(0, Math.max(0, turn.offsetTop - 8), reduceMotion.matches ? 0 : 300);
+  });
 }
 
 function renderAnswer(question: string, at: number, a: ViewerAnswer | null, failed: string): HTMLLIElement {
@@ -1393,12 +1399,7 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
     ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
   ];
   if (a.t_from !== null && a.t_to !== null) rows.push(["Over", a.t_from === a.t_to ? `${clock(a.t_from)} of the match` : `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
-  rows.push(["Computed by", `code, from ${feed.mock ? "the mock positions" : "positions tracked from the video"}`]);
-  rows.push(
-    a.source === "model"
-      ? ["Checked by", "the fact-checking agent: code checks the number against the cited fact, then the Judge reads the sentence"]
-      : ["Checked by", "code: the number is the cited fact itself, put in a fixed sentence; no AI wrote it"],
-  );
+
   for (const [k, v] of rows) {
     const dt = document.createElement("dt");
     dt.textContent = k;
@@ -1596,34 +1597,32 @@ async function openHow(h: How) {
   }
   if (h.why) top.push(p(h.why.text, "said lead"));
   const steps: HTMLElement[] = [];
+  const list = document.createElement("ol");
+  list.className = "stepper";
   if (bundle) {
     const canvas = document.createElement("canvas");
     canvas.className = "seen";
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}.`);
-    const caption = p(`The broadcast picture at ${clock(h.t)}.`);
-    steps.push(step("What the cameras saw", canvas, caption));
+    // The frame the claim cites, with what the detector boxed; its words are for screen readers only.
+    const cameras = step("What the cameras saw", canvas);
+    steps.push(cameras);
     void drawSeen(canvas, h.t).then((found) => {
-      const unsure = found.filter((d) => d.score < 0.8).length;
-      const said = found.length
-        ? `${found.length} things our detector found in this frame, each boxed with how sure it was${unsure ? `; ${unsure} under 80% (yellow)` : ""}.`
-        : "The detector found nothing in this frame.";
-      caption.textContent = `${said} ${bundle!.manifest.detector ? `Detector: ${bundle!.manifest.detector}.` : ""}`.trim();
-      canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ") || "nothing detected"}.`);
+      if (!found.length) {
+        cameras.remove(); // a frame with nothing found is no evidence: the step is not shown
+        count.textContent = `${list.children.length} checks · all passed`;
+        return;
+      }
+      canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ")}.`);
     });
-  } else steps.push(step("What the cameras saw", p("This phone has no footage from the big screen to show.")));
-  if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), p("From positions tracked in the video.")));
-  else steps.push(step("What was measured", p("From positions tracked in the video.")));
-  const checked =
-    h.source === "model"
-      ? "The Companion agent wrote the sentence. Code checked every number against the cited facts, and the Judge read it before it reached you."
-      : "Code worked out every number and put it in a fixed sentence. No AI wrote it.";
-  const rows = h.answer ? evidence(h.answer) : [p(`Facts cited: ${h.evidence.join(", ") || "none"}`, "fine ids")];
-  steps.push(step("What the fact-checker did", p(checked, "said"), ...rows));
+  }
+  const measured = p("Measured from player tracking", "said");
+  if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), measured));
+  else steps.push(step("What was measured", measured));
+  const checked = h.source === "model" ? "Written by the Companion, checked by code and the Judge before it was shown" : "Checked by code before it was shown";
+  steps.push(step("What the fact-checker did", p(checked, "said"), ...(h.answer ? evidence(h.answer) : [])));
   const count = p(`${steps.length} checks · all passed`, "count-line");
-  const list = document.createElement("ol");
-  list.className = "stepper";
-  list.append(...steps);
+  list.replaceChildren(...steps);
   body.replaceChildren(...top, count, list);
   await howSheet.present();
   requestAnimationFrame(redrawPictures);

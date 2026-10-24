@@ -302,7 +302,8 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     how.click()  # one tap opens the sheet with the evidence
     evidence = phone.locator("#how-body")
     evidence.locator(".evidence").wait_for()
-    assert "Lisbon 7's top speed" in evidence.inner_text() and "no AI wrote it" in evidence.inner_text()
+    assert "Lisbon 7's top speed" in evidence.inner_text()
+    assert "Checked by code before it was shown" in evidence.inner_text()
     evidence.get_by_text("Facts cited").click()
     assert re.search(r"peak_speed:player_a7_window_0\.00-\d+\.\d\d", evidence.inner_text())
     assert "Lisbon 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
@@ -760,7 +761,7 @@ def test_an_answer_says_fact_checked_only_when_the_judge_saw_it(browser, prod_si
     answer.locator(".how").click()
     page.locator("#how-body .evidence").wait_for()
     said = page.locator("#how-body").inner_text()
-    assert ("the fact-checking agent" in said) == (source == "model")
+    assert ("checked by code and the Judge" in said) == (source == "model")
     assert not errors
 
 
