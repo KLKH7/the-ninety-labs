@@ -50,11 +50,14 @@ INSIGHT_TOOLS = (
     "referee", "lineup",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
-# Every tool the server serves. team_shape and the insight tools are served but not in the published
-# Analyst's allowed tools: adding them changes that agent's definition, which takes an `agents-live`
-# publish run. Until then the workflow hands the minute's shape facts to the writers as evidence
+# Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
+# the published Analyst's allowed tools: adding them changes that agent's definition, which takes an
+# `agents-live` publish run. Until then the workflow hands the minute's shape facts to the writers as evidence
 # (ninety/agents/workflow.py).
-SERVED = (*TOOLS, "team_shape", *INSIGHT_TOOLS)
+SERVED = (*TOOLS, "team_shape", "re_perceive", *INSIGHT_TOOLS)
+# Vision's per-camera observations for a served clip, when its multi-view run is in the image:
+# <NINETY_VIEWS_DIR>/<match>/<camera>/observations.jsonl (ninety/vision/live_job.py writes views/).
+VIEWS_DIR = os.environ.get("NINETY_VIEWS_DIR", "")
 
 def match_id(seed: int) -> str:
     return f"seed{seed}"
@@ -259,6 +262,38 @@ def team_shape(match: str, minute_from: int, minute_to: int) -> dict:
             "need": shape.MIN_TRACKED, "facts": rows[:MAX_EVENTS * 2]}
 
 
+@lru_cache(maxsize=len(DETECTED))
+def _perceiver(match: str):
+    from ninety.agents.perceive import Perceiver
+
+    root = Path(VIEWS_DIR) / match if VIEWS_DIR else None
+    views = {}
+    for path in sorted(root.glob("*/observations.jsonl")) if root and root.is_dir() else []:
+        views[path.parent.name] = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return Perceiver(views)
+
+
+def re_perceive(match: str, event_id: str, camera: str, mode: str) -> dict:
+    """Look again at one detected event of a match through one camera: R3's event detection re-run
+    on that camera's observations, in mode "window" (3 s around the event) or "track" (the whole clip:
+    each track's side voted over every frame it was seen). Returns the same event as that camera saw
+    it (type, t, team, team_confidence, player, confidence), or found null and why. Read-only; it
+    never reads ground truth. Use it when a claim's evidence is unsure, not to find new events. Unlike
+    the fact-checker's own looks, calls here are neither capped nor logged: no published agent may
+    call it yet (it is not in TOOLS)."""
+    if match not in DETECTED:
+        served = ", ".join(DETECTED)
+        raise ValueError(f"no detected events to look at again for {match!r}; available: {served}")
+    events = {e["id"]: e for e in detected.load(DETECTED[match]())}
+    if event_id not in events:
+        raise ValueError(f"no detected event {event_id!r} in {match}")
+    perceiver = _perceiver(match)
+    if not perceiver.views:
+        return {"event": event_id, "camera": camera, "mode": mode, "found": None,
+                "why": "this match has no per-camera observations to look again through"}
+    return perceiver.re_perceive(events[event_id], camera, mode).as_dict()
+
+
 def make_server() -> FastMCP:
     """A server with the match tools. Stateless with JSON responses: what Foundry's MCP tool needs
     (one request, one answer, no session). The API builds its own, since an HTTP server's session
@@ -274,7 +309,7 @@ def make_server() -> FastMCP:
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
     )
-    for tool in (list_events, match_info, team_shape, *insight):
+    for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)
     return server
 
