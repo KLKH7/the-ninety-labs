@@ -87,8 +87,11 @@ def test_a_kick_off_after_the_goal_adds_evidence_and_one_with_players_in_the_wro
 def test_a_known_height_under_the_bar_keeps_the_line_evidence_whole_and_one_over_it_is_no_goal():
     under = shot_scene(into_net(), heights=lambda f: (0.11, 0.05) if f > KICK else None)
     assert run(under)[1][0]["confidence"] == 0.8
-    # Over the bar by the rule's own margin: z + 2 se just above 2.44 - 0.11.
-    over = shot_scene(into_net(), heights=lambda f: (oc.CROSSBAR - oc.BALL_R, 0.01) if f > KICK else None)
+    # Law 1's bar is 2.44 m, the ball's radius 0.11 m: a centre at 2.31 m give or take 0.01 m
+    # (2.33 m at two standard errors) is under it; at 2.32 m (2.34 m) it is not.
+    under_edge = shot_scene(into_net(), heights=lambda f: (2.31, 0.01) if f > KICK else None)
+    assert run(under_edge)[1][0]["confidence"] == 0.8
+    over = shot_scene(into_net(), heights=lambda f: (2.32, 0.01) if f > KICK else None)
     shots, goals, _, _ = run(over)
     assert goals == [] and shots[0]["outcome"] != "goal"
 
@@ -178,3 +181,27 @@ def test_the_net_must_hold_the_ball_in_net_frames(frames_in_net, goal):
         return None  # the ball no longer seen: picked out of the net, or hidden
     _, goals, _, _ = run(shot_scene(path))
     assert bool(goals) is goal
+
+
+def parried(turn_deg):
+    """The ball flies at the keeper at (103, 34) and leaves him at the same speed, turned by
+    `turn_deg` toward +y, and goes on until it is out."""
+    at = (102.7, 34.0)
+    d = math.dist((90.3, 34.0), at)
+    reach = d / (25.0 / FPS)
+    a = math.radians(turn_deg)
+
+    def path(k):
+        if k <= reach:
+            return 90.3 + (at[0] - 90.3) * k / reach, 34.0
+        s = 25.0 * (k - reach) / FPS
+        return at[0] + s * math.cos(a), at[1] + s * math.sin(a)
+    return path
+
+
+def test_a_parry_that_turns_the_ball_wide_at_the_keeper_is_a_save_and_a_slight_swerve_is_not_a_touch():
+    # The ball keeps its speed, so only the change of direction can show the touch.
+    shots, goals, _, _ = run(shot_scene(parried(60.0), keeper=(103.0, 34.0)))
+    assert goals == [] and [s["outcome"] for s in shots] == ["on_target"]
+    shots, _, _, _ = run(shot_scene(parried(20.0), keeper=(103.0, 34.0)))
+    assert [s["outcome"] for s in shots] != ["on_target"]
