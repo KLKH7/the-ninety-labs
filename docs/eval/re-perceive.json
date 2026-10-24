@@ -1,0 +1,2816 @@
+{
+ "clips": [
+  "seed108",
+  "seed109",
+  "seed110",
+  "seed113",
+  "seed114",
+  "seed115",
+  "seed116",
+  "seed117",
+  "seed119",
+  "seed120",
+  "seed121",
+  "seed122",
+  "seed2041",
+  "seed2042",
+  "seed2043",
+  "seed2044",
+  "seed2045",
+  "seed3041",
+  "seed3042",
+  "seed3043",
+  "seed3044",
+  "seed3045"
+ ],
+ "summary": {
+  "held": 81,
+  "resolved": 0,
+  "resolved_right": 0,
+  "resolved_wrong": 0,
+  "resolved_false_event": 0,
+  "contradicted": 28,
+  "contradicted_right": 7,
+  "contradicted_wrong": 7,
+  "unresolved": 53
+ },
+ "rows": [
+  {
+   "clip": "seed109",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed110",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 165.12,
+      "team": "home",
+      "team_confidence": 0.346,
+      "player": "h-t3",
+      "confidence": 0.735
+     },
+     "why": "tac-l saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed110",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 166.2,
+      "team": "away",
+      "team_confidence": 0.72,
+      "player": "a-t4",
+      "confidence": 0.386
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 166.2,
+      "team": "away",
+      "team_confidence": 0.577,
+      "player": "a-t4",
+      "confidence": 0.386
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed110",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 167.04,
+      "team": "home",
+      "team_confidence": 0.649,
+      "player": "h-t2",
+      "confidence": 0.697
+     },
+     "why": "tac-l saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed110",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 167.16,
+      "team": "away",
+      "team_confidence": 0.658,
+      "player": "a-t1",
+      "confidence": 0.612
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed110",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 171.44,
+      "team": "away",
+      "team_confidence": 0.172,
+      "player": null,
+      "confidence": 0.78
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 171.44,
+      "team": "away",
+      "team_confidence": 0.793,
+      "player": null,
+      "confidence": 0.78
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 171.64,
+      "team": "home",
+      "team_confidence": 0.616,
+      "player": null,
+      "confidence": 0.801
+     },
+     "why": "tac-r saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed113",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed113",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 111.52,
+      "team": "home",
+      "team_confidence": 0.863,
+      "player": "h-t1",
+      "confidence": 0.838
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed113",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 111.52,
+      "team": "home",
+      "team_confidence": 0.843,
+      "player": "h-t1",
+      "confidence": 0.838
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed115",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 94.96,
+      "team": "home",
+      "team_confidence": 0.2,
+      "player": null,
+      "confidence": 0.352
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 94.96,
+      "team": "away",
+      "team_confidence": 0.718,
+      "player": null,
+      "confidence": 0.352
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed115",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 94.96,
+      "team": "home",
+      "team_confidence": 0.927,
+      "player": null,
+      "confidence": 0.352
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 94.96,
+      "team": "away",
+      "team_confidence": 0.718,
+      "player": null,
+      "confidence": 0.352
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed115",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed115",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed115",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 96.8,
+      "team": "home",
+      "team_confidence": 0.722,
+      "player": null,
+      "confidence": 0.417
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 63.12,
+      "team": "away",
+      "team_confidence": 0.614,
+      "player": "a-t7",
+      "confidence": 0.791
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 66.36,
+      "team": "away",
+      "team_confidence": 0.907,
+      "player": "a-t13",
+      "confidence": 0.278
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00006",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00007",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 67.72,
+      "team": "home",
+      "team_confidence": 0.807,
+      "player": "h-t6",
+      "confidence": 0.306
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00008",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00008",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00008",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00008",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00009",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00009",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 69.04,
+      "team": "home",
+      "team_confidence": 0.23,
+      "player": "h-t1",
+      "confidence": 0.274
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00009",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 69.04,
+      "team": "away",
+      "team_confidence": 0.64,
+      "player": "a-t15",
+      "confidence": 0.274
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00010",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00010",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 69.36,
+      "team": "home",
+      "team_confidence": 0.633,
+      "player": "h-t17",
+      "confidence": 0.445
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00010",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 69.36,
+      "team": "away",
+      "team_confidence": 0.542,
+      "player": "a-t11",
+      "confidence": 0.445
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00011",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00011",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00011",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 69.76,
+      "team": "away",
+      "team_confidence": 0.64,
+      "player": "a-t15",
+      "confidence": 0.399
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00012",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00012",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 69.36,
+      "team": "away",
+      "team_confidence": 0.974,
+      "player": "a-t17",
+      "confidence": 0.445
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00013",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00013",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00013",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00013",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 70.36,
+      "team": "home",
+      "team_confidence": 0.823,
+      "player": "h-t5",
+      "confidence": 0.364
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed116",
+   "event": "v00014",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00014",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00014",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00014",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 237.36,
+      "team": "away",
+      "team_confidence": 0.485,
+      "player": "a-t12",
+      "confidence": 0.308
+     },
+     "why": "tac-r saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 240.32,
+      "team": "home",
+      "team_confidence": 0.233,
+      "player": "h-t11",
+      "confidence": 0.293
+     },
+     "why": "tac-r saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00006",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00007",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed117",
+   "event": "v00008",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00008",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00008",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00008",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed120",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 181.96,
+      "team": "away",
+      "team_confidence": 0.94,
+      "player": "a-t3",
+      "confidence": 0.263
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 181.96,
+      "team": "away",
+      "team_confidence": 0.966,
+      "player": "a-t3",
+      "confidence": 0.263
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed120",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 182.48,
+      "team": "away",
+      "team_confidence": 0.949,
+      "player": "a-t9",
+      "confidence": 0.259
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed120",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed121",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 116.12,
+      "team": "away",
+      "team_confidence": 0.693,
+      "player": "a-t14",
+      "confidence": 0.651
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed121",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed121",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed121",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed122",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 114.36,
+      "team": "away",
+      "team_confidence": 0.595,
+      "player": "a-t2",
+      "confidence": 0.547
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed122",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 116.72,
+      "team": "away",
+      "team_confidence": 0.667,
+      "player": "a-t13",
+      "confidence": 0.365
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2041",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 242.08,
+      "team": "home",
+      "team_confidence": 0.843,
+      "player": "h-t4",
+      "confidence": 0.857
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 241.68,
+      "team": "away",
+      "team_confidence": 0.777,
+      "player": "a-t3",
+      "confidence": 0.504
+     },
+     "why": "tac-r saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2041",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 247.36,
+      "team": "away",
+      "team_confidence": 0.381,
+      "player": "a-t4",
+      "confidence": 0.717
+     },
+     "why": "tac-r saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2042",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 165.48,
+      "team": "home",
+      "team_confidence": 0.526,
+      "player": null,
+      "confidence": 0.502
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2042",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 169.24,
+      "team": "home",
+      "team_confidence": 0.839,
+      "player": null,
+      "confidence": 0.408
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2042",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 171.24,
+      "team": "home",
+      "team_confidence": 0.912,
+      "player": "h-t10",
+      "confidence": 0.667
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2042",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 173.56,
+      "team": "away",
+      "team_confidence": 0.75,
+      "player": "a-t3",
+      "confidence": 0.415
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 177.2,
+      "team": "away",
+      "team_confidence": 0.605,
+      "player": "a-t19",
+      "confidence": 0.749
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 180.0,
+      "team": "home",
+      "team_confidence": 0.62,
+      "player": "h-t15",
+      "confidence": 0.376
+     },
+     "why": "tac-l saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 181.88,
+      "team": "away",
+      "team_confidence": 0.836,
+      "player": "a-t17",
+      "confidence": 0.522
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 182.4,
+      "team": "away",
+      "team_confidence": 0.95,
+      "player": "a-t9",
+      "confidence": 0.444
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2043",
+   "event": "v00006",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 182.64,
+      "team": "away",
+      "team_confidence": 0.88,
+      "player": null,
+      "confidence": 0.501
+     },
+     "why": "tac-l saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed2045",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 197.88,
+      "team": "away",
+      "team_confidence": 0.752,
+      "player": "a-t9",
+      "confidence": 0.592
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed2045",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 199.44,
+      "team": "away",
+      "team_confidence": 0.619,
+      "player": "a-t18",
+      "confidence": 0.47
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 199.44,
+      "team": "away",
+      "team_confidence": 0.669,
+      "player": "a-t19",
+      "confidence": 0.47
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed2045",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 200.92,
+      "team": "away",
+      "team_confidence": 0.72,
+      "player": "a-t2",
+      "confidence": 0.603
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 145.4,
+      "team": "away",
+      "team_confidence": 0.936,
+      "player": "a-t13",
+      "confidence": 0.507
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 145.4,
+      "team": "away",
+      "team_confidence": 0.842,
+      "player": "a-t13",
+      "confidence": 0.507
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00006",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00006",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 145.96,
+      "team": "away",
+      "team_confidence": 0.874,
+      "player": "a-t5",
+      "confidence": 0.265
+     },
+     "why": "tac-r saw it, no surer"
+    }
+   ]
+  },
+  {
+   "clip": "seed3041",
+   "event": "v00007",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00007",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3042",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3042",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 98.44,
+      "team": "home",
+      "team_confidence": 0.992,
+      "player": "h-t4",
+      "confidence": 0.664
+     },
+     "why": "tac-r saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed3043",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3043",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 193.2,
+      "team": "home",
+      "team_confidence": 0.989,
+      "player": "h-t11",
+      "confidence": 0.555
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 193.2,
+      "team": "home",
+      "team_confidence": 0.949,
+      "player": "h-t7",
+      "confidence": 0.555
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3043",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3043",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 194.6,
+      "team": "home",
+      "team_confidence": 0.877,
+      "player": null,
+      "confidence": 0.613
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 194.6,
+      "team": "home",
+      "team_confidence": 0.879,
+      "player": null,
+      "confidence": 0.613
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3043",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00005",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3044",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 135.2,
+      "team": "home",
+      "team_confidence": 0.924,
+      "player": "h-t12",
+      "confidence": 0.812
+     },
+     "why": "tac-r saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed3044",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00002",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3044",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3044",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 141.64,
+      "team": "home",
+      "team_confidence": 0.979,
+      "player": "h-t5",
+      "confidence": 0.661
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 141.64,
+      "team": "home",
+      "team_confidence": 0.909,
+      "player": "h-t18",
+      "confidence": 0.661
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 141.6,
+      "team": "away",
+      "team_confidence": 0.973,
+      "player": "a-t1",
+      "confidence": 0.426
+     },
+     "why": "tac-r saw it for the other side (away)"
+    }
+   ]
+  },
+  {
+   "clip": "seed3045",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": false,
+   "looks": [
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": null,
+     "why": "tac-l did not see it"
+    },
+    {
+     "event": "v00001",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3045",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": false,
+   "side_right": null,
+   "looks": [
+    {
+     "event": "v00002",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 81.48,
+      "team": "home",
+      "team_confidence": 0.656,
+      "player": null,
+      "confidence": 0.41
+     },
+     "why": "tac-l saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed3045",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 83.12,
+      "team": "away",
+      "team_confidence": 0.977,
+      "player": "a-t1",
+      "confidence": 0.683
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 83.12,
+      "team": "away",
+      "team_confidence": 0.949,
+      "player": "a-t6",
+      "confidence": 0.683
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00003",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 83.32,
+      "team": "home",
+      "team_confidence": 0.935,
+      "player": "h-t12",
+      "confidence": 0.861
+     },
+     "why": "tac-r saw it for the other side (home)"
+    }
+   ]
+  },
+  {
+   "clip": "seed3045",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 85.36,
+      "team": "away",
+      "team_confidence": 0.87,
+      "player": "a-t4",
+      "confidence": 0.701
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-l",
+     "mode": "track",
+     "found": {
+      "type": "pass",
+      "t": 85.36,
+      "team": "away",
+      "team_confidence": 0.831,
+      "player": "a-t1",
+      "confidence": 0.701
+     },
+     "why": "tac-l saw it, no surer"
+    },
+    {
+     "event": "v00004",
+     "camera": "tac-r",
+     "mode": "window",
+     "found": null,
+     "why": "tac-r did not see it"
+    }
+   ]
+  },
+  {
+   "clip": "seed3045",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "contradicted",
+   "matched": true,
+   "side_right": true,
+   "looks": [
+    {
+     "event": "v00005",
+     "camera": "tac-l",
+     "mode": "window",
+     "found": {
+      "type": "pass",
+      "t": 87.68,
+      "team": "home",
+      "team_confidence": 0.409,
+      "player": "h-t2",
+      "confidence": 0.295
+     },
+     "why": "tac-l saw it for the other side (home)"
+    }
+   ]
+  }
+ ]
+}

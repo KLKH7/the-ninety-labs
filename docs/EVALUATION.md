@@ -526,8 +526,11 @@ the whole clip, at most 3 looks a match minute, every look a trace step and a Le
 (type, 1 s, 2 m) seen confidently, and, for a claim naming a side, the side re-read above 0.96 by the
 whole-clip vote only, the reading the threshold was measured on (lesson 227: a window's vote read a
 false event's side at 1.0). A camera that sees the other side keeps it held, with that reason.
-**Not yet measured:** `ninety.eval.re_perceive_eval` grades it offline on validation clips with
-per-camera observations; until it has run, no claim is made that looking again helps.
+**Measured** on 22 validation clips through the tactical rig's two lenses
+([eval/re-perceive.md](eval/re-perceive.md)): of 81 detections a team claim would be held on, a
+second look resolved **0** (so it aired nothing, and no wrong side), and contradicted 28, no better
+than a coin where the event was real (7 right, 7 wrong; a contradiction only holds). Safe, and no
+gain yet: the gate opens only when a camera tells sides better than today's kit reader.
 
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 

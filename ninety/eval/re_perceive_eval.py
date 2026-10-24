@@ -46,8 +46,13 @@ def truth_of(event: dict, truth: list[dict]) -> dict | None:
 def clip_rows(clip: Path) -> list[dict]:
     views = {p.parent.name: _jsonl(p) for p in sorted((clip / "views").glob("*/observations.jsonl"))}
     truth = _jsonl(clip / "events.jsonl")  # grading only
+    return rows_for(clip.name, _jsonl(clip / "detected.jsonl"), views, truth)
+
+
+def rows_for(name: str, detected: list[dict], views: dict[str, list[dict]], truth: list[dict]) -> list[dict]:
+    """The held detections of one clip, each looked at again through `views` and graded on `truth`."""
     out = []
-    for event in _jsonl(clip / "detected.jsonl"):
+    for event in detected:
         if event["type"] not in TEMPLATE_TYPES:
             continue
         held = event["confidence"] < MIN_CONFIDENCE or not side_known(event)
@@ -59,7 +64,7 @@ def clip_rows(clip: Path) -> list[dict]:
         outcome = "resolved" if scope else "contradicted" if contradicted else "unresolved"
         match = truth_of(event, truth)
         side_right = None if match is None else match["team"] == event["team"]
-        out.append({"clip": clip.name, "event": event["id"], "type": event["type"], "outcome": outcome,
+        out.append({"clip": name, "event": event["id"], "type": event["type"], "outcome": outcome,
                     "matched": match is not None, "side_right": side_right,
                     "looks": [lk.as_dict() for lk in looks]})
     return out
@@ -98,12 +103,38 @@ def report(s: dict, clips: list[str]) -> str:
     ]) + "\n"
 
 
+def split_rows(seeds: list[int], fused: Path, views: dict[str, Path], truth_root: Path) -> list[dict]:
+    """Clips laid out as vision's validation run writes them: the fused observations per seed
+    (`<fused>/seed<N>.jsonl`, whose events are what the live path detects), each camera's
+    observations per seed (`<view dir>/seed<N>.jsonl`), and the answer key per seed
+    (`<truth_root>/seed<N>/events.jsonl`, grading only)."""
+    from ninety.vision import events as vision_events
+
+    out = []
+    for seed in seeds:
+        name = f"seed{seed}"
+        detected, _ = vision_events.detect(_jsonl(fused / f"{name}.jsonl"))
+        cams = {cam: _jsonl(d / f"{name}.jsonl") for cam, d in views.items()
+                if (d / f"{name}.jsonl").exists()}
+        out += rows_for(name, detected, cams, _jsonl(truth_root / name / "events.jsonl"))
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--clips", type=Path, nargs="+", required=True, help="validation clip folders")
+    ap.add_argument("--clips", type=Path, nargs="*", default=[], help="validation clip folders")
+    ap.add_argument("--seeds", type=int, nargs="*", default=[], help="validation seeds (split layout)")
+    ap.add_argument("--fused", type=Path, help="split layout: fused observations, seed<N>.jsonl")
+    ap.add_argument("--view", action="append", default=[], metavar="NAME=DIR",
+                    help="split layout: one camera's observations, seed<N>.jsonl (repeatable)")
+    ap.add_argument("--truth-root", type=Path, help="split layout: <dir>/seed<N>/events.jsonl")
     ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
     args = ap.parse_args()
     rows = [r for clip in args.clips for r in clip_rows(clip)]
+    if args.seeds:
+        views = dict(v.split("=", 1) for v in args.view)
+        rows += split_rows(args.seeds, args.fused, {k: Path(d) for k, d in views.items()}, args.truth_root)
+    args.clips = args.clips or [Path(f"seed{s}") for s in args.seeds]
     s = summary(rows)
     names = [c.name for c in args.clips]
     args.out.with_suffix(".json").write_text(json.dumps({"clips": names, "summary": s, "rows": rows},
