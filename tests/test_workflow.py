@@ -292,19 +292,48 @@ def test_a_claim_is_written_only_once_it_has_text():
     assert history(ledger, f"m-{MAIN}") == [] and result.reviews[0].status == "held"
 
 
-def test_both_claims_are_checked_and_the_tactician_airs_when_verified():
+def test_once_the_tacticians_claim_is_verified_the_alternative_is_not_checked():
+    # Row 3 of the Oct 23 agents audit: checking (and rewriting) a reading that cannot air spent
+    # Judge and writer calls. The Tactician's verified claim airs; the alternative is skipped.
     judge, ledger = Judge(), InMemoryLedger()
     other = PASSES[1]["id"]
     alternative = Claim(true_claim(MAIN).text, [MAIN])
     result = run(models(analyst=(picks(MAIN, evidence={MAIN: [MAIN, other]}),),
                         tactician=[reply(true_claim(MAIN))], challenger=[reply(alternative)], judge=judge),
                  ledger=ledger)
-    assert len(judge.asked) == 2
+    assert judge.asked == [true_claim(MAIN)]
     (review,) = result.reviews
-    assert review.aired == true_claim(MAIN) and review.alternative.ok
-    # The alternative that did not air stays verified in the Ledger.
-    assert history(ledger, f"m-{MAIN}", "challenger")[-1]["status"] == "verified"
+    assert review.aired == true_claim(MAIN) and review.alternative is None
+    assert review.author == "tactician" and review.attempts == (("tactician", 1), ("challenger", 1))
+    skip = next(s for s in result.trace if s.role == "fact_checker" and s.action == "skip")
+    assert "not checked" in skip.detail
+    # The alternative stays in the Ledger as the Challenger wrote it, never checked.
+    assert history(ledger, f"m-{MAIN}", "challenger")[-1]["status"] == "draft"
     assert next(s for s in result.trace if s.action == "air").detail.startswith("the tactician's claim")
+
+
+def test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite():
+    # The audit's case: three wasted calls when the Challenger's reading was sent back for rewriting.
+    calls = []
+
+    async def challenger(prompt):
+        calls.append(prompt)
+        return reply(false_claim(MAIN))
+
+    result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))]},
+                                 challenger=challenger, judge=Judge()))
+    # analyst, tactician, challenger, one Judge call for the Tactician: no check or rewrite of the reading
+    assert len(calls) == 1 and result.model_calls == 4
+    assert result.reviews[0].aired == true_claim(MAIN)
+
+
+def test_a_recording_made_under_the_old_rule_replays_with_it():
+    # Recordings before the rule have no flag: they replay checking the alternative, as they ran.
+    judge = Judge()
+    alternative = Claim(true_claim(MAIN).text, [MAIN])
+    result = run(models(tactician=[reply(true_claim(MAIN))], challenger=[reply(alternative)], judge=judge),
+                 check_alternative_after_verified=True)
+    assert len(judge.asked) == 2 and result.reviews[0].alternative.ok
 
 
 def test_the_alternative_airs_only_when_the_tacticians_claim_fails():
@@ -624,6 +653,8 @@ def test_record_saves_the_live_replies_and_the_cli_prints_the_model_call_count(
     out, cues = tmp_path / "w.json", tmp_path / "cues.jsonl"
     cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out, "--cues-out", cues)
     recording = WorkflowRecording.load(out)
+    # A new recording says which rule it was made under, so its replay checks as it ran.
+    assert recording.inputs["alternative_checked_after_verified"] is False
     assert [(t.role, t.response) for t in recording.turns] == [
         ("analyst", picks(MAIN)), ("tactician", reply(true_claim(MAIN))), ("challenger", '{"agree": true}'),
         ("judge", json.dumps({"ok": True, "reasons": [], "category": None})),
@@ -802,13 +833,15 @@ def test_a_challenger_failing_on_its_rewrite_leaves_its_rejection_standing():
             raise RuntimeError("model down")
         return reply(false_claim(MAIN))
 
+    # The Tactician's claims are all wrong, so the Challenger's reading is checked and sent back.
     ledger = InMemoryLedger()
-    result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))]},
+    tactician = [reply(false_claim(MAIN))] * (MAX_REWRITES + 1)
+    result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": tactician},
                                  challenger=challenger), ledger=ledger)
     fail = next(s for s in result.trace if s.role == "challenger" and s.action == "fail")
     assert "the rejection stands" in fail.detail
     assert history(ledger, f"m-{MAIN}", "challenger")[-1]["status"] == "rejected"
-    assert result.reviews[0].aired == true_claim(MAIN)
+    assert result.reviews[0].aired is None
 
 
 # Second review (4a91fa8): crash paths and bounds ---------------------------------------------

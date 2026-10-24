@@ -1691,7 +1691,7 @@ def crowded_start(
 
 # A goalkeeper's own touches and his dive: the actions the engine names when he handles the ball
 # or throws himself at it (ninety/sim). Arms over the ball are what hides it from the lens.
-KEEPER_ACTIONS = ("hands", "dive", "throw")
+KEEPER_ACTIONS = ("hands", "dive", "throw", "bowl")
 # The penalty area, 16.5 m from the goal line and 40.32 m wide (Law 1): where a keeper handles.
 PENALTY_DEPTH_M = 16.5
 PENALTY_HALF_WIDTH_M = 20.16
