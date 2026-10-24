@@ -2800,3 +2800,45 @@ short and actionable. This file is public: no research sources, product names or
   has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
   variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
   `replays/`, `docs/eval/` and the fixtures are unchanged from main's check on the same texts.
+
+### 240. A measurement is re-run on the engine the demo uses, and a fixed sentence in a report becomes a computed one
+- **What happened:** the insight, roles and team-distance evaluations ran on runs/u7, seed11 and
+  c21, simulated on Oct 13–14, before the engine fixes. The u7 run logged 22 of 265 passes from a
+  player to himself; the validator's C8 now rejects these. Re-run on the freeze engine (65247ba3:
+  the demo's seed 8076 and seeds 7, 11 and 21), the fact-checker missed 9 planted false claims and
+  stopped 16 true ones that u7 never produced:
+  - a back line's change and height, both in metres, were not bound to their roles ("pushed up
+    21 m, to 21 m");
+  - one name could be said as both players of a one-two;
+  - a regain that led to a shot was stopped by the counter-press's words, and its reversal
+    ("never won the ball back and had a shot") passed.
+
+  Name precision fell from 0.999 to 0.939–0.975, and with full tracking team distance read
+  0.967–1.204 of the truth, not "within a few percent". A step rule fixed before measuring found no
+  step that tames the error, so the phone now labels the distance with its measured worst over
+  every freeze match graded (±21%, the demo's own match; one held-out match alone gave ±15%, narrower
+  than the demo's, caught in review). Two report texts were fixed strings: the
+  roles report named runs/u7 whatever it ran on, and the team-distance report kept its "few
+  percent". Both stayed true-sounding after the numbers changed.
+- **Rule:** an evaluation quoted in the docs runs on a match simulated at the engine the demo uses,
+  and its report states the runs it read and the range it measured, computed, never typed. When the
+  engine moves, the evaluations are re-run before their numbers are quoted.
+- **Check:** `docs/eval/roles.md`, `team-distance.md` and `insight-claims.md` name their runs (the
+  `f*-65247ba3` folders). `tests/test_insight_check.py::test_a_line_moves_by_its_change_to_its_height_never_the_other_way_round`,
+  `::test_one_name_said_as_both_players_of_a_one_two_is_refused` and
+  `::test_a_regain_that_led_to_a_shot_is_said_in_its_own_words_and_never_reversed` fail when their
+  rule is mutated.
+
+### 241. A name is one player at a time
+- **What happened:** the players ranking listed one starter's name twice: two tracks were both
+  assigned his role and both passed the name gate. The first rule proposed, "if two tracks claim a
+  name, neither gets it", named nobody on the stand-in: the tracker breaks every player into
+  several tracks over a match, so every name had several claimants (742 named tracks became 0).
+- **Rule:** tracks that claim one name and are never on the pitch together are one player in
+  pieces, and keep it; two that are there at the same time lose it and fall back to their role
+  (`roles.one_track_per_name`). The ranking merges one named player's pieces into one row. On the
+  freeze stand-in (gates 0.203) this keeps 612 of 742 names and lifts their precision from 0.930 to
+  0.977; 38 of the 130 names it removes were wrong.
+- **Check:** `tests/test_insights.py::test_a_name_binds_to_one_player_at_a_time` and
+  `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
+  when the overlap test or the merge is mutated.

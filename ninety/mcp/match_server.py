@@ -209,7 +209,7 @@ def style(match: str, minute_from: int, minute_to: int, club: str | None = None)
     """How each club plays between two match minutes, computed by code from detected passes and
     tracked shape: share of passes from each channel (left, centre, right as it attacks), its median
     width against the other club's, crosses (wide final-third passes ending in the box), its keeper's
-    long (32 m or more) and short passes, counter-attacks (open-play regain to shot, seconds) and
+    long (32 m or more) and short passes, regains that led to a shot (open-play regain to shot, seconds) and
     one-twos. Cite by id; quote a channel's share right after naming the channel."""
     return _insight(match, "style", minute_from, minute_to, club)
 
