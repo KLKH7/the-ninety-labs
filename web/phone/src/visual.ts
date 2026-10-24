@@ -318,8 +318,9 @@ export function drawVisual(view: View, v: Visual) {
       for (const b of v.bands!) {
         const top = Y(Math.max(b.y0, b.y1));
         const h = Math.abs(Y(b.y1) - Y(b.y0));
-        ctx.globalAlpha = 0.06 + 0.5 * (b.share / busiest); // the busiest lane strongest
-        ctx.fillStyle = own;
+        // White by share, never a team colour over a large area (DESIGN.md); the busiest lane strongest.
+        ctx.globalAlpha = 0.04 + 0.2 * (b.share / busiest);
+        ctx.fillStyle = "#fff";
         ctx.fillRect(X(0), top, PITCH_X * view.s, h);
         ctx.globalAlpha = 1;
         ctx.strokeStyle = "rgba(255,255,255,0.5)";
