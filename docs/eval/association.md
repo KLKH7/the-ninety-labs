@@ -41,7 +41,7 @@ tracks have the same true player. The results:
 Each comes with a Wilson 95% interval. The results are reported as measured, with no second run
 under another threshold.
 
-## Deviations (recorded before the results were read)
+## Deviations from the plan
 
 - **The views' runs:** the first views runs placed nothing. `live_job` never passed `fixed=True`
   for a view (lesson 235): seed108 had its camera OK on 0 of 250 frames. They were run again with
