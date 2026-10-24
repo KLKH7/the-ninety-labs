@@ -144,9 +144,14 @@ class Review:
     alternative: Verdict | None
     aired: Claim | None
     status: ClaimStatus
+    author: Author | None = None  # whose claim aired
+    attempts: tuple[tuple[Author, int], ...] = ()  # drafts each writer wrote for this moment
+    drafted: Claim | None = None  # the Tactician's last claim, aired or not (what the trace shows)
 
     def __post_init__(self) -> None:
         _require(self.status in CLAIM_STATUSES, f"unknown status {self.status!r}")
+        _require(self.author is None or self.aired is not None,
+                 f"review {self.moment_id}: only an aired claim has an author")
         _require(
             (self.aired is not None) == (self.status == "verified"),
             f"review {self.moment_id}: a claim airs if and only if the status is verified",
