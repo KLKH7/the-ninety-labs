@@ -45,6 +45,10 @@ jobs:
             echo "::error::nightly/evals-$night exists: tonight's evaluation was already archived; delete that branch to re-run"
             exit 1
           fi
+          if [ -e "docs/eval/nightly/$night" ]; then
+            echo "::error::docs/eval/nightly/$night is already on main: tonight's evaluation was already committed"
+            exit 1
+          fi
           echo "night=$night" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked

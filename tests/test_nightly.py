@@ -113,6 +113,7 @@ def test_a_night_already_archived_stops_before_any_model_call():
     )
     assert guard < first_model and '"nightly/evals-$night"' in steps[guard]["run"]
     assert "exit 1" in steps[guard]["run"]
+    assert '[ -e "docs/eval/nightly/$night" ]' in steps[guard]["run"]  # nor one already merged
     # The commit job archives under the night the guard checked, not a date of its own.
     assert flow["jobs"]["commit"]["env"]["NIGHT"] == "${{ needs.evals.outputs.night }}"
     assert flow["jobs"]["evals"]["outputs"]["night"] == "${{ steps.night.outputs.night }}"

@@ -36,8 +36,9 @@ def run_fact_checker(monkeypatch, tmp_path, rows):
     fe.main()
 
 
-def test_a_fact_checker_run_in_which_the_judge_never_answered_writes_nothing(monkeypatch, tmp_path):
-    rows = [claim_row("service") for _ in range(8)] + [claim_row(code_ok=False)] * 4
+@pytest.mark.parametrize("hold", ["service", "timeout"])
+def test_a_fact_checker_run_in_which_the_judge_never_answered_writes_nothing(monkeypatch, tmp_path, hold):
+    rows = [claim_row(hold) for _ in range(8)] + [claim_row(code_ok=False)] * 4
     with pytest.raises(evidence.NothingMeasured, match="did not answer 8 of 8 claims sent to the Judge"):
         run_fact_checker(monkeypatch, tmp_path, rows)
     assert not (tmp_path / "f.md").exists() and not (tmp_path / "f.json").exists()
@@ -91,6 +92,13 @@ def test_an_analyst_run_in_which_the_models_never_answered_writes_nothing(monkey
     assert not (tmp_path / "a.md").exists()
     run_analyst(monkeypatch, tmp_path, [draft()] * 9 + [draft(text="")])  # one silent minute in ten
     assert (tmp_path / "a.md").exists()
+
+
+@pytest.mark.parametrize("hold", ["service", "timeout"])
+def test_an_analyst_run_whose_judge_never_answered_writes_nothing(monkeypatch, tmp_path, hold):
+    with pytest.raises(evidence.NothingMeasured, match="did not answer 10 of 10 minutes"):
+        run_analyst(monkeypatch, tmp_path, [draft(category=hold)] * 10)
+    assert not (tmp_path / "a.md").exists()
 
 
 def test_a_live_writer_cannot_leave_out_its_definitions():
