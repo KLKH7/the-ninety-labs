@@ -66,7 +66,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
 | `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders) and training; tracking, camera-to-pitch mapping, possession and event rules are planned |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow: Analyst and fact-checking agent (Judge) on Foundry, the live path to overlay cues, the Data agent; Producer and Personalizer are in open pull requests |
+| `ninety/agents` | Agent Framework workflow on Foundry: the multi-agent graph (Analyst, Tactician, Challenger, fact-checking agent with the Judge, Producer), the slice (Analyst and Judge), the live path to overlay cues; the Vision Auditor (offline, code-written; its model path not yet recorded) and the Data agent (code). The Personalizer is `ninety/personalizer` |
 | `ninety/speech` | The Describer: audio description from fact-checked lines only, within 2 s of the play, placed in stereo; SSML and WebVTT; Azure AI Speech behind `--speech azure` |
 | `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
