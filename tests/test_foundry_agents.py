@@ -59,7 +59,8 @@ def test_the_allowed_tools_are_the_servers_tools():
     assert sorted(t.name for t in served) == sorted(match_server.SERVED)
     # The published Analyst may call a subset; team_shape joins it when the Analyst is republished.
     assert set(match_server.TOOLS) <= set(match_server.SERVED)
-    assert set(match_server.SERVED) - set(match_server.TOOLS) == {"team_shape", "re_perceive"}
+    extra = {"team_shape", "re_perceive", *match_server.INSIGHT_TOOLS}
+    assert set(match_server.SERVED) - set(match_server.TOOLS) == extra
 
 
 def test_the_team_shape_tool_describes_its_typed_facts():
