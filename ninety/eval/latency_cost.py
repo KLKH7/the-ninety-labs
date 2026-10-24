@@ -43,8 +43,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "docs" / "eval" / "latency-cost.json"
 REPORT = ROOT / "docs" / "eval" / "latency-cost.md"
 RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
-# The template cues for seed 7's first five minutes (docs/EVALUATION.md: 108 cues for seed 7, five
-# minutes): what the casual persona's graphics say, a floor for what a spoken description says.
+# The template cues for seed 7's first five minutes (docs/EVALUATION.md): what the casual persona's
+# graphics say, a floor for what a spoken description says.
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
@@ -195,7 +195,9 @@ def measure_latency(clip: Path, runs: int) -> dict:
     recording = Recording.load(RECORDING)
     scenarios: dict[str, list[dict[str, float]]] = {"e2e": [], "replay": []}
     with _Spans() as spans, tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames"])
+        # The single Analyst path: the committed timings and "What runs" describe it, not the graph.
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames",
+                                        "--single-analyst"])
         for n in range(runs + 1):  # the first run warms imports and caches, and is not counted
             _quiet(lambda: asyncio.run(e2e.run(args)))
             stages = spans.take()
@@ -217,7 +219,8 @@ def describe_clip(clip: Path) -> dict:
     from ninety import e2e
 
     with tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames"])
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames",
+                                        "--single-analyst"])
         manifest = _quiet(lambda: asyncio.run(e2e.run(args)))
     return {"frames": manifest["detections"]["frames"], "events": manifest["events"]["count"],
             "events_source": manifest["events"]["source"], "facts": manifest["facts"],

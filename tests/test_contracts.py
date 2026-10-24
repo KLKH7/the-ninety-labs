@@ -103,6 +103,8 @@ def test_a_review_airs_a_claim_only_when_verified():
         Review("m1", bad, None, CLAIM, "verified")
     with pytest.raises(ValueError, match="status"):
         Review("m1", bad, None, None, "maybe")
+    with pytest.raises(ValueError, match="only an aired claim has an author"):
+        Review("m1", bad, None, None, "rejected", "tactician")
 
 
 # Viewer input is validated at the boundary ------------------------------------------------------
