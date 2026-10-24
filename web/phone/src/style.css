@@ -430,3 +430,35 @@ ion-footer.composer .footer-background { display: none; }
 .skeleton.line { height: 18px; }
 .skeleton.short { width: 62%; }
 .skeleton.stamp { width: 48px; height: 16px; margin-top: 10px; }
+
+/* Listening and text (Comet's voice settings, Evernote's text size): grouped rounded lists. */
+.settings-open { width: 44px; height: 44px; border: 0; background: none; color: var(--text); display: grid; place-items: center; }
+.settings-open svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#settings-sheet .sheet-body { height: 100%; overflow-y: auto; padding-bottom: 40px; }
+.group-title { margin: 24px 20px 8px; font-size: 17px; font-weight: 600; color: var(--text-2); }
+.group { list-style: none; margin: 0 16px; padding: 0 16px; border-radius: 22px; background: var(--surface); }
+.setting-row { display: flex; align-items: center; gap: 12px; min-height: 56px; }
+.group > .setting-row + .setting-row { border-top: 0.5px solid var(--hairline); }
+.setting-row > span { display: grid; gap: 2px; flex: 1; }
+.row-title { font-size: 17px; color: var(--text); }
+.row-sub { font-size: 14px; color: var(--text-2); }
+.radio-main { flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 56px; border: 0; background: none; padding: 0; text-align: left; }
+.radio-main .tick { width: 22px; height: 22px; fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.radio-main[aria-checked="true"] .tick { visibility: visible; }
+.preview { width: 36px; height: 36px; flex: none; border: 0; border-radius: 18px; background: var(--text-2); color: var(--surface); display: grid; place-items: center; }
+.preview svg { width: 18px; height: 18px; fill: currentColor; }
+.switch { appearance: none; width: 51px; height: 31px; flex: none; border-radius: 16px; background: rgba(120, 120, 128, 0.32); position: relative; transition: background 0.2s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+.switch:checked { background: #34c759; }
+.switch:checked::after { transform: translateX(20px); }
+.rate-group { display: flex; align-items: center; gap: 12px; min-height: 64px; }
+#rate { flex: 1; accent-color: var(--text); min-height: 44px; }
+#rate-value { min-width: 44px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The transcript caption: what is being read aloud, above the tab bar, for a moment. */
+.caption { position: fixed; left: 16px; right: 16px; bottom: calc(64px + 20px + env(safe-area-inset-bottom)); z-index: 20; margin: 0; padding: 12px 16px;
+  border-radius: 16px; background: rgba(28, 28, 30, 0.94); color: #fff; font-size: 17px; line-height: 1.35; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
+
+/* Text size: the content scales; the tab bar and score band keep their size. */
+html[data-text="large"] :is(.live-pane, .insights, .answers, .how-body, #player) { zoom: 1.15; }
+html[data-text="xlarge"] :is(.live-pane, .insights, .answers, .how-body, #player) { zoom: 1.3; }

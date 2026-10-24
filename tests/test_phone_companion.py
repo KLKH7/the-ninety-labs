@@ -612,3 +612,26 @@ def test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks(br
     # mutation: call speechSynthesis.speak in speakAloud under webdriver -> __spoke > 0
     assert page.evaluate("window.__spoke") == 0
     assert not errors
+
+
+def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False)
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#settings-sheet #rate")
+    page.fill("#rate", "1.4")
+    assert page.text_content("#rate-value") == "1.4x"
+    page.locator("#text-sizes [role=radio]", has_text="Large").first.click()
+    assert page.evaluate("document.documentElement.dataset.text") == "large"
+    assert page.get_attribute("#text-sizes [role=radio] >> nth=1", "aria-checked") == "true"
+    page.click("#close-settings")
+    # The choices hold across a reload (this browser only).
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    assert page.evaluate("document.documentElement.dataset.text") == "large"
+    # Read-aloud on, with the transcript on (the default): the line is shown as it is said.
+    page.click(".speak >> nth=0")
+    page.evaluate("window.ninetyPhone.announce('Oakfield break forward')")
+    page.wait_for_selector("#caption:not([hidden])")
+    assert page.text_content("#caption") == "Oakfield break forward"
+    assert page.evaluate("window.ninetySpokenAloud") == ["Oakfield break forward"]  # recorded, never voiced
+    assert not errors

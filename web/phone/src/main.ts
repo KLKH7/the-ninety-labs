@@ -12,6 +12,7 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
+import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { nameIds, teamNames } from "../../viewer/src/teams";
@@ -634,7 +635,7 @@ function announce(text: string) {
   $("announce").textContent = text;
   if (speaking && "speechSynthesis" in window) {
     speechSynthesis.cancel();
-    speakAloud(text);
+    say(text);
     lockScreen(text);
   }
 }
@@ -659,6 +660,108 @@ for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
     if (!speaking && "speechSynthesis" in window) speechSynthesis.cancel();
   });
 }
+
+// --- listening and text size (settings.ts): voice, rate, transcript, text size ------------------
+
+let settings = prefs.load();
+let captionTimer = 0;
+/** Speaks a line with the fan's voice and rate; with the transcript on, shows it as a caption too. */
+function say(text: string) {
+  speakAloud(text, { rate: settings.rate, voice: settings.voice });
+  if (!settings.transcript) return;
+  const caption = $("caption");
+  caption.textContent = text;
+  caption.hidden = false;
+  clearTimeout(captionTimer);
+  captionTimer = window.setTimeout(() => (caption.hidden = true), 4000 + 60 * text.length); // design: time to read it
+}
+
+function applyText() {
+  document.documentElement.dataset.text = settings.text;
+}
+
+const SIZES: [prefs.TextSize, string][] = [
+  ["normal", "Normal"],
+  ["large", "Large"],
+  ["xlarge", "Extra large"],
+];
+const SAMPLE = "Oakfield keep winning it back fast: four times inside five seconds this half.";
+
+function radioRow(group: string, label: string, on: boolean, pick: () => void, extra?: HTMLElement): HTMLLIElement {
+  const li = document.createElement("li");
+  li.className = "setting-row radio";
+  const b = document.createElement("button");
+  b.type = "button";
+  b.setAttribute("role", "radio");
+  b.setAttribute("aria-checked", String(on));
+  b.dataset.group = group;
+  b.className = "radio-main";
+  b.innerHTML = '<span class="row-title"></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+  b.querySelector(".row-title")!.textContent = label;
+  b.addEventListener("click", () => {
+    pick();
+    prefs.save(settings);
+    renderSettings();
+  });
+  if (extra) li.append(extra);
+  li.append(b);
+  return li;
+}
+
+function renderSettings() {
+  const vs = prefs.voices();
+  $("voices").replaceChildren(
+    radioRow("voice", "Phone's default voice", settings.voice === null, () => (settings.voice = null)),
+    ...vs.map((v) => {
+      const play = document.createElement("button");
+      play.type = "button";
+      play.className = "preview";
+      play.setAttribute("aria-label", `Hear ${v.name}`);
+      play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10l8-5z"/></svg>';
+      play.addEventListener("click", () => {
+        if ("speechSynthesis" in window) speechSynthesis.cancel();
+        speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
+      });
+      return radioRow("voice", v.name, settings.voice === v.name, () => (settings.voice = v.name), play);
+    }),
+  );
+  $<HTMLInputElement>("transcript-on").checked = settings.transcript;
+  const rate = $<HTMLInputElement>("rate");
+  rate.min = String(prefs.RATES.min);
+  rate.max = String(prefs.RATES.max);
+  rate.step = String(prefs.RATES.step);
+  rate.value = String(settings.rate);
+  rate.setAttribute("aria-valuetext", `${settings.rate.toFixed(1)} times`);
+  $("rate-value").textContent = `${settings.rate.toFixed(1)}x`;
+  $("text-sizes").replaceChildren(...SIZES.map(([size, label]) => radioRow("text", label, settings.text === size, () => (settings.text = size))));
+  applyText();
+}
+
+$("transcript-on").addEventListener("change", (e) => {
+  settings.transcript = (e.target as HTMLInputElement).checked;
+  prefs.save(settings);
+});
+$("rate").addEventListener("input", (e) => {
+  settings.rate = Number((e.target as HTMLInputElement).value);
+  prefs.save(settings);
+  $("rate-value").textContent = `${settings.rate.toFixed(1)}x`;
+  $("rate").setAttribute("aria-valuetext", `${settings.rate.toFixed(1)} times`);
+});
+const settingsSheet = $("settings-sheet") as IonModal;
+let settingsUp = false;
+for (const b of document.querySelectorAll<HTMLButtonElement>(".settings-open")) {
+  b.addEventListener("click", () => {
+    settings = prefs.load();
+    renderSettings();
+    void settingsSheet.present();
+  });
+}
+settingsSheet.addEventListener("ionModalWillPresent", () => (settingsUp = true));
+settingsSheet.addEventListener("ionModalWillDismiss", () => (settingsUp = false));
+settingsSheet.addEventListener("ionModalDidPresent", () => $("settings-title").focus());
+$("close-settings").addEventListener("click", () => void settingsSheet.dismiss());
+if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => settingsUp && renderSettings());
+applyText();
 
 // --- the player sheet (ion-modal with a grabber and two heights) --------------------------------
 
@@ -1098,7 +1201,7 @@ function answerActions(a: ViewerAnswer): HTMLElement {
   };
   const text = named(a.text, a.names);
   row.append(
-    icon("Read this answer aloud", '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>', () => speakAloud(text)),
+    icon("Read this answer aloud", '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>', () => say(text)),
     icon("Copy this answer", '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', () => void navigator.clipboard?.writeText(text)),
   );
   const n = a.evidence.length;
