@@ -140,6 +140,14 @@ def mock_pair(browser, site, *, play=True, minimap_body=None):
     return laptop, phone, errors, requests
 
 
+def turn_on_read_aloud(page):
+    """Read-aloud is a switch in the settings sheet (the ⋯ button), off until a fan turns it on."""
+    page.click(".settings-open >> nth=0")
+    page.locator("#settings-sheet .speak").click()
+    page.click("#close-settings")
+    page.wait_for_function("!document.querySelector('#settings-sheet').classList.contains('show-modal')")
+
+
 def open_roster(page):
     """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
     page.focus("#lt-players")
@@ -324,7 +332,7 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     said = phone.locator("#now-said")
     assert said.get_attribute("aria-live") == "polite"
-    phone.click(".speak >> nth=0")  # read-aloud on: the play is described as it happens
+    turn_on_read_aloud(phone)  # read-aloud on: the play is described as it happens
     assert phone.is_checked("#now-live")
     phone.wait_for_function("document.querySelector('#now-said').textContent.startsWith('At ')")
     club = "(London|Lisbon)"

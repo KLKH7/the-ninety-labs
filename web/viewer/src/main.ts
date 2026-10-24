@@ -423,7 +423,8 @@ async function start() {
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
         .map((c) => {
-          const said = (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, "");
+          // The check's result belongs in How we know, never prefixed to what is shown or said.
+          const said = c.text.replace(/\.$/, "");
           return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
         })
         .join(". ");

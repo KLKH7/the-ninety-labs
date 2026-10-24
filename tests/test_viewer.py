@@ -113,7 +113,7 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
     assert set(on_air(page)) == {"insight-e2", "cue-e2-analyst"}
-    assert "Fact-checked: Crowmere 8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
+    assert "Crowmere 8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
     page.keyboard.press("1")

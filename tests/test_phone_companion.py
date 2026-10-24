@@ -21,7 +21,7 @@ import pytest
 
 from ninety import e2e
 from tests.e2e_clip import H, W, write_clip
-from tests.test_phone import MOCK_CODE, MOCK_DIST, PHONE_SIZE, browser, unavailable, watch  # noqa: F401
+from tests.test_phone import MOCK_CODE, MOCK_DIST, PHONE_SIZE, browser, turn_on_read_aloud, unavailable, watch  # noqa: F401
 from tests.test_radar import FPS, SEGMENTS, observations_clip, tracked_clip
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -481,7 +481,7 @@ def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reache
     page.focus("#now-live")  # ...until a keyboard or screen-reader user reaches them
     box = page.locator("#now-box").bounding_box()
     assert box["width"] > 100 and box["height"] > 40, box
-    page.click(".speak >> nth=0")  # one control: read aloud, and describe the play as it happens
+    turn_on_read_aloud(page)  # one control: read aloud, and describe the play as it happens
     assert page.is_checked("#now-live")
     assert not errors
 
@@ -616,11 +616,11 @@ def test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks(br
     under automation (navigator.webdriver) a line is recorded, never handed to speechSynthesis."""
     laptop, page, errors = phone(browser, site, bundle=False)
     page.evaluate("() => { window.__spoke = 0; speechSynthesis.speak = () => { window.__spoke += 1; }; }")
-    assert page.get_attribute(".speak >> nth=0", "aria-pressed") == "false"
+    assert page.get_attribute("#settings-sheet .speak", "aria-pressed") == "false"
     page.evaluate("window.ninetyPhone.announce('A line with read-aloud off')")  # words on screen, no voice
     assert page.text_content("#announce") == "A line with read-aloud off"
     assert page.evaluate("window.ninetySpokenAloud") is None
-    page.click(".speak >> nth=0")
+    turn_on_read_aloud(page)
     page.evaluate("window.ninetyPhone.announce('A line with read-aloud on')")
     page.wait_for_function("(window.ninetySpokenAloud || []).length > 0")
     # mutation: call speechSynthesis.speak in speakAloud under webdriver -> __spoke > 0
@@ -643,7 +643,7 @@ def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browse
     page.wait_for_selector("body[data-state=live]")
     assert page.evaluate("document.documentElement.dataset.text") == "large"
     # Read-aloud on, with the transcript on (the default): the line is shown as it is said.
-    page.click(".speak >> nth=0")
+    turn_on_read_aloud(page)
     page.evaluate("window.ninetyPhone.announce('London break forward')")
     page.wait_for_selector("#caption:not([hidden])")
     assert page.text_content("#caption") == "London break forward"
