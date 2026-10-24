@@ -112,7 +112,7 @@ def test_a_ball_flying_through_the_goal_footprint_without_stopping_is_no_goal():
 def test_on_the_line_is_not_over_it():
     # Rule 1: the centre must be beyond the line by more than the radius plus E_X.
     on = 105.0 + oc.BALL_R + oc.E_X
-    _, goals, _, _ = run(shot_scene(into_net((on, 34.0))))
+    _, goals, _, _ = run(shot_scene(into_net((on - 1e-6, 34.0))))  # on it, clear of float rounding
     assert goals == []
     _, goals, _, _ = run(shot_scene(into_net((on + 0.05, 34.0))))
     assert len(goals) == 1
