@@ -18,27 +18,38 @@ export const CLUBS: Record<string, string> = {
   HLT: "Holtmoor",
   IVY: "Ivydale",
   KST: "Kestwood",
+  LIS: "Lisbon Esportes",
+  LON: "London Athletic",
   MRL: "Merlton",
   OAK: "Oakfield",
   QRY: "Quarrydale",
 };
 
-/** For a bundle that names no clubs (made before the codes were carried). */
-export const DEFAULT_TEAMS: TeamNames = { home: "Oakfield", away: "Fenwick" };
+/** The demo's two clubs (Kian, Oct 24): London Athletic at home, Lisbon Esportes away. Screens say
+ * the short name ("London"); the full name heads the line-ups. */
+export const DEFAULT_TEAMS: TeamNames = { home: "London", away: "Lisbon" };
+
+/** A club's short name, as running text says it: the first word of its full name. */
+export const short = (full: string) => full.split(" ")[0];
+
+/** A club's full name from its short one, when the codes know it. */
+export function fullName(name: string): string {
+  return Object.values(CLUBS).find((full) => short(full) === name) ?? name;
+}
 
 /** The clubs a payload names, by code (a bundle's `teams`) or by name (an answer's); otherwise the
  * default. */
 export function teamNames(from: unknown): TeamNames {
   const t = from as Partial<TeamNames> | null | undefined;
   const name = (s: unknown): string | null =>
-    typeof s !== "string" ? null : (CLUBS[s] ?? (/^[\p{L}][\p{L} .'-]{0,23}$/u.test(s) && !/^(home|away)$/i.test(s) ? s : null));
+    typeof s !== "string" ? null : CLUBS[s] ? short(CLUBS[s]) : (/^[\p{L}][\p{L} .'-]{0,23}$/u.test(s) && !/^(home|away)$/i.test(s) ? short(s) : null);
   const home = name(t?.home);
   const away = name(t?.away);
   return home && away && home !== away ? { home, away } : DEFAULT_TEAMS;
 }
 
 /** A player as a fan reads him: the name or role a payload gives (`names`), otherwise his club and
- * shirt ("Fenwick 7"), or for a tracked player his club and the tracker's number ("Fenwick player
+ * shirt ("Lisbon 7"), or for a tracked player his club and the tracker's number ("Lisbon player
  * 12"): never an invented name, shirt or role. */
 export function playerLabel(id: string, teams: TeamNames, names?: Record<string, string>): string {
   const given = names?.[id];
@@ -48,7 +59,13 @@ export function playerLabel(id: string, teams: TeamNames, names?: Record<string,
   return track ? `${club} player ${track[1]}` : `${club} ${id.slice(1)}`;
 }
 
-/** Text with every player id (h7, a-t12) said as `playerLabel` says it; only the names change. */
+/** Text with every player id (h7, a-t12) said as a fan would: a given name or role, a shirt
+ * ("Lisbon 7"), or, for a tracked player the agents have not named, "a Lisbon player": the
+ * tracker's number is not a shirt, and reads badly in a sentence. */
 export function nameIds(text: string, teams: TeamNames, names?: Record<string, string>): string {
-  return text.replace(/\b[ha](?:-t\d+|[1-9]|1[01])\b/g, (id) => playerLabel(id, teams, names));
+  return text.replace(/\b[ha](?:-t\d+|[1-9]|1[01])\b/g, (id, at: number) => {
+    if (names?.[id] || !id.includes("-t")) return playerLabel(id, teams, names);
+    const club = teams[id.startsWith("h") ? "home" : "away"];
+    return at === 0 ? `A ${club} player` : `a ${club} player`;
+  });
 }

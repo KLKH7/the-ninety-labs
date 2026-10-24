@@ -143,10 +143,10 @@ def test_without_a_bundle_the_phone_runs_on_in_match_time(browser, site):  # noq
 # --- answers: the picture their data carries ------------------------------------------------------
 
 QUESTIONS = [
-    ("Where are Oakfield overloading?", "overload"),
-    ("Which pass broke Fenwick's lines?", "line_break"),
-    ("What are Oakfield's passing options?", "pass_options"),
-    ("How are Fenwick set up?", "shape"),
+    ("Where are London overloading?", "overload"),
+    ("Which pass broke Lisbon's lines?", "line_break"),
+    ("What are London's passing options?", "pass_options"),
+    ("How are Lisbon set up?", "shape"),
     ("How are the teams moving?", "wind"),
 ]
 
@@ -225,7 +225,7 @@ OFFSIDE = {"line_x": 88.4, "receiver": [88.9, 30, "h-t9"], "second_last": [88.4,
 
 def test_an_offside_too_close_to_call_is_never_called_and_headlines_are_the_facts(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
-    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "Oakfield"}
+    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "London"}
 
     def preview(kind: str, geometry: dict) -> dict:
         visual = {**base, "kind": kind, "geometry": geometry}
@@ -247,7 +247,7 @@ def test_a_visual_missing_its_numbers_draws_no_picture(browser, site):  # noqa: 
     """The phone never fills in a number: an agents' visual (schemas/insight_card.schema.json) without
     the data its kind needs is not drawn."""
     laptop, page, errors = phone(browser, site, bundle=False)
-    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "Oakfield"}
+    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "London"}
     zone = {"x0": 40.0, "x1": 60.0, "y0": 20.0, "y1": 40.0}
     lb = {"from": [40, 30], "to": [70, 30, "h-t9"]}
     press = {"ball": [60, 30], "pressers": [[58, 30]]}
@@ -288,8 +288,8 @@ def test_a_visual_missing_its_numbers_draws_no_picture(browser, site):  # noqa: 
 def test_a_player_is_named_by_the_answers_names_or_his_club_never_his_id(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     label = page.evaluate("[window.ninetyPhone.name('a-t12'), window.ninetyPhone.name('h7'), "
-                          "window.ninetyPhone.name('a-t12', {'a-t12': \"Fenwick's left-back\"})]")
-    assert label == ["Fenwick player 12", "Oakfield 7", "Fenwick's left-back"]
+                          "window.ninetyPhone.name('a-t12', {'a-t12': \"Lisbon's left-back\"})]")
+    assert label == ["Lisbon player 12", "London 7", "Lisbon's left-back"]
     assert not errors
 
 
@@ -347,7 +347,9 @@ def test_every_scorebug_code_has_one_club_name_starting_with_its_letters():
 
     source = (Path(__file__).resolve().parent.parent / "web" / "viewer" / "src" / "teams.ts").read_text()
     clubs = dict(re.findall(r'^\s+([A-Z]{3}): "([^"]+)",$', source, re.M))
-    assert set(clubs) == set(TEAM_CODES)
+    # Every code the renderer draws has a club, plus the demo's two (Kian, Oct 24: LON, LIS), which
+    # the renderer's TEAM_CODES will carry once its owner adds them.
+    assert set(TEAM_CODES) <= set(clubs) and set(clubs) - set(TEAM_CODES) <= {"LON", "LIS"}
     assert len(set(clubs.values())) == len(clubs)
     for code, name in clubs.items():
         assert name.upper().startswith(code[0]), (code, name)
@@ -455,7 +457,7 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     """At 61.2 s the cut clip's detections (tests/e2e_clip.py) are on the bundle's frame: the sheet
     boxes each with its confidence, says so in words, and says which check passed the answer."""
     laptop, page, errors = phone(browser, site, laptop_t=61.2)
-    answer = ask(page, "Where are Oakfield overloading?")
+    answer = ask(page, "Where are London overloading?")
     answer.locator(".how").click()
     seen = "document.querySelector('#how-body canvas.seen')?.getAttribute('aria-label')"
     page.wait_for_function(f"({seen} || '').includes('percent')")
@@ -482,7 +484,7 @@ def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reache
 
 def test_an_answer_headline_reads_naturally_from_its_own_numbers(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
-    answer = ask(page, "Where are Oakfield overloading?")
+    answer = ask(page, "Where are London overloading?")
     answers = [p for p in page.evaluate("window.ninetyPhone.seen") if p.get("type") == "answer"]
     visual = answers[-1]["answer"]["visual"]
     g = visual["geometry"]
@@ -493,7 +495,7 @@ def test_an_answer_headline_reads_naturally_from_its_own_numbers(browser, site):
 
 def test_the_var_check_puts_the_margin_on_a_scale_and_never_calls_inside_the_band(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
-    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "Oakfield", "kind": "offside"}
+    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "London", "kind": "offside"}
 
     def var(geometry):
         page.evaluate("v => window.ninetyPhone.how(v)", {**base, "geometry": geometry})
@@ -539,13 +541,13 @@ def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, sit
 def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     page.click("#lt-players")
-    page.get_by_role("button", name="Oakfield 7", exact=True).click()
+    page.get_by_role("button", name="London 7", exact=True).click()
     page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert "average position" in page.inner_text("#avg-pos")
-    page.locator("#compare-chips").get_by_role("button", name="Fenwick 7", exact=True).click()
+    page.locator("#compare-chips").get_by_role("button", name="Lisbon 7", exact=True).click()
     page.wait_for_selector("#compare-rows:not([hidden]) .stat-row")
     labels = [page.locator("#compare-rows .stat-row").nth(i).get_attribute("aria-label") for i in range(3)]
-    assert labels[0].startswith("Speed now (km/h): Oakfield 7 ") and ", Fenwick 7 " in labels[0]
+    assert labels[0].startswith("Speed now (km/h): London 7 ") and ", Lisbon 7 " in labels[0]
     assert not errors
 
 
@@ -630,10 +632,10 @@ def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browse
     assert page.evaluate("document.documentElement.dataset.text") == "large"
     # Read-aloud on, with the transcript on (the default): the line is shown as it is said.
     page.click(".speak >> nth=0")
-    page.evaluate("window.ninetyPhone.announce('Oakfield break forward')")
+    page.evaluate("window.ninetyPhone.announce('London break forward')")
     page.wait_for_selector("#caption:not([hidden])")
-    assert page.text_content("#caption") == "Oakfield break forward"
-    assert page.evaluate("window.ninetySpokenAloud") == ["Oakfield break forward"]  # recorded, never voiced
+    assert page.text_content("#caption") == "London break forward"
+    assert page.evaluate("window.ninetySpokenAloud") == ["London break forward"]  # recorded, never voiced
     assert not errors
 
 

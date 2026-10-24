@@ -34,7 +34,7 @@ export interface MatchData {
  * the play it skipped to matters). */
 export const SKIP_LABEL_S = 2.5;
 
-/** A chapter's label with the club's name for the side it names ("Goal, home" -> "Goal · Oakfield"):
+/** A chapter's label with the club's name for the side it names ("Goal, home" -> "Goal · London"):
  * match.json names sides, the screen names clubs. */
 export function chapterLabel(c: Pick<Chapter, "label">, teams: TeamNames): string {
   return c.label.replace(/, (home|away)$/, (_, side: "home" | "away") => ` · ${teams[side]}`);

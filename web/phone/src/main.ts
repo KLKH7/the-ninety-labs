@@ -412,11 +412,11 @@ async function loadBundle() {
   }
 }
 
-/** The two clubs' colours (DESIGN.md: Oakfield navy, Fenwick claret; another club takes the one
+/** The two clubs' colours (DESIGN.md: London team-a, Lisbon team-b; another club takes the one
  * left), on the page's variables and on every pitch drawing. Colour follows the club, not the side. */
 function clubColours() {
   const root = document.documentElement;
-  const own = (club: string) => (club === "Oakfield" ? "a" : club === "Fenwick" ? "b" : null);
+  const own = (club: string) => (club === "London" ? "a" : club === "Lisbon" ? "b" : null);
   let h = own(teams.home);
   let a = own(teams.away);
   if (!h) h = a === "a" ? "b" : "a";
@@ -694,7 +694,7 @@ const SIZES: [prefs.TextSize, string][] = [
   ["large", "Large"],
   ["xlarge", "Extra large"],
 ];
-const SAMPLE = "Oakfield keep winning it back fast: four times inside five seconds this half.";
+const SAMPLE = "London keep winning it back fast: four times inside five seconds this half.";
 
 function radioRow(group: string, label: string, on: boolean, pick: () => void, extra?: HTMLElement): HTMLLIElement {
   const li = document.createElement("li");
@@ -1092,7 +1092,7 @@ const METRIC_WORDS: Record<string, string> = {
   pass_options: "open teammates",
 };
 
-/** The API names players by id (a7); fans read "Fenwick 7", or the name the answer carries. Only
+/** The API names players by id (a7); fans read "Lisbon 7", or the name the answer carries. Only
  * the names change, never a number. */
 function named(text: string, names?: Record<string, string>): string {
   return nameIds(text, teams, names);
@@ -1785,7 +1785,7 @@ function showMatch(t: number) {
   }
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
-  // Scorers under the band: detected goals only, so far ("Fenwick player 9 43′", or the club alone
+  // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
   // when the detection names no player).
   const scored = m.goals.filter((g) => g.t <= t && g.team);
   const scorers = $("scorers");
