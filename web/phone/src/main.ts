@@ -1251,7 +1251,11 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   if (a && a.status === "verified") {
     // The headline: a natural phrase for a picture's kind ("1 v 2 round the ball"), else the figure.
     const v = a.visual ? fromScout(a.visual, a.t_to) : null;
-    const line = v && drawable(v) ? title(v) : a.value !== null ? `${a.value} ${a.unit ?? ""}`.trim() : "";
+    // The headline answers the question (Kian): code's own headline when the answer carries one,
+    // else the picture's, else the figure. Player ids in it are named like the sentence.
+    const line = a.headline
+      ? named(a.headline, a.names)
+      : v && drawable(v) ? title(v) : a.value !== null ? `${a.value} ${a.unit ?? ""}`.trim() : "";
     if (line) {
       const big = document.createElement("p");
       big.className = "figure";

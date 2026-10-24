@@ -686,3 +686,33 @@ def test_team_stats_add_the_scouts_rows_so_far_at_the_clock_marking_unsure_and_h
     assert not any(label.startswith("Length") for label in labels)  # null is not measurable
     assert page.locator("#stat-rows .stat-group h3", has_text="Pressing").count() == 1
     assert not errors
+
+
+@pytest.mark.parametrize(("question", "headline", "shown"), [
+    ("Who has run the furthest?", "a7", "Lisbon 7"),  # who: a name (ids named like the sentence)
+    ("How many passes have London completed?", "12 passes", "12 passes"),  # how many: a number, a unit
+    ("Where are London overloading?", "Their right, middle third", "Their right, middle third"),  # where
+])
+def test_an_answer_headline_is_codes_direct_answer(browser, site, question, headline, shown):  # noqa: F811
+    """Kian's rule (#294): the headline answers the question; code computes it from the question's kind."""
+    laptop, page, errors = phone(browser, site, bundle=False)
+    page.click("#tab-button-ask")
+    answer = {"status": "verified", "text": "A sentence.", "metric": None, "value": 99, "unit": "km/h",
+              "evidence": ["f1"], "t_from": 60.0, "t_to": 61.0, "headline": headline}
+    page.evaluate("([q, a]) => window.ninetyPhone.answer(q, a)", [question, answer])
+    # mutation: ignore `headline` in renderAnswer -> the figure "99 km/h" shows instead
+    assert page.locator("#answers .answer .figure").last.inner_text() == shown
+    assert not errors
+
+
+def test_without_a_headline_an_answer_falls_back_to_its_pictures_headline(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False)
+    page.click("#tab-button-ask")
+    visual = {"kind": "overload", "fact": "f1", "t": 60.0, "team": "home", "club": "Crowmere",
+              "geometry": {"zone": {"x0": 40, "x1": 64, "y0": 22, "y1": 46},
+                           "home": [[50, 30], [52, 28], [55, 35]], "away": [[57, 31]]}}
+    answer = {"status": "verified", "text": "A sentence.", "metric": None, "value": None, "unit": None,
+              "evidence": ["f1"], "t_from": 60.0, "t_to": 60.0, "visual": visual, "headline": None}
+    page.evaluate("([q, a]) => window.ninetyPhone.answer(q, a)", ["Where are Crowmere overloading?", answer])
+    assert page.locator("#answers .answer .figure").last.inner_text() == "3 v 1 round the ball"
+    assert not errors
