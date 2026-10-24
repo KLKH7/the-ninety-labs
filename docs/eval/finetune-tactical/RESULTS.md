@@ -44,7 +44,7 @@ By pitch zone, on test (x along the pitch in metres; near and far halves across 
 
 - **Coverage on test:** every on-pitch player (30,755 of 30,755) and 99.5% of balls (1,338 of 1,345)
   are inside some view's picture.
-- **Weakest zone:** the ball in the far third away from tac-l's side (`x70-105/far`), at 0.27 on
+- **Weakest zone:** the ball in tac-r's far corner (`x70-105/far`), at 0.27 on
   test against 0.89 on validation. That gap is wider than either interval and is not explained
   here; it is reported, not tuned for.
 
