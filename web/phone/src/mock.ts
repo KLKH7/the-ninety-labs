@@ -294,6 +294,7 @@ export class MockFeed implements Feed {
         evidence,
         visual: scout,
         why: { question: `Why does that matter at ${clock(t)}?`, answer: { status: "verified", text: mockWhy(visual), evidence, visual: scout } },
+        spoken: said.text, // the sentence as a voice reads it (insight_card v2 requires it)
       };
     });
   }

@@ -385,7 +385,8 @@ def scout_card(cid: str, t: float, headline: str) -> dict:
             "status": "verified", "source": "code", "evidence": [f"ov:{cid}"], "visual": visual,
             "why": {"question": "Why does that matter?",
                     "answer": {"status": "verified", "text": "A spare player to pass to.",
-                               "evidence": [f"ov:{cid}"], "visual": visual}}}
+                               "evidence": [f"ov:{cid}"], "visual": visual}},
+            "spoken": "Crowmere had three players round the ball against one."}
 
 
 @pytest.fixture(scope="module")
