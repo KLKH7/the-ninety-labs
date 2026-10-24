@@ -1,0 +1,40 @@
+{
+  "save_filter": true,
+  "labels": true,
+  "moments": [
+    {
+      "event": "v2",
+      "t": 61.0,
+      "team": "home",
+      "player": "h9",
+      "kind": "goal",
+      "why": "goal",
+      "label": "THUNDERBOLT",
+      "label_detail": "112 km/h · 26 m",
+      "d_m": 26.0,
+      "v_kmh": 112.4,
+      "T_s": 0.83,
+      "clip": [53.0, 64.0],
+      "caption": "A thunderbolt from h9, 26 m out at 112 km/h!",
+      "caption_source": "model"
+    },
+    {
+      "event": "v5",
+      "t": 62.8,
+      "team": "away",
+      "player": "a4",
+      "kind": "save",
+      "why": "beat_the_dive",
+      "label": "REFLEX SAVE",
+      "label_detail": "0.35 s",
+      "d_m": 6.0,
+      "v_kmh": 61.7,
+      "T_s": 0.35,
+      "clip": [54.8, 65.8],
+      "caption": "a4 is denied from 6 m at 62 km/h.",
+      "caption_source": "code"
+    }
+  ],
+  "saves_by_pace": ["v5"],
+  "saves_left_out": 1
+}
