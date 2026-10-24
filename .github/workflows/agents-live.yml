@@ -16,7 +16,7 @@ on:
         description: What to run
         required: true
         type: choice
-        options: [publish, record, failures, ablation, eval, personalizer]
+        options: [publish, record, failures, ablation, eval, personalizer, companion-match]
       ref:
         description: Branch, tag or commit to run
         required: true
@@ -81,6 +81,11 @@ jobs:
               # The workflow's live replay; commit the downloaded file unedited (lessons 32 and 44).
               uv run ninety-workflow --minute 2 --plant --record replays/workflow-minute2-plant.json \
                 --cues-out runs/agents-live/workflow-cues.jsonl "${extra[@]}"
+              ;;
+            companion-match)
+              # The match Companion's tool choice on the held-out questions and its answers on the
+              # stand-in match; commit runs/eval/companion-tools.{json,md} unedited to docs/eval/.
+              uv run python -m ninety.eval.companion_tools --live --out runs/eval/companion-tools.json "${extra[@]}"
               ;;
             personalizer)
               uv run python -m ninety.personalizer.eval --seeds 21,33 --out runs/eval/personalizer.md "${extra[@]}"

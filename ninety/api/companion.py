@@ -54,7 +54,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
-from ninety.agents import companion
+from ninety.agents import companion, companion_match
 from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validator
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
@@ -165,6 +165,9 @@ class Room:
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
     sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
+    # The match conversation: each phone question and its answer, so a follow-up has its context
+    # (ninety/agents/companion_match.py). Capped; it lives and dies with the pairing.
+    turns: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -173,6 +176,8 @@ class LiveModels:
 
     ask: Ask
     judge: Judge
+    match_ask: Ask | None = None  # the match Companion (ninety-companion-match), for match questions
+    referee_ask: Ask | None = None  # the Referee (ninety-referee), handed rules questions
 
 
 def client_ip(request: Request | WebSocket) -> str:
@@ -548,6 +553,26 @@ class Companion:
             return track
         if question.player is not None and question.player not in track.roster:
             return _error(422, f"{question.player!r} is not on the roster of {room.clip}")
+        if question.player is None:
+            insights = _insights(room.clip)
+            if insights is not None:
+                # A match question: the match Companion chooses the insight tools in Live mode (within
+                # the session's budget), with the pairing's earlier turns; code routes and answers
+                # otherwise or when it fails.
+                ask = judge = referee_ask = None
+                if live and self.budget.take(question.session):
+                    models = await self._live_models()
+                    if models is not None and models.match_ask is not None:
+                        ask, judge = models.match_ask, models.judge
+                        referee_ask = models.referee_ask
+                result = await companion_match.answer_match(
+                    question, insights, ask, judge, history=room.turns, referee_ask=referee_ask
+                )
+                turn = {"question": question.text, "answer": result.answer.text, "calls": list(result.tools)}
+                room.turns = [*room.turns, turn][-MAX_TURNS:]
+                return JSONResponse(
+                    _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
+                )
         window = None
         if question.player is not None:
             _, window = self._window(track, question.player, 0.0, question.t)
@@ -586,6 +611,19 @@ class Companion:
         ]
 
 
+MAX_TURNS = 6  # design: a pairing remembers its last six exchanges, more than the model is shown
+
+
+def _insights(clip: str):
+    """The clip's insight facts, or None when it has no tracked frames or is not served."""
+    from ninety.mcp import match_server
+
+    try:
+        return match_server.insights_of(clip)
+    except ValueError:
+        return None
+
+
 def answer_json(answer: Answer) -> dict:
     return {
         "status": answer.status,
@@ -596,6 +634,10 @@ def answer_json(answer: Answer) -> dict:
         "evidence": list(answer.evidence),
         "t_from": answer.t_from,
         "t_to": answer.t_to,
+        "visual": answer.visual,
+        "names": answer.names,
+        "spoken": answer.spoken,
+        "follow_ups": list(answer.follow_ups),
     }
 
 
@@ -619,7 +661,11 @@ async def foundry_models() -> LiveModels:
     await credentials.sign_in(credential)
     client = foundry.chat_client(credential)
     agents = []
-    for local in (companion.companion_agent(client), judge_agent(client)):
+    from ninety.agents.referee import referee_agent
+
+    match_agent = companion_match.companion_match_agent(client)
+    locals_ = (companion.companion_agent(client), judge_agent(client), match_agent, referee_agent(client))
+    for local in locals_:
         name, version = foundry.pinned(local)
         published = FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT,
@@ -628,7 +674,7 @@ async def foundry_models() -> LiveModels:
             credential=credential,
         )
         agents.append(await stack.enter_async_context(published))
-    companion_ag, judge_ag = agents
+    companion_ag, judge_ag, match_ag, referee_ag = agents
 
     async def ask(prompt: str) -> str:
         return (await companion_ag.run(prompt)).text
@@ -636,7 +682,13 @@ async def foundry_models() -> LiveModels:
     async def judge(claim: Claim, evidence: list[dict]) -> Verdict:
         return await run_judge(judge_ag, claim, evidence)
 
-    return LiveModels(ask, judge)
+    async def match_ask(prompt: str) -> str:
+        return (await match_ag.run(prompt)).text
+
+    async def referee_ask(prompt: str) -> str:
+        return (await referee_ag.run(prompt)).text
+
+    return LiveModels(ask, judge, match_ask, referee_ask)
 
 
 def from_env(env: dict[str, str] | None = None) -> Companion | None:
