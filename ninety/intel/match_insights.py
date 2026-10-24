@@ -47,6 +47,9 @@ class MatchInsights:
         fixture: Fixture,
         gate: Mapping | None = None,
     ) -> MatchInsights:
+        bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
+        if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
+            raise ValueError(f"{clip}: frames must be source 'tracked', got {bad}")
         f = Frames(frames)
         gate = dict(roles.gates() if gate is None else gate)
         people = {}
