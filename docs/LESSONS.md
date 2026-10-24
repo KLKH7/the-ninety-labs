@@ -2344,3 +2344,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
   fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
   renders byte-identical (seed 122 at main, frames, events, meta and images).
+
+### 227. A confidence is compared only with a threshold measured on the same reading
+- **What happened:** active perception re-runs the event detector on another camera, or on a 3 s
+  window, to re-read a side the fact-checker holds. The first version let any look re-read the side.
+  On the M1 clip a 3 s window read the side of v00003, a false detection (a shot read as a pass), at
+  1.0; the whole clip had read it at 0.529. A side vote over a few frames is more one-sided than the
+  clip's, whoever is right, and the 0.96 threshold was measured on whole-clip votes. The look would
+  have aired a team claim on an event that never happened. The evaluation's own fixture test caught
+  it before any number was published.
+- **Rule:** a score is compared only with a threshold measured on the same kind of reading. A
+  shorter window, another camera or another model is a new reading, and needs its own measurement
+  before it can open a gate. Until then it may only confirm what does not depend on it (here, that
+  the event was seen).
+- **Check:** `tests/test_perceive.py::test_a_window_s_side_vote_never_confirms_a_side` and
+  `::test_on_the_m1_clip_no_look_resolves_the_false_detection`.

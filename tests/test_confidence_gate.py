@@ -187,7 +187,8 @@ def test_the_describer_s_own_line_names_a_side_only_when_it_was_told_firmly(side
 
 
 @pytest.mark.parametrize("text", ["Los visitantes completan un pase de 12 m.", "El equipo local juega.",
-                                  "The visitors complete a pass of 12 m.", "The hosts complete a pass."])
+                                  "The visitors complete a pass of 12 m.", "The hosts complete a pass.",
+                                  "The visiting side complete a pass of 12 m.", "Los de casa juegan."])
 def test_a_side_named_in_other_words_is_held_too(text):
     gated = confidence_gate(Claim(text, ["v1"]), {"v1": pass_on_side(0.529)})
     assert not gated.ok and gated.category == "low_confidence"
@@ -205,3 +206,23 @@ def test_no_club_variant_is_asked_for_when_the_side_is_unsure():
 
     assert not [p for p in profiles_for(nameless_pass(0.529)) if p.persona == "club"]
     assert [p for p in profiles_for(nameless_pass(0.97)) if p.persona == "club"]
+
+
+def test_a_club_variant_written_anyway_is_held_where_the_side_is_unsure():
+    # The Personalizer's re-check holds a club's-side variant however it is worded (team_view), behind
+    # profiles_for not asking for one: a stale profile list must not air "our side" at 0.529.
+    from ninety.agents.contracts import Variant
+    from ninety.personalizer.cues import verify
+
+    known = {"v1": pass_on_side(0.529)}
+    claim = Claim("A completed pass of 12 m.", ["v1"])
+    variant = Variant("club", "en", "Our side keep it moving with a pass of 12 m.", ("v1",))
+    checked = asyncio.run(verify(claim, [variant], known, None))
+    assert not checked.shown and checked.refused[0][1] == "held"
+
+
+def test_an_unnamed_event_on_an_unsure_side_reads_as_a_pass_or_a_shot():
+    from ninety.agents.cues import _text
+
+    assert _text(nameless_pass(0.529), "analyst").startswith("a pass")
+    assert _text(nameless_pass(0.529) | {"type": "shot"}, "analyst").startswith("a shot")

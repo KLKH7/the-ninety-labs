@@ -518,6 +518,17 @@ Describer model's line goes through the same gate; the Personalizer asks for no 
 and holds one written anyway. **Known residual:** a track id (`a-t9`) encodes the side by its
 letter, from the same decision; it is not held, as naming the track is how the agents say who.
 
+**Active perception** (`ninety/agents/perceive.py`, the MCP tool `re_perceive`). A claim the gate
+holds on a doubtful detection is looked at again: the fact-checker re-runs R3's event detection
+(`ninety.vision.events.detect`, unchanged) on another camera's observations, a 3 s window and then
+the whole clip, at most 3 looks a match minute, every look a trace step and a Ledger record
+(`source: re_perceive`). It airs only when every doubtful detection is confirmed: the same event
+(type, 1 s, 2 m) seen confidently, and, for a claim naming a side, the side re-read above 0.96 by the
+whole-clip vote only, the reading the threshold was measured on (lesson 227: a window's vote read a
+false event's side at 1.0). A camera that sees the other side keeps it held, with that reason.
+**Not yet measured:** `ninety.eval.re_perceive_eval` grades it offline on validation clips with
+per-camera observations; until it has run, no claim is made that looking again helps.
+
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 
 **The metric.** `tests/test_render_camera.py` counts a live frame as well framed when the ball is in

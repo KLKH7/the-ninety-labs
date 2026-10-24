@@ -327,6 +327,7 @@ class Run:
     # Recordings made before the fact-checker stopped checking a Challenger's reading once the
     # Tactician's claim was verified replay under the rule they were recorded with.
     check_alternative_after_verified: bool = False
+    perceiver: object | None = None  # ninety/agents/perceive.Perceiver: the clip's other cameras
 
     def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
              fallback: str = "") -> None:
@@ -555,6 +556,8 @@ class FactChecker(Executor):
             if checked.judge_seconds is not None:
                 run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
+            if checked.verdict.category == "low_confidence" and run.perceiver is not None:
+                checked = await self.look_again(case, draft, scope, checked)
             draft.verdict, draft.status = checked.verdict, status_for(checked.verdict)
             await run.write_claim(case, draft)
             reasons = "; ".join(checked.verdict.reasons)
@@ -573,6 +576,32 @@ class FactChecker(Executor):
                 detail = f"{draft.author}'s claim" + (f": {reasons}" if reasons else "")
             run.step("fact_checker", case.moment.id, ACTION[draft.status], started, detail)
         await ctx.send_message(ToProducer(case))
+
+    async def look_again(self, case: Case, draft: Draft, scope: dict[str, dict], checked):
+        """Active perception (ninety/agents/perceive.py): a claim held on a doubtful detection is
+        looked at again through the clip's other cameras; with every doubtful detection confirmed,
+        it goes through the whole fact-checker again on the confirmed readings. Every look is a
+        trace step and a Ledger record (`source: re_perceive`)."""
+        from ninety.agents import perceive
+
+        run = self.run
+        started = time.perf_counter()
+        confirmed, looks = perceive.recheck(run.perceiver, draft.claim.text, scope, case.moment.minute)
+        for n, look in enumerate(looks):
+            run.step("fact_checker", case.moment.id, "re_perceive", started,
+                     f"{look.event} through {look.camera} ({look.mode}): {look.why}")
+            await run.ledger.append(Record(
+                id=f"look-{case.moment.id}-{draft.author}-{draft.attempt}-{n}", version=1, kind="fact",
+                t=run.t[case.moment.main_event], source="re_perceive",
+                confidence=(look.found or {}).get("confidence"), evidence=(),
+                payload=look.as_dict()))
+        if not looks:
+            run.step("fact_checker", case.moment.id, "re_perceive", started,
+                     "no look left this minute, or no other camera")
+        if confirmed is None:
+            return checked
+        with telemetry.stage_span("fact_check", attempt=draft.attempt, re_perceived=True):
+            return await fact_check(draft.claim, confirmed, guarded(run.models.judge), run.gate)
 
 
 class Producer(Executor):
@@ -720,6 +749,7 @@ async def run_workflow(
     personalize: bool = False,
     shape: list[dict] | None = None,
     check_alternative_after_verified: bool = False,
+    perceiver=None,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those. `shape` is the match's
@@ -740,7 +770,7 @@ async def run_workflow(
             by_minute[r["minute"]] = (*by_minute.get(r["minute"], ()), r["id"])
     run = Run(counted, ledger, known, match, inline_events, plant, live, gate,
               personalize, events, t=times, shape=by_minute,
-              check_alternative_after_verified=check_alternative_after_verified)
+              check_alternative_after_verified=check_alternative_after_verified, perceiver=perceiver)
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
     personalizer = Personalizer(run)
@@ -798,7 +828,7 @@ async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
-    personalizer: Personalize | None = None, shape: list[dict] | None = None,
+    personalizer: Personalize | None = None, shape: list[dict] | None = None, perceiver=None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
@@ -813,11 +843,11 @@ async def run_live(
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject, personalizer, shape)
+                               content, personalize, inject, personalizer, shape, perceiver)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject, given_personalizer, shape=None):
+                    personalize, inject, given_personalizer, shape=None, perceiver=None):
     from ninety import config
     from ninety.agents import foundry
 
@@ -875,7 +905,7 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
         if inject is not None:
             models = inject(models)
         result = await run_workflow(models, events, minute, match, plant, True, inline_events,
-                                    personalize=personalize, shape=shape)
+                                    personalize=personalize, shape=shape, perceiver=perceiver)
     telemetry.flush()
     return result, turns, pins, failed[0], events
 

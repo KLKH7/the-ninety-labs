@@ -182,7 +182,7 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
     async def sign_in(cred):
         signed.append(cred)
 
-    async def run_live(load, minute, match, inline, plant, trace_to, credential):
+    async def run_live(load, minute, match, inline, plant, trace_to, credential, perceiver=None):
         assert inline and trace_to == "none" and credential == "cred"
         assert match == "seed42-inline"  # an id no server serves (lesson 90)
         minutes.append(minute)
@@ -334,3 +334,15 @@ def test_live_agents_refuse_another_explain_mode(tmp_path, other):
     with pytest.raises(SystemExit):
         e2e.main([str(clip), "--out", str(tmp_path / "b"), "--detections", str(detections), "--frames",
                   "--events-file", str(events_file), "--agents", "live", *other])
+
+
+def test_views_give_the_fact_checker_cameras_to_look_again_through(tmp_path):
+    # --views: the bundle records every look the fact-checker took (ninety/agents/perceive.py).
+    views = tmp_path / "views" / "tactical1"
+    views.mkdir(parents=True)
+    obs = ROOT / "tests" / "fixtures" / "observations-seed900001.jsonl"
+    (views / "observations.jsonl").write_text(obs.read_text())
+    out, manifest = run(tmp_path, "--views", str(tmp_path / "views"))
+    assert manifest["agents"]["re_perceived"] == []  # the clip's claim is sure: nothing to look at
+    with pytest.raises(SystemExit, match="no <camera>/observations.jsonl"):
+        run(tmp_path / "again", "--views", str(tmp_path / "empty"))

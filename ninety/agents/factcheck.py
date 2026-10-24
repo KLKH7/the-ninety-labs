@@ -123,9 +123,10 @@ MIN_CONFIDENCE = 0.5
 # Re-measure when the side decision changes.
 MIN_TEAM_CONFIDENCE = 0.96
 # A claim that names a side, in English or Spanish (ninety/personalizer/core.TEAM_WORDS): "home",
-# "away", "the hosts", "the visitors", "local", "visitantes". It errs on holding: "away from goal"
-# is held too.
-TEAM_NAMED = re.compile(r"\b(?:home|away|hosts?|visitors?|local(?:es)?|visitantes?)\b", re.I)
+# "away", "the hosts", "the visitors", "the visiting side", "local", "visitantes", "los de casa".
+# It errs on holding: "away from goal" is held too.
+TEAM_NAMED = re.compile(
+    r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
 
 
 def side_known(event: Mapping) -> bool:
