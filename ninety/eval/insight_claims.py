@@ -12,6 +12,8 @@ tracker spoils it), every sentence code can say about every fact and every 15-mi
 - name: a named player replaced by another name on the sheets;
 - kind: the sentence cites a fact of another kind;
 - minute: the minute one later;
+- polarity: the direction turned around (won back or not, lost or completed, to an open teammate
+  or not, somebody open or nobody), numbers and names kept;
 - uncited: no evidence.
 
 A planted claim is caught when the check rejects it. Separately, each true claim on a fact that is
@@ -38,6 +40,18 @@ from ninety.agents.insight_check import verify
 from ninety.eval import insight_standin
 from ninety.intel.teamsheet import Fixture
 
+# Plants that reverse which way a fact went (the merge queue's review, lesson 11): each turns a true
+# sentence's direction around, keeping its numbers and names.
+POLARITY_FLIPS = (
+    (r"(?<!never )\bwon (it|the ball) back", r"never won \1 back"),
+    (r"\bnever won it back", "won it back"),
+    (r"\blost the ball and had", "won the ball back and had"),
+    (r"\blost (a|the) pass with no", r"completed \1 pass with no"),
+    (r"\blost the ball with no", "completed the pass with no"),
+    (r"\bbut lost the pass elsewhere", "and the pass found an open teammate"),
+    (r"\bbut the pass went elsewhere and was lost", "and the pass found an open teammate"),
+    (r"\bhad \d+ (open )?teammates?", "had no teammates"),
+)
 WORDS = {
     1: "one",
     2: "two",
@@ -99,6 +113,10 @@ def plants(text: str, fact: dict, mi, other: dict | None) -> list[tuple[str, Cla
     m = re.search(r"minute (\d+)", text)
     if m:
         out.append(("minute", Claim(text[: m.start(1)] + str(int(m.group(1)) + 1) + text[m.end(1) :], ev)))
+    for pattern, repl in POLARITY_FLIPS:
+        flipped = re.sub(pattern, repl, text, count=1)
+        if flipped != text:
+            out.append(("polarity", Claim(flipped, ev)))
     out.append(("uncited", Claim(text, [])))
     return out
 
