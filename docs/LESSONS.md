@@ -2280,6 +2280,18 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
 
+### 204. A pose that names the action's mechanics, not its kind, draws one action as another
+- **What happened:** #216 gave keepers a throw from the hands: a roll is bowled, the ball brought
+  down in his hands to the grass and released from there. The engine named every wind-up `strike`,
+  so the renderer drew a kicking leg winding up and the ball meeting his boot. Through the 4.7 s
+  he held the ball before it his pose read `stand`, so nothing put his hands on it either. The
+  engine knew both (`windup[3] == "bowl"`, `held_by`) and exported neither.
+- **Rule:** the pose the engine exports names what the body does with the ball, from the engine's
+  own state; the renderer draws that name and never guesses it from where the ball goes next.
+- **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
+  fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
+  renders byte-identical (seed 122 at main, frames, events, meta and images).
+
 ### 221. A number matched by value and unit alone passes in the wrong role
 - **What happened:** the insight fact-check let a sentence state any number a cited fact held,
   written with that number's unit. A planted claim "6 players against 1 player" passed when the

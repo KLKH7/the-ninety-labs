@@ -669,16 +669,20 @@ def _kick_path(c: dict, u: float, contact: tuple, d: tuple, heading: float, xy: 
     return (contact[0] + d[0] * on, contact[1] + d[1] * on, contact[2] + up)
 
 
+HOLD_ACTIONS = ("hands", "bowl")
+
+
 def holds(frames: list[dict]) -> dict[str, list[tuple[int, int]]]:
     """Per keeper, the runs of frames (first, last) in which he holds the ball: the frame names him
-    its possessor and his pose is hands."""
+    its possessor and his pose is hands, or bowl: a throw along the ground, the ball brought down in
+    his hands to the grass (the engine's own wind-up; lesson 204), so his hands stay on it to the grass."""
     out: dict[str, list[tuple[int, int]]] = {}
     for i, fr in enumerate(frames):
         who = fr.get("possessor")
         if not who:
             continue
         pl = next((p for p in fr["players"] if p["id"] == who), None)
-        if pl is None or pl.get("action") != "hands":
+        if pl is None or pl.get("action") not in HOLD_ACTIONS:
             continue
         runs = out.setdefault(who, [])
         if runs and runs[-1][1] == i - 1:
@@ -816,7 +820,9 @@ def face(g: Gait, player: dict) -> None:
     if "vx" in player:
         g.speed = math.hypot(player["vx"], player.get("vy", 0.0))
     if "action" in player:
-        g.action = player["action"]
+        # A bowl is drawn as the hold it is (holds): both hands on the ball as it comes down to the
+        # grass, no kicking leg; the release is the pass the engine makes from the grass.
+        g.action = "hands" if player["action"] == "bowl" else player["action"]
         g.dive = player.get("dive", 0.0)
 
 
