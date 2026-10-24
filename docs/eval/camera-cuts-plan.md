@@ -160,3 +160,85 @@ adopted: **T1 at 21.634 grey levels**, missing no cut on validation and finding 
 whip pan. T1 was listed as a contrast, expected to suffer from pans; on these clips a pan moved it
 at most 17.9, which is why it won. Seeds 108, 109 and 112 to 119 have no detected cut, so their
 camera fit is exactly the one on main (`test_a_clip_without_a_cut_is_fitted_exactly_as_before`).
+
+### Steps 2 and 3 on validation (`ninety.eval.camera_cuts`, [camera-cuts/validation.md](camera-cuts/validation.md))
+
+Fitted before (one shot, today's fit) and after (shot by shot) on the two clips with cuts, with the
+label boxes as detections, both judged by merged main's trust test (B3, then the shot-aware `agree`):
+
+| Seed | Cuts found (missed, false) | Trusted before (good, bad) | Trusted after (good, bad) | Worst after |
+|---|---|---|---|---|
+| 110 | 3 of 3 (0, 0) | 27 (27, 0) | 134 (39, 95) | 1.344 m |
+| 111 | 2 of 2 (0, 1: the whip pan) | 0 | 0 | - |
+
+By shot, on 110: the two gantry shots fit to about 0.1 m, as before. The tight lens beside the
+gantry (8 degrees across) gets its own gantry 28 m from the true one along the line of sight, where
+distance trades against zoom, and its 99 trusted frames are 0.95 to 1.34 m wrong. The behind-goal
+and low net shots (all of 111, 13 frames of 110) never fit: the gantry grid does not cover them, as
+the plan said.
+
+Against the bar:
+1. Cuts: 5 of 5 found, 1 false (the whip pan). On that whip pan's shot nothing fits either way.
+2. **Met:** worst trusted 1.344 m, under MAX_TRUSTED_M 8.5 m.
+3. **Not met:** 107 frames newly trusted, of which 12 are good (within 1.0 m). The other 95 are the
+   tight shot's, 1.0 to 1.34 m wrong.
+4. **Met:** no detected cut on 108, 109, 112 to 119, so their fit is unchanged.
+
+So the change misses its bar and is **not on by default**: `observe --cuts` turns it on, and without
+it `observe` fits one shot as on main (`test_observe_fits_each_shot_on_its_own_and_labels_it`).
+
+### The test set, scored once (after b542fa1 froze the detector, [camera-cuts/test.md](camera-cuts/test.md))
+
+ours-v2's committed detections, the re-rendered frozen clips (byte-identical to their digests),
+before and after judged by merged main's trust test. Cuts: 4 of 4 found, none false; no cut found on
+900001, 900004 or 900005, whose observations are byte-identical before and after.
+
+| Seed | Trusted before (bad) | Trusted after (bad) | Worst after | Players after, median / p90 |
+|---|---|---|---|---|
+| 900002 | 0 | 9 (0) | 0.27 m | 0.34 / 0.52 m |
+| 900003 | 0 | **20 (20)** | **44.8 m** | 32.4 / 46.4 m |
+
+- **900002:** its gantry shot (frames 5326 to 5426) now fits and 9 frames are trusted, all right. The
+  shots behind the goal around it never fit.
+- **900003:** the old 46 m frames (5970 to 5976, the tight shot) are no longer trusted. But its last
+  shot is the **reverse angle** (a camera in the far stand), and it is fitted as the main gantry
+  turned half a turn about the centre spot: Law 1's markings are the same after that turn, so the
+  markings and the heights both pass, and 20 frames are trusted about 44 m wrong. No check in the
+  fit can see it (lesson 238; `test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`).
+- **Events** ([camera-cuts/event-report-after.json](camera-cuts/event-report-after.json)): passes
+  strict, all five clips, **2 of 13 found, 1 false, F1 0.25, before and after alike**. Neither cut
+  clip makes an event. That is far below event-report-v2's 7 of 13, F1 0.67, and the cause is the
+  baseline, not this change (below).
+
+### What the baseline does to the test set (found while scoring; nothing was changed on it)
+
+Merged main's band (0.966, 1.121, #270) was measured on renderer 0.5.15. The frozen test set is
+renderer 0.3.2, where a right camera's height ratio with label boxes is about 0.94 to 0.96 (seeds
+110 and 118). Re-judging the same fits three ways, trusted frames (bad):
+
+| Seed | Old band (0.901, 1.002), heights | #270 band, heights | #270 band and B3 (main) |
+|---|---|---|---|
+| 900001 | 190 (3) | 115 (54) | 115 (54) |
+| 900004 | 163 (6) | 102 (70) | 30 (0) |
+| 900005 | 250 (0) | 9 (0) | 9 (0) |
+| 900002 before / after | 109 (8, to 159 m) / 101 (0, worst 0.4 m) | 0 / 13 (4) | 0 / 9 (0) |
+| 900003 before / after | 0 / 39 (39) | 8 (8) / 20 (20) | 0 / 20 (20) |
+
+So main's published pass F1 of 0.67 no longer holds on main's code: with #270 it is 0.25 on the same
+clips. Under the band the test set's look was measured on, following cuts would take 900002 from 109
+trusted frames (8 of them up to 159 m wrong) to 101, none over 0.4 m. That is reported, not adopted:
+it was seen after the test score, and choosing a band per look is #270's and R3's call.
+
+### What is still wrong, and what it needs
+
+- **The reverse angle** is the main camera's mirror through the centre spot. Telling them apart
+  needs a cue the half turn changes: which side the near stand, the boards or the dugouts are on, or
+  the scorebug's side. Then it must be fitted or refused, never placed through the mirror.
+- **Cameras behind a goal and at the net** are outside the gantry grid, so they are never placed. A
+  search for them needs a sourced camera plan.
+- **A tight lens's own gantry** slides 28 m along its line of sight. Its frames could be held to the
+  gantry of the clip's other shots when they share a stand, which would need a test on clips with a
+  tight cut.
+- **Validation has 5 cuts on 2 clips and no reverse angle.** Before any of this is tuned, R2 should
+  render validation clips with cuts of every kind (reverse, tight, behind the goal, net), at the
+  test set's look and at today's.
