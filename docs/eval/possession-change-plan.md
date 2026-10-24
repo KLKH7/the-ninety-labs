@@ -81,3 +81,16 @@ the ball (two frames near him, moving with him) reads as two changes, there and 
 detector misses going out makes the restart's taker a change; a whole clip with the sides swapped
 gives every change to the wrong side and fails them all (the side is read once per clip,
 [possession-calibration.md](possession-calibration.md)).
+
+## Outcome (after the one test run, 2026-10-23)
+
+- The rule ran as written; nothing was changed after scoring.
+- The answer key was rebuilt on macOS from `cca498c` by `scripts/rebuild_test_truth.py`. All five
+  `events.jsonl` matched their frozen sha256, every observations file covers exactly its window's
+  frames, and every clip's pass counts under all three rules equal event-report-v2's.
+- Result in [possession-change.md](possession-change.md): 1 of 5 found, none false. The four
+  misses: three on 900003 (camera trusted on 4 of 250 frames), one of them at a restart; and on
+  900001 the keeper's save, after the shot read as a pass that goes over the goal line (the false
+  out of play event-report-v2 already lists), so no change is told after it. A ball height
+  (#226) and shot outcomes (#271) are what would let it be found.
+- Validation was not run (no observations here). Development numbers there are still owed.
