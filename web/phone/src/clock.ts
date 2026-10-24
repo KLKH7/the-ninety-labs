@@ -11,11 +11,20 @@ export const TOLERANCE_S = 0.2;
  * design: four missed messages, so one slow network moment does not flash "Laptop lost". */
 export const STALE_S = 4;
 
+/** Video time against match time across the broadcast's cuts (viewer/src/radar.ts, `timeline`). */
+export interface Cuts {
+  matchTime(v: number): number;
+  videoTime(t: number): number;
+}
+
 export class LaptopClock {
   private t = 0;
   private playing = false;
   private at = 0; // performance.now() when the last message arrived
   heard = false;
+  /** The bundle's cuts, once read. The laptop sends match time; between its messages the video
+   * runs on in video time, so across a cut the match clock jumps, and so must the phone's. */
+  cuts: Cuts | null = null;
 
   constructor(private readonly now: () => number = () => performance.now()) {}
 
@@ -41,6 +50,8 @@ export class LaptopClock {
 
   /** Match time now, in seconds. */
   time(): number {
-    return this.t + (this.playing ? Math.min(this.age(), STALE_S) : 0);
+    const run = this.playing ? Math.min(this.age(), STALE_S) : 0;
+    if (!this.cuts || !run) return this.t + run;
+    return this.cuts.matchTime(this.cuts.videoTime(this.t) + run);
   }
 }
