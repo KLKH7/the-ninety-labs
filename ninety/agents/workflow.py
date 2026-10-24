@@ -978,6 +978,7 @@ def main() -> None:
             sys.exit(f"replay stopped: {e}. Record it again with --record.")
         print_result(result, live=False)
     else:
+        from ninety.agents import evidence, foundry
         from ninety.agents.foundry import RegistryDrift
 
         if args.events:
@@ -1008,7 +1009,9 @@ def main() -> None:
                       "moments": [m.id for m in result.moments],
                       "alternative_checked_after_verified": False}
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            WorkflowRecording(WORKFLOW, _commit(), pins, inputs, stamp, turns).save(args.record)
+            # The definitions the run's foundry.pinned accepted, from this same code (evidence.py).
+            defs = evidence.of_code(lambda client: list(foundry.workflow_agents(client).values()))
+            WorkflowRecording(WORKFLOW, _commit(), pins, inputs, stamp, turns, defs).save(args.record)
             print(f"recorded {len(turns)} model answer(s) to {args.record}")
     if args.cues_out:
         write_cues(result.cues, args.cues_out)

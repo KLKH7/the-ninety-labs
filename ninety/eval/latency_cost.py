@@ -246,6 +246,9 @@ def measure(clip: Path, runs: int) -> dict:
                       "spoken_claim": json.loads(accepted.response)["text"]},
         "calls": model_calls(recording),
         "graphics_text": graphics_text(),
+        # The recording's agent definitions (ninety/agents/evidence.py), when it records them; an
+        # older recording names its versions in `model` only.
+        **({"agent_definitions": recording.agent_definitions} if recording.agent_definitions else {}),
     }
 
 

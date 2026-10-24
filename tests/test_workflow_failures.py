@@ -452,6 +452,14 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
     assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
+    # Which definition of each agent ran, in the data and in the report (lesson 216).
+    from ninety.agents import evidence, foundry
+
+    roles = {"ninety-moment-analyst", "ninety-tactician", "ninety-challenger", "ninety-judge",
+             "ninety-personalizer"}
+    assert body[evidence.KEY] == {n: e for n, e in foundry.load_registry().items() if n in roles}
+    data = evidence.read(tmp_path / "failure-table-live.json")[0]
+    assert evidence.read(tmp_path / "failure-table-live.md") == (data, "recorded")
 
 def test_the_worst_personalized_minute_fits_the_superstep_budget():
     # Three moments, both writers rejected on every draft but the Tactician's last, which airs and

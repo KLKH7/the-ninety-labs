@@ -561,9 +561,17 @@ def main() -> None:
         args.out.mkdir(parents=True, exist_ok=True)
         commit = workflow._commit()  # the engine the seeds were simulated with, and everything else
         reports = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
-        md = f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n{reports}"
+        # The workflow's agents and the Personalizer, as run_live and core.published_ask pin them.
+        from ninety.agents import evidence, foundry
+        from ninety.personalizer.core import personalizer_agent
+
+        defs = evidence.of_code(
+            lambda client: [*foundry.workflow_agents(client).values(), personalizer_agent(client)]
+        )
+        md = (f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n"
+              f"{evidence.md_line(defs)}\n\n{reports}")
         body = {"command": COMMAND + " --live", "commit": commit, "minute": MINUTE,
-                "models": "the published Foundry agents",
+                "models": "the published Foundry agents", evidence.KEY: defs,
                 "grounds": [{"match": t[0]["match"], "rows": t} for t in tables]}
         for name, text in (("failure-table-live.md", md),
                            ("failure-table-live.json", json.dumps(body, indent=1, allow_nan=False) + "\n")):
