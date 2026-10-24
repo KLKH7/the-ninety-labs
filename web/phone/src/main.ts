@@ -1885,41 +1885,58 @@ interface TeamStatsFacts {
 }
 const shownStats = new Map<string, [number, number]>();
 function renderStats(st: MatchData["stats"][number]) {
-  const rows: [string, number, number][] = [
-    ["Shots", st.home.shots, st.away.shots],
-    ["Shots on target", st.home.shots_on_target, st.away.shots_on_target],
-    ["Passes completed", st.home.passes_completed, st.away.passes_completed],
-    ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
-  ];
-  // Measured per-team facts when the bundle has them (match.json team_stats, #269): possession only
-  // if its gate passed; distance with how much of the players' time was tracked.
+  type Row = [string, number, number];
+  const pct = (n: number, d: number) => (d > 0 ? Math.round((100 * n) / d) : NaN);
+  // Grouped as Apple Sports and FotMob group a match's stats; every number computed by code from the
+  // detected events (match.json) or the measured team facts (team_stats, #269).
   const ts = (state.match as (MatchData & { team_stats?: TeamStatsFacts }) | null)?.team_stats;
-  if (ts?.possession) rows.unshift(["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)]);
-  if (ts?.distance) rows.push(["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]);
+  const groups: [string, Row[]][] = [
+    ["Attack", [
+      ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
+      ["Shots", st.home.shots, st.away.shots],
+      ["Shots on target", st.home.shots_on_target, st.away.shots_on_target],
+    ]],
+    ["Passing", [
+      ["Passes completed", st.home.passes_completed, st.away.passes_completed],
+      ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
+      ["Pass accuracy %", pct(st.home.passes_completed, st.home.passes_attempted), pct(st.away.passes_completed, st.away.passes_attempted)],
+    ]],
+    ["Physical", ts?.distance ? [["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]] : []],
+  ];
   const covered = ts?.distance ? Math.round(100 * Math.min(ts.distance.home.coverage, ts.distance.away.coverage)) : null;
   $("stats-note").textContent = covered === null ? "From the footage shown, so far." : `From the footage shown, so far. Distance covers ${covered}% of the players' time.`;
-  const items = rows
-    .filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a))
-    .map(([label, h, a]) => {
-      const li = document.createElement("li");
-      li.className = "stat-row";
-      li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
-      li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
-      // The numbers tick up from what the row showed before (ticker.ts).
-      const was = shownStats.get(label);
-      li.querySelector<HTMLElement>(".home-v")!.textContent = String(was?.[0] ?? h);
-      li.querySelector<HTMLElement>(".away-v")!.textContent = String(was?.[1] ?? a);
-      tickTo(li.querySelector<HTMLElement>(".home-v")!, h);
-      tickTo(li.querySelector<HTMLElement>(".away-v")!, a);
-      shownStats.set(label, [h, a]);
-      li.querySelector(".label")!.textContent = label;
-      // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
-      const share = h + a === 0 ? 0.5 : h / (h + a);
-      (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
-      (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
-      for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
-      return li;
-    });
+  const row = ([label, h, a]: Row) => {
+    const li = document.createElement("li");
+    li.className = "stat-row";
+    li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
+    li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
+    // The numbers tick up from what the row showed before (ticker.ts).
+    const was = shownStats.get(label);
+    li.querySelector<HTMLElement>(".home-v")!.textContent = String(was?.[0] ?? h);
+    li.querySelector<HTMLElement>(".away-v")!.textContent = String(was?.[1] ?? a);
+    tickTo(li.querySelector<HTMLElement>(".home-v")!, h);
+    tickTo(li.querySelector<HTMLElement>(".away-v")!, a);
+    shownStats.set(label, [h, a]);
+    li.querySelector(".label")!.textContent = label;
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    const share = h + a === 0 ? 0.5 : h / (h + a);
+    (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
+    (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
+    for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
+    return li;
+  };
+  const items: HTMLLIElement[] = [];
+  for (const [name, rows] of groups) {
+    const shown = rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a));
+    if (!shown.length) continue;
+    const head = document.createElement("li");
+    head.className = "stat-group";
+    head.setAttribute("role", "presentation");
+    const h3 = document.createElement("h3");
+    h3.textContent = name;
+    head.append(h3);
+    items.push(head, ...shown.map(row));
+  }
   $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
 }

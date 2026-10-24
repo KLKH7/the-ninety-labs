@@ -541,3 +541,5 @@ ion-footer.composer { padding: 8px 0 20px; } /* 8 pt more air above the tab bar 
 .roster .who { grid-template-columns: 36px 1fr auto; align-items: center; border-top: 0.5px solid var(--glass-edge); }
 .roster .who .where { font-size: 15px; color: var(--text-2); }
 .roster .who .num { font-weight: 700; }
+.stat-group h3 { margin: 14px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-2); text-transform: none; }
+.stat-group:first-child h3 { margin-top: 0; }
