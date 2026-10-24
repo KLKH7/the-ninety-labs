@@ -138,6 +138,13 @@ def _minute_now(t: float) -> int:
     return int(t // 60) + 1
 
 
+def first_object(reply: str) -> object:
+    """The first JSON object in a model's reply, and nothing after it. The published Companion
+    answers a plan with the plan and then goes on to write an "answer" step of its own, with facts
+    it made up (lesson 236): only the plan is read, so nothing it invented reaches the tools."""
+    return json.JSONDecoder().raw_decode(reply[reply.index("{") :])[0]
+
+
 def _calls(plan: object, insights, minute: int) -> list[dict]:
     """The model's tool calls, kept only when well formed: a known tool, a club of this match or
     none, minutes within the match so far. Anything else is dropped, never repaired into a call."""
@@ -687,9 +694,8 @@ async def answer_match(
     async def drafted():
         plan_reply = await ask(plan_prompt(question, insights, history))
         try:
-            body = re.search(r"\{.*\}", plan_reply, re.S)
-            plan = json.loads(body.group() if body else plan_reply)
-        except (json.JSONDecodeError, TypeError, AttributeError):
+            plan = first_object(plan_reply)
+        except (json.JSONDecodeError, TypeError, AttributeError, ValueError):
             raise _NotTheFormat("plan") from None
         calls = _calls(plan, insights, minute)
         if not calls:
