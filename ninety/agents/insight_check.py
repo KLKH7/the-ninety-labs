@@ -126,7 +126,8 @@ VERDICT_WORDS = (
 NEVER_WON = re.compile(
     r"\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:won|win)\s+"
     r"(?:it|the ball|possession)\s+back\b"
-    r"|\bwithout (?:winning|getting) (?:it|the ball) back\b|\bnot (?:won|regained)\b",
+    r"|\bwithout (?:winning|getting) (?:it|the ball) back\b|\bnot (?:won|regained)\b"
+    r"|\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:regain|recover|get)\w*\b",
     re.I,
 )
 WON_BACK = re.compile(
@@ -320,8 +321,10 @@ def check(
             )
 
     # Polarity: the words that say which way it went must agree with the cited facts' own fields.
-    reasons += polarity_reasons(claim.text, cited)
-    reasons += direction_reasons(claim.text, cited)
+    reasons += polarity_reasons(claim.text, cited)  # a known reversal: wrong, rejected
+    # A direction cue the check cannot match to the fact: it may be right, but it is not affirmatively
+    # matched, so it is held, never passed (the Coordinator's decision: fail closed).
+    held += direction_reasons(claim.text, cited)
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}
@@ -379,7 +382,8 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
 # direction matters, every word that could state a direction is checked: the sentence's direction
 # words must all sit inside a phrase that states the fact's own direction (APPROVED), and any other
 # direction word or negation is refused. A true sentence in other words is refused too, and code's
-# own sentence airs instead: it fails closed.
+# own sentence airs instead: it fails closed. Such a sentence is held (it may be true; nothing that
+# is not affirmatively matched airs); a known reversal (`polarity_reasons`) is rejected.
 NEGATION = re.compile(
     r"\b(?:not|no|never|none|nobody|nothing|zero|without|fail\w*|unable|neither|nor|cannot|no-one"
     r"|no one)\b|n't\b",

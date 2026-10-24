@@ -310,7 +310,11 @@ def test_team_sheet_is_fictional_and_deterministic():
     from ninety.render.params import TEAM_CODES
     from ninety.sim.engine import FORMATION
 
-    assert set(teamsheet.CLUBS) == set(TEAM_CODES)
+    assert set(TEAM_CODES) <= set(teamsheet.CLUBS)  # every code the renderer draws names a club
+    assert (
+        teamsheet.CLUBS["LON"] == teamsheet.CLUBS["OAK"] and teamsheet.CLUBS["LIS"] == teamsheet.CLUBS["FEN"]
+    )
+    assert teamsheet.team_sheet(7, "LON") == teamsheet.team_sheet(7, "OAK")  # one club, one sheet
     assert teamsheet.ROLES == tuple(r for r, _, _ in FORMATION)
     a, b = teamsheet.team_sheet(7, "OAK"), teamsheet.team_sheet(7, "OAK")
     assert a == b and a != teamsheet.team_sheet(8, "OAK")

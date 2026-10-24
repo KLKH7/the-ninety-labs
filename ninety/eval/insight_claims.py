@@ -131,7 +131,7 @@ def run(mi) -> dict:
     by_kind = {}
     for f in rows:
         by_kind.setdefault(f["kind"], f)
-    true_ok = true_bad = held_ok = held_bad = 0
+    true_ok = true_bad = held_ok = held_bad = true_held = 0
     wrongly = []
     caught, missed = Counter(), Counter()
     escapes = []
@@ -153,6 +153,7 @@ def run(mi) -> dict:
                 true_ok += 1
             else:
                 true_bad += 1
+                true_held += status == "held"
                 wrongly.append({"text": text, "reasons": v.reasons})
             other = next((g for k, g in by_kind.items() if k != f["kind"] and g.get("confident")), None)
             for kind, planted in plants(text, known[f["id"]], mi, other):
@@ -175,6 +176,7 @@ def run(mi) -> dict:
         "facts": len(rows),
         "true_claims": true_ok + true_bad,
         "true_wrongly_stopped": true_bad,
+        "true_held": true_held,
         "unsure_claims": held_ok + held_bad,
         "unsure_held": held_ok,
         "unsure_passed": held_bad,
@@ -240,7 +242,7 @@ def markdown(report: dict) -> str:
         "",
         "Caveat: the same author wrote the claim templates, the plants and the checker. This is an author's "
         "test of the reader, not an independent audit (docs/LESSONS.md, lesson 4). The plants reverse code's "
-        "own templates; free paraphrases are covered by the closed-world direction rule and the reviewer's "
+        "own templates; free paraphrases are covered by the closed-world direction rule (a cue it cannot match is held) and the reviewer's "
         "61 paraphrases (tests/test_insight_check.py::test_paraphrases_of_a_direction), and every model "
         "sentence also goes to the Judge.",
         "",

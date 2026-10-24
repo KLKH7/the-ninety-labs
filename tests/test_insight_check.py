@@ -373,3 +373,25 @@ PARAPHRASES = [
 def test_paraphrases_of_a_direction(text, fid, reject):
     v = verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES)
     assert (not v.ok) is reject, (text, v.reasons)
+
+
+# What failing closed costs: true sentences in words the direction check does not know are held, not
+# passed (they reach the phone as code's sentence instead). Measured here, not hidden.
+TRUE_PARAPHRASES = [
+    ("Lisbon Esportes won it back 2.4 seconds after losing it.", "cp:v7", "verified"),
+    ("Lisbon Esportes regained possession 2.4 seconds later.", "cp:v7", "held"),
+    ("Lisbon Esportes got the ball back quickly.", "cp:v7", "held"),
+    ("Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8", "verified"),
+    ("Lisbon Esportes did not win it back.", "cp:v8", "verified"),
+    ("Lisbon Esportes could not regain the ball.", "cp:v8", "held"),
+    ("London Athletic had 3 teammates free further up the pitch.", "po:v9", "verified"),
+    ("London Athletic completed the pass with 3 open teammates ahead.", "po:v9", "verified"),
+    ("London Athletic kept possession with 3 options free.", "po:v9", "held"),
+    ("London Athletic lost the ball with no teammate free further up the pitch.", "po:f", "verified"),
+]
+
+
+@pytest.mark.parametrize("text, fid, status", TRUE_PARAPHRASES)
+def test_true_paraphrases_pass_or_are_held_never_rejected(text, fid, status):
+    v = verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES)
+    assert status_for(v) == status, (text, v.reasons)

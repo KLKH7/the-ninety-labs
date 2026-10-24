@@ -36,6 +36,10 @@ CLUBS = {
     "MRL": "Merlton",
     "OAK": "London Athletic",
     "QRY": "Quarrydale",
+    # The broadcast's new scorebug codes for the same two clubs (the renderer moves OAK and FEN to
+    # LON and LIS): both spellings name one club.
+    "LON": "London Athletic",
+    "LIS": "Lisbon Esportes",
 }
 # The 4-3-3 the engine plays (ninety/sim/engine.FORMATION, the same role codes; tests hold them
 # equal): role code, shirt number (the common squad numbering of a 4-3-3, *design*), what a fan calls
@@ -98,7 +102,7 @@ class Starter:
 
 
 # Short names for a score line, where they differ from the full name (Kian, Oct 24).
-SHORT = {"OAK": "London", "FEN": "Lisbon"}
+SHORT = {"OAK": "London", "FEN": "Lisbon", "LON": "London", "LIS": "Lisbon"}
 
 
 def short_name(code: str) -> str:
@@ -118,7 +122,7 @@ def _surname(rng: random.Random) -> str:
 def team_sheet(seed: int, code: str) -> tuple[Starter, ...]:
     """The eleven starters of club `code` in the match of `seed`, in POSITIONS order."""
     club = club_name(code)
-    rng = random.Random(f"teamsheet-{seed}-{code}")
+    rng = random.Random(f"teamsheet-{seed}-{club}")  # by name: a club's two codes give one team sheet
     names: set[str] = set()
     out = []
     for role, number, label, line in POSITIONS:
