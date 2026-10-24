@@ -143,3 +143,8 @@ driver and detection, #250's `pitch.py`) so the band is applied to fits made the
 derived. The one test clip fitted at 4ae7357 before this (900001) is fitted again. Its first
 observations were never read.
 
+**A clip with no placeable camera** (observe raises "no frame shows enough pitch markings"; met on
+validation seed 112) is counted, not dropped: every frame untrusted, nothing placed, so its frames
+count against coverage and recall. The driver change (`_observed`) only handles that case. It
+applies to the test run too, before any test result is read.
+
