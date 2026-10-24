@@ -54,6 +54,9 @@ def compact(event: dict) -> dict:
     if event.get("confidence") is not None:
         # How sure the detector is; the fact-checker holds back claims built on a low one.
         out["confidence"] = event["confidence"]
+    if event.get("team_confidence") is not None:
+        # How firmly the side was told from the kit; a claim naming a team waits for a sure one.
+        out["team_confidence"] = event["team_confidence"]
     return out
 
 

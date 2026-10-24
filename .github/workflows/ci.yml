@@ -133,7 +133,8 @@ jobs:
   phone:
     # Type-checks and builds the phone companion and the viewer, then drives the phone at phone size
     # on its mock feed and against the companion API with the viewer pairing it: pairing, clock sync,
-    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py).
+    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py); the radar across
+    # a cut, answer pictures, insights and tabs (tests/test_phone_companion.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -152,7 +153,11 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_phone.py
+      - run: uv run pytest -q tests/test_phone.py tests/test_phone_companion.py
+        env:
+          NINETY_REQUIRE_PHONE: "1"
+      # Read-aloud in the pinned voice: the phone's player in a muted browser (tests/test_speech.py).
+      - run: uv run pytest -q tests/test_speech.py
         env:
           NINETY_REQUIRE_PHONE: "1"
 

@@ -55,6 +55,7 @@ Real broadcast footage has properties detectors depend on. Match them:
 | Grass | Mowing stripes, wear near goals and centre | Striped texture; wear is faint, paler turf that follows the stripes, never brown blotches |
 | Image | Compression blocks, slight noise, sharpening halos | Add mild noise and JPEG/H.264-style compression at export |
 | Other | Scorebug, crowd, advertising boards | A generic scorebug and boards with **made-up brands only** |
+| Fouls | The whistle goes, play stops, the fouler often owns up with a raised hand and team-mates turn to the man down | The engine already stops play (players walk and stand until the restart); the renderer draws the fall (`fall`, `fall_dir`), the fouler's hand up and the fouled side's three nearest turning their heads to him for 2 s from the foul frame (*design*, `ninety/render/fouls.py`; heads only, since a body faces the engine's `heading`), and the mp4 carries a whistle synthesised in `ninety/render/audio.py` at each foul the picture shows |
 | Dead balls | The director cuts away from the wait (replays and close-ups, about 7 s a shot) and back to the restart | Broadcast clips only (`ninety-render`; datasets and test sets show every frame): hold the stoppage at least 4 s, cut, come back closed up on the restart 6 s before it and ease out to the wide shot for the kick (`ninety/render/edit.py`); cut only a dead ball whose stoppage and restart the clip shows, record each cut in `meta.json`, never cut over an event |
 
 ## 3. Randomize what varies between real matches

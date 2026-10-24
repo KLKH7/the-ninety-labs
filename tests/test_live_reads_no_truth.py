@@ -66,6 +66,11 @@ assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
 assert match_server.team_shape(detected.M1_CLIP, 1, 99)["tracked"]  # shape from tracked positions only
+# Active perception re-runs vision's event detection on observations only (ninety/agents/perceive.py).
+from ninety.agents.perceive import Perceiver
+_obs = [json.loads(line) for line in open(detected.FIXTURES / "observations-seed900001.jsonl")]
+_m1 = detected.load(detected.m1_path(detected.M1_CLIP))[0]
+assert Perceiver({"tactical1": _obs}).re_perceive(_m1, "tactical1", "track").found is not None
 
 # The phone companion as deployed (NINETY_COMPANION unset is `on`): the M1 clip from tracked
 # positions only, and every stand-in, whose positions are the simulator's, refused before any is read.

@@ -93,7 +93,7 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     claim = page.locator("#claims .claim")
     assert claim.count() == 1
     assert claim.locator(".chip").text_content() == "Accepted"
-    assert "h8 shot, on target, 101 km/h." in claim.inner_text()
+    assert "h8 shoots at 101 km/h, on target." in claim.inner_text()
     assert claim.locator(".step.reject").count() == 1
     assert "143" in claim.locator(".step.reject").inner_text()
     assert "Events" in page.locator("#pipeline").inner_text()
@@ -114,7 +114,7 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
     # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
     assert set(on_air(page)) == {"insight-m-e2"}
-    assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
+    assert "Crowmere 8 shoots at 101 km/h, on target" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
     page.keyboard.press("1")

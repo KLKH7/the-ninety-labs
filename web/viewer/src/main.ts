@@ -1,9 +1,10 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
-import { setupMatch } from "./match";
+import { pairCardUp, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
+import { type TeamNames, nameIds, teamNames } from "./teams";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -207,6 +208,13 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
   );
 }
 
+/** The big screen: in match mode the TV shows only the broadcast, its on-screen graphics, the score
+ * and clock, the chapters and the QR code to pair a phone; the radar, stats, trace and pipeline
+ * live on the phone. `?dev=1` keeps every panel, for building and judging the pipeline. */
+export function bigScreen(matchMode: boolean, search: string): boolean {
+  return matchMode && new URLSearchParams(search).get("dev") !== "1";
+}
+
 async function start() {
   const base = new URLSearchParams(location.search).get("bundle") ?? "bundle/";
   let b: Bundle;
@@ -223,6 +231,15 @@ async function start() {
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
   const { matchTime, videoTime, segmentOf } = timeline(m);
+  const teams = teamNames(m.teams);
+  // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
+  // the names change, never a number, so what the fact-checking agent passed is what airs.
+  b.cues = b.cues.map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  const big = bigScreen(!!b.match, location.search);
+  if (big) {
+    document.body.dataset.screen = "big";
+    showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
+  }
   scrub.max = String(footage.duration);
   scrub.step = String(1 / m.fps);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
@@ -239,8 +256,9 @@ async function start() {
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
       : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
-  const rememberedVoice = store.get("voice");
-  voiceBox.checked = rememberedVoice !== "0";
+  // The voice is off until a fan picks audio description on this page: a remembered choice never
+  // starts it speaking on load.
+  voiceBox.checked = false;
   const applyVoice = () => {
     // With the voice on, the live region stays quiet so a screen reader does not say it twice.
     onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
@@ -265,7 +283,8 @@ async function start() {
   });
 
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
-  const setPersona = (p: Persona, focus = false) => {
+  const setPersona = (p: Persona, focus = false, picked = true) => {
+    if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
     persona = p;
     store.set("persona", p);
     document.body.dataset.persona = p;
@@ -305,9 +324,16 @@ async function start() {
   scrub.addEventListener("input", () => footage.seek(Number(scrub.value)));
   renderPipeline(b);
   renderTrace(b, seekMatch);
-  const radar = setupRadar(b, segmentOf, matchTime);
-  const match = setupMatch(b, (v) => footage.seek(v));
-  const phone = new PhonePanel(m.clip, { time: () => m.t_start + footage.time(), playing: () => !footage.paused() });
+  const radar = setupRadar(b, segmentOf, matchTime, teams, big);
+  const match = setupMatch(b, (v) => footage.seek(v), teams);
+  // The phone runs on match time, across the broadcast's cuts: the same clock the radar and the
+  // graphics use (lesson 33), so its radar shows the frame on the TV.
+  const phone = new PhonePanel(
+    m.clip,
+    { time: () => matchTime(footage.time()), playing: () => !footage.paused() },
+    new URL(b.base, location.href).pathname,
+    big,
+  );
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -343,6 +369,7 @@ async function start() {
         setPersona("audio");
         break;
       case "d":
+        if (big) return;
         showBoxes.checked = !showBoxes.checked;
         break;
       case "[":
@@ -352,7 +379,7 @@ async function start() {
         match.step(footage.time(), e.key === "]" ? 1 : -1);
         break;
       case "m":
-        if (!b.radar) return;
+        if (!b.radar || big) return;
         showRadar.checked = !showRadar.checked;
         showRadar.dispatchEvent(new Event("change"));
         break;
@@ -379,6 +406,14 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
+    if (big) {
+      const up = phone.paired && pairCardUp(b.match?.chapters ?? [], m.fps, v);
+      const card = $("pair-card");
+      if (card.hidden === up) {
+        card.hidden = !up;
+        card.classList.toggle("still", reduceMotionBox.checked);
+      }
+    }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
@@ -388,7 +423,8 @@ async function start() {
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
         .map((c) => {
-          const said = (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, "");
+          // The check's result belongs in How we know, never prefixed to what is shown or said.
+          const said = c.text.replace(/\.$/, "");
           return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
         })
         .join(". ");
@@ -408,13 +444,19 @@ async function start() {
     playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
     requestAnimationFrame(frame);
   };
-  setPersona(persona);
+  setPersona(persona, false, false);
   document.body.dataset.state = "ready";
   requestAnimationFrame(frame);
 }
 
 /** The radar panel: drawn each frame from the bundle's radar.json, or a note saying it has none. */
-function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], matchTime: (v: number) => number) {
+function setupRadar(
+  b: Bundle,
+  segmentOf: (k: number) => [number, number],
+  matchTime: (v: number) => number,
+  teams: TeamNames,
+  big: boolean,
+) {
   const panel = $("radar-panel");
   const note = $("radar-note");
   let model: RadarModel | null = null;
@@ -429,6 +471,13 @@ function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], match
     showRadar.disabled = true;
     radarCanvas.hidden = true;
     $("radar-legend").hidden = true;
+  }
+  for (const side of ["home", "away"] as const) $(`radar-${side}`).textContent = teams[side];
+  if (big) {
+    // On the phone instead (web/phone); nothing is drawn here.
+    $("radar-section").hidden = true;
+    showRadar.checked = false;
+    return { tick: () => null };
   }
   const remembered = store.get("radar");
   showRadar.checked = remembered !== "0";
@@ -468,7 +517,7 @@ function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], match
     radarCanvas.dataset.frame = state ? String(state.frame) : "";
     // The description changes at most once a second, so a screen reader is not flooded.
     const now = performance.now();
-    const said = describe(state);
+    const said = describe(state, teams);
     if (said !== spoken && now - spokenAt > 1000) {
       spoken = said;
       spokenAt = now;

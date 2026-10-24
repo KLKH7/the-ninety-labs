@@ -36,7 +36,8 @@ def write_clip(root: Path, jpeg: bytes = b"not a real jpeg") -> tuple[Path, Path
     (clip / "images").mkdir(parents=True)
     frames = FPS * SECONDS
     meta = {"clip_id": "seed42", "seed": 42, "fps": FPS, "frames": frames, "t_start": T_START,
-            "t_end": T_START + (frames - 1) / FPS, "params": {"width": W, "height": H}}
+            "t_end": T_START + (frames - 1) / FPS, "params": {"width": W, "height": H,
+            "home_code": "CRW", "away_code": "DUN"}}
     (clip / "clip.json").write_text(json.dumps(meta))
     (clip / "events.jsonl").write_text(ANSWER_KEY)
     (clip / "frames.jsonl").write_text(ANSWER_KEY)

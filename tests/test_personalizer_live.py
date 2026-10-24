@@ -23,7 +23,11 @@ from ninety.personalizer.core import model_personalizer, problem, verified_text
 from ninety.personalizer.server import create_app
 
 URL = "http://personalizer.test/"
-EVENTS = detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")
+# The stand-in carries no side confidence, so every side in it is unsure (factcheck.side_known) and
+# no club variant would be written. These tests are about variants on a side told surely: 0.99 is
+# above MIN_TEAM_CONFIDENCE. The unsure case is pinned below.
+EVENTS = [{**e, "team_confidence": 0.99}
+          for e in detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")]
 SURE = next(e for e in EVENTS if e["type"] == "pass" and e.get("receiver") and e["confidence"] >= 0.8
             and compact(e)["minute"] == 2 and e.get("ball_speed_kmh"))
 ROW = compact(SURE)
@@ -136,6 +140,8 @@ def test_profiles_cover_every_written_persona_in_both_languages_but_the_claim_it
     focus = next(p for p in profiles if p.persona == "player_focus")
     assert club.club == SURE["team"] and focus.player == SURE["player"]
     assert not any(p.persona == "player_focus" for p in personal.profiles_for({**SURE, "player": None}))
+    for unsure in ({**SURE, "team_confidence": None}, {**SURE, "team_confidence": 0.96}):
+        assert not any(p.persona == "club" for p in personal.profiles_for(unsure))
 
 
 def test_every_verified_variant_airs_as_a_schema_valid_cue(mock_mode):

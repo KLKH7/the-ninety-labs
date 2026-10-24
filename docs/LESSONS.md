@@ -2353,6 +2353,19 @@ short and actionable. This file is public: no research sources, product names or
   the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
   and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
 
+### 218. A confidence the agents never see protects nothing
+- **What happened:** detected events carried `team_confidence`, how firmly the side was told from
+  the kit, and the evaluation reported it. But `facts.compact`, which shapes every event an agent
+  or the fact-checker reads, dropped it. A claim naming the wrong team passed every check whenever
+  the detector had the side wrong (5 of 16 validation passes), because the evidence agreed with the
+  claim and nothing said how unsure that evidence was. Lesson 146 is the same failure for names.
+- **Rule:** an uncertainty the detector measures travels with the fact to the fact-checker. A claim
+  that rests on it is held below a threshold set from the measured reliability, and the threshold's
+  source and n are written beside it.
+- **Check:** `tests/test_confidence_gate.py::test_the_agents_see_how_firmly_the_side_was_told` and
+  `::test_a_claim_naming_a_team_on_an_unsure_side_is_held_not_rejected` fail if `compact` drops the
+  field or the gate ignores it.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
@@ -2362,6 +2375,29 @@ short and actionable. This file is public: no research sources, product names or
   An approval for a live run is spent only on a script that parses.
 - **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
   it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 216. Evidence says which agent produced it, or it rots without a sound
+- **What happened:** the agents' committed reports named a published version (`ninety-judge:1`) in
+  their prose, and nothing compared it with the code. The Judge moved to version 4, the
+  Personalizer to version 2, and `fact-checker.md`, `personalizer.md` and the planted-claim set
+  kept describing agents that no longer ran; the nightly that re-measured the Judge wrote only to
+  `runs/eval/`, so its numbers never reached a file anyone reviews. The published 136/136 also
+  counted 9 false claims held back by Judge service errors as catches, and `analyst.md` graded
+  drafts against this commit's match after the Analyst had read the deployed one (lesson 90).
+- **Rule:** every agent report and replay records each agent's version and `definition_sha` as the
+  run wrote it, and CI compares them with the code: a mismatch fails unless the file is listed as
+  stale with why and the run that replaces it, and the list fails when an entry is fresh again.
+  A file from before fingerprints is read through the registry's history, never given an invented
+  fingerprint, and an agent a file names without a definition is unknown, never fresh. A hold the
+  service caused is counted apart from a rejection a check made, and a run the model mostly did
+  not answer writes no report. A nightly lands as a pull request of dated, unedited reports.
+- **Check:** `tests/test_evidence_fresh.py` (a planted fingerprint in a copied report, replay or
+  Markdown line fails; an unknown version fails; a listing without a reason, or for a fresh file,
+  fails, a listing whose stale agents differ fails); `tests/test_live_eval_outage.py` (an
+  all-service-error run writes nothing); `tests/test_nightly.py` (a report without fingerprints
+  is not archived; the workflow's writing job has no Azure sign-in and opens a PR against main).
+  The first version passed a report with an empty definitions line as fresh; review caught it, and
+  23 mutants of the rules are now each killed by a test.
 
 ### 193. Score a claimed tie at the answer before adding an input to break it
 - **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
@@ -2477,7 +2513,6 @@ short and actionable. This file is public: no research sources, product names or
   bisector of the open part (red on main); his spots at three kicks are written out, so a change
   to the wall's cover moves them; he keeps the cover while the set ball waits and drops it after
   the kick; at his own side's free kick nothing changes.
-
 ### 204. A pose that names the action's mechanics, not its kind, draws one action as another
 - **What happened:** #216 gave keepers a throw from the hands: a roll is bowled, the ball brought
   down in his hands to the grass and released from there. The engine named every wind-up `strike`,
@@ -2489,6 +2524,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
   fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
   renders byte-identical (seed 122 at main, frames, events, meta and images).
+
+### 227. A confidence is compared only with a threshold measured on the same reading
+- **What happened:** active perception re-runs the event detector on another camera, or on a 3 s
+  window, to re-read a side the fact-checker holds. The first version let any look re-read the side.
+  On the M1 clip a 3 s window read the side of v00003, a false detection (a shot read as a pass), at
+  1.0; the whole clip had read it at 0.529. A side vote over a few frames is more one-sided than the
+  clip's, whoever is right, and the 0.96 threshold was measured on whole-clip votes. The look would
+  have aired a team claim on an event that never happened. The evaluation's own fixture test caught
+  it before any number was published. The second version still let a tactical lens's whole-clip vote
+  re-read the side, although 0.96 was measured on the broadcast's (the independent review caught it:
+  wrong sides reach 0.994 on the lenses). Now a look never re-reads a side.
+- **Rule:** a score is compared only with a threshold measured on the same kind of reading. A
+  shorter window, another camera or another model is a new reading, and needs its own measurement
+  before it can open a gate. Until then it may only confirm what does not depend on it (here, that
+  the event was seen).
+- **Check:** `tests/test_perceive.py::test_a_look_never_re_reads_a_side_so_a_team_claim_on_an_unsure_side_stays_held`
+  and `::test_a_real_camera_look_runs_inside_the_workflow`.
 
 ### 215. A detector tuned on one look is re-checked on the look the renderer draws now
 - **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
@@ -2586,7 +2638,91 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
 
-### 231. On a machine other sessions share, stop your own processes by id, never by a pattern
+### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
+- **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
+  heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called
+  creepy, in the one feature built for fans who listen instead of watch. Meanwhile we had an Azure AI
+  Speech resource, and the Describer pinned a neural voice (Ryan) that nothing on the phone used.
+  Nobody had chosen either voice by listening.
+- **Rule:** the voice is picked by ear from samples made in the voices that could ship (Oct 23:
+  all 17 British neural voices and two HD voices; Kian chose en-GB-OllieMultilingualNeural). It is
+  pinned in one place (`ninety/speech/voice.py`), and every path that speaks reads it: the bundle's
+  pre-generated lines, the Live route and the Describer. The phone plays the bundle's audio first,
+  then the Live route, and uses the device's voice only when neither has the line.
+- **Check:** `tests/test_speech.py::test_every_path_that_speaks_reads_the_one_pinned_voice`,
+  `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
+  `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
+  first and the second and third tests fail.
+
+### 224. Every picture of the pitch goes through one projection, and its words follow the engine
+- **What happened:** the phone's minimap drew pitch metres with its own projection, y = 0 at the
+  top, while the TV picture and the viewer's radar put the y = 0 touchline at the bottom, where the
+  broadcast camera stands. The phone showed the match upside down beside the screen it follows,
+  and its heat map and wind map with it. Its "left" and "right" flank words had been written to
+  match that drawing, so they were wrong too: the engine starts a home left-back at 0.85 of the
+  width, which the phone called the right. Its tests tapped dots with the same y-down formula, so
+  they agreed with the bug.
+- **Rule:** every drawing of the pitch on any screen (radar, heat map, wind map, answer pictures)
+  goes through `web/viewer/src/radar.ts`'s `projection`, and taps are hit-tested through it. Words
+  for a place on the pitch are grounded in the engine's own coordinates, not in a drawing. A test
+  that finds a dot asks the page where it drew it, and checks which way up that is.
+- **Check:** `tests/test_phone_companion.py::test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot`
+  (a player 20 m from the near touchline is below halfway); `tests/test_phone.py`'s tap test asks
+  `ninetyPhone.screenOf` and asserts the same.
+
+### 225. A second screen runs on the first screen's clock, cuts included
+- **What happened:** the viewer sent the phone `t_start` plus the video's time, which is the match
+  time only while the clip has no cut; a condensed match is all cuts. Between messages the phone
+  ran its clock on in match time, so even with the right message it slid into the stretch of the
+  match the broadcast skipped, drawing the radar where the video never was for up to a second.
+- **Rule:** one clock for every screen (lesson 33): the big screen sends match time from the same
+  function the graphics use, and the phone reads the bundle's cuts and runs on in video time
+  between messages, as the video does.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut`
+  fails with `t_start + video time`; `tests/test_phone_companion.py::test_the_phone_clock_jumps_the_cut_with_the_video_and_never_shows_the_gap`
+  fails with the cuts dropped from `LaptopClock.time`.
+
+### 236. A late joiner is sent the state as it stands now, not as it was last stored
+- **What happened:** the companion relay stored the big screen's once-a-second clock and replayed
+  it unchanged to a phone that joined late. A phone could start up to a second behind the screen it
+  follows until the next message; the phone clock test failed two runs in three, and the mock relay
+  did the same.
+- **Rule:** state that runs on by itself (a playing clock) is advanced by how long it was held
+  before it is replayed; state that does not (a paused clock, a focus) is replayed as stored. The
+  mock relay asks the laptop for its clock as it stands now, as the server computes it.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_a_playing_clock_as_it_stands_now`
+  (fails with the stored message replayed); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`.
+
+### 237. Tests and screenshot runs never speak aloud
+- **What happened:** browser tests and screenshot scripts turned read-aloud on and the headless
+  browser spoke with the Mac's system voice; Kian heard it from a test run.
+- **Rule:** every voice the screens use goes through one function (`web/viewer/src/speech.ts`,
+  `speakAloud`), which under automation (`navigator.webdriver`) records the line instead of
+  speaking it; recorded audio and tones stay silent too. Read-aloud is off until a fan turns it on.
+- **Check:** `tests/test_phone_companion.py::test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks`
+  (fails if `speakAloud` calls `speechSynthesis` under webdriver).
+
+### 234. A foul that only the data knows about is not a foul on screen
+- **What happened:** Kian watched a test clip with a foul in it and could not tell a foul had
+  happened. The engine had stopped play: within 0.5 s of each whistle on seed 7, at most one of 22
+  players was still running. But the picture showed players drifting to a stop, no whistle and no
+  one reacting. The fall itself (#223) was not in that clip's render yet.
+- **Rule:** an event a viewer must follow gets a cue they can see or hear, drawn from the engine's
+  own record of it (the foul's frame, its fouler and the fouled player, their positions), never by
+  moving anyone. A cue that would contradict a truth field, such as turning a body away from its
+  `heading`, is drawn where the truth says nothing: here the head turns, and the hand goes up.
+- **Check:**
+  - `tests/test_render_fouls.py`: the reactions start at the foul frame, are gone after REACT_S,
+    reach the three nearest team-mates and not the fouled man, and the head turns toward him;
+    nothing happens without a foul.
+  - `tests/test_render_mesh.py`: the page and Python draw the raised hand and the turned head the
+    same way, within 1.5 cm on every marker.
+  - A clip with no foul renders byte-identical to the renderer before this change, given the same
+    two team codes. The rename to LON and LIS changes the scorebug text in every render with
+    graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
+    codes in their params, so re-rendering one differs in the scorebug only.
+
+### 238. On a machine other sessions share, stop your own processes by id, never by a pattern
 - **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
   background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
   whose command line holds `until [`, so the other sessions' wait loops alive then were killed

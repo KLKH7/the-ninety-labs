@@ -20,6 +20,7 @@ import subprocess
 from dataclasses import asdict
 
 from ninety import config
+from ninety.agents.evidence import KEY
 from ninety.agents.factcheck import Claim
 from ninety.agents.judge import judge
 from ninety.eval import ablation, planted
@@ -54,7 +55,7 @@ def to_ask(data: dict) -> list[dict]:
 
 async def record(items: list[dict], concurrency: int = 3) -> dict:
     gate = asyncio.Semaphore(concurrency)
-    async with judge_under_test(local=False) as (agent, label):
+    async with judge_under_test(local=False) as (agent, label, defs):
         counting = CountingAgent(agent)
 
         async def one(item):
@@ -69,6 +70,7 @@ async def record(items: list[dict], concurrency: int = 3) -> dict:
     return {
         "version": planted.VERSION,
         "judge": label.replace("`", ""),
+        KEY: defs,  # the Judge's version and definition fingerprint (ninety/agents/evidence.py)
         "model": config.MODEL,
         "commit": sha,
         "recorded_at": datetime.date.today().isoformat(),
