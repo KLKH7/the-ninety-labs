@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ninety.intel import counter_press, line_breaks, offside, overloads, pass_options, roles, shape, style
+from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
@@ -37,6 +38,7 @@ class MatchInsights:
     people: dict[str, dict]  # track id -> roles.who record
     minutes: int
     gates: dict = field(default_factory=dict)
+    team_stats: dict = field(default_factory=dict)  # the phone's match stats (ninety/intel/team_stats.py)
 
     @classmethod
     def build(
@@ -109,7 +111,9 @@ class MatchInsights:
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
-        return cls(clip, fixture, facts, people, int(last // 60) + 1, gate)
+        return cls(
+            clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames)
+        )
 
     # -- what the tools answer -------------------------------------------------------------
 
@@ -330,6 +334,7 @@ class MatchInsights:
             "minutes": self.minutes,
             "gates": self.gates,
             "people": self.people,
+            "team_stats": self.team_stats,
             "facts": self.facts,
         }
 
@@ -343,6 +348,7 @@ class MatchInsights:
             dict(body["people"]),
             int(body["minutes"]),
             dict(body.get("gates") or {}),
+            dict(body.get("team_stats") or {}),
         )
 
 
