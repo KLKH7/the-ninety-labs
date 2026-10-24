@@ -2305,3 +2305,14 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 216. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
