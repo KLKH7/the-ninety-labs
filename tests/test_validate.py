@@ -1175,3 +1175,26 @@ def test_a_cut_from_the_end_of_a_half_to_the_kick_off_passes(tmp_path):
         if e["type"] == "set_piece":
             e["type"] = "kickoff"
     assert run(tmp_path, cut_away(clip, 60, 120)) == {}
+
+
+def test_a_new_ball_placed_after_the_end_of_a_half_passes(tmp_path):
+    """Law 7, lesson 213: from the end of the first half the ball is out of play until the second
+    half's kick-off, so a new ball may be placed for it, as after any stoppage."""
+    clip = clean_clip()
+    for n in range(100, 150):
+        clip["frames"][n]["possessor"] = None
+    for n in range(105, 150):  # placed on the centre mark at frame 105, before the kick-off at 110
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 52.5, 34.0
+    clip["events"].append(event("e2", 100, "half_time", "away", x=50.0))
+    clip["events"].append(event("e3", 110, "kickoff", "away", "a1", x=52.5, y=34.0))
+    assert "P3 ball speed" not in run(tmp_path, clip)
+
+
+def test_a_substitution_at_half_time_passes(tmp_path):
+    """Law 3: a substitution is made at a stoppage, and the end of a half is one (Law 7)."""
+    clip = clean_clip()
+    substitute(clip, 120)
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+    assert run(tmp_path, clip) == {}

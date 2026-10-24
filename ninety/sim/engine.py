@@ -893,17 +893,22 @@ class Engine:
 
     def penalty_in_progress(self) -> bool:
         """Law 7: a half is extended for a penalty kick to be taken and completed: awarded and not
-        yet taken, or struck and its ball still live, untouched by any player but the keeper it was
-        struck at (design: completed once it is out of play, a goal, at rest, or played by another;
-        the engine's own record, kicked, is the shot until someone else plays it)."""
+        yet taken; taken and not yet struck; or struck, with its ball still moving, in play, and
+        played by nobody but the keeper it was struck at. Completed once it stops, goes out of play
+        or in, or is played by any other player, the kicker included (a touch the engine records:
+        a deflection, interception, tackle or control)."""
         if self.restart is not None:
             return self.restart.kind == "penalty_kick"
         if self.from_restart == "penalty_kick":
             return True  # taken, and the taker turning to strike it
         shot = self.penalty_shot
-        if shot is None or self.kicked is not shot or self.possessor is not None:
+        if shot is None or self.possessor is not None or math.hypot(*self.ball[3:6]) == 0.0:
             return False
-        return math.hypot(*self.ball[3:6]) > 0.0
+        keeper = self.keeper(other(shot["team"])).id
+        after = self.match.events[self.match.events.index(shot) + 1:]
+        touched = any(e["type"] in ("deflection", "interception", "tackle", "possession_change")
+                      and e.get("player") != keeper for e in after)
+        return not touched
 
     def half_time(self) -> None:
         """Law 7: the referee ends the first half at HALF_S (no added time is modelled): whatever was
