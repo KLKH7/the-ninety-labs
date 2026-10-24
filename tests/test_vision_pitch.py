@@ -180,9 +180,9 @@ def test_a_clip_is_tracked_frame_to_frame_and_every_frame_is_ok(pan, small_grid)
 
 
 def test_the_cut_distance_is_the_mean_grey_change_over_the_thumbnail():
-    a = grass()
-    b = grass()
-    b[:30] = (240, 240, 240)  # the top half turns white
+    a = grass(72, 128)  # whole thumbnail cells, 4 x 4 px
+    b = grass(72, 128)
+    b[:36] = (240, 240, 240)  # the top half turns white
     ta, tb = pitch.thumbnail(a), pitch.thumbnail(b)
     assert pitch.cut_distance(ta, ta) == 0.0
     grey = np.mean(grass()[0, 0].astype(float))
