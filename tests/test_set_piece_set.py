@@ -156,3 +156,18 @@ def test_build_refuses_a_match_simulated_shorter_than_the_plan(tmp_path):
         (d / "meta.json").write_text(json.dumps({"minutes": 30}))
     with pytest.raises(ValueError, match="30.0 minutes"):
         sp.build(tmp_path)
+
+
+def test_check_passes_on_the_same_matches_and_fails_on_a_changed_one(tmp_path):
+    events = [ev("out_of_play", 100.0, 40.0, 0.0), ev("set_piece", 120.0, 40.0, 0.0)]
+    for s in sp.VALIDATION + sp.TEST:
+        d = tmp_path / f"seed{s}"
+        d.mkdir()
+        (d / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+        (d / "meta.json").write_text(json.dumps({"minutes": 35}))
+    out = tmp_path / "set.json"
+    sp.main(["--sims", str(tmp_path), "--out", str(out)])
+    sp.main(["--sims", str(tmp_path), "--out", str(out), "--check"])
+    (tmp_path / f"seed{sp.TEST[0]}" / "events.jsonl").write_text(json.dumps(events[0]) + "\n")
+    with pytest.raises(SystemExit, match="not what the rule gives"):
+        sp.main(["--sims", str(tmp_path), "--out", str(out), "--check"])

@@ -66,3 +66,19 @@ def test_each_clip_gets_one_render_and_validate_line_at_the_render_commit(tmp_pa
             f"--set dead_ball_cut=false --out {d}") in line
     assert f"uv run ninety-validate {d}" in line and "--views" not in line
     assert len(set_commands.commands(manifest, tmp_path)) == 2
+
+
+def test_check_passes_on_the_same_matches_and_fails_on_a_changed_one(tmp_path):
+    import pytest
+
+    for s in ps.VALIDATION + ps.TEST:
+        d = tmp_path / f"seed{s}"
+        d.mkdir()
+        (d / "events.jsonl").write_text(json.dumps(ev("tackle", 105.0)) + "\n")
+        (d / "meta.json").write_text(json.dumps({"minutes": 35}))
+    out = tmp_path / "set.json"
+    ps.main(["--sims", str(tmp_path), "--out", str(out)])
+    ps.main(["--sims", str(tmp_path), "--out", str(out), "--check"])
+    (tmp_path / f"seed{ps.TEST[0]}" / "events.jsonl").write_text(json.dumps(ev("tackle", 305.0)) + "\n")
+    with pytest.raises(SystemExit, match="not what the rule gives"):
+        ps.main(["--sims", str(tmp_path), "--out", str(out), "--check"])

@@ -187,9 +187,15 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="The set-piece set's clips, from its matches' answer keys.")
     ap.add_argument("--sims", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--check", action="store_true", help="rebuild and fail unless --out has the same bytes")
     a = ap.parse_args(argv)
     m = build(a.sims)
-    a.out.write_text(json.dumps(m, indent=1) + "\n")
+    text = json.dumps(m, indent=1) + "\n"
+    if a.check:
+        if a.out.read_text() != text:
+            raise SystemExit(f"{a.out} is not what the rule gives on these matches")
+    else:
+        a.out.write_text(text)
     print(json.dumps({"count": m["count"], "restarts": m["restarts"], "seconds": m["seconds"]}))
 
 
