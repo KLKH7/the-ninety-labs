@@ -255,7 +255,7 @@ def offline_analyst(events: list[dict], plant: bool):
         event = most_interesting(by_minute.get(minute, []))
         if event is None:
             return json.dumps({"text": "", "evidence": []})
-        claim = Claim(_text(event, "analyst") + ".", [event["id"]])
+        claim = Claim(describe.as_sentence(_text(event, "analyst") + "."), [event["id"]])
         if plant and calls == 1:
             claim = tamper(claim)
         return json.dumps({"text": claim.text, "evidence": claim.evidence})
@@ -373,8 +373,11 @@ def offline_models(events: list[dict]) -> Models:
         return json.dumps({"moments": picks})
 
     async def tactician(prompt: str) -> str:
+        # A sentence, as a co-commentator would say it, from the event's own fields; not the graphic's
+        # compact form ("h11 → h8, 17 m, 53 km/h"), which the template already shows.
         event = by_id[json.loads(prompt)["moment"]["main_event"]]
-        return json.dumps({"text": _text(event, "analyst") + ".", "evidence": [event["id"]]})
+        text = describe.as_sentence(_text(event, "analyst") + ".")
+        return json.dumps({"text": text, "evidence": [event["id"]]})
 
     async def challenger(prompt: str) -> str:
         return json.dumps({"agree": True})
@@ -415,7 +418,7 @@ async def explain_with_graph(
     events: list[dict], clip: str, plant: bool,
     run_minute: Callable[[int, bool], Awaitable] | None = None,
     single: Callable[[int, bool], Awaitable[tuple[list[dict], list[dict]]]] | None = None,
-    mode: str = "graph offline",
+    mode: str = "graph offline", perceiver=None,
 ) -> tuple[list[dict], list[dict], list[str], list[dict], list[dict]]:
     """The graph once per minute with a pass, shot or goal to explain. Returns the cues (templates,
     each minute's insights and the templates it badged), the claim traces, the detections too
@@ -437,7 +440,7 @@ async def explain_with_graph(
 
     async def offline_minute(minute: int, planted: bool):
         return await workflow.run_workflow(offline_models(agent_events), events, minute, clip,
-                                           plant=planted, inline_events=True)
+                                           plant=planted, inline_events=True, perceiver=perceiver)
 
     async def offline_single(minute: int, planted: bool) -> tuple[list[dict], list[dict]]:
         new, traced, _ = await explain_and_render(events, clip, planted, None, [minute])
@@ -511,7 +514,7 @@ async def published_single(credential, turns: list[dict], pins: dict[str, str]):
         yield ask, judge
 
 
-async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
+async def explain_live(events: list[dict], clip: str, plant: bool, log: dict, perceiver=None):
     """The graph on the published Foundry agents (a live, billed call), one sign-in for the whole
     clip; the published single Analyst for any minute the graph fails on. `log` gets the versions
     that ran, every model answer, and the minutes in which a model call failed (the graph then holds
@@ -530,7 +533,8 @@ async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
 
         async def run_minute(minute: int, planted: bool):
             result, said, ran, model_failed, _ = await workflow.run_live(
-                lambda: events, minute, match, True, planted, trace_to="none", credential=credential)
+                lambda: events, minute, match, True, planted, trace_to="none", credential=credential,
+                perceiver=perceiver)
             turns.extend({"minute": minute, **asdict(t)} for t in said)
             pins.update(ran)
             if model_failed:
@@ -554,10 +558,24 @@ async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
                         turn["minute"] = minute
                 return new, traced
 
-            out = await explain_with_graph(events, clip, plant, run_minute, single, mode="graph live")
+            out = await explain_with_graph(events, clip, plant, run_minute, single, mode="graph live",
+                                           perceiver=perceiver)
     log.update({"pins": pins, "model_answers": len(turns), "model_failures": failed})
     log["turns"] = turns
     return out
+
+
+def load_views(views: Path):
+    """A Perceiver over vision's per-camera observations (ninety/vision/live_job.py writes
+    `views/<name>/observations.jsonl`): what active perception looks again through."""
+    from ninety.agents.perceive import Perceiver
+
+    rows = {}
+    for path in sorted(views.glob("*/observations.jsonl")):
+        rows[path.parent.name] = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not rows:
+        raise SystemExit(f"{views}: no <camera>/observations.jsonl to look again through")
+    return Perceiver(rows)
 
 
 # ---------------------------------------------------------------- footage
@@ -610,6 +628,7 @@ async def run(args: argparse.Namespace) -> dict:
     with telemetry.stage_span("stats", events=len(events)):
         facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
+    perceiver = load_views(args.views) if args.views else None
     fallbacks: list[dict] = []
     notes: list[dict] = []
     agents_log: dict = {}
@@ -617,12 +636,14 @@ async def run(args: argparse.Namespace) -> dict:
         cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
         agents_mode = "replay" if recording else "single analyst offline"
     elif args.agents == "live":
-        cues, claims, held, fallbacks, notes = await explain_live(events, clip.id, args.plant, agents_log)
+        cues, claims, held, fallbacks, notes = await explain_live(events, clip.id, args.plant, agents_log,
+                                                                  perceiver)
         agents_mode = "graph live"
         # Every model answer, for audit: what the published agents said, minute by minute.
         (out / "agents.json").write_text(json.dumps(agents_log.pop("turns"), indent=2) + "\n")
     else:
-        cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant)
+        cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant,
+                                                                        perceiver=perceiver)
         agents_mode = "graph offline"
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
@@ -703,7 +724,9 @@ async def run(args: argparse.Namespace) -> dict:
         "agents": {"mode": agents_mode,
                    "planted": any(c["planted"] for c in claims) if not recording else False,
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims),
-                   "fallbacks": fallbacks, "minutes_without_a_moment": notes, **agents_log},
+                   "fallbacks": fallbacks, "minutes_without_a_moment": notes,
+                   "re_perceived": [look.as_dict() for look in perceiver.looks] if perceiver else None,
+                   **agents_log},
         "cues": len(cues),
         "audio": audio,
         "radar": radar_info,
@@ -739,6 +762,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--agents", choices=("offline", "live"), default="offline",
                     help="the multi-agent graph's writers: offline stand-ins (no Azure), or the published "
                          "Foundry agents (a live, billed call)")
+    ap.add_argument("--views", type=Path, default=None,
+                    help="vision's views/ folder for the clip (one observations.jsonl per camera): the "
+                         "fact-checker looks again through the other cameras at a claim it would hold")
     ap.add_argument("--single-analyst", action="store_true",
                     help="run the single Analyst -> Fact-checker path instead of the graph (the fallback)")
     ap.add_argument("--plant", action="store_true", help="plant a false number in the first draft")

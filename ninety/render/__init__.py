@@ -77,4 +77,10 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.17 (after #231's 0.5.15 and #235's 0.5.16): a keeper's bowl (the engine's own wind-up, action
 # "bowl") is drawn as the hold it is, both hands bringing the ball down to the grass, never a kicking
 # leg. No engine before #216 names one, so every earlier clip renders byte-identical (lesson 204).
-RENDERER_VERSION = "0.5.17"
+# 0.5.18: a foul is legible (lesson 234). The fouler raises a hand and the fouled side's three nearest
+# turn their heads to the man down, for 2 s from the engine's foul frame, drawn from its event and
+# positions (bodies still face the engine's heading). The mp4 carries a synthesised whistle at each
+# foul the picture shows. Every clip shows London Athletic (LON) against Lisbon Esportes (LIS) on the
+# score bug (Kian, Oct 24); the seed's other draws are unchanged. A clip with no foul renders the same
+# pixels as 0.5.17 given those two codes.
+RENDERER_VERSION = "0.5.18"

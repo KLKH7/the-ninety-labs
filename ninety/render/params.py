@@ -46,6 +46,10 @@ PLANNED: dict[str, tuple] = {"lighting": ("day",), "weather": ("clear",)}
 
 # Fictional three-letter codes; none is a Premier League club code.
 TEAM_CODES = ("ASH", "CRW", "DUN", "ELM", "FEN", "GRV", "HLT", "IVY", "KST", "MRL", "OAK", "QRY")
+# The two teams every clip shows (Kian's decision, Oct 24): London Athletic at home, Lisbon Esportes
+# away, both fictional. The seed still draws two TEAM_CODES, so every later draw of a seed (patterns,
+# the camera cut, the tactical mount) stays where it was; the codes drawn are no longer shown.
+TEAMS = {"home": ("LON", "London Athletic"), "away": ("LIS", "Lisbon Esportes")}
 # Made-up advertising brands for the pitch-side boards.
 BOARD_BRANDS = ("VANTIRO", "QELMORA", "BRISKEL", "OSTRAVEN", "PALMIRU", "ZENTHA", "THE NINETY LABS")
 
@@ -116,8 +120,8 @@ class RenderParams:
     # "crowded" picks the window where players most often hide the ball; "keeper" the one where a
     # goalkeeper most often handles or dives (override only: seeds never draw it)
     occlusion: str = "natural"
-    home_code: str = "ASH"
-    away_code: str = "CRW"
+    home_code: str = TEAMS["home"][0]
+    away_code: str = TEAMS["away"][0]
     boards: tuple[str, ...] = BOARD_BRANDS
     stadium: str = "plain"
     views: str = "none"
@@ -245,7 +249,7 @@ def sample_params(seed: int, **overrides) -> RenderParams:
     drawn_occlusion = "crowded" if hard.random() < HARD_CASE_RATE else "natural"
     contrast = overrides.get("kit_contrast", drawn_contrast)
     home, away, hgk, agk = sample_kits(rng, contrast)
-    codes = rng.sample(TEAM_CODES, 2)
+    rng.sample(TEAM_CODES, 2)  # drawn and not used, so later draws stay put (TEAMS)
     base = RenderParams(
         camera=cam,
         lighting=lighting,
@@ -265,8 +269,8 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         crowd_density=round(rng.uniform(0.5, 1.0), 2),
         motion_blur=round(rng.uniform(0.3, 0.7), 2),
         noise=round(rng.uniform(0.006, 0.02), 4),
-        home_code=codes[0],
-        away_code=codes[1],
+        home_code=TEAMS["home"][0],
+        away_code=TEAMS["away"][0],
     )
     # Appended draws. Everything above is the original sequence and must stay in this order.
     if drawn_lighting != "overcast":

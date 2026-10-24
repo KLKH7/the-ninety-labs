@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -246,7 +247,17 @@ def build() -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--rows", action="store_true", help="simulate and write the shape facts first")
+    ap.add_argument("--check", action="store_true",
+                    help="re-simulate and fail if the committed facts or report are stale (lessons 44, 77)")
     args = ap.parse_args()
+    if args.check:
+        fresh = json.dumps(simulated_rows(), separators=(",", ":"), sort_keys=True) + "\n"
+        stale = [ROWS.name] if ROWS.read_text() != fresh else []
+        if REPORT.read_text() != build():
+            stale.append(REPORT.name)
+        if stale:
+            raise SystemExit(f"stale: {', '.join(stale)}: run `{sys.argv[0]} --rows`")
+        return
     if args.rows:
         ROWS.write_text(json.dumps(simulated_rows(), separators=(",", ":"), sort_keys=True) + "\n")
     REPORT.write_text(build())

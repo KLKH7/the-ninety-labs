@@ -666,6 +666,7 @@ def answer_json(answer: Answer) -> dict:
         "names": answer.names,
         "spoken": answer.spoken,
         "follow_ups": list(answer.follow_ups),
+        "headline": answer.headline,
     }
 
 
