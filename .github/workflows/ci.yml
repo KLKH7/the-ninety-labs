@@ -11,7 +11,7 @@ permissions:
 # A new push to a pull request cancels the run on its previous head, so queued runs on superseded
 # heads stop taking runners. A run on main is never cancelled.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
