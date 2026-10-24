@@ -82,7 +82,7 @@ TOOL_WORDS = (
         "style",
         r"\b(?:style|playing like|play(?:ing)? like this|tactic\w*|approach|long balls?|go(?:ing)? long"
         r"|cross\w*|wings?|down the (?:left|right|middle)|counter[- ]attack\w*|on the break|one-twos?"
-        r"|wall pass\w*"
+        r"|wall pass\w*|how (?:are|is) [\w' ]+ playing"
         r"|goal ?keeper|keeper)\b",
     ),
     ("players", r"\b(?:best|man of the match|stand-?out|star|playing well|who(?:'s| has) been)\b"),
@@ -248,31 +248,89 @@ def minutes_of(text: str, minute: int) -> tuple[int, int] | None:
 
 FOLLOW_UPS = {
     "goal_build_up": (
-        "Who took the most players out of the game?",
-        "How quickly did {club} win the ball back?",
+        "Who has been the best player?",
+        "How quickly do {club} win the ball back?",
+        "Was anyone offside before the goal?",
     ),
-    "players": ("Why did {club} score?", "Where are {club} outnumbering them?"),
-    "style": ("Do {club} counter-attack?", "Is their keeper going long?"),
-    "referee": ("What counts as a handball?", "Was anyone offside before the goal?"),
-    "counter_press": ("Did {club} have options when they lost it?", "And in the first half?"),
-    "overloads": ("How quickly do {club} win the ball back?", "Which passes cut through?"),
-    "line_breaks": ("Who has been the best player?", "Where are {club} outnumbering them?"),
-    "pass_options": ("How quickly do {club} win the ball back?", "Which passes cut through?"),
-    "team_shape": ("Where are {club} outnumbered?", "And in the last ten minutes?"),
-    "lineup": ("Who has been the best player?", "Why do {club} keep losing the ball?"),
+    "players": ("Why did {club} score?", "Where are {club} outnumbering them?", "How are {club} playing?"),
+    "style": ("Do {club} counter-attack?", "Is the {club} keeper going long?", "Which passes cut through?"),
+    "referee": ("What counts as a handball?", "Was anyone offside?", "Why did {club} score?"),
+    "counter_press": (
+        "Did {club} have options when they lost it?",
+        "And in the first half?",
+        "Where are {club} outnumbering them?",
+    ),
+    "overloads": (
+        "How quickly do {club} win the ball back?",
+        "Which passes cut through?",
+        "How are {club} playing?",
+    ),
+    "line_breaks": (
+        "Who has been the best player?",
+        "Where are {club} outnumbering them?",
+        "How are {club} playing?",
+    ),
+    "pass_options": (
+        "How quickly do {club} win the ball back?",
+        "Which passes cut through?",
+        "Who has been the best player?",
+    ),
+    "team_shape": (
+        "Where are {club} outnumbering them?",
+        "And in the last ten minutes?",
+        "How are {club} playing?",
+    ),
+    "lineup": (
+        "Who has been the best player?",
+        "Why do {club} keep losing the ball?",
+        "How are {club} playing?",
+    ),
 }
+GENERAL = (
+    "Who has been the best player?",
+    "How are {club} playing?",
+    "Why did {club} score?",
+    "Which passes cut through?",
+    "How quickly do {club} win the ball back?",
+)
+FOLLOW_UP_COUNT = 3
 
 
-def follow_ups(calls: list[dict], cited: list[dict], insights) -> tuple[str, ...]:
-    """Two suggested next questions, from the tools the answer used, about the club it was about."""
+def answerable(text: str, insights, t: float) -> bool:
+    """Can the tools answer this question now: code routes it to a tool and a checked answer comes back."""
+    if not route(text):
+        return False
+    a, _ = code_match_answer(Question("follow-up", None, text, max(0.0, t)), insights, suggest=False)
+    return a.status == "verified"
+
+
+def follow_ups(
+    calls: list[dict], cited: list[dict], insights, asked=(), t: float | None = None
+) -> tuple[str, ...]:
+    """Up to three suggested next questions, from the tools the answer used and then general ones,
+    about the club it was about. Each is kept only if the tools can answer it now (`answerable`) and
+    it is neither a question already asked in the conversation nor another suggestion again."""
     club = next((f.get("club") for f in cited if f.get("club")), None) or insights.fixture.clubs["home"]
-    out = []
-    for c in calls:
-        for q in FOLLOW_UPS.get(c["name"], ()):
-            q = q.format(club=club)
-            if q not in out:
-                out.append(q)
-    return tuple(out[:2])
+    if t is None:
+        ts = [float(f["t"]) for f in cited if f.get("t") is not None]
+        ts += [60.0 * f["minute_to"] for f in cited if f.get("minute_to")]
+        t = max(ts, default=60.0 * insights.minutes)
+    seen = {q.strip().lower() for q in asked}
+    # Not the same topic again: a suggestion that routes to exactly the tools of the question just
+    # asked would repeat it in other words.
+    just_asked = set(route(list(asked)[-1])) if asked else set()
+    out: list[str] = []
+    pool = [q for c in calls for q in FOLLOW_UPS.get(c["name"], ())] + list(GENERAL)
+    for template in pool:
+        q = template.format(club=club)
+        if q.lower() in seen or q in out or (just_asked and set(route(q)) == just_asked):
+            continue
+        seen.add(q.lower())
+        if answerable(q, insights, t):
+            out.append(q)
+        if len(out) == FOLLOW_UP_COUNT:
+            break
+    return tuple(out)
 
 
 def _point_ids(node) -> set[str]:
@@ -317,7 +375,9 @@ def _span(cited: list[dict]) -> tuple[float | None, float | None]:
     return (min(ts), max(ts)) if ts else (None, None)
 
 
-def _match_answer(text: str, cited: list[dict], insights=None, calls=()) -> Answer:
+def _match_answer(
+    text: str, cited: list[dict], insights=None, calls=(), asked=(), t=None, suggest=True
+) -> Answer:
     t_from, t_to = _span(cited)
     lead = next((f for f in cited if f.get("value") is not None and f.get("unit")), None)
     metric, value, unit = (lead["metric"], float(lead["value"]), lead["unit"]) if lead else (None, None, None)
@@ -326,7 +386,7 @@ def _match_answer(text: str, cited: list[dict], insights=None, calls=()) -> Answ
     if insights is not None:
         extra = {
             "names": names_of(cited, visual, insights),
-            "follow_ups": follow_ups(list(calls), cited, insights),
+            "follow_ups": follow_ups(list(calls), cited, insights, asked, t) if suggest else (),
         }
     # The answer is spoken as written: code's and the model's sentences carry no visual reference
     # (insight_check rejects one), so the screen reader and the Describer read the text itself.
@@ -521,12 +581,12 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
         names = [c["name"] for c in history[-1]["calls"]] if history[-1].get("calls") else []
     lo, hi = minutes_of(question.text, minute) or (max(1, minute - WINDOW_MIN + 1), minute)
     # A club the question names may be the side acting or the side acted on ("which pass cut through
-    # Fenwick?"): code reads both clubs' facts and the fact-check binds the sentence to the right one.
+    # Lisbon Esportes?"): code reads both clubs' facts and the fact-check binds the sentence to the right one.
     return [{"name": n, "club": None, "minute_from": lo, "minute_to": hi} for n in names]
 
 
 def code_match_answer(
-    question: Question, insights, calls: list[dict] | None = None, history=()
+    question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
     """Code's answer: the routed tools' facts, the first one code can say and the check passes. A
     goal is told with the strongest thing that led to it."""
@@ -536,6 +596,11 @@ def code_match_answer(
     clubs = insights.fixture.clubs
     for f in facts:
         f.setdefault("clubs", clubs)
+    named = [n for n in clubs.values() if re.search(rf"\b{re.escape(n)}\b", question.text, re.I)]
+    if len(named) == 1:
+        # A question about one club hears about that club first (its facts before the other's); the
+        # fact-check still binds the sentence to the right side.
+        facts = sorted(facts, key=lambda f: f.get("club") not in (None, named[0]))
     if re.search(r"\b(?:which|who|whose)\b", question.text, re.I):
         # "Which pass…?", "Who…?": a moment with a player in it, before a club's total.
         facts = sorted(facts, key=lambda f: f.get("t") is None)
@@ -550,7 +615,15 @@ def code_match_answer(
         if cited:
             text = " ".join(code_texts(f)[0] for f in cited)
             if _verify(Claim(text, [f["id"] for f in cited]), known, insights).ok:
-                return _match_answer(text, cited, insights, calls), calls
+                return _match_answer(
+                    text,
+                    cited,
+                    insights,
+                    calls,
+                    asked=[*(h["question"] for h in history), question.text],
+                    t=question.t,
+                    suggest=suggest,
+                ), calls
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
     if goal is not None:
         for f in facts:
@@ -560,12 +633,28 @@ def code_match_answer(
                 lead = text[0].lower() + text[1:]
                 combined = f"{goal['club']} scored in minute {goal['minute']}. Just before it, {lead}"
                 if _verify(Claim(combined, [goal["id"], f["id"]]), known, insights).ok:
-                    return _match_answer(combined, [goal, f], insights, calls), calls
+                    return _match_answer(
+                        combined,
+                        [goal, f],
+                        insights,
+                        calls,
+                        asked=[*(h["question"] for h in history), question.text],
+                        t=question.t,
+                        suggest=suggest,
+                    ), calls
     for f in facts:
         for text in code_texts(f):
             claim = Claim(text, [f["id"]])
             if _verify(claim, known, insights).ok:
-                return _match_answer(text, [f], insights, calls), calls
+                return _match_answer(
+                    text,
+                    [f],
+                    insights,
+                    calls,
+                    asked=[*(h["question"] for h in history), question.text],
+                    t=question.t,
+                    suggest=suggest,
+                ), calls
     names = ", ".join(n.replace("_", " ") for n in MATCH_TOOLS[:4])
     why = (
         "I have no tracked positions for this match yet."
@@ -643,4 +732,7 @@ async def answer_match(
         return fallback(tuple(verdict.reasons), calls)
     known = {f["id"]: f for f in facts}
     cited = [known[i] for i in claim.evidence]
-    return MatchResult(_match_answer(claim.text, cited, insights, calls), "model", tuple(calls))
+    asked = [*(h["question"] for h in history), question.text]
+    return MatchResult(
+        _match_answer(claim.text, cited, insights, calls, asked, question.t), "model", tuple(calls)
+    )

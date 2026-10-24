@@ -296,10 +296,10 @@ def test_who_says_a_name_only_past_its_gate():
     w = roles.who("h-t5", "home", assigned, fx, open_gate)
     assert w["name"] == fx.sheet("home")[4].name and w["say"] == w["name"]
     w = roles.who("h-t5", "home", assigned, fx, {"name": 0.9, "role": 0.6, "line": 0.5})
-    assert w["name"] is None and w["say"] == "Oakfield's left-back" and w["sheet_name"]
+    assert w["name"] is None and w["say"] == "London Athletic's left-back" and w["sheet_name"]
     w = roles.who("h-t5", "home", assigned, fx, {"name": None, "role": None, "line": 0.5})
-    assert w["say"] == "an Oakfield defender"
-    assert roles.who("h-t9", "home", assigned, fx, open_gate)["say"] == "an Oakfield player"
+    assert w["say"] == "a London Athletic defender"
+    assert roles.who("h-t9", "home", assigned, fx, open_gate)["say"] == "a London Athletic player"
 
 
 def test_no_calibration_names_nobody(tmp_path):

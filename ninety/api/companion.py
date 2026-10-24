@@ -177,6 +177,7 @@ class LiveModels:
     ask: Ask
     judge: Judge
     match_ask: Ask | None = None  # the match Companion (ninety-companion-match), for match questions
+    referee_ask: Ask | None = None  # the Referee (ninety-referee), handed rules questions
 
 
 def client_ip(request: Request | WebSocket) -> str:
@@ -558,13 +559,14 @@ class Companion:
                 # A match question: the match Companion chooses the insight tools in Live mode (within
                 # the session's budget), with the pairing's earlier turns; code routes and answers
                 # otherwise or when it fails.
-                ask = judge = None
+                ask = judge = referee_ask = None
                 if live and self.budget.take(question.session):
                     models = await self._live_models()
                     if models is not None and models.match_ask is not None:
                         ask, judge = models.match_ask, models.judge
+                        referee_ask = models.referee_ask
                 result = await companion_match.answer_match(
-                    question, insights, ask, judge, history=room.turns
+                    question, insights, ask, judge, history=room.turns, referee_ask=referee_ask
                 )
                 turn = {"question": question.text, "answer": result.answer.text, "calls": list(result.tools)}
                 room.turns = [*room.turns, turn][-MAX_TURNS:]
@@ -659,8 +661,11 @@ async def foundry_models() -> LiveModels:
     await credentials.sign_in(credential)
     client = foundry.chat_client(credential)
     agents = []
+    from ninety.agents.referee import referee_agent
+
     match_agent = companion_match.companion_match_agent(client)
-    for local in (companion.companion_agent(client), judge_agent(client), match_agent):
+    locals_ = (companion.companion_agent(client), judge_agent(client), match_agent, referee_agent(client))
+    for local in locals_:
         name, version = foundry.pinned(local)
         published = FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT,
@@ -669,7 +674,7 @@ async def foundry_models() -> LiveModels:
             credential=credential,
         )
         agents.append(await stack.enter_async_context(published))
-    companion_ag, judge_ag, match_ag = agents
+    companion_ag, judge_ag, match_ag, referee_ag = agents
 
     async def ask(prompt: str) -> str:
         return (await companion_ag.run(prompt)).text
@@ -680,7 +685,10 @@ async def foundry_models() -> LiveModels:
     async def match_ask(prompt: str) -> str:
         return (await match_ag.run(prompt)).text
 
-    return LiveModels(ask, judge, match_ask)
+    async def referee_ask(prompt: str) -> str:
+        return (await referee_ag.run(prompt)).text
+
+    return LiveModels(ask, judge, match_ask, referee_ask)
 
 
 def from_env(env: dict[str, str] | None = None) -> Companion | None:

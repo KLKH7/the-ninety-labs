@@ -2,12 +2,13 @@
 
 An insight claim is one sentence citing insight facts (ninety/intel/insights.py), team-shape facts
 or detected events by id. Its text is for a fan, so it names clubs and players the way a fan
-hears them ("Oakfield", "Tomas Varick", "Oakfield's left-back"), never "home", "away" or a track id.
+hears them ("London Athletic", "Tomas Varick", "London Athletic's left-back"), never "home",
+"away" or a track id.
 It passes only if (docs/GROUNDING.md I7):
 
 - it cites at least one id, and every id is known;
 - every number is a cited fact's value, or one of its `also` numbers, written with that number's
-  unit (or a word for it: "4 Fenwick players" for 4 `opponents`), or a cited minute or clock. The
+  unit (or a word for it: "4 Lisbon Esportes players" for 4 `opponents`), or a cited minute or clock. The
   reader is the fact-checker's own (factcheck.spelled_as_digits, factcheck.NUMBER), so a number
   spelled in words or glued to its unit is read too (lessons 129, 130, 151);
 - the first club it names is the side of a cited fact, so a claim cannot hand one team's line
@@ -223,7 +224,7 @@ def check(
     for tid in sorted(set(PLAYER.findall(claim.text))):
         reasons.append(f"{tid} is an id: name the player or his position")
 
-    # Clubs. A club written straight after a number is what was counted ("6 Fenwick players"): for
+    # Clubs. A club written straight after a number is what was counted ("6 Lisbon Esportes players"): for
     # a line break that is the opponents. The first club named otherwise is who acted, and must be
     # the side of a cited fact, so a claim cannot hand one team's insight to the other.
     names = {name: team for team, name in clubs.items()}

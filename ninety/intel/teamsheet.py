@@ -3,7 +3,9 @@
 The renderer gives each clip two fictional three-letter codes for the score bug (ninety/render/
 params.TEAM_CODES). Each code here has a fictional club name, and each club a team sheet for a
 match: eleven starters, each with a name, a shirt number and a position in the 4-3-3 the engine
-plays (rules 4.4 and 4.7: no real club, player, kit or crest). The sheet is drawn from the match's
+plays (rules 4.4 and 4.7: no real club, player, kit or crest). London Athletic and Lisbon Esportes
+are fictional clubs named after real cities (Kian's choice, Oct 24): the cities are real, the clubs,
+their players, kits and crests are not. The sheet is drawn from the match's
 seed and the club's code, so the same match always has the same names, and it is the kind of
 thing a broadcaster has before kick-off: it says who plays where, never where anyone is.
 
@@ -22,9 +24,18 @@ from dataclasses import asdict, dataclass
 # One fictional club per renderer code (ninety/render/params.TEAM_CODES), the names every screen
 # shows (web/viewer/src/teams.ts CLUBS): tests hold all three equal.
 CLUBS = {
-    "ASH": "Ashvale", "CRW": "Crowmere", "DUN": "Dunhollow", "ELM": "Elmwick", "FEN": "Fenwick",
-    "GRV": "Grovely", "HLT": "Holtmoor", "IVY": "Ivydale", "KST": "Kestwood", "MRL": "Merlton",
-    "OAK": "Oakfield", "QRY": "Quarrydale",
+    "ASH": "Ashvale",
+    "CRW": "Crowmere",
+    "DUN": "Dunhollow",
+    "ELM": "Elmwick",
+    "FEN": "Lisbon Esportes",
+    "GRV": "Grovely",
+    "HLT": "Holtmoor",
+    "IVY": "Ivydale",
+    "KST": "Kestwood",
+    "MRL": "Merlton",
+    "OAK": "London Athletic",
+    "QRY": "Quarrydale",
 }
 # The 4-3-3 the engine plays (ninety/sim/engine.FORMATION, the same role codes; tests hold them
 # equal): role code, shirt number (the common squad numbering of a 4-3-3, *design*), what a fan calls
@@ -86,6 +97,14 @@ class Starter:
     line: str
 
 
+# Short names for a score line, where they differ from the full name (Kian, Oct 24).
+SHORT = {"OAK": "London", "FEN": "Lisbon"}
+
+
+def short_name(code: str) -> str:
+    return SHORT.get(code) or club_name(code)
+
+
 def club_name(code: str) -> str:
     if code not in CLUBS:
         raise ValueError(f"unknown club code {code!r}")
@@ -135,4 +154,16 @@ class Fixture:
         }
 
 
-__all__ = ["CLUBS", "LABEL", "LINE", "POSITIONS", "ROLES", "Fixture", "Starter", "club_name", "team_sheet"]
+__all__ = [
+    "CLUBS",
+    "SHORT",
+    "short_name",
+    "LABEL",
+    "LINE",
+    "POSITIONS",
+    "ROLES",
+    "Fixture",
+    "Starter",
+    "club_name",
+    "team_sheet",
+]

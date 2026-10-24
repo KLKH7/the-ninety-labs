@@ -195,11 +195,13 @@ def build_agents(client: FoundryChatClient) -> list[Agent]:
     from ninety.agents.companion import companion_agent
     from ninety.agents.companion_match import companion_match_agent
     from ninety.agents.describer import describer_agent
+    from ninety.agents.referee import referee_agent
     from ninety.personalizer.core import personalizer_agent
 
     agents = [
         *slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
-        companion_agent(client), companion_match_agent(client), describer_agent(client),
+        companion_agent(client), companion_match_agent(client), referee_agent(client),
+        describer_agent(client),
     ]
     return list({a.name: a for a in agents}.values())
 

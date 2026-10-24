@@ -87,6 +87,78 @@ def cm_clubs(q: dict) -> list[str]:
 SEEDS: dict[str, list[str]] = {}
 
 
+def follow_up_quality(answers: list[tuple[str, tuple[str, ...]]], mi) -> dict:
+    """For each answered question's suggestions: are there three, can the tools answer each now
+    (re-checked through the code path), and is none a repeat (of the question, of each other, or of
+    the question's topic: the same tools)?"""
+    rows, full, ok_all = [], 0, 0
+    for question, ups, answer_club in answers:
+        q_tools = set(cm.route(question))
+        answerable = [cm.answerable(u, mi, 60.0 * mi.minutes - 1) for u in ups]
+        named = [c for c in mi.fixture.clubs.values() if c.lower() in question.lower()]
+        # Relevant: a suggestion names the club asked about, or the club the answer was about.
+        allowed = {*named, answer_club} - {None}
+        off_club = len(named) == 1 and any(
+            c.lower() in u.lower() for u in ups for c in mi.fixture.clubs.values() if c not in allowed
+        )
+        repeat = (
+            len(set(ups)) != len(ups)
+            or any(u.lower() == question.lower() for u in ups)
+            or any(q_tools and set(cm.route(u)) == q_tools for u in ups)
+        )
+        good = len(ups) == cm.FOLLOW_UP_COUNT and all(answerable) and not repeat and not off_club
+        full += len(ups) == cm.FOLLOW_UP_COUNT
+        ok_all += good
+        rows.append(
+            {
+                "question": question,
+                "follow_ups": list(ups),
+                "answerable": answerable,
+                "repeat": repeat,
+                "off_club": off_club,
+            }
+        )
+    n = len(answers)
+    return {
+        "questions": n,
+        "three_offered": full,
+        "all_good": ok_all,
+        "answerable": f"{sum(sum(r['answerable']) for r in rows)}/{sum(len(r['follow_ups']) for r in rows)}",
+        "repeats": sum(r["repeat"] for r in rows),
+        "off_club": sum(r["off_club"] for r in rows),
+        "rows": rows,
+    }
+
+
+def _club_of(result, mi) -> str | None:
+    """The club the answer's first cited fact is about."""
+    known = mi.known()
+    for i in result.answer.evidence:
+        f = known.get(i)
+        if f and f.get("team"):
+            return mi.fixture.clubs[f["team"]]
+        if i.count(":") >= 2 and i.split(":")[1] in mi.fixture.clubs:  # a summary: kind:team:window
+            return mi.fixture.clubs[i.split(":")[1]]
+    return None
+
+
+def code_follow_ups(questions: list[dict]) -> dict:
+    """Code's answers to each question on the stand-in match, and their suggestions' quality."""
+    from ninety.intel.match_insights import MatchInsights
+
+    mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
+    out = []
+    for q in questions:
+        a, b = SEEDS[str(q["seed"])]
+        text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
+        r = asyncio.run(
+            cm.answer_match(Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1), mi)
+        )
+        if r.answer.status == "verified":
+            out.append((text, r.answer.follow_ups, (r.answer.visual or {}).get("club") or _club_of(r, mi)))
+    return follow_up_quality(out, mi)
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=Path("docs/eval/companion-tools.json"))
@@ -103,6 +175,7 @@ def main(argv: list[str] | None = None) -> None:
         "code": {**score(code)},
     }
     report["code"]["chosen"] = dict(Counter(t for _, c in code for t in c))
+    report["code"]["follow_ups"] = code_follow_ups(questions)
     if args.live:
         report["model"] = asyncio.run(live(questions))
     args.out.write_text(json.dumps(report, indent=1) + "\n")
@@ -117,6 +190,10 @@ def main(argv: list[str] | None = None) -> None:
         "author.",
         "",
         f"- Code router: **{c['right']}/{c['answered']}** right ({c['accuracy']}).",
+        f"- Follow-up suggestions on code's verified answers (stand-in match): "
+        f"{c['follow_ups']['all_good']}/{c['follow_ups']['questions']} answers offer three that the tools "
+        f"can answer and none repeats; {c['follow_ups']['answerable']} suggestions answerable, "
+        f"{c['follow_ups']['repeats']} with a repeat, {c['follow_ups']['off_club']} about the other club.",
         "- By tool: " + ", ".join(f"{k} {v}" for k, v in c["by_tool"].items()),
         "",
         "Wrong:",
@@ -182,7 +259,7 @@ async def live(questions: list[dict]) -> dict:
 
     plans, plan_ms = await model_plans(questions, ask)
     mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
-    ends, ms, rows = Counter(), [], []
+    ends, ms, rows, ups = Counter(), [], [], []
     for q in questions:
         a, b = SEEDS[str(q["seed"])]
         text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
@@ -192,6 +269,8 @@ async def live(questions: list[dict]) -> dict:
         ms.append((time.perf_counter() - t0) * 1000)
         end = f"{r.source}:{r.answer.status}"
         ends[end] += 1
+        if r.answer.status == "verified":
+            ups.append((text, r.answer.follow_ups, (r.answer.visual or {}).get("club") or _club_of(r, mi)))
         rows.append(
             {
                 "question": text,
@@ -208,6 +287,7 @@ async def live(questions: list[dict]) -> dict:
         "plan_latency": latency(plan_ms),
         "answers": dict(ends),
         "answer_latency": latency(ms),
+        "follow_ups": follow_up_quality(ups, mi),
         "rows": rows,
         "agents": {name: registry.get(name) for name in ("ninety-companion-match", "ninety-judge")},
         "cost": {

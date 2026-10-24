@@ -7,7 +7,7 @@ from ninety.agents.factcheck import Claim
 from ninety.agents.insight_check import verify
 from ninety.intel import style
 
-CLUBS = {"home": "Oakfield", "away": "Fenwick"}
+CLUBS = {"home": "London Athletic", "away": "Lisbon Esportes"}
 
 
 def p(eid, t, team, x, y, ex, ey, outcome="success", player=None, receiver=None):
@@ -52,23 +52,23 @@ def test_channels_are_named_as_each_team_attacks():
             p("v5", 5, "away", 60, 60, 50, 60),
         ]
     )
-    home = style.channels(rows, "home", 1, 5, "Oakfield")
+    home = style.channels(rows, "home", 1, 5, "London Athletic")
     assert home["shares"] == {"left": 75, "centre": 0, "right": 25} and home["most"] == "left"
-    assert style.channels(rows, "away", 1, 5, "Fenwick")["most"] == "right"  # y = 60 is away's right
+    assert style.channels(rows, "away", 1, 5, "Lisbon Esportes")["most"] == "right"  # y = 60 is away's right
     bands = {b["channel"]: (b["y0"], b["y1"]) for b in home["visual"]["bands"]}
     assert bands["left"][0] > bands["right"][0]  # home's left is high y
 
 
 def test_a_channel_share_is_said_of_its_channel():
     rows = style.passes([p("v1", 1, "home", 40, 60, 50, 60)] * 3 + [p("v4", 4, "home", 40, 10, 50, 10)])
-    fact = {**style.channels(rows, "home", 1, 5, "Oakfield"), "clubs": CLUBS}
+    fact = {**style.channels(rows, "home", 1, 5, "London Athletic"), "clubs": CLUBS}
     known = {fact["id"]: fact}
     [text] = companion.code_texts(fact)
     assert verify(Claim(text, [fact["id"]]), known, CLUBS).ok, text
-    wrong = "Oakfield played most through the right: 75% of their passes started there."
+    wrong = "London Athletic played most through the right: 75% of their passes started there."
     assert not verify(Claim(wrong, [fact["id"]]), known, CLUBS).ok  # 75% is the left's share
     assert not verify(
-        Claim("Oakfield sent 25% of their passes down the left.", [fact["id"]]), known, CLUBS
+        Claim("London Athletic sent 25% of their passes down the left.", [fact["id"]]), known, CLUBS
     ).ok
 
 
@@ -81,8 +81,10 @@ def test_crosses_are_wide_final_third_passes_into_the_box():
             p("c4", 4, "away", 25, 6, 10, 34, "fail"),
         ]
     )
-    assert style.crosses(rows, "home", 1, 5, "Oakfield")["value"] == 1  # c2 ends outside, c3 is central
-    away = style.crosses(rows, "away", 1, 5, "Fenwick")
+    assert (
+        style.crosses(rows, "home", 1, 5, "London Athletic")["value"] == 1
+    )  # c2 ends outside, c3 is central
+    away = style.crosses(rows, "away", 1, 5, "Lisbon Esportes")
     assert (away["value"], away["completed"]) == (1, 0)
 
 
@@ -91,10 +93,11 @@ def test_keeper_distribution_needs_the_keeper_named_by_position():
         [p("k1", 1, "home", 5, 34, 50, 34, player="h-t1"), p("k2", 2, "home", 5, 34, 20, 30, player="h-t1")]
     )
     people = {"h-t1": {"team": "home", "role": "GK", "position": "goalkeeper"}}
-    k = style.keeper(rows, "home", 1, 5, "Oakfield", people)
+    k = style.keeper(rows, "home", 1, 5, "London Athletic", people)
     assert (k["value"], k["short"], k["lands"]["middle"]) == (1, 1, 1)
     assert (
-        style.keeper(rows, "home", 1, 5, "Oakfield", {"h-t1": {**people["h-t1"], "position": None}}) is None
+        style.keeper(rows, "home", 1, 5, "London Athletic", {"h-t1": {**people["h-t1"], "position": None}})
+        is None
     )
 
 
@@ -123,7 +126,7 @@ def test_one_two(gap, between, want):
 
 
 def test_style_questions_route_to_the_style_tool():
-    assert companion.route("Why are Oakfield playing like this?")[0] == "style"
+    assert companion.route("Why are London Athletic playing like this?")[0] == "style"
     assert companion.route("Is their keeper going long?")[0] == "style"
 
 
@@ -132,7 +135,7 @@ def test_long_and_short_counts_keep_their_own_words():
         "id": "style:keeper:home:m1-15",
         "kind": "keeper",
         "team": "home",
-        "club": "Oakfield",
+        "club": "London Athletic",
         "value": 1,
         "unit": "times",
         "confident": True,
@@ -141,7 +144,7 @@ def test_long_and_short_counts_keep_their_own_words():
         "also": [[1, "times", style.LONG_CONTEXT], [2, "times", style.SHORT_CONTEXT]],
     }
     known = {fact["id"]: fact}
-    ok = "Oakfield went long 1 time and short 2 times from minute 1 to minute 15."
+    ok = "London Athletic went long 1 time and short 2 times from minute 1 to minute 15."
     assert verify(Claim(ok, [fact["id"]]), known, CLUBS).ok
     assert not verify(Claim(ok.replace("short 2", "short 1"), [fact["id"]]), known, CLUBS).ok
     assert not verify(Claim(ok.replace("long 1 time", "long 2 times"), [fact["id"]]), known, CLUBS).ok

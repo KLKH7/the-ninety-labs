@@ -9,15 +9,15 @@ from ninety.intel.counter_press import WITHIN
 from ninety.intel.teamsheet import Fixture
 
 FX = Fixture(7, "OAK", "FEN")
-CLUBS = FX.clubs  # home Oakfield, away Fenwick
-LB = FX.sheet("home")[4]  # the left-back on Oakfield's sheet
+CLUBS = FX.clubs  # home London Athletic, away Lisbon Esportes
+LB = FX.sheet("home")[4]  # the left-back on London Athletic's sheet
 
 LINE_BREAK = {
     "id": "lb:v1",
     "kind": "line_break",
     "metric": "opponents_bypassed",
     "team": "home",
-    "club": "Oakfield",
+    "club": "London Athletic",
     "minute": 23,
     "t": 1330.0,
     "value": 4,
@@ -38,7 +38,7 @@ COUNTER = {
     "kind": "counter_press",
     "metric": "pressers",
     "team": "away",
-    "club": "Fenwick",
+    "club": "Lisbon Esportes",
     "minute": 30,
     "t": 1790.0,
     "value": 3,
@@ -58,7 +58,7 @@ OVERLOAD = {
     "kind": "overload",
     "metric": "extra_players",
     "team": "home",
-    "club": "Oakfield",
+    "club": "London Athletic",
     "minute": 12,
     "t": 700.0,
     "value": 3,
@@ -75,7 +75,7 @@ NAMED = {
     "h-t5": {
         "track": "h-t5",
         "team": "home",
-        "club": "Oakfield",
+        "club": "London Athletic",
         "role": "LB",
         "share": 0.9,
         "name": LB.name,
@@ -95,14 +95,24 @@ def run(text, evidence=("lb:v1",), known=KNOWN, people=NAMED):
 @pytest.mark.parametrize(
     "text, evidence",
     [
-        ("In minute 23, Oakfield played a pass that took 4 Fenwick players out of the game.", ("lb:v1",)),
-        (f"In minute 23, {LB.name} played a pass that took 4 Fenwick players out of the game.", ("lb:v1",)),
+        (
+            "In minute 23, London Athletic played a pass that took 4 Lisbon Esportes players out of the "
+            "game.",
+            ("lb:v1",),
+        ),
+        (
+            f"In minute 23, {LB.name} played a pass that took 4 Lisbon Esportes players out of the game.",
+            ("lb:v1",),
+        ),
         (f"{LB.name}'s pass in minute 23 bypassed 4 opponents.", ("lb:v1",)),
-        ("Oakfield's left-back cut through 4 Fenwick players with one pass.", ("lb:v1",)),
-        ("Fenwick won it back 2.4 seconds after losing it, with 3 players around the ball.", ("cp:v7",)),
-        ("Fenwick won the ball back within five seconds, with three players pressing.", ("cp:v7",)),
-        ("In minute 12, Oakfield had 4 players against 1 player around the ball.", ("ov:v3",)),
-        ("Oakfield had 3 extra players around the ball in minute 12.", ("ov:v3",)),
+        ("London Athletic's left-back cut through 4 Lisbon Esportes players with one pass.", ("lb:v1",)),
+        (
+            "Lisbon Esportes won it back 2.4 seconds after losing it, with 3 players around the ball.",
+            ("cp:v7",),
+        ),
+        ("Lisbon Esportes won the ball back within five seconds, with three players pressing.", ("cp:v7",)),
+        ("In minute 12, London Athletic had 4 players against 1 player around the ball.", ("ov:v3",)),
+        ("London Athletic had 3 extra players around the ball in minute 12.", ("ov:v3",)),
     ],
 )
 def test_true_claims_pass(text, evidence):
@@ -113,29 +123,37 @@ def test_true_claims_pass(text, evidence):
 @pytest.mark.parametrize(
     "text, evidence, why",
     [
-        ("Oakfield took 5 Fenwick players out of the game in minute 23.", ("lb:v1",), "number"),
-        ("Oakfield took 4 metres out of Fenwick in minute 23.", ("lb:v1",), "number"),
-        ("Oakfield took fifty Fenwick players out of the game.", ("lb:v1",), "number"),
-        ("Fenwick bypassed 4 Oakfield players in minute 23.", ("lb:v1",), "not the side"),
-        (f"{LB.name} took 4 Oakfield players out of the game.", ("lb:v1",), "passing side"),
+        (
+            "London Athletic took 5 Lisbon Esportes players out of the game in minute 23.",
+            ("lb:v1",),
+            "number",
+        ),
+        ("London Athletic took 4 metres out of Lisbon Esportes in minute 23.", ("lb:v1",), "number"),
+        ("London Athletic took fifty Lisbon Esportes players out of the game.", ("lb:v1",), "number"),
+        ("Lisbon Esportes bypassed 4 London Athletic players in minute 23.", ("lb:v1",), "not the side"),
+        (f"{LB.name} took 4 London Athletic players out of the game.", ("lb:v1",), "passing side"),
         ("The home team bypassed 4 opponents in minute 23.", ("lb:v1",), "home or away"),
         ("h-t5 bypassed 4 opponents in minute 23.", ("lb:v1",), "an id"),
-        ("Oakfield bypassed 4 opponents in minute 24.", ("lb:v1",), "minute"),
+        ("London Athletic bypassed 4 opponents in minute 24.", ("lb:v1",), "minute"),
         (f"{FX.sheet('home')[9].name} bypassed 4 opponents.", ("lb:v1",), "not a player"),
-        ("Oakfield's striker bypassed 4 opponents.", ("lb:v1",), "striker"),
-        ("Oakfield overloaded Fenwick's left with 4 players.", ("lb:v1",), "overload"),
-        ("Fenwick won it back within 5 seconds.", ("lb:v1",), "counter_press"),
-        ("Oakfield bypassed 4 opponents.", (), "cite"),
-        ("Oakfield bypassed 4 opponents.", ("lb:v99",), "unknown"),
-        ("Fenwick won it back 3 seconds after losing it.", ("cp:v7",), "number"),
+        ("London Athletic's striker bypassed 4 opponents.", ("lb:v1",), "striker"),
+        ("London Athletic overloaded Lisbon Esportes's left with 4 players.", ("lb:v1",), "overload"),
+        ("Lisbon Esportes won it back within 5 seconds.", ("lb:v1",), "counter_press"),
+        ("London Athletic bypassed 4 opponents.", (), "cite"),
+        ("London Athletic bypassed 4 opponents.", ("lb:v99",), "unknown"),
+        ("Lisbon Esportes won it back 3 seconds after losing it.", ("cp:v7",), "number"),
         (
-            "Fenwick won it back 5 seconds after losing it.",
+            "Lisbon Esportes won it back 5 seconds after losing it.",
             ("cp:v7",),
             "number",
         ),  # the window, not the regain
-        ("Fenwick had 3 players near the ball in the next 2.4 seconds.", ("cp:v7",), "number"),
-        ("Oakfield had 3 players against 4 players around the ball.", ("ov:v3",), "number"),
-        ("Oakfield had 4 players against 3 players around the ball.", ("ov:v3",), "number"),  # 3 is the extra
+        ("Lisbon Esportes had 3 players near the ball in the next 2.4 seconds.", ("cp:v7",), "number"),
+        ("London Athletic had 3 players against 4 players around the ball.", ("ov:v3",), "number"),
+        (
+            "London Athletic had 4 players against 3 players around the ball.",
+            ("ov:v3",),
+            "number",
+        ),  # 3 is the extra
     ],
 )
 def test_planted_false_claims_are_rejected(text, evidence, why):
@@ -147,26 +165,30 @@ def test_planted_false_claims_are_rejected(text, evidence, why):
 def test_a_name_below_its_gate_is_held():
     v = run(f"{LB.name} bypassed 4 opponents in minute 23.", people=UNNAMED)
     assert status_for(v) == "held"
-    assert run("Oakfield's left-back bypassed 4 opponents.", people=UNNAMED).category == "low_confidence"
+    assert (
+        run("London Athletic's left-back bypassed 4 opponents.", people=UNNAMED).category == "low_confidence"
+    )
 
 
 def test_an_unsure_fact_is_held():
     known = {"lb:v1": {**LINE_BREAK, "confident": False, "lo": 3, "hi": 6}}
-    assert status_for(run("Oakfield bypassed 4 opponents in minute 23.", known=known)) == "held"
+    assert status_for(run("London Athletic bypassed 4 opponents in minute 23.", known=known)) == "held"
 
 
 def test_a_weak_detection_is_held():
     known = {"lb:v1": {**LINE_BREAK, "event_confidence": 0.3}}
-    assert status_for(run("Oakfield bypassed 4 opponents in minute 23.", known=known)) == "held"
+    assert status_for(run("London Athletic bypassed 4 opponents in minute 23.", known=known)) == "held"
 
 
 def test_a_wrong_claim_on_an_unsure_fact_is_rejected_not_held():
     known = {"lb:v1": {**LINE_BREAK, "confident": False}}
-    assert status_for(run("Oakfield bypassed 7 opponents.", known=known)) == "rejected"
+    assert status_for(run("London Athletic bypassed 7 opponents.", known=known)) == "rejected"
 
 
 def test_ordinary_english_is_not_a_team_word():
-    assert run("Oakfield pulled Fenwick away from their goal and bypassed 4 players in minute 23.").ok
+    assert run(
+        "London Athletic pulled Lisbon Esportes away from their goal and bypassed 4 players in minute 23."
+    ).ok
 
 
 # Polarity: the merge queue's review found sentences that reverse a fact passing (lesson 11).
@@ -175,7 +197,7 @@ PRESS_LOST = {
     "kind": "counter_press",
     "metric": "pressers",
     "team": "away",
-    "club": "Fenwick",
+    "club": "Lisbon Esportes",
     "minute": 30,
     "t": 1790.0,
     "value": 1,
@@ -192,7 +214,7 @@ OPTIONS = {
     "kind": "pass_options",
     "metric": "open_teammates_ahead",
     "team": "home",
-    "club": "Oakfield",
+    "club": "London Athletic",
     "minute": 31,
     "t": 1850.0,
     "value": 3,
@@ -210,13 +232,13 @@ POLARITY = {f["id"]: f for f in (COUNTER, PRESS_LOST, OPTIONS)}
 @pytest.mark.parametrize(
     "text, fid",
     [
-        ("Fenwick won the ball back after losing it.", "cp:v8"),
-        ("Fenwick won it back within 5 seconds.", "cp:v8"),
-        ("Fenwick never won it back.", "cp:v7"),
-        ("Oakfield lost a pass with no open teammate further forward.", "po:v9"),
-        ("Oakfield played it with nobody open ahead.", "po:v9"),
-        ("Oakfield had 3 open teammates ahead but lost the pass.", "po:v9"),
-        ("Oakfield had 3 teammates free, but the pass went elsewhere.", "po:v9"),
+        ("Lisbon Esportes won the ball back after losing it.", "cp:v8"),
+        ("Lisbon Esportes won it back within 5 seconds.", "cp:v8"),
+        ("Lisbon Esportes never won it back.", "cp:v7"),
+        ("London Athletic lost a pass with no open teammate further forward.", "po:v9"),
+        ("London Athletic played it with nobody open ahead.", "po:v9"),
+        ("London Athletic had 3 open teammates ahead but lost the pass.", "po:v9"),
+        ("London Athletic had 3 teammates free, but the pass went elsewhere.", "po:v9"),
     ],
 )
 def test_a_sentence_that_reverses_the_fact_is_rejected(text, fid):
@@ -227,9 +249,9 @@ def test_a_sentence_that_reverses_the_fact_is_rejected(text, fid):
 @pytest.mark.parametrize(
     "text, fid",
     [
-        ("Fenwick won it back 2.4 seconds after losing it.", "cp:v7"),
-        ("Fenwick lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
-        ("Oakfield had 3 teammates free and the pass found an open teammate.", "po:v9"),
+        ("Lisbon Esportes won it back 2.4 seconds after losing it.", "cp:v7"),
+        ("Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
+        ("London Athletic had 3 teammates free and the pass found an open teammate.", "po:v9"),
     ],
 )
 def test_a_sentence_that_keeps_the_facts_direction_passes(text, fid):
@@ -243,7 +265,7 @@ def test_none_of_something_needs_a_zero():
         "kind": "overload",
         "metric": "overload_moments",
         "team": "home",
-        "club": "Oakfield",
+        "club": "London Athletic",
         "minute_from": 1,
         "minute_to": 15,
         "value": 2,
@@ -251,7 +273,7 @@ def test_none_of_something_needs_a_zero():
         "confident": True,
     }
     v = verify(
-        Claim("Oakfield built no overloads from minute 1 to minute 15.", [summary["id"]]),
+        Claim("London Athletic built no overloads from minute 1 to minute 15.", [summary["id"]]),
         {summary["id"]: summary},
         CLUBS,
     )

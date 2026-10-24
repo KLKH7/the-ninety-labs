@@ -21,7 +21,7 @@ from ninety.agents.contracts import Question  # noqa: E402
 
 
 def scene(receiver_x, opp_missing=0, team="home"):
-    """A home pass from (60, 34) to h-t9; Fenwick's keeper at the line and a defender at 85 m."""
+    """A home pass from (60, 34) to h-t9; Lisbon Esportes's keeper at the line and a defender at 85 m."""
     home = [
         {"id": "h-t1", "team": "home", "x": 60.0, "y": 34.0},
         {"id": "h-t9", "team": "home", "x": receiver_x, "y": 30.0},
@@ -105,14 +105,14 @@ def reading(verdict, margin=5.0):
         "id": "off:v1",
         "kind": "offside",
         "team": "home",
-        "club": "Oakfield",
+        "club": "London Athletic",
         "minute": 23,
         "t": 1330.0,
         "verdict": verdict,
         "margin_m": margin,
         "confident": True,
         "receiver": "h-t5",
-        "receiver_is": "Oakfield's left-back",
+        "receiver_is": "London Athletic's left-back",
         "also": [[margin, "m"]] if verdict in ("onside", "offside") else [],
     }
 
@@ -122,12 +122,16 @@ def reading(verdict, margin=5.0):
     [
         (
             "offside",
-            "In minute 23, Oakfield's left-back was in an offside position, 5 m beyond the line.",
+            "In minute 23, London Athletic's left-back was in an offside position, 5 m beyond the line.",
             True,
         ),
-        ("offside", "In minute 23, Oakfield's left-back was onside by 5 m.", False),
-        ("too_close", "In minute 23, Oakfield's left-back was offside.", False),
-        ("too_close", "In minute 23, the offside line on Oakfield's left-back was too close to call.", True),
+        ("offside", "In minute 23, London Athletic's left-back was onside by 5 m.", False),
+        ("too_close", "In minute 23, London Athletic's left-back was offside.", False),
+        (
+            "too_close",
+            "In minute 23, the offside line on London Athletic's left-back was too close to call.",
+            True,
+        ),
         ("onside", "In minute 23, the call was too close to make.", False),
     ],
 )
@@ -137,7 +141,7 @@ def test_a_call_must_be_the_readings(verdict, claim, ok):
         "h-t5": {
             "track": "h-t5",
             "team": "home",
-            "club": "Oakfield",
+            "club": "London Athletic",
             "role": "LB",
             "position": "left-back",
             "name": None,
@@ -145,7 +149,12 @@ def test_a_call_must_be_the_readings(verdict, claim, ok):
         }
     }
     assert (
-        verify(Claim(claim, [f["id"]]), {f["id"]: f}, {"home": "Oakfield", "away": "Fenwick"}, people).ok
+        verify(
+            Claim(claim, [f["id"]]),
+            {f["id"]: f},
+            {"home": "London Athletic", "away": "Lisbon Esportes"},
+            people,
+        ).ok
         is ok
     )
 

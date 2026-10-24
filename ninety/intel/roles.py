@@ -194,8 +194,8 @@ def who(
 
 
 def say(w: Mapping) -> str:
-    """How a sentence names the player: "Tomas Varick", "Oakfield's left-back", "an Oakfield
-    defender", or "an Oakfield player"."""
+    """How a sentence names the player: "Tomas Varick", "London Athletic's left-back", "a London Athletic
+    defender", or "a London Athletic player"."""
     club = w.get("club") or "the team"
     if w.get("name"):
         return w["name"]
