@@ -1251,7 +1251,11 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   if (a && a.status === "verified") {
     // The headline: a natural phrase for a picture's kind ("1 v 2 round the ball"), else the figure.
     const v = a.visual ? fromScout(a.visual, a.t_to) : null;
-    const line = v && drawable(v) ? title(v) : a.value !== null ? `${a.value} ${a.unit ?? ""}`.trim() : "";
+    // The headline answers the question (Kian): code's own headline when the answer carries one,
+    // else the picture's, else the figure. Player ids in it are named like the sentence.
+    const line = a.headline
+      ? named(a.headline, a.names)
+      : v && drawable(v) ? title(v) : a.value !== null ? `${a.value} ${a.unit ?? ""}`.trim() : "";
     if (line) {
       const big = document.createElement("p");
       big.className = "figure";
@@ -1877,6 +1881,7 @@ interface StatsBlock {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 interface TeamStatsFacts {
   from_footage: boolean;
+  within_pct?: number; // the distance is measured to within this many percent (#300)
   distance?: Record<"home" | "away", { km: number; coverage: number }>;
   possession?: Record<"home" | "away", { share: number }>;
 }
@@ -1931,6 +1936,14 @@ function renderStats(st: MatchData["stats"][number]) {
     tickTo(li.querySelector<HTMLElement>(".away-v")!, a);
     shownStats.set(label, [h, a]);
     li.querySelector(".label")!.textContent = label;
+    // Distance carries how close it is measured: a quiet "±15%" after it, in words for a screen reader.
+    if (label === "Distance (km)" && ts?.within_pct) {
+      const pm = document.createElement("span");
+      pm.className = "within";
+      pm.textContent = ` ±${ts.within_pct}%`;
+      li.querySelector(".label")!.append(pm);
+      li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
+    }
     // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;

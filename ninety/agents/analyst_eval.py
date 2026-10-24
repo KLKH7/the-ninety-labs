@@ -5,12 +5,16 @@ rate the same responses.
     uv run python -m ninety.agents.analyst_eval --foundry    # also records both in Foundry
 
 The published Analyst (the version pinned in foundry_agents.json) writes one claim per match
-minute, reading the match only through the MCP server, which Foundry calls. Our fact-checker (code
-checks, then the published Judge) decides whether that first draft would reach the screen: the
-number that matters on air, decided in code and by the Judge, not by an evaluator model.
-Foundry's built-in evaluators (task adherence, intent resolution, tool call accuracy) then score
-the stored responses by id; they are model-graded opinions, reported beside our verdicts, never in
-place of them.
+minute from that minute's events, sent inline from this commit's simulation under a match id no
+server serves (lesson 90: before, it read the deployed image's match over MCP while the grade used
+this commit's events). A reply that calls the match tools anyway is graded a reject: what it read is
+not what is graded. This measures inline drafting; the live slice still reads over MCP. Our
+fact-checker (code checks, then the published Judge) decides, against only the events the Analyst
+was shown, whether that first draft would reach the screen: the number that matters on air, decided
+in code and by the Judge, not by an evaluator model. Foundry's built-in evaluators (task adherence,
+intent resolution) then score the stored responses by id; they are model-graded opinions, reported
+beside our verdicts, never in place of them. Tool call accuracy is not asked: the Analyst is told
+not to call tools here.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from pathlib import Path
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, foundry_evals
+from ninety.agents import credentials, evidence, foundry, foundry_evals
 from ninety.agents.factcheck import check
 from ninety.agents.judge import judge
 from ninety.agents.slice import analyst_prompt, parse_claim
@@ -34,13 +38,14 @@ from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
 FOUNDRY_EVAL = "ninety-analyst-first-draft"
-EVALUATORS = ["task_adherence", "intent_resolution", "tool_call_accuracy"]
+EVALUATORS = ["task_adherence", "intent_resolution"]  # no tool_call_accuracy: no tools are meant to be called
 MINUTES = match_server.MINUTES  # one claim per minute of a served match
 
 
-async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
+async def drafts(seeds: list[int]) -> tuple[list[dict], str, dict]:
     """One first draft per minute per seed, each with its response id and the fact-checker's
-    verdict. Returns the rows and which agent versions ran."""
+    verdict. Returns the rows, which agent versions ran, and their definitions
+    (ninety/agents/evidence.py)."""
     async with credentials.new_credential() as credential:
         # Signed in before the simulations, which can outlast agents-live's sign-in (credentials.py).
         await credentials.sign_in(credential)
@@ -48,13 +53,17 @@ async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
         return await _drafts(credential, seeds, known_by_seed)
 
 
-async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) -> tuple[list[dict], str]:
-    rows, ran = [], ""
+async def _drafts(
+    credential, seeds: list[int], known_by_seed: dict[int, dict]
+) -> tuple[list[dict], str, dict]:
+    rows, ran, defs = [], "", {}
     for seed in seeds:
         known = known_by_seed[seed]
         async with contextlib.AsyncExitStack() as stack:
             agents, labels = [], []
-            for local in foundry.slice_agents(foundry.chat_client(credential)):
+            locals_ = foundry.slice_agents(foundry.chat_client(credential))
+            defs = evidence.record(locals_)
+            for local in locals_:
                 name, version = foundry.pinned(local)
                 labels.append(f"{name}:{version}")
                 published = FoundryAgent(
@@ -66,8 +75,13 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                 agents.append(await stack.enter_async_context(published))
             analyst, judge_agent = agents
             ran = ", ".join(labels)
+            # The Analyst gets the minute's events from this commit's simulation, inline, under an id
+            # no server serves: graded against the same events it read (lesson 90). Before, it read
+            # the deployed image's match over MCP while the grade used this commit's events.
+            match = match_server.unserved(match_server.match_id(seed))
             for minute in range(1, MINUTES + 1):
-                response = await analyst.run(analyst_prompt(match_server.match_id(seed), minute))
+                inline = [e for e in known.values() if e["minute"] == minute]
+                response = await analyst.run(analyst_prompt(match, minute, events=inline))
                 row = {
                     "seed": seed,
                     "minute": minute,
@@ -75,24 +89,32 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                     "text": response.text,
                 }
                 try:
-                    claim = parse_claim(response.text)
+                    text = foundry.inline_only(response)
+                except foundry.ReadTheTools as e:  # it called the tools anyway: what it read is not graded
+                    rows.append({**row, "claim": "", "verdict": "reject",
+                                 "reasons": [f"called the match tools: {e}"]})
+                    continue
+                try:
+                    claim = parse_claim(text)
                 except (ValueError, AttributeError) as e:  # not the JSON the instructions ask for
                     rows.append(
                         {**row, "claim": "", "verdict": "reject", "reasons": [f"unparseable reply: {e}"]}
                     )
                     continue
-                verdict = check(claim, known)
+                shown = {e["id"]: e for e in inline}  # graded on what it was shown, nothing more
+                verdict = check(claim, shown)
                 if verdict.ok:
-                    verdict = await judge(judge_agent, claim, [known[i] for i in claim.evidence])
+                    verdict = await judge(judge_agent, claim, [shown[i] for i in claim.evidence])
                 rows.append(
                     {
                         **row,
                         "claim": claim.text,
                         "verdict": "accept" if verdict.ok else "reject",
                         "reasons": verdict.reasons,
+                        "category": verdict.category,
                     }
                 )
-    return rows, ran
+    return rows, ran, defs
 
 
 async def foundry_scores(response_ids: list[str]) -> dict:
@@ -115,7 +137,9 @@ async def foundry_scores(response_ids: list[str]) -> dict:
     }
 
 
-def report(rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None) -> str:
+def report(
+    rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None, *, defs: dict,
+) -> str:
     sha = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True
     ).stdout.strip()
@@ -127,6 +151,8 @@ def report(rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored
         f"`{sha}`, simulator seeds {seeds}, minutes 1 to {MINUTES}, agents {ran} on `{config.MODEL}`. The "
         "Analyst writes one claim per minute; the fact-checker (code checks, then the Judge) decides "
         "whether that first draft would air.",
+        "",
+        evidence.md_line(defs),
         "",
         f"**First drafts that would air:** {aired}/{len(rows)}.",
         "",
@@ -158,13 +184,21 @@ def report(rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored
     return "\n".join(lines) + "\n"
 
 
+def refuse_outage(rows: list[dict]) -> None:
+    """NothingMeasured when too many minutes got no answer: an empty Analyst reply, or a Judge
+    service error or timeout on its draft. That run measured an outage, not the Analyst (lesson 131)."""
+    unanswered = sum(not r["text"] or r.get("category") in {"service", "timeout"} for r in rows)
+    evidence.refuse_outage(unanswered, len(rows), "minutes")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", default="21,33", help="comma-separated simulator seeds (held out)")
     ap.add_argument("--out", type=Path, default=ROOT / "docs/eval/analyst.md")
     ap.add_argument("--foundry", action="store_true", help="record in Foundry and run its agent evaluators")
     args = ap.parse_args()
-    rows, ran = asyncio.run(drafts([int(s) for s in args.seeds.split(",")]))
+    rows, ran, defs = asyncio.run(drafts([int(s) for s in args.seeds.split(",")]))
+    refuse_outage(rows)  # before anything is recorded in Foundry or written
     recorded = scored = None
     if args.foundry:
         recorded = foundry_evals.record(
@@ -185,7 +219,7 @@ def main() -> None:
         )
         scored = asyncio.run(foundry_scores([r["response_id"] for r in rows if r["response_id"]]))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, ran, recorded, scored))
+    args.out.write_text(report(rows, args.seeds, ran, recorded, scored, defs=defs))
     print(args.out.read_text())
 
 

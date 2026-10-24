@@ -6,7 +6,7 @@ from pathlib import Path
 from ninety.intel.match_insights import MatchInsights
 from ninety.intel.stats_table import stats_table
 
-STANDIN = Path(__file__).resolve().parents[1] / "docs" / "eval" / "standin-insights-seed7.json"
+STANDIN = Path(__file__).resolve().parents[1] / "docs" / "eval" / "standin-insights-seed8076.json"
 
 
 def test_rows_are_grouped_and_so_far():

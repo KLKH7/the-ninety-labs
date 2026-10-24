@@ -193,6 +193,31 @@ def who(
     return out
 
 
+def one_track_per_name(
+    people: Mapping[str, Mapping], spans: Mapping[str, tuple[float, float]]
+) -> dict[str, dict]:
+    """A name binds to one player at a time. Tracks named the same starter that are never on the
+    pitch together are one player's track broken in pieces, and keep it; two that are there at the
+    same time (a swap, or a misread) cannot both be him, so neither is named: each falls back to
+    what its role allows, and its sheet name stays known, so a sentence naming him is held."""
+    by: dict[tuple[str, str], list[str]] = {}
+    for track, w in people.items():
+        if w.get("name"):
+            by.setdefault((w["team"], w["name"]), []).append(track)
+    out = {track: dict(w) for track, w in people.items()}
+
+    def together(a: str, b: str) -> bool:
+        (a0, a1), (b0, b1) = spans[a], spans[b]
+        return a0 <= b1 and b0 <= a1
+
+    for tracks in by.values():
+        for track in tracks:
+            if any(other != track and together(track, other) for other in tracks):
+                out[track].update(name=None, number=None)
+                out[track]["say"] = say(out[track])
+    return out
+
+
 def say(w: Mapping) -> str:
     """How a sentence names the player: "Tomas Varick", "London Athletic's left-back", "a London Athletic
     defender", or "a London Athletic player"."""
@@ -209,4 +234,5 @@ def say(w: Mapping) -> str:
     return f"{article} {club} player"
 
 
-__all__ = ["CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "say", "who"]
+__all__ = [
+    "CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "one_track_per_name", "say", "who"]
