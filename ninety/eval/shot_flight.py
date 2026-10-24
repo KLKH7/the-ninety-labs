@@ -27,12 +27,12 @@ from pathlib import Path
 
 from ninety.eval.event_score import STRICT_M, check_frames, git_commit, load_events, match, ratio, wilson
 from ninety.eval.vision_score import IN_AIR_Z
+
+# The live rule's own definitions (ninety/highlights.py), so the grading and the reel cannot drift.
+from ninety.highlights import CENTRE_Y, PITCH_X, T_DIVE_S, distance_m, flight_time_s, goal_line
 from ninety.sim import ball
 from ninety.sim.engine import CROSSBAR, FPS, GOAL_HALF_WIDTH, POST_RADIUS
 
-PITCH_X, CENTRE_Y = 105.0, 34.0
-# docs/eval/highlights-plan.md: a save beats the dive when T <= 0.97 s (Ibrahim et al. 2019).
-T_DIVE_S = 0.97
 # The plan's gates, fixed before any measurement: the 95th percentile flight-time error on matched
 # saves, the share of matched saves on the same side of T_DIVE_S, and the fewest saves to judge them.
 GATE_T_P95_S = 0.10
@@ -48,24 +48,6 @@ GATE_WOODWORK_PRECISION = 0.90
 # window (Amendment 1, how vision finds them, rule 3).
 WOODWORK_FRAMES = 3
 TOUCHING_M = ball.RADIUS + POST_RADIUS  # the engine's woodwork contact, centre to post or bar
-
-
-def goal_line(x: float) -> float:
-    """The goal line a shot from x attacks: the nearer one. A shot is an option only within 40 m
-    of the goal's centre (GROUNDING D3), so it is always struck in the half it attacks."""
-    return PITCH_X if x > PITCH_X / 2 else 0.0
-
-
-def distance_m(x: float, y: float) -> float:
-    """d: from where the shot was struck to the centre of the goal it attacks (D3, lesson 138)."""
-    return math.hypot(goal_line(x) - x, CENTRE_Y - y)
-
-
-def flight_time_s(d: float, speed_kmh: float | None) -> float | None:
-    """T = d / v, with v in metres a second; None without a speed."""
-    if speed_kmh is None or speed_kmh <= 0:
-        return None
-    return d / (speed_kmh / 3.6)
 
 
 def percentile(values: list[float], q: float) -> float | None:
