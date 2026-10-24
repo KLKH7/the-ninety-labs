@@ -282,6 +282,19 @@ def check(
 
     # Players and positions.
     about = _people(cited, people)
+    # A cited team-sheet row says who plays where (never where anyone is): its name with its position.
+    rows = [f for f in cited if f.get("kind") == "sheet"]
+    about += [{"name": f["name"], "position": f["position"]} for f in rows]
+    for f in rows:
+        for other in rows:
+            if other is not f and re.search(
+                rf"\b{re.escape(f['name'])}\b[^.;]*?\b{re.escape(other['position'])}\b", claim.text, re.I
+            ) and not re.search(
+                rf"\b{re.escape(f['name'])}\b[^.;]*?\b{re.escape(f['position'])}\b", claim.text, re.I
+            ):
+                reasons.append(
+                    f"{f['name']} is the {f['position']} on the team sheet, not the {other['position']}"
+                )
     said_names = {w["name"] for w in about if w.get("name")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):

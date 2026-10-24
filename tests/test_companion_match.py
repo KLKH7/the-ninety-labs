@@ -630,3 +630,145 @@ def test_a_follow_up_already_asked_is_not_suggested_again():
     history = [{"question": first.follow_ups[0], "answer": "x", "calls": []}]
     again = asyncio.run(companion.answer_match(Q, mi, history=history)).answer
     assert first.follow_ups[0] not in again.follow_ups
+
+
+# Who plays where, and the headline (lesson 237).
+
+STANDIN = None
+
+
+def standin() -> MatchInsights:
+    from ninety.eval.companion_tools import STANDIN as path
+
+    global STANDIN
+    STANDIN = STANDIN or MatchInsights.from_dict(json.loads(path.read_text()))
+    return STANDIN
+
+
+@pytest.mark.parametrize(
+    "text, team, role",
+    [
+        ("Who is Lisbon's left-back?", "away", "LB"),
+        ("What's the name of Lisbon Esportes's number 9?", "away", "ST"),
+        ("Who plays on the right wing for London Athletic?", "home", "RW"),
+        ("Which London Athletic player is the holding midfielder?", "home", "CM"),
+        ("Who is London's keeper?", "home", "GK"),
+    ],
+)
+def test_who_plays_a_position_is_answered_from_that_row_of_the_sheet(text, team, role):
+    mi = standin()
+    row = next(s for s in mi.fixture.sheet(team) if s.role == role)
+    r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
+    assert r.answer.status == "verified", r.answer.text
+    assert r.answer.evidence == (f"sheet:{team}:{role}",)
+    assert r.answer.text == f"{row.name} plays {row.position} for {row.club}, by the team sheet."
+    assert r.answer.headline == row.name
+
+
+@pytest.mark.parametrize("text", ["Who is the best player?", "Who is Lisbon's most dangerous player?"])
+def test_who_is_best_is_never_answered_with_a_name_off_the_sheet(text):
+    # The stand-in has no confident leader (the bounds overlap), so there is no honest name to give.
+    mi = standin()
+    r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
+    assert r.answer.status == "unanswerable" and not any(e.startswith("sheet:") for e in r.answer.evidence)
+
+
+def test_a_sheet_row_says_only_its_own_name_position_and_club():
+    from ninety.agents.factcheck import Claim
+
+    mi = standin()
+    facts = companion.run_tools(mi, [{"name": "lineup", "club": None, "minute_from": 1, "minute_to": 9}])
+    known = {f["id"]: f for f in facts}
+    gk, rb, lb = (known[f"sheet:home:{r}"] for r in ("GK", "RB", "LB"))
+
+    def ok(text, *rows):
+        return companion._verify(Claim(text, [r["id"] for r in rows]), known, mi).ok
+
+    assert ok(f"{gk['name']} plays goalkeeper for London Athletic, by the team sheet.", gk)
+    assert ok(f"{lb['name']} plays left-back for London Athletic, and {rb['name']} plays right-back.", lb, rb)
+    assert not ok(f"{gk['name']} plays goalkeeper for Lisbon Esportes, by the team sheet.", gk)
+    assert not ok(f"{gk['name']} plays right-back for London Athletic, by the team sheet.", gk)
+    assert not ok(f"{lb['name']} plays right-back for London Athletic, by the team sheet.", lb, rb)
+    assert not ok(f"{lb['name']} plays left-back for London Athletic and scored 3 goals.", lb)
+
+
+def test_a_one_two_with_one_name_twice_is_not_said():
+    f = {"confident": True, "metric": "one_two", "minute": 17, "club": "London Athletic"}
+    assert companion.code_texts({**f, "passer_is": "Mateo Molby", "receiver_is": "Mateo Molby"}) == []
+    assert companion.code_texts({**f, "passer_is": "Mateo Molby", "receiver_is": "Kai Nondell"})
+
+
+def test_a_pass_that_took_out_one_player_says_player():
+    f = {"confident": True, "metric": "opponents_bypassed", "minute": 8, "value": 1, "team": "home",
+         "club": "London Athletic", "clubs": {"home": "London Athletic", "away": "Lisbon Esportes"},
+         "passer_is": "Kai Nondell"}
+    assert companion.code_texts(f) == [
+        "In minute 8, Kai Nondell played a pass that took 1 Lisbon Esportes player out of the game."
+    ]
+
+
+@pytest.mark.parametrize(
+    "question, cited, want",
+    [
+        (
+            "How quickly do they win it back?",
+            [{"metric": "regains_within_5s", "value": 45, "unit": "regains"}],
+            "45 regains in 5 s",
+        ),
+        ("How many players did that pass take out?", [{"metric": "opponents_bypassed", "value": 3,
+                                                        "unit": "opponents"}], "3 opponents"),
+        ("How many did it take out?", [{"metric": "opponents_bypassed", "value": 1, "unit": "opponents"}],
+         "1 opponent"),
+        (
+            "Where are London outnumbering them?",
+            [{"metric": "overload_moments", "most": "final-left", "value": 4, "unit": "overloads"}],
+            "Down the left, final third",
+        ),
+        ("Where do they play through?", [{"metric": "pass_share_by_channel", "most": "right", "value": 40,
+                                          "unit": "%"}], "Down the right"),
+        ("Who took them out?", [{"metric": "opponents_bypassed", "value": 3, "unit": "opponents",
+                                 "passer_is": "London Athletic's left-back", "club": "London Athletic"}],
+         "London's left-back"),
+        ("Who took them out?", [{"metric": "opponents_bypassed", "value": 3, "unit": "opponents",
+                                 "passer_is": "Kai Nondell", "club": "London Athletic"}], "Kai Nondell"),
+        ("Who was open?", [{"metric": "passes_with_no_open_teammate_ahead", "value": 7, "unit": "passes",
+                            "club": "Lisbon Esportes"}], "Lisbon"),
+        ("Why do they keep losing it?", [{"metric": "regains_within_5s", "value": 0, "unit": "regains"}],
+         "0 regains in 5 s"),
+        ("Is their gegenpress working?", [{"kind": "goal", "club": "London Athletic"}], None),
+    ],
+)
+def test_the_headline_is_the_direct_answer_to_the_question_asked(question, cited, want):
+    mi = MatchInsights.from_dict(json.loads(companion_standin_text()))
+    assert companion.headline(question, cited, mi) == want
+
+
+def companion_standin_text() -> str:
+    from ninety.eval.companion_tools import STANDIN as path
+
+    return path.read_text()
+
+
+def test_every_held_out_answer_is_headed_by_what_its_question_asks():
+    from ninety.eval import companion_tools as ct
+
+    body = json.loads(ct.QUESTIONS.read_text())
+    saved = dict(ct.SEEDS)
+    ct.SEEDS.update(body["seeds"])
+    try:
+        got = ct.code_headlines(body["questions"])
+    finally:
+        ct.SEEDS.clear()
+        ct.SEEDS.update(saved)
+    assert got["answers"] >= 20 and got["fit"] == got["answers"], [r for r in got["rows"] if not r["fits"]]
+    assert {"who", "number", "where"} <= set(got["by_kind"])
+
+
+def test_the_headline_reaches_the_phone_and_matches_the_schema():
+    from ninety.api.companion import answer_json
+
+    mi = standin()
+    r = asyncio.run(companion.answer_match(Question("s", None, "Who is Lisbon's left-back?", 60.0 * 9), mi))
+    body = answer_json(r.answer)
+    schema_validator("viewer_answer").validate(body)
+    assert body["headline"] == r.answer.headline and body["headline"]
