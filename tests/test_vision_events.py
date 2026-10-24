@@ -212,8 +212,10 @@ def test_a_detected_event_carries_its_holders_side_confidence():
 
 
 def test_out_of_play_names_nobody():
+    # The ball comes to rest over the goal line wide of the post (a ball at rest between the posts
+    # is a goal: ninety/vision/outcomes.py).
     events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
-        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
+        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 50.0)) for f in range(21, 30)])
     outs = [e for e in events if e["type"] == "out_of_play"]
     assert outs and all(e["player"] is None for e in outs)
 

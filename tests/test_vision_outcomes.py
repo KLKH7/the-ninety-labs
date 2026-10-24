@@ -205,3 +205,51 @@ def test_a_parry_that_turns_the_ball_wide_at_the_keeper_is_a_save_and_a_slight_s
     assert goals == [] and [s["outcome"] for s in shots] == ["on_target"]
     shots, _, _, _ = run(shot_scene(parried(20.0), keeper=(103.0, 34.0)))
     assert [s["outcome"] for s in shots] != ["on_target"]
+
+
+def test_a_ball_kicked_out_of_the_net_toward_the_pitch_is_no_shot_and_no_second_goal():
+    # After the goal a blue team-mate stands by the ball at rest in the net, then rolls it out toward
+    # halfway: from behind the goal line its path crosses the line between the posts, and it is still
+    # in the net for a moment after he strikes it (the demo clip's case).
+    reach = math.ceil(math.dist((90.3, 34.0), (106.0, 35.0)) / (25.0 / FPS))
+    out_at = reach + 30
+
+    def path(k):
+        if k <= out_at:
+            return into_net()(k)
+        return 106.0 - 4.5 * (k - out_at) / FPS, 35.0  # rolled out: four frames still in the net
+    rows = shot_scene(path, frames=KICK + out_at + 30)
+    for r in rows[KICK + reach + 10:]:  # he stands still by the ball; it leaves him faster than he carries
+        r["players"].append({"bbox": [600, 0, 610, 30], "score": 0.9, "x": 106.3, "y": 35.0, "rgb": BLUE})
+    shots, goals, _, _ = run(rows)
+    assert len(goals) == 1 and [s["outcome"] for s in shots] == ["goal"]
+
+
+def test_a_goal_no_detected_shot_led_to_is_still_a_goal_and_its_strike_a_shot():
+    # A lofted strike whose ground track first runs wide of the goal (it bends as the ball rises and
+    # falls), then comes in and rests in the net: no shot is read at the strike.
+    def path(k):
+        t = k / FPS
+        if t <= 0.4:
+            return 90.3 + 10.0 * t, 34.0 + 30.0 * t  # heading for y = 46 at the line: wide
+        return into_net((106.0, 35.0))(k)
+    shots, goals, types, _ = run(shot_scene(path))
+    assert len(goals) == 1 and goals[0]["team"] == "home" and "out_of_play" not in types
+    # The strike: the spell's last frame, up to SPEED_FRAMES before the kick (events.py).
+    assert [s["outcome"] for s in shots] == ["goal"] and KICK - ev.SPEED_FRAMES <= shots[0]["frame"] <= KICK
+
+
+def test_the_goal_is_when_the_ball_crossed_the_line_not_when_it_came_to_rest():
+    # The ball first sits past the net's depth (a high ball placed long, as on the demo clip), then
+    # settles in the net: the goal's frame is the first frame over the line.
+    deep = 105.0 + oc.NET_DEPTH_M + oc.E_X + 0.2
+    reach = math.ceil(math.dist((90.3, 34.0), (deep, 35.0)) / (25.0 / FPS))
+
+    def path(k):
+        if k <= reach + 8:
+            return into_net((deep, 35.0))(k)
+        return 106.0, 35.0
+    rows = shot_scene(path)
+    over = next(r["frame"] for r in rows if r["ball"] and r["ball"][0]["x"] - 105.0 > oc.BALL_R + oc.E_X)
+    _, goals, _, _ = run(rows)
+    assert len(goals) == 1 and goals[0]["frame"] == over

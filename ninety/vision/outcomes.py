@@ -36,8 +36,9 @@ NET_DEPTH_M = 2.0  # the net as the renderer draws it (ninety/sim/engine.py, NET
 PENALTY_AREA_X = 16.5  # Law 1
 # The ball's position error, 95th percentile, measured on validation clips (shot-outcomes-plan.md):
 # along the pitch (E_X) and across it (E_Y) within 25 m of a goal line, on the ground; and its
-# distance error within 15 m of the centre spot (E_C). docs/eval/shot-outcomes.json: 607 frames near the
-# goals, 1,010 near the centre, on 24 validation clips (the across error is larger: it is depth to the gantry).
+# distance error within 15 m of the centre spot (E_C). docs/eval/shot-outcomes.json: 607 frames near
+# the goals, 1,010 near the centre, on 24 validation clips (the across error is larger: it is depth to
+# the gantry).
 E_X = 0.093
 E_Y = 0.355
 E_C = 0.688
@@ -114,9 +115,9 @@ def _runs(points: list[BallPoint], ok: list[bool]) -> list[list[int]]:
 
 
 def line_evidence(after: list[BallPoint], heights: dict, team: str) -> tuple[float, int, float] | None:
-    """The first run of IN_NET_FRAMES frames in the net (rules 1 to 3): (score, its first point's
-    index, y there), the score halved near a post and halved again where no frame's height is
-    known; None if the ball never rests in the net."""
+    """The first run of IN_NET_FRAMES frames in the net (rules 1 to 3): (score, the index of the
+    frame the ball crossed the line on its way there, y where it rests), the score halved near a
+    post and halved again where no frame's height is known; None if the ball never rests in the net."""
     flags = [in_mouth(p, heights.get(p.frame), team) for p in after]
     for run in _runs(after, [f[0] for f in flags]):
         if len(run) < IN_NET_FRAMES:
@@ -126,7 +127,13 @@ def line_evidence(after: list[BallPoint], heights: dict, team: str) -> tuple[flo
             score /= 2
         if all(heights.get(after[k].frame) is None for k in run):
             score /= 2
-        return score, run[0], after[run[0]].y
+        # The goal is when the whole ball crossed the line (Law 10), not when it came to rest: the
+        # first frame of the unbroken stretch over the line that ends in the run.
+        cross = run[0]
+        while cross > 0 and behind(after[cross - 1], team) > BALL_R + E_X \
+                and after[cross].frame - after[cross - 1].frame <= GAP_FRAMES:
+            cross -= 1
+        return score, cross, after[run[0]].y
     return None
 
 

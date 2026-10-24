@@ -65,3 +65,24 @@ Goal precision and recall, save precision and recall, with 95% Wilson intervals,
 listed, on the test split of the shot-outcome set ([shot-outcome-set.md](shot-outcome-set.md)),
 rendered for this because the frozen test set shows no goal and one save, and the 24 validation
 clips hold no shot. False goals and false saves are also counted on the frozen 30-clip test set.
+
+## Amendment (Oct 24, before any clip of the shot-outcome set was rendered or scored)
+
+Found on the demo clip (seed 8001, development only, never a measurement): its goal was read as out
+of play and a second, false goal 2.3 s later. Three rule fixes, none of them a threshold:
+
+- **A goal no detected shot led to is still a goal.** A lofted strike's ground track bends wide of
+  the posts as the ball rises, so no shot is read at it (events.py's known limit). Rules 1 to 3 are now
+  also applied to every run of the ball over a goal line (`events.out_of_play`): at rest in the net,
+  it is a goal for the side attacking that goal (an own goal counts for it too, Law 10), with the
+  kick-off evidence as before; the last spell of that side before it becomes the shot, outcome goal.
+- **A strike from behind a goal line is no shot.** A player rolling the ball out of the net toward
+  the pitch had his path "cross the goal line between the posts" (the shot rule's test) and, the ball
+  still in the net, a second goal.
+- **The goal's time is when the ball crossed the line** (Law 10), the first frame of the unbroken
+  stretch over the line that ends at rest in the net, not the first frame at rest: on the demo the
+  ball sat beyond the net's depth for a second first, which put the goal 1.2 s late, outside the
+  scorer's 1.0 s window.
+
+On the demo clip afterwards: one shot (0.3 s from the true strike) and one goal (one frame from the
+true goal), confidence 0.865 with the kick-off seen after the cut.

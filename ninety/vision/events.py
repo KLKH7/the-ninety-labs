@@ -207,6 +207,8 @@ def heads_for_goal(path: list[BallPoint], i: int, team: str) -> bool:
     crosses the goal line `team` attacks between the widened posts, from within SHOT_MAX_M. A
     lofted ball's ground track bends away from the camera as it rises (planned: its flight in 3D)."""
     p = path[i]
+    if not 0.0 <= p.x <= PITCH_X:
+        return False  # struck from behind a goal line (out of the net, say): toward the pitch, not a goal
     later = [q for q in path[i + 1:] if q.frame - p.frame <= SHOT_LOOK_S * FPS]
     if len(later) < 2:
         return False
@@ -254,6 +256,19 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     if not steps:
         return None
     return round(steps[len(steps) // 2] * 3.6, 1)
+
+
+def _credit_shot(events: list[dict], spell: Spell, team: str, who, p: BallPoint, event) -> None:
+    """The strike a goal came from: the event already at that spell's end becomes a shot with outcome
+    goal (a pass whose ground track bent wide), or a shot is added there."""
+    for e in events:
+        if e["frame"] == spell.last and e["team"] == team and e["type"] in ("pass", "shot"):
+            for k in ("intended", "interceptor", "deflected_by", "receiver"):
+                e.pop(k, None)
+            e.update(type="shot", outcome="goal", receiver=None, end_x=None, end_y=None)
+            return
+    event("shot", spell.last, team, p.x, p.y, p.score, spell.track.side_confidence, player=who,
+          outcome="goal")
 
 
 def detect(rows: list[dict], join_breaks: bool = True,
@@ -345,6 +360,28 @@ def detect(rows: list[dict], join_breaks: bool = True,
         f = path[i].frame
         if any(s < f < e and outcomes.behind(path[i], t) > 0 for s, e, t in goals):
             continue  # the ball in the net: a goal, not out of play (Law 9 against Law 10)
+        # A goal no detected shot led to (a lofted strike's ground track bends wide of the posts): the
+        # ball over a goal line and at rest in the net is a goal on its own evidence, for the side
+        # attacking that goal (an own goal counts for it too, Law 10), up to the next cut or strike.
+        scorer = "home" if path[i].x > PITCH_X else "away" if path[i].x < 0 else None
+        if scorer is not None:
+            nxt = [c + 1 for c in cut_at if c >= f] + [k for k in strikes if k > f]
+            end = outcomes._index(path, min(nxt, default=None))
+            line = outcomes.line_evidence(path[i:end], heights, scorer)
+            if line is not None:
+                score, k, y = line
+                g = path[i + k]
+                kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks)
+                conf = round(1 - (1 - score) * (1 - kick), 3)
+                last = [s for s in sp if s.last < f and s.track.team == scorer]
+                who = attribute(last[-1].track, path[index[last[-1].last]], tracks) if last else None
+                if last:
+                    _credit_shot(events, last[-1], scorer, who, path[index[last[-1].last]], event)
+                event("goal", g.frame, scorer, outcomes.goal_line(scorer), y, conf,
+                      last[-1].track.side_confidence if last else None, player=who)
+                until = path[end].frame if end < len(path) else rows[-1]["frame"] + 1
+                goals.append((f - 1, until, scorer))
+                continue
         last = [s for s in sp if s.last < f and s.track.team]
         if not last:
             continue
