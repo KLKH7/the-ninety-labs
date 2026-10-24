@@ -58,20 +58,28 @@ def cases(seed: int, minutes: float) -> list[dict]:
     meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
                     and "distance_m" in e and "intended" in e]
     meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
+    # A pass said to go "to" or to "pick out" its receiver states that he was the one meant: true only
+    # when nobody else was (audit 4a, the review of #251: "a7 plays a long ball to a1", meant for a3,
+    # was labelled true and its rejection counted as the Judge's error).
+    as_meant = [e for e in done if e.get("intended") in (None, e.get("receiver"))]
     tackles = [e for e in events if e["type"] == "tackle"]
+    # "Wins the ball" is true only of a tackle that won it (audit 4a: four failed tackles were labelled
+    # true under these words, and the Judge rejecting them was counted as its error).
+    tackles_won = [e for e in tackles if e.get("outcome") == "success"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
     # as goals do.
     all_shots = [e for e in extended if e["type"] == "shot" and e.get("outcome") != "goal"]
-    short_slow = [e for e in done if e["distance_m"] <= SHORT_SLOW[0]
+    short_slow = [e for e in as_meant if e["distance_m"] <= SHORT_SLOW[0]
                   and (e.get("ball_speed_kmh") or 0) <= SHORT_SLOW[1]]
-    long_balls = [e for e in done if e["distance_m"] >= LONG_PASS_M]
+    long_balls = [e for e in as_meant if e["distance_m"] >= LONG_PASS_M]
     fast_passes = [e for e in done if (e.get("ball_speed_kmh") or 0) >= FAST_PASS_KMH]
     long_range = [e for e in all_shots if e.get("distance_m", 0) >= LONG_RANGE_M]
     fast_shots = [e for e in all_shots if (e.get("ball_speed_kmh") or 0) >= FAST_SHOT_KMH]
     interceptions = [e for e in events if e["type"] == "interception"]
     pressure = [e for e in events if e["type"] == "pressure"]
-    goals = [e for e in extended if e["type"] == "goal"]
+    # A goal names its scorer; one that names nobody gave the claim "None scores." (audit 4a).
+    goals = [e for e in extended if e["type"] == "goal" and e.get("player")]
     other = {"home": "away", "away": "home"}
 
     def teammate(e):
@@ -83,23 +91,25 @@ def cases(seed: int, minutes: float) -> list[dict]:
     # not in the event) and {rival} (the other team).
     kinds = {
         "true: completed pass": (
-            True, done, "{player} plays a {distance_m} m pass to {receiver}."
+            True, as_meant, "{player} plays a {distance_m} m pass to {receiver}."
         ),
         "true: cited clock": (
             True, done, "{player} plays a pass at {clock}."
         ),
         "true: tackle": (
-            True, tackles, "{player} wins the ball from {receiver} with a tackle."
+            True, tackles_won, "{player} wins the ball from {receiver} with a tackle."
         ),
         "true: shot": (
             True, shots, "{player} shoots at {ball_speed_kmh} km/h."
         ),
         # true claims with interpretation: a commentator's reading of supported facts
         "true: interpreted tackle": (
-            True, tackles, "{player} wins the ball back from {receiver}, a crucial defensive intervention."
+            True, tackles_won,
+            "{player} wins the ball back from {receiver}, a crucial defensive intervention."
         ),
         "true: interpreted pass": (
-            True, done, "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
+            True, as_meant,
+            "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
         ),
         "true: interpreted shot": (
             True, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
