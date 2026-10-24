@@ -300,3 +300,11 @@ def test_a_line_about_a_detection_whose_side_is_unsure_names_no_side():
     for s in track.said:
         assert bool(SIDE_WORD.search(s.spoken)) <= all(sure[i] for i in s.evidence), s.spoken
     assert any(not sure[i] for s in track.said for i in s.evidence)  # the case is in the data
+
+
+def test_the_sides_are_named_as_their_clubs_when_the_bundle_knows_them():
+    clubs = {"home": "London", "away": "Lisbon"}
+    assert d.spoken("h11 → h8, 17 m.", clubs=clubs) == "London's number 11 plays it 17 metres to number 8."
+    assert d.spoken("a-t4 finds a-t5.", True, clubs=clubs) == "A Lisbon player finds a team-mate."
+    assert d.spoken("a-t4 finds a-t5.", False, clubs=clubs) == "A player finds another player."  # unsure
+    assert d.spoken("home's back line has pushed up 8 m.", clubs=clubs).startswith("London's back line")

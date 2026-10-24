@@ -239,7 +239,8 @@ def _sentence(text: str) -> str:
 as_sentence = _sentence  # the offline stand-in Tactician writes its claim this way (ninety/e2e.py)
 
 
-def _names(text: str, side_known: bool = True, compact: bool = False) -> str:
+def _names(text: str, side_known: bool = True, compact: bool = False,
+           clubs: dict[str, str] | None = None) -> str:
     """Ids as a commentator says them. A squad id is its side's shirt number ("Home's number 11", then
     "number 8"). A tracked player has no shirt number the tracker read, so a track id is never said as
     a number: he is "a home player", then "a team-mate", only when the line's side was told surely;
@@ -255,9 +256,13 @@ def _names(text: str, side_known: bool = True, compact: bool = False) -> str:
         first = side not in sides
         sides.add(side)
         if m[2]:
-            phrase = f"number {m[2]}" if compact or not first else f"{side.capitalize()}'s number {m[2]}"
+            club = (clubs or {}).get(side, side.capitalize())
+            phrase = f"number {m[2]}" if compact or not first else f"{club}'s number {m[2]}"
         elif side_known and not compact:
-            phrase = ("an away player" if side == "away" else "a home player") if first else "a team-mate"
+            if clubs and side in clubs:
+                phrase = f"a {clubs[side]} player" if first else "a team-mate"
+            else:
+                phrase = ("an away player" if side == "away" else "a home player") if first else "a team-mate"
         else:
             phrase = "a player" if not seen else "another player"
         seen[whole] = phrase
@@ -266,13 +271,16 @@ def _names(text: str, side_known: bool = True, compact: bool = False) -> str:
     return PLAYER_SPOKEN.sub(say, text)
 
 
-def spoken(text: str, side_known: bool = True, compact: bool = False) -> str:
+def spoken(text: str, side_known: bool = True, compact: bool = False,
+           clubs: dict[str, str] | None = None) -> str:
     """What the voice says for a checked line: a sentence, not a graphic's compact form; ids as a
     commentator names players; units in full. The substitutions are fixed: what is said carries
     exactly the checked line's numbers, and names no side the checked line does not (a track id's
-    side only where it was told surely)."""
-    out = TEAM_SPOKEN.sub(lambda m: m[1].capitalize(), _sentence(text))
-    out = _names(out, side_known, compact)
+    side only where it was told surely). `clubs` names the sides ({"home": "London", ...}, from the
+    bundle's team codes): "London's number 11" rather than "Home's number 11"."""
+    names = clubs or {}
+    out = TEAM_SPOKEN.sub(lambda m: names.get(m[1], m[1].capitalize()), _sentence(text))
+    out = _names(out, side_known, compact, clubs)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
     out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
     out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
@@ -412,7 +420,7 @@ def estimate(words: str, _ssml: str) -> tuple[float, str]:
     return estimated_seconds(words), "estimated"
 
 
-def schedule(lines: list[Line], duration: Duration) -> Track:
+def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None = None) -> Track:
     """One voice in time order: each line starts when the last ended (plus GAP_S), at most
     MAX_LAG_S after its event; it shortens, then drops, rather than run late or push a more
     important line coming up past MAX_LAG_S."""
@@ -427,7 +435,7 @@ def schedule(lines: list[Line], duration: Duration) -> Track:
         upcoming = [n for n in lines[i + 1:] if n.priority < line.priority]
         chosen = None
         for n, text in enumerate(line.versions):
-            words = spoken(text, line.side_known, compact=n > 0)
+            words = spoken(text, line.side_known, compact=n > 0, clubs=clubs)
             seconds, how = duration(words, ssml(words, line.priority))
             end = start + seconds
             if all(end + GAP_S - n2.t <= MAX_LAG_S for n2 in upcoming if n2.t < end + GAP_S):
@@ -453,12 +461,13 @@ def schedule(lines: list[Line], duration: Duration) -> Track:
 
 
 def describe(events: list[dict], cues: list[dict], duration: Duration = estimate,
-             upgrades: dict[str, str] | None = None, shape: list[dict] | None = None
-             ) -> tuple[Track, list[dict]]:
+             upgrades: dict[str, str] | None = None, shape: list[dict] | None = None,
+             clubs: dict[str, str] | None = None) -> tuple[Track, list[dict]]:
     """The spoken track for detected `events` and the live path's `cues` (and the clip's shape facts,
-    when it has tracked positions), and the refusals."""
+    when it has tracked positions), and the refusals. `clubs` names the sides when the bundle knows
+    its teams (see `spoken`)."""
     lines, refused = candidates(events, cues, upgrades, shape)
-    return schedule(lines, duration), refused
+    return schedule(lines, duration, clubs), refused
 
 
 # ---------------------------------------------------------------- real synthesis (behind a flag)
