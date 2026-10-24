@@ -650,3 +650,16 @@ ion-tab-button ion-label { font-size: 10px; font-weight: 500; }
     linear-gradient(115deg, var(--field-home) 0%, color-mix(in oklch, var(--field-home) 50%, var(--field-away)) 50%, var(--field-away) 100%);
   background-color: #000;
 }
+
+/* Blind-critic pass 2 */
+.live-pane { padding: 4px 10px 0; }
+.card, .insight, .group, .roster-card, .pitch-card { border-radius: 20px; }
+.pitch-card { padding: 10px; }
+#pitch-mode { margin: 0 2px 2px; }
+ion-segment.seg { --background: rgba(255, 255, 255, 0.08); }
+ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.18); }
+.live-tabs button { font-size: 17px; font-weight: 600; }
+.more { background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18); }
+.more svg circle { fill: currentColor; stroke: none; }
+:root { --field-a: oklch(0.3 0.06 275); --field-b: oklch(0.3 0.075 10); }
+:root, :root.ios { --pitch: #2b3a31; --pitch-stripe: #2b3a31; }
