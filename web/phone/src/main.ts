@@ -778,7 +778,7 @@ const SIZES: [prefs.TextSize, string][] = [
   ["large", "Large"],
   ["xlarge", "Extra large"],
 ];
-const SAMPLE = "London keep winning it back fast: four times inside five seconds this half.";
+const SAMPLE = "This is the voice that will read the match to you."; // the preview line voice bundles pre-generate (#279)
 
 function radioRow(group: string, label: string, on: boolean, pick: () => void, extra?: HTMLElement): HTMLLIElement {
   const li = document.createElement("li");
