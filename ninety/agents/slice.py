@@ -43,7 +43,7 @@ from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, telemetry
+from ninety.agents import credentials, evidence, foundry, telemetry
 from ninety.agents.contracts import CLOCK_RULE  # noqa: F401  (re-exported: the slice's name before the move)
 from ninety.agents.factcheck import (
     Claim,
@@ -371,7 +371,9 @@ def main() -> None:
         print(f"ran {ran}")
         if args.record:
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events).save(
+            # The definitions the run's foundry.pinned accepted, from this same code (evidence.py).
+            defs = evidence.of_code(foundry.slice_agents)
+            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events, defs).save(
                 args.record
             )
     for line in outcome.trace:
