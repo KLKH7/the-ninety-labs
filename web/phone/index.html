@@ -63,6 +63,7 @@
                   </div>
                 </div>
                 <output class="sr-only" id="score" aria-live="off">– : –</output>
+                <p class="scorers" id="scorers" hidden></p>
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 
@@ -78,6 +79,19 @@
                 <p id="refused" class="refused" role="alert" hidden></p>
               </div>
               <p class="sr-only" id="map-sides"></p>
+
+              <!-- Just now: the latest Story moment, as the lock screen says it. -->
+              <section class="live-section" id="just-now" aria-labelledby="just-now-title" hidden>
+                <h2 class="section-title" id="just-now-title">Just now</h2>
+                <div id="just-now-body"></div>
+              </section>
+
+              <!-- Match stats: mirrored bars in the clubs' colours, from the footage shown. -->
+              <section class="live-section" id="live-stats" aria-labelledby="live-stats-title" hidden>
+                <h2 class="section-title" id="live-stats-title">Match stats</h2>
+                <ul class="stat-rows" id="stat-rows"></ul>
+                <p class="fine">From the footage shown, so far.</p>
+              </section>
               <p id="now-said" class="now-said" aria-live="polite"></p>
               <p class="fine now-age" id="now-age" aria-hidden="true"></p>
 

@@ -107,6 +107,8 @@ def test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot(b
     assert top < y and y > (top + bottom) / 2 and y < bottom  # below halfway between the touchlines
     assert x > box["width"] / 2  # x runs left to right
     page.wait_for_function("document.querySelector('#map').dataset.dots === '4'")
+    page.wait_for_function("document.querySelector('#status').dataset.state === 'paused'")  # settled
+    box = page.locator("#map").bounding_box()  # measured once the page has stopped moving
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
     assert page.inner_text("#player-title") == "Dunhollow player 3"
@@ -505,4 +507,27 @@ def test_the_var_check_puts_the_margin_on_a_scale_and_never_calls_inside_the_ban
     said = var({**OFFSIDE, "verdict": "unsure"})
     assert "a defender was out of the cameras' view" in said
     assert page.locator("#how-body .margin-scale").count() == 0  # no margin to put on a scale
+    assert not errors
+
+
+def test_live_shows_just_now_and_match_stats_from_the_bundle_only(browser, cards_site):  # noqa: F811
+    url, www = cards_site
+    laptop, page, errors = phone(browser, url, laptop_t=61)
+    page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
+    assert "Crowmere had three players" in page.inner_text("#just-now")  # the newest card up to the clock
+    # No match.json in this bundle: no stats are shown rather than any invented.
+    assert page.locator("#live-stats").is_hidden() and page.locator("#scorers").is_hidden()
+    assert not errors
+
+
+def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.wait_for_selector("#live-stats:not([hidden])")
+    stats = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["stats"]
+    last = [s for s in stats if s["t"] <= 62.8][-1]
+    rows = page.locator("#stat-rows .stat-row")
+    labels = [rows.nth(i).get_attribute("aria-label") for i in range(rows.count())]
+    assert f"Shots: Crowmere {last['home']['shots']}, Dunhollow {last['away']['shots']}" in labels
+    home, away = last["home"]["passes_completed"], last["away"]["passes_completed"]
+    assert f"Passes completed: Crowmere {home}, Dunhollow {away}" in labels
     assert not errors

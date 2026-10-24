@@ -51,8 +51,8 @@ ion-toolbar.band-bar { --background: var(--bg); --color: var(--text); --border-c
 .crest-letter { fill: #fff; font: 700 24px var(--ion-font-family); }
 .centre { display: grid; justify-items: center; gap: 2px; padding-top: 30px; }
 #clock { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
-.status { margin: 0; font-size: 13px; color: var(--text-2); }
-.status[data-state="synced"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } /* live is the ticking clock */
+.status { margin: 0; min-height: 18px; font-size: 13px; color: var(--text-2); } /* its line is kept, so nothing below jumps */
+.status[data-state="synced"] { visibility: hidden; } /* when all is well, live is the ticking clock */
 .scoreline { margin: 8px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
 
 /* Live: the pitch, and two quiet rows */
@@ -204,3 +204,17 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .zero { position: absolute; left: 50%; top: 4px; width: 1px; height: 20px; background: var(--text-2); }
 .mark { position: absolute; top: 6px; width: 16px; height: 16px; margin-left: -8px; border-radius: 8px; background: var(--text); border: 2px solid var(--bg); }
 .scale-labels { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); }
+
+/* Live: scorers under the band, Just now, Match stats (Apple Sports live) */
+.scorers { margin: 10px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
+.live-section { padding: 0 16px; margin-top: 32px; }
+.live-section .section-title { margin: 0 0 8px; }
+.just-text { margin: 0; font-size: 17px; }
+.stat-rows { list-style: none; margin: 0; padding: 0; }
+.stat-row { position: relative; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; height: 52px; border-bottom: 0.5px solid var(--hairline); }
+.stat-row .v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-row .away-v { text-align: right; }
+.stat-row .label { text-align: center; font-size: 15px; color: var(--text-2); }
+.stat-row .bar { position: absolute; bottom: 6px; height: 4px; border-radius: 2px; }
+.stat-row .home-bar { right: calc(50% + 1px); background: var(--home); }
+.stat-row .away-bar { left: calc(50% + 1px); background: var(--away); }

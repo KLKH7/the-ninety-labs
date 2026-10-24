@@ -322,6 +322,7 @@ interface BundleManifest {
 let bundleFps = 25;
 let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
+let bundleEvents = new Map<string, { player?: string | null; team?: string }>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -356,6 +357,17 @@ async function loadBundle() {
       m.cards ? get("cards.json") : null,
     ]);
     if (Array.isArray(cards)) bundleCards = (cards as InsightCard[]).filter((c) => c.status === "verified");
+    if (match) {
+      // The detected events, for who scored each detected goal (match.json names the event).
+      const r = await fetch(new URL("events.jsonl", base));
+      if (r.ok) {
+        for (const line of (await r.text()).split("\n")) {
+          if (!line.trim()) continue;
+          const e = JSON.parse(line) as { id: string; player?: string | null; team?: string };
+          bundleEvents.set(e.id, e);
+        }
+      }
+    }
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
     $("match-card").hidden = !state.match;
@@ -1283,7 +1295,26 @@ async function refreshInsights(force = false) {
   }
 }
 
+/** Live's "Just now": the newest Story moment, its sentence, chip and minute. */
+function renderJustNow() {
+  const c = state.insights[0];
+  $("just-now").hidden = !c;
+  if (!c) return;
+  const text = document.createElement("p");
+  text.className = "just-text";
+  text.textContent = named(c.text, c.names);
+  text.append(
+    " ",
+    howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
+  );
+  const when = document.createElement("time");
+  when.className = "when-line";
+  when.textContent = `${c.minute}′ · ${teams[c.team]}`;
+  $("just-now-body").replaceChildren(text, when);
+}
+
 function renderInsights() {
+  renderJustNow();
   // A live blog: the minute on the left, one sentence, a small diagram, a quiet "How we know ›".
   const list = $("insights");
   if (!state.insights.length) {
@@ -1345,31 +1376,52 @@ function showMatch(t: number) {
   }
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
+  // Scorers under the band: detected goals only, so far ("Fenwick player 9 43′", or the club alone
+  // when the detection names no player).
+  const scored = m.goals.filter((g) => g.t <= t && g.team);
+  const scorers = $("scorers");
+  scorers.hidden = scored.length === 0;
+  const said = scored
+    .map((g) => {
+      const who = bundleEvents.get(g.event)?.player;
+      return `${who ? playerName(who) : teams[g.team!]} ${Math.floor(g.t / 60) + 1}′`;
+    })
+    .join(", ");
+  if (scorers.textContent !== said) scorers.textContent = said;
   const st = statsAt(m, t);
   const key = JSON.stringify(st);
   if (key === statsKey) return;
   statsKey = key;
-  const cell = (tag: "td" | "th", text: string, scope?: string) => {
-    const el = document.createElement(tag);
-    el.textContent = text;
-    if (scope) el.setAttribute("scope", scope);
-    return el;
-  };
-  const head = document.createElement("tr");
-  head.append(cell("th", ""), cell("th", teams.home, "col"), cell("th", teams.away, "col"));
-  const rows: [string, (x: typeof st.home) => string][] = [
-    ["Goals", (x) => String(x.goals)],
-    ["Shots (on target)", (x) => `${x.shots} (${x.shots_on_target})`],
-    ["Passes completed", (x) => `${x.passes_completed} of ${x.passes_attempted}`],
+  renderStats(st);
+}
+
+/** Match stats as mirrored bars (Apple Sports): the home value at the left edge, the away value at
+ * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
+function renderStats(st: MatchData["stats"][number]) {
+  const rows: [string, number, number][] = [
+    ["Shots", st.home.shots, st.away.shots],
+    ["Shots on target", st.home.shots_on_target, st.away.shots_on_target],
+    ["Passes completed", st.home.passes_completed, st.away.passes_completed],
+    ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
   ];
-  $("team-stats").replaceChildren(
-    head,
-    ...rows.map(([name, f]) => {
-      const tr = document.createElement("tr");
-      tr.append(cell("th", name, "row"), cell("td", f(st.home)), cell("td", f(st.away)));
-      return tr;
-    }),
-  );
+  const items = rows
+    .filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a))
+    .map(([label, h, a]) => {
+      const li = document.createElement("li");
+      li.className = "stat-row";
+      li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
+      const total = Math.max(1, h + a);
+      li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
+      li.querySelector(".home-v")!.textContent = String(h);
+      li.querySelector(".away-v")!.textContent = String(a);
+      li.querySelector(".label")!.textContent = label;
+      (li.querySelector(".home-bar") as HTMLElement).style.width = `calc(${(50 * h) / total}% - 1px)`;
+      (li.querySelector(".away-bar") as HTMLElement).style.width = `calc(${(50 * a) / total}% - 1px)`;
+      for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
+      return li;
+    });
+  $("stat-rows").replaceChildren(...items);
+  $("live-stats").hidden = items.length === 0;
 }
 
 // --- the wind map on the radar (first in the cut order: wind.ts loads only when turned on) -----
