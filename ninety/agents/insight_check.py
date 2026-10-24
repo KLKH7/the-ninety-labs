@@ -118,10 +118,7 @@ VERDICT_WORDS = (
     ),
     ("onside", re.compile(r"\bwas onside\b|\bonside by\b|\bwas(?:n't| not) offside\b", re.I)),
     ("too_close", re.compile(r"\btoo close\b", re.I)),
-
-
-
-
+)
 # Words that say which way a fact went, checked against the fact's own fields (polarity): whether
 # a turnover was won back (`regained`, or a summary's regains), whether a pass was lost (`outcome`),
 # whether it went to an open teammate (`target_open`), and whether anyone was open at all (`value`).
