@@ -139,6 +139,15 @@ SIDE_PX = (2, 3, 4)
 MIN_LUMA_STEP = 10.0
 MIN_BLUE_STEP = 15.0
 BOX_PAD_PX = 4  # around each detected player and ball, so a white kit or boot is not a marking
+# Sensor grain (the renderer's `noise`, ninety/render/params.py) makes bright specks that pass the
+# step test on their own: on dataset v2's validation clips only 0.39 of the marked pixels lay within
+# 2 px of a true marking, and the camera fit failed on every clip tried (lesson 215). The image is
+# blurred 3 x 3 first (_box3): chosen there against the true cameras by a rule fixed first (the
+# most marked pixels within 2 px of a true marking, keeping at least 80% of those the unfiltered
+# test found, a 1 px line surviving): 0.82 on a marking, with 29% more on-marking pixels than
+# unfiltered (the blur finds faint far lines too). A neighbour count after it scored 0.84 and is
+# not kept: a speck the blur spreads is a 3 x 3 blob that passes any neighbour count a 1 px line
+# passes, so what it removed could not be named or tested (lesson 190).
 
 
 def _shift(a: np.ndarray, dy: int, dx: int, fill) -> np.ndarray:
@@ -149,9 +158,20 @@ def _shift(a: np.ndarray, dy: int, dx: int, fill) -> np.ndarray:
     return out
 
 
+def _box3(img: np.ndarray) -> np.ndarray:
+    """A 3 x 3 box blur: sensor grain's single-pixel noise falls threefold, while a 1 px line,
+    spread to 3 px, still steps well above MIN_LUMA_STEP and MIN_BLUE_STEP (white on grass is
+    about 120 levels brighter, a third of that after the blur)."""
+    out = np.zeros_like(img)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            out += np.stack([_shift(img[..., c], dy, dx, 0.0) for c in range(img.shape[-1])], -1)
+    return out / 9
+
+
 def line_mask(rgb: np.ndarray, boxes=()) -> np.ndarray:
     """(H, W) bool: pixels on a white marking, with the given [x0, y0, x1, y1] boxes cleared."""
-    img = rgb.astype(np.float32)
+    img = _box3(rgb.astype(np.float32))
     r, g, b = img[..., 0], img[..., 1], img[..., 2]
     luma = img.mean(-1)
     grass = (g > r + 10) & (g > b + 10)
