@@ -121,6 +121,11 @@ def read_team_stats(path: Path) -> dict:
     body = json.loads(path.read_text())
     stats = body.get("team_stats", body)
     out: dict = {"from_footage": bool(stats.get("from_footage", True)), "bin_min": stats.get("bin_min")}
+    within = stats.get("within_pct")  # how close the distance is measured (calibrated, #300)
+    if within is not None:
+        if not isinstance(within, int) or not 0 < within <= 100:
+            raise SystemExit(f"{path}: team_stats.within_pct is a whole percentage from 1 to 100")
+        out["within_pct"] = within
     distance = stats.get("distance") or {}
     for side in ("home", "away"):
         d = distance.get(side)
