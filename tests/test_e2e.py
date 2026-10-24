@@ -91,7 +91,7 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     out, manifest = run(tmp_path)
     claim = only_claim(out)
     assert claim["status"] == "accepted" and claim["verdict"] == "verified" and claim["evidence"] == ["e2"]
-    assert claim["text"] == "h8 shot, on target, 101 km/h."
+    assert claim["text"] == "h8 shoots at 101 km/h, on target."
     assert claim["mode"] == "graph offline" and manifest["agents"]["mode"] == "graph offline"
     assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 1}
     # The graph ran: the Analyst picked, the Tactician wrote, the Challenger read it, the checker
@@ -161,7 +161,7 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert fell == {"minute": 2, "error": "RuntimeError"}  # the type only: no service text on screen
     claim = only_claim(out)
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
-    assert claim["status"] == "accepted" and claim["text"] == "h8 shot, on target, 101 km/h."
+    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots at 101 km/h, on target."
     assert [c for c in cues(out) if c["kind"] == "insight"]
 
 
@@ -182,7 +182,7 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
     async def sign_in(cred):
         signed.append(cred)
 
-    async def run_live(load, minute, match, inline, plant, trace_to, credential):
+    async def run_live(load, minute, match, inline, plant, trace_to, credential, perceiver=None):
         assert inline and trace_to == "none" and credential == "cred"
         assert match == "seed42-inline"  # an id no server serves (lesson 90)
         minutes.append(minute)
@@ -334,6 +334,18 @@ def test_live_agents_refuse_another_explain_mode(tmp_path, other):
     with pytest.raises(SystemExit):
         e2e.main([str(clip), "--out", str(tmp_path / "b"), "--detections", str(detections), "--frames",
                   "--events-file", str(events_file), "--agents", "live", *other])
+
+
+def test_views_give_the_fact_checker_cameras_to_look_again_through(tmp_path):
+    # --views: the bundle records every look the fact-checker took (ninety/agents/perceive.py).
+    views = tmp_path / "views" / "tactical1"
+    views.mkdir(parents=True)
+    obs = ROOT / "tests" / "fixtures" / "observations-seed900001.jsonl"
+    (views / "observations.jsonl").write_text(obs.read_text())
+    out, manifest = run(tmp_path, "--views", str(tmp_path / "views"))
+    assert manifest["agents"]["re_perceived"] == []  # the clip's claim is sure: nothing to look at
+    with pytest.raises(SystemExit, match="no <camera>/observations.jsonl"):
+        run(tmp_path / "again", "--views", str(tmp_path / "empty"))
 
 
 def test_the_live_fallback_s_judge_shows_in_the_trace_as_it_ruled():

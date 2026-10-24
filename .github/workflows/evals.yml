@@ -5,8 +5,16 @@ name: evals
 # the Analyst's first drafts with Foundry's agent evaluators (ninety/agents/analyst_eval.py).
 # Signs in with the same OIDC identity as deploy.yml (trusted for main only, no stored secret),
 # which holds Foundry User on the Foundry resource (infra/main.bicep). Costs cents a night in
-# model calls. Reports are kept as a workflow artifact; the committed docs/eval files come from
-# a maintainer's run at a known commit, as docs/EVALUATION.md requires.
+# model calls.
+#
+# Every report records the agent definitions it ran with (ninety/agents/evidence.py). After a
+# successful run, the `commit` job copies the reports unedited to docs/eval/nightly/<date>/
+# (ninety/eval/nightly.py; known-invalid reports are skipped) and opens a pull request with them;
+# it never pushes to main. A night already archived stops before any model call. The `commit` job
+# has no Azure sign-in, only a token to push its own `nightly/evals-<date>` branch and open the
+# PR. The repository must allow GitHub Actions to create pull requests (Settings > Actions >
+# General); a PR opened with this token does not start CI by itself, so close and reopen it to
+# run CI before merging. The top-level docs/eval/ reports are replaced only by a reviewed change.
 on:
   schedule:
     - cron: "0 8 * * *" # 01:00 PT
@@ -25,8 +33,23 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      night: ${{ steps.night.outputs.night }}
     steps:
       - uses: actions/checkout@v7
+      - name: Name the night, and refuse a second run of it before any model call
+        id: night
+        run: |
+          night=$(date -u +%F)
+          if git ls-remote --exit-code --heads origin "nightly/evals-$night" > /dev/null; then
+            echo "::error::nightly/evals-$night exists: tonight's evaluation was already archived; delete that branch to re-run"
+            exit 1
+          fi
+          if [ -e "docs/eval/nightly/$night" ]; then
+            echo "::error::docs/eval/nightly/$night is already on main: tonight's evaluation was already committed"
+            exit 1
+          fi
+          echo "night=$night" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - uses: azure/login@v2
@@ -49,3 +72,41 @@ jobs:
         with:
           name: eval-reports
           path: runs/eval/
+
+  commit:
+    # Only a run in which every evaluation finished: a run that measured an outage publishes
+    # nothing (lesson 131).
+    needs: evals
+    if: needs.evals.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      NIGHT: ${{ needs.evals.outputs.night }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v4
+        with:
+          name: eval-reports
+          path: runs/eval
+      - name: Archive the reports
+        run: |
+          uv run python -m ninety.eval.nightly runs/eval --date "$NIGHT" --body runs/nightly-body.md \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="nightly/evals-$NIGHT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add "docs/eval/nightly/$NIGHT"
+          git commit -m "Nightly agent evaluation, $NIGHT"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Nightly agent evaluation, $NIGHT" \
+            --body-file runs/nightly-body.md

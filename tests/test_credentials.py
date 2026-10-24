@@ -99,12 +99,14 @@ def test_the_fact_checker_evaluation_signs_in_before_it_builds_its_cases(monkeyp
     monkeypatch.setattr(fe.foundry, "chat_client", lambda credential: clients.append(credential) or object())
     monkeypatch.setattr(fe, "judge_agent", lambda client: "judge")
     monkeypatch.setattr(fe.foundry, "pinned", lambda local: ("ninety-judge", "1"))
+    defs = {"ninety-judge": {"version": "1", "definition_sha": "3eea4db1096b7a49"}}
+    monkeypatch.setattr(fe.evidence, "record", lambda agents: defs)
     monkeypatch.setattr(fe, "FoundryAgent", Agent)
     monkeypatch.setattr(fe, "events_in", lambda *a: order.append("simulate") or [])
     monkeypatch.setattr(fe, "cases", lambda seed, minutes: [])
     Agent.built = []
-    rows, label = asyncio.run(fe.run([21], 1))
-    assert rows == [] and label.startswith("`ninety-judge:1`")
+    rows, label, ran = asyncio.run(fe.run([21], 1))
+    assert rows == [] and label.startswith("`ninety-judge:1`") and ran == defs
     assert order[:2] == ["token", "simulate"] and order[-1] == "closed"
     assert clients and all(map(signed_in, clients + Agent.built)) and len(Agent.built) == 1
 
