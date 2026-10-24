@@ -9,7 +9,7 @@ is) and each frame 3 more (pan, tilt, focal length).
 
     line_points(rgb, boxes)        white-marking pixels, with players and the ball masked out
     fit_clip(points_by_frame, ...) the gantry and every frame's pan, tilt and focal length
-    shot_starts(histograms)        where the camera cuts, from the picture's colours
+    shot_starts(thumbnails)        where the camera cuts, from how much the picture changes
     fit_shots(points, ..., starts) fit_clip on each shot alone: a new gantry after every cut
     fit_fixed(static, points, ...) a fixed lens (the tactical camera): one camera for the clip
 
@@ -655,34 +655,38 @@ def fit_clip(points: list[np.ndarray], width: int, height: int,
 # A broadcast cuts between cameras. Across a cut the gantry and the aim change at once, so one
 # gantry for the clip fits neither side and tracking from the last frame starts from a camera that
 # is gone (lesson 159). A cut is found from the picture alone: within a shot the camera pans and
-# zooms smoothly and the picture's colours barely change; across a cut they change at once. The
-# measure is the classic shot-boundary one (Zhang, Kankanhalli and Smoliar 1993; Lienhart 1999):
-# half the L1 distance between consecutive frames' colour histograms, CUT_BINS levels a channel,
-# 0 for the same colours, 1 for none shared. CUT_THRESHOLD was set on validation clips by the rule
-# written first in docs/eval/camera-cuts-plan.md (the widest gap between cuts and non-cuts there,
-# at its geometric middle).
-CUT_BINS = 8
-CUT_THRESHOLD = 0.3  # placeholder until validation
+# zooms smoothly and the picture changes little from one frame to the next; across a cut it
+# changes at once. The measure is the pairwise frame difference of the shot-boundary literature
+# (Zhang, Kankanhalli and Smoliar 1993; Lienhart 1999), on a coarse image so that a pan of a few
+# pixels moves it little: the mean absolute difference, in grey levels (0 to 255), between two
+# frames' greyscale thumbnails of CUT_THUMB cells. It and CUT_THRESHOLD were chosen on validation
+# clips by the rule written first in docs/eval/camera-cuts-plan.md: no candidate separated the 5
+# cuts there from every other frame (a whip pan behind the goal changes the picture as much), so
+# the one with the fewest errors was adopted, at the geometric middle of its best interval
+# (17.87 to 26.19): no cut missed, that whip pan the one false cut.
+CUT_THUMB = (32, 18)  # cells across and down (design, a candidate fixed before measuring)
+CUT_THRESHOLD = 21.634
 
 
-def colour_histogram(rgb: np.ndarray, bins: int = CUT_BINS) -> np.ndarray:
-    """(bins**3,) the share of the image's pixels in each RGB cell, bins levels a channel."""
-    q = (rgb.astype(np.int64) * bins) // 256
-    idx = (q[..., 0] * bins + q[..., 1]) * bins + q[..., 2]
-    h = np.bincount(idx.ravel(), minlength=bins ** 3).astype(float)
-    return h / max(h.sum(), 1.0)
+def thumbnail(rgb: np.ndarray, cells: tuple[int, int] = CUT_THUMB) -> np.ndarray:
+    """(down, across) mean grey level of each cell, the image cropped to whole cells."""
+    across, down = cells
+    g = rgb.astype(float).mean(-1)
+    H, W = g.shape
+    g = g[: H // down * down, : W // across * across]
+    return g.reshape(down, H // down, across, W // across).mean((1, 3))
 
 
 def cut_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """Half the L1 distance between two colour histograms: the share of pixels that changed cell."""
-    return 0.5 * float(np.abs(a - b).sum())
+    """Mean absolute difference between two thumbnails, in grey levels."""
+    return float(np.abs(a - b).mean())
 
 
-def shot_starts(hists: list[np.ndarray], threshold: float | None = None) -> list[int]:
+def shot_starts(thumbs: list[np.ndarray], threshold: float | None = None) -> list[int]:
     """Indices of each shot's first frame: 0, then every frame at least `threshold` (default
     CUT_THRESHOLD) from the frame before it."""
     thr = CUT_THRESHOLD if threshold is None else threshold
-    return [0] + [i for i in range(1, len(hists)) if cut_distance(hists[i - 1], hists[i]) >= thr]
+    return [0] + [i for i in range(1, len(thumbs)) if cut_distance(thumbs[i - 1], thumbs[i]) >= thr]
 
 
 def fit_shots(points: list[np.ndarray], width: int, height: int, starts: list[int],

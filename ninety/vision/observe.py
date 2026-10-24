@@ -14,7 +14,7 @@ the counts must agree). For each frame it writes one line:
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
 
 The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). It
-also cuts between cameras: a cut is found from the images' colours (pitch.shot_starts), and each
+also cuts between cameras: a cut is found where the picture changes at once (pitch.shot_starts), and each
 shot is fitted on its own (pitch.fit_shots), its index written as `camera.shot`. A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
@@ -192,7 +192,7 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
     `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
-    rgbs, points, hists = [], [], []
+    rgbs, points, thumbs = [], [], []
     counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
@@ -200,14 +200,14 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
         rgbs.append(rgb)
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
-            hists.append(pitch.colour_histogram(rgb))
+            thumbs.append(pitch.thumbnail(rgb))
             continue
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
     if not fixed:
-        starts = pitch.shot_starts(hists)
+        starts = pitch.shot_starts(thumbs)
         gantries, fits = pitch.fit_shots(points, W, H, starts)
     else:
         view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)

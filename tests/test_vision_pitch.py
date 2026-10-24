@@ -179,26 +179,42 @@ def test_a_clip_is_tracked_frame_to_frame_and_every_frame_is_ok(pan, small_grid)
 # Camera cuts (pitch.shot_starts, pitch.fit_shots; docs/eval/camera-cuts-plan.md).
 
 
-def test_the_cut_distance_is_the_share_of_pixels_whose_colour_cell_changed():
+def test_the_cut_distance_is_the_mean_grey_change_over_the_thumbnail():
     a = grass()
     b = grass()
-    b[:30] = (240, 240, 240)  # half the picture turns white: half its pixels change cell
-    ha, hb = pitch.colour_histogram(a), pitch.colour_histogram(b)
-    assert pitch.cut_distance(ha, ha) == 0.0
-    assert pitch.cut_distance(ha, hb) == pytest.approx(0.5)
-    white = np.full_like(a, 240)
-    assert pitch.cut_distance(ha, pitch.colour_histogram(white)) == pytest.approx(1.0)
+    b[:30] = (240, 240, 240)  # the top half turns white
+    ta, tb = pitch.thumbnail(a), pitch.thumbnail(b)
+    assert pitch.cut_distance(ta, ta) == 0.0
+    grey = np.mean(grass()[0, 0].astype(float))
+    assert pitch.cut_distance(ta, tb) == pytest.approx(0.5 * (240 - grey))
 
 
 def test_a_shot_starts_at_every_frame_at_least_the_threshold_from_the_last():
-    h0 = pitch.colour_histogram(grass())
+    t0 = pitch.thumbnail(grass())
     half = grass()
     half[:30] = (240, 240, 240)
-    h1 = pitch.colour_histogram(half)  # 0.5 from h0
-    hists = [h0, h0, h1, h1, h0]
-    assert pitch.shot_starts(hists, threshold=0.5) == [0, 2, 4]  # at the threshold is a cut
-    assert pitch.shot_starts(hists, threshold=0.51) == [0]
-    assert pitch.shot_starts([h0, h1]) == [0, 1]  # the adopted threshold sees half the picture change
+    t1 = pitch.thumbnail(half)
+    d = pitch.cut_distance(t0, t1)
+    thumbs = [t0, t0, t1, t1, t0]
+    assert pitch.shot_starts(thumbs, threshold=d) == [0, 2, 4]  # at the threshold is a cut
+    assert pitch.shot_starts(thumbs, threshold=d + 0.01) == [0]
+    assert pitch.shot_starts([t0, t1]) == [0, 1]  # the adopted threshold sees half the picture change
+
+
+def stripes(offset: int, h: int = 180, w: int = 320) -> np.ndarray:
+    """Mowing stripes 40 px wide, two greens, shifted `offset` px: a pan across the grass."""
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    light = ((np.arange(w) + offset) // 40) % 2 == 0
+    img[:, light] = (70, 140, 20)
+    img[:, ~light] = (50, 110, 10)
+    return img
+
+
+def test_a_pan_across_the_grass_is_not_a_cut():
+    # A pan of 8 px a frame here, as at about 0.02 rad a frame on a 1280 px picture with a wide lens
+    # (pitch.STEP_SD), moves the thumbnail by a few grey levels, far under the threshold.
+    d = pitch.cut_distance(pitch.thumbnail(stripes(0)), pitch.thumbnail(stripes(8)))
+    assert 0 < d < pitch.CUT_THRESHOLD / 2
 
 
 OTHER_GANTRY = (50.0, -38.0, 15.0)  # another camera on the same stand, 8 m along it
