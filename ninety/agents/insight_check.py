@@ -85,6 +85,10 @@ UNIT_WORDS = {
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
+REGAIN = r"won (?:it|the ball) back|wins? (?:it|the ball) back|regain\w*"
+# A word another kind's facts also say: a counter-attack starts with a regain (GROUNDING I12, I4), so
+# "won the ball back" is a cited counter fact's own words too.
+ALSO_SAID_BY = {"counter_press": (REGAIN, {"counter"})}
 KIND_WORDS = {
     "one_two": r"one[- ]twos?|wall pass\w*",
     "counter": r"counter[- ]attack\w*|on the break",
@@ -95,9 +99,7 @@ KIND_WORDS = {
         r"bypass\w*|line[- ]break\w*|broke (?:the|their) lines?|breaks? (?:the|their) lines?"
         r"|cut through|took out|taking out|packing"
     ),
-    "counter_press": (
-        r"counter[- ]?press\w*|gegenpress\w*|won (?:it|the ball) back|wins? (?:it|the ball) back|regain\w*"
-    ),
+    "counter_press": rf"counter[- ]?press\w*|gegenpress\w*|{REGAIN}",
     "pass_options": (
         r"open (?:team-?mates?|options?|players?|men)|unmarked|free (?:man|men|team-?mates?)"
         r"|passing options?|nobody (?:was )?open"
@@ -282,6 +284,9 @@ def check(
 
     # Players and positions.
     about = _people(cited, people)
+    for name in sorted(set(sheet_names)):
+        if re.search(rf"\b{re.escape(name)}\b\s+(?:and|to|with)\s+\b{re.escape(name)}\b", claim.text):
+            reasons.append(f"{name} is said as two players")
     said_names = {w["name"] for w in about if w.get("name")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
@@ -332,7 +337,13 @@ def check(
     # Kind words.
     kinds = {f.get("kind") for f in cited}
     for kind, words in KIND_WORDS.items():
-        if re.search(rf"\b(?:{words})\b", claim.text, re.I) and kind not in kinds:
+        if not re.search(rf"\b(?:{words})\b", claim.text, re.I) or kind in kinds:
+            continue
+        shared, others = ALSO_SAID_BY.get(kind, ("", set()))
+        rest = claim.text
+        if shared and kinds & others:
+            rest = re.sub(rf"\b(?:{shared})\b", "", rest, flags=re.I)
+        if re.search(rf"\b(?:{words})\b", rest, re.I):
             reasons.append(f"'{kind.replace('_', ' ')}' needs a cited {kind} fact")
 
     if reasons:
@@ -352,8 +363,11 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
     presses = [f for f in cited if f.get("kind") == "counter_press" and f.get("metric") == "pressers"]
     regains = [f for f in cited if f.get("metric") == "regains_within_5s"]
     passes = [f for f in cited if f.get("metric") == "open_teammates_ahead"]
-    if presses or regains:
-        won = any(f.get("regained") for f in presses) or any(f.get("value") for f in regains)
+    counters = [f for f in cited if f.get("metric") == "regain_to_shot_s"]  # each starts at a regain (I12)
+    if presses or regains or counters:
+        won = (
+            any(f.get("regained") for f in presses) or any(f.get("value") for f in regains) or bool(counters)
+        )
         if NEVER_WON.search(text):
             if won:
                 out.append("it says the ball was not won back; the cited facts say it was")
@@ -409,6 +423,7 @@ DIRECTED = (
     "passes_with_no_open_teammate_ahead",
     "extra_players",
     "overload_moments",
+    "regain_to_shot_s",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -442,6 +457,7 @@ TEMPLATES = {
         r"had a spare player there",
     ],
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
+    "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
 }
 
 

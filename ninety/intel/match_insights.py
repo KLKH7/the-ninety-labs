@@ -78,7 +78,7 @@ class MatchInsights:
                     **r,
                     "kind": "shape",
                     "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
-                    "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
+                    "also": shape_also(r),
                     "visual": {
                         "kind": "shape",
                         "minute": r["minute"],
@@ -366,6 +366,16 @@ class MatchInsights:
             dict(body.get("team_stats") or {}),
             dict(body.get("stats") or {}),
         )
+
+
+CHANGE_CONTEXT = r"\b(?:up|back|by|forward|deeper|higher|further)\s+$"
+
+
+def shape_also(r: Mapping) -> list:
+    """A shape fact's other number: its change, said right after the move ("pushed up 6 m"), while
+    its value (the line's height) is the one after "to". Both are metres, so each is bound to its own
+    role (lesson 221)."""
+    return [[abs(r["change"]), r["unit"], CHANGE_CONTEXT]] if r.get("change") else []
 
 
 def shape_drawings(frames: Sequence[Mapping]) -> dict[tuple[str, int], dict]:

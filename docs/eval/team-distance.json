@@ -1,5 +1,5 @@
 {
- "run": "u7",
+ "run": "f8076-65247ba3",
  "minutes": 30.0,
  "step_s": 1.0,
  "max_step_mps": 12.0,
@@ -8,135 +8,135 @@
    "missing": 0.0,
    "fragment_s": 30.0,
    "ratio": {
-    "median": 1.015,
-    "min": 1.007,
-    "max": 1.027
+    "median": 1.091,
+    "min": 1.021,
+    "max": 1.204
    },
    "ratio_shown": {
-    "median": 1.015,
-    "min": 1.007,
-    "max": 1.027
+    "median": 1.091,
+    "min": 1.021,
+    "max": 1.204
    },
    "rows": [
     {
      "bin": 0,
      "team": "home",
-     "true_m": 6102,
-     "tracked_m": 6182,
+     "true_m": 4199,
+     "tracked_m": 4469,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.013,
-     "ratio_shown": 1.013
+     "ratio": 1.064,
+     "ratio_shown": 1.064
     },
     {
      "bin": 0,
      "team": "away",
-     "true_m": 5821,
-     "tracked_m": 5878,
+     "true_m": 4038,
+     "tracked_m": 4323,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.01,
-     "ratio_shown": 1.01
+     "ratio": 1.071,
+     "ratio_shown": 1.071
     },
     {
      "bin": 1,
      "team": "home",
-     "true_m": 5538,
-     "tracked_m": 5687,
+     "true_m": 3524,
+     "tracked_m": 3945,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.027,
-     "ratio_shown": 1.027
+     "ratio": 1.12,
+     "ratio_shown": 1.12
     },
     {
      "bin": 1,
      "team": "away",
-     "true_m": 5544,
-     "tracked_m": 5689,
+     "true_m": 3687,
+     "tracked_m": 4091,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.026,
-     "ratio_shown": 1.026
+     "ratio": 1.11,
+     "ratio_shown": 1.11
     },
     {
      "bin": 2,
      "team": "home",
-     "true_m": 5381,
-     "tracked_m": 5490,
+     "true_m": 3620,
+     "tracked_m": 3963,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.02,
-     "ratio_shown": 1.02
+     "ratio": 1.095,
+     "ratio_shown": 1.095
     },
     {
      "bin": 2,
      "team": "away",
-     "true_m": 5801,
-     "tracked_m": 5866,
+     "true_m": 2487,
+     "tracked_m": 2995,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.011,
-     "ratio_shown": 1.011
+     "ratio": 1.204,
+     "ratio_shown": 1.204
     },
     {
      "bin": 3,
      "team": "home",
-     "true_m": 5499,
-     "tracked_m": 5544,
+     "true_m": 5010,
+     "tracked_m": 5113,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.008,
-     "ratio_shown": 1.008
+     "ratio": 1.021,
+     "ratio_shown": 1.021
     },
     {
      "bin": 3,
      "team": "away",
-     "true_m": 5584,
-     "tracked_m": 5692,
+     "true_m": 3767,
+     "tracked_m": 4065,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.019,
-     "ratio_shown": 1.019
+     "ratio": 1.079,
+     "ratio_shown": 1.079
     },
     {
      "bin": 4,
      "team": "home",
-     "true_m": 5696,
-     "tracked_m": 5742,
+     "true_m": 3745,
+     "tracked_m": 4131,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.008,
-     "ratio_shown": 1.008
+     "ratio": 1.103,
+     "ratio_shown": 1.103
     },
     {
      "bin": 4,
      "team": "away",
-     "true_m": 5656,
-     "tracked_m": 5751,
+     "true_m": 4699,
+     "tracked_m": 4890,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.017,
-     "ratio_shown": 1.017
+     "ratio": 1.041,
+     "ratio_shown": 1.041
     },
     {
      "bin": 5,
      "team": "home",
-     "true_m": 5579,
-     "tracked_m": 5698,
+     "true_m": 3851,
+     "tracked_m": 4191,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.022,
-     "ratio_shown": 1.022
+     "ratio": 1.088,
+     "ratio_shown": 1.088
     },
     {
      "bin": 5,
      "team": "away",
-     "true_m": 5994,
-     "tracked_m": 6033,
+     "true_m": 3361,
+     "tracked_m": 3678,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 1.007,
-     "ratio_shown": 1.007
+     "ratio": 1.094,
+     "ratio_shown": 1.094
     }
    ]
   },
@@ -144,135 +144,135 @@
    "missing": 0.0,
    "fragment_s": 10.0,
    "ratio": {
-    "median": 0.95,
-    "min": 0.935,
-    "max": 0.97
+    "median": 1.019,
+    "min": 0.967,
+    "max": 1.129
    },
    "ratio_shown": {
-    "median": 0.95,
-    "min": 0.935,
-    "max": 0.97
+    "median": 1.019,
+    "min": 0.967,
+    "max": 1.129
    },
    "rows": [
     {
      "bin": 0,
      "team": "home",
-     "true_m": 6102,
-     "tracked_m": 5792,
+     "true_m": 4199,
+     "tracked_m": 4216,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.949,
-     "ratio_shown": 0.949
+     "ratio": 1.004,
+     "ratio_shown": 1.004
     },
     {
      "bin": 0,
      "team": "away",
-     "true_m": 5821,
-     "tracked_m": 5497,
+     "true_m": 4038,
+     "tracked_m": 3987,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.944,
-     "ratio_shown": 0.944
+     "ratio": 0.988,
+     "ratio_shown": 0.988
     },
     {
      "bin": 1,
      "team": "home",
-     "true_m": 5538,
-     "tracked_m": 5300,
+     "true_m": 3524,
+     "tracked_m": 3669,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.957,
-     "ratio_shown": 0.957
+     "ratio": 1.041,
+     "ratio_shown": 1.041
     },
     {
      "bin": 1,
      "team": "away",
-     "true_m": 5544,
-     "tracked_m": 5376,
+     "true_m": 3687,
+     "tracked_m": 3849,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.97,
-     "ratio_shown": 0.97
+     "ratio": 1.044,
+     "ratio_shown": 1.044
     },
     {
      "bin": 2,
      "team": "home",
-     "true_m": 5381,
-     "tracked_m": 5208,
+     "true_m": 3620,
+     "tracked_m": 3697,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.968,
-     "ratio_shown": 0.968
+     "ratio": 1.021,
+     "ratio_shown": 1.021
     },
     {
      "bin": 2,
      "team": "away",
-     "true_m": 5801,
-     "tracked_m": 5593,
+     "true_m": 2487,
+     "tracked_m": 2809,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.964,
-     "ratio_shown": 0.964
+     "ratio": 1.129,
+     "ratio_shown": 1.129
     },
     {
      "bin": 3,
      "team": "home",
-     "true_m": 5499,
-     "tracked_m": 5144,
+     "true_m": 5010,
+     "tracked_m": 4845,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.935,
-     "ratio_shown": 0.935
+     "ratio": 0.967,
+     "ratio_shown": 0.967
     },
     {
      "bin": 3,
      "team": "away",
-     "true_m": 5584,
-     "tracked_m": 5308,
+     "true_m": 3767,
+     "tracked_m": 3802,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.951,
-     "ratio_shown": 0.951
+     "ratio": 1.009,
+     "ratio_shown": 1.009
     },
     {
      "bin": 4,
      "team": "home",
-     "true_m": 5696,
-     "tracked_m": 5388,
+     "true_m": 3745,
+     "tracked_m": 3813,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.946,
-     "ratio_shown": 0.946
+     "ratio": 1.018,
+     "ratio_shown": 1.018
     },
     {
      "bin": 4,
      "team": "away",
-     "true_m": 5656,
-     "tracked_m": 5365,
+     "true_m": 4699,
+     "tracked_m": 4596,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.949,
-     "ratio_shown": 0.949
+     "ratio": 0.978,
+     "ratio_shown": 0.978
     },
     {
      "bin": 5,
      "team": "home",
-     "true_m": 5579,
-     "tracked_m": 5281,
+     "true_m": 3851,
+     "tracked_m": 3977,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.947,
-     "ratio_shown": 0.947
+     "ratio": 1.033,
+     "ratio_shown": 1.033
     },
     {
      "bin": 5,
      "team": "away",
-     "true_m": 5994,
-     "tracked_m": 5724,
+     "true_m": 3361,
+     "tracked_m": 3443,
      "coverage": 1.0,
      "jumps": 0,
-     "ratio": 0.955,
-     "ratio_shown": 0.955
+     "ratio": 1.024,
+     "ratio_shown": 1.024
     }
    ]
   },
@@ -280,135 +280,135 @@
    "missing": 0.05,
    "fragment_s": 30.0,
    "ratio": {
-    "median": 0.915,
-    "min": 0.906,
-    "max": 0.93
+    "median": 0.982,
+    "min": 0.921,
+    "max": 1.098
    },
    "ratio_shown": {
-    "median": 0.964,
-    "min": 0.955,
-    "max": 0.974
+    "median": 1.038,
+    "min": 0.969,
+    "max": 1.152
    },
    "rows": [
     {
      "bin": 0,
      "team": "home",
-     "true_m": 6102,
-     "tracked_m": 5580,
-     "coverage": 0.95,
+     "true_m": 4199,
+     "tracked_m": 3958,
+     "coverage": 0.948,
      "jumps": 0,
-     "ratio": 0.915,
-     "ratio_shown": 0.963
+     "ratio": 0.943,
+     "ratio_shown": 0.994
     },
     {
      "bin": 0,
      "team": "away",
-     "true_m": 5821,
-     "tracked_m": 5327,
-     "coverage": 0.952,
+     "true_m": 4038,
+     "tracked_m": 3960,
+     "coverage": 0.954,
      "jumps": 0,
-     "ratio": 0.915,
-     "ratio_shown": 0.961
+     "ratio": 0.981,
+     "ratio_shown": 1.029
     },
     {
      "bin": 1,
      "team": "home",
-     "true_m": 5538,
-     "tracked_m": 5083,
-     "coverage": 0.949,
+     "true_m": 3524,
+     "tracked_m": 3586,
+     "coverage": 0.95,
      "jumps": 0,
-     "ratio": 0.918,
-     "ratio_shown": 0.967
+     "ratio": 1.018,
+     "ratio_shown": 1.072
     },
     {
      "bin": 1,
      "team": "away",
-     "true_m": 5544,
-     "tracked_m": 5089,
+     "true_m": 3687,
+     "tracked_m": 3723,
      "coverage": 0.952,
      "jumps": 0,
-     "ratio": 0.918,
-     "ratio_shown": 0.964
+     "ratio": 1.01,
+     "ratio_shown": 1.061
     },
     {
      "bin": 2,
      "team": "home",
-     "true_m": 5381,
-     "tracked_m": 4929,
-     "coverage": 0.949,
+     "true_m": 3620,
+     "tracked_m": 3556,
+     "coverage": 0.947,
      "jumps": 0,
-     "ratio": 0.916,
-     "ratio_shown": 0.966
+     "ratio": 0.982,
+     "ratio_shown": 1.038
     },
     {
      "bin": 2,
      "team": "away",
-     "true_m": 5801,
-     "tracked_m": 5383,
-     "coverage": 0.955,
+     "true_m": 2487,
+     "tracked_m": 2731,
+     "coverage": 0.953,
      "jumps": 0,
-     "ratio": 0.928,
-     "ratio_shown": 0.972
+     "ratio": 1.098,
+     "ratio_shown": 1.152
     },
     {
      "bin": 3,
      "team": "home",
-     "true_m": 5499,
-     "tracked_m": 5002,
+     "true_m": 5010,
+     "tracked_m": 4614,
+     "coverage": 0.95,
+     "jumps": 0,
+     "ratio": 0.921,
+     "ratio_shown": 0.969
+    },
+    {
+     "bin": 3,
+     "team": "away",
+     "true_m": 3767,
+     "tracked_m": 3658,
+     "coverage": 0.954,
+     "jumps": 0,
+     "ratio": 0.971,
+     "ratio_shown": 1.018
+    },
+    {
+     "bin": 4,
+     "team": "home",
+     "true_m": 3745,
+     "tracked_m": 3767,
      "coverage": 0.952,
      "jumps": 0,
-     "ratio": 0.91,
-     "ratio_shown": 0.955
-    },
-    {
-     "bin": 3,
-     "team": "away",
-     "true_m": 5584,
-     "tracked_m": 5192,
-     "coverage": 0.955,
-     "jumps": 0,
-     "ratio": 0.93,
-     "ratio_shown": 0.974
-    },
-    {
-     "bin": 4,
-     "team": "home",
-     "true_m": 5696,
-     "tracked_m": 5185,
-     "coverage": 0.95,
-     "jumps": 0,
-     "ratio": 0.91,
-     "ratio_shown": 0.958
+     "ratio": 1.006,
+     "ratio_shown": 1.057
     },
     {
      "bin": 4,
      "team": "away",
-     "true_m": 5656,
-     "tracked_m": 5145,
+     "true_m": 4699,
+     "tracked_m": 4426,
      "coverage": 0.948,
      "jumps": 0,
-     "ratio": 0.91,
-     "ratio_shown": 0.96
+     "ratio": 0.942,
+     "ratio_shown": 0.993
     },
     {
      "bin": 5,
      "team": "home",
-     "true_m": 5579,
-     "tracked_m": 5150,
-     "coverage": 0.95,
+     "true_m": 3851,
+     "tracked_m": 3785,
+     "coverage": 0.946,
      "jumps": 0,
-     "ratio": 0.923,
-     "ratio_shown": 0.972
+     "ratio": 0.983,
+     "ratio_shown": 1.038
     },
     {
      "bin": 5,
      "team": "away",
-     "true_m": 5994,
-     "tracked_m": 5433,
-     "coverage": 0.948,
+     "true_m": 3361,
+     "tracked_m": 3352,
+     "coverage": 0.952,
      "jumps": 0,
-     "ratio": 0.906,
-     "ratio_shown": 0.957
+     "ratio": 0.997,
+     "ratio_shown": 1.047
     }
    ]
   },
@@ -416,135 +416,135 @@
    "missing": 0.05,
    "fragment_s": 10.0,
    "ratio": {
-    "median": 0.861,
-    "min": 0.83,
-    "max": 0.872
+    "median": 0.927,
+    "min": 0.88,
+    "max": 1.029
    },
    "ratio_shown": {
-    "median": 0.907,
-    "min": 0.876,
-    "max": 0.919
+    "median": 0.975,
+    "min": 0.926,
+    "max": 1.083
    },
    "rows": [
     {
      "bin": 0,
      "team": "home",
-     "true_m": 6102,
-     "tracked_m": 5304,
-     "coverage": 0.953,
+     "true_m": 4199,
+     "tracked_m": 3729,
+     "coverage": 0.945,
      "jumps": 0,
-     "ratio": 0.869,
-     "ratio_shown": 0.912
+     "ratio": 0.888,
+     "ratio_shown": 0.94
     },
     {
      "bin": 0,
      "team": "away",
-     "true_m": 5821,
-     "tracked_m": 4955,
-     "coverage": 0.951,
-     "jumps": 0,
-     "ratio": 0.851,
-     "ratio_shown": 0.895
-    },
-    {
-     "bin": 1,
-     "team": "home",
-     "true_m": 5538,
-     "tracked_m": 4777,
-     "coverage": 0.948,
-     "jumps": 0,
-     "ratio": 0.863,
-     "ratio_shown": 0.91
-    },
-    {
-     "bin": 1,
-     "team": "away",
-     "true_m": 5544,
-     "tracked_m": 4825,
-     "coverage": 0.947,
-     "jumps": 0,
-     "ratio": 0.87,
-     "ratio_shown": 0.919
-    },
-    {
-     "bin": 2,
-     "team": "home",
-     "true_m": 5381,
-     "tracked_m": 4640,
-     "coverage": 0.941,
-     "jumps": 0,
-     "ratio": 0.862,
-     "ratio_shown": 0.917
-    },
-    {
-     "bin": 2,
-     "team": "away",
-     "true_m": 5801,
-     "tracked_m": 5057,
-     "coverage": 0.95,
-     "jumps": 0,
-     "ratio": 0.872,
-     "ratio_shown": 0.917
-    },
-    {
-     "bin": 3,
-     "team": "home",
-     "true_m": 5499,
-     "tracked_m": 4567,
-     "coverage": 0.948,
-     "jumps": 0,
-     "ratio": 0.83,
-     "ratio_shown": 0.876
-    },
-    {
-     "bin": 3,
-     "team": "away",
-     "true_m": 5584,
-     "tracked_m": 4858,
-     "coverage": 0.958,
-     "jumps": 0,
-     "ratio": 0.87,
-     "ratio_shown": 0.908
-    },
-    {
-     "bin": 4,
-     "team": "home",
-     "true_m": 5696,
-     "tracked_m": 4834,
-     "coverage": 0.948,
-     "jumps": 0,
-     "ratio": 0.849,
-     "ratio_shown": 0.895
-    },
-    {
-     "bin": 4,
-     "team": "away",
-     "true_m": 5656,
-     "tracked_m": 4855,
-     "coverage": 0.955,
-     "jumps": 0,
-     "ratio": 0.858,
-     "ratio_shown": 0.899
-    },
-    {
-     "bin": 5,
-     "team": "home",
-     "true_m": 5579,
-     "tracked_m": 4791,
+     "true_m": 4038,
+     "tracked_m": 3653,
      "coverage": 0.952,
      "jumps": 0,
-     "ratio": 0.859,
-     "ratio_shown": 0.902
+     "ratio": 0.905,
+     "ratio_shown": 0.951
+    },
+    {
+     "bin": 1,
+     "team": "home",
+     "true_m": 3524,
+     "tracked_m": 3366,
+     "coverage": 0.949,
+     "jumps": 0,
+     "ratio": 0.955,
+     "ratio_shown": 1.006
+    },
+    {
+     "bin": 1,
+     "team": "away",
+     "true_m": 3687,
+     "tracked_m": 3475,
+     "coverage": 0.957,
+     "jumps": 0,
+     "ratio": 0.942,
+     "ratio_shown": 0.985
+    },
+    {
+     "bin": 2,
+     "team": "home",
+     "true_m": 3620,
+     "tracked_m": 3359,
+     "coverage": 0.952,
+     "jumps": 0,
+     "ratio": 0.928,
+     "ratio_shown": 0.974
+    },
+    {
+     "bin": 2,
+     "team": "away",
+     "true_m": 2487,
+     "tracked_m": 2559,
+     "coverage": 0.95,
+     "jumps": 0,
+     "ratio": 1.029,
+     "ratio_shown": 1.083
+    },
+    {
+     "bin": 3,
+     "team": "home",
+     "true_m": 5010,
+     "tracked_m": 4426,
+     "coverage": 0.954,
+     "jumps": 0,
+     "ratio": 0.883,
+     "ratio_shown": 0.926
+    },
+    {
+     "bin": 3,
+     "team": "away",
+     "true_m": 3767,
+     "tracked_m": 3456,
+     "coverage": 0.956,
+     "jumps": 0,
+     "ratio": 0.917,
+     "ratio_shown": 0.96
+    },
+    {
+     "bin": 4,
+     "team": "home",
+     "true_m": 3745,
+     "tracked_m": 3510,
+     "coverage": 0.954,
+     "jumps": 0,
+     "ratio": 0.937,
+     "ratio_shown": 0.982
+    },
+    {
+     "bin": 4,
+     "team": "away",
+     "true_m": 4699,
+     "tracked_m": 4133,
+     "coverage": 0.945,
+     "jumps": 0,
+     "ratio": 0.88,
+     "ratio_shown": 0.93
+    },
+    {
+     "bin": 5,
+     "team": "home",
+     "true_m": 3851,
+     "tracked_m": 3572,
+     "coverage": 0.946,
+     "jumps": 0,
+     "ratio": 0.927,
+     "ratio_shown": 0.98
     },
     {
      "bin": 5,
      "team": "away",
-     "true_m": 5994,
-     "tracked_m": 5145,
-     "coverage": 0.949,
+     "true_m": 3361,
+     "tracked_m": 3117,
+     "coverage": 0.951,
      "jumps": 0,
-     "ratio": 0.858,
-     "ratio_shown": 0.905
+     "ratio": 0.928,
+     "ratio_shown": 0.976
     }
    ]
   }

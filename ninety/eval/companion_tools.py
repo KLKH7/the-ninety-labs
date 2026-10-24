@@ -9,7 +9,7 @@ apart, never pooled (deterministic and model-graded results stay apart):
 - model: the Companion's plan step, only with --live, which calls the published model and costs
   money (tell the Coordinator first). A request the model never answered is counted apart from
   a wrong plan (lesson 131). With --live the model's answers are also run over the stand-in match
-  (docs/eval/standin-insights-seed7.json), fact-checked and judged, and timed end to end.
+  (docs/eval/standin-insights-seed8076.json), fact-checked and judged, and timed end to end.
 
     uv run python -m ninety.eval.companion_tools --out docs/eval/companion-tools.json
 """
@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> None:
         print("wrong:", w)
 
 
-STANDIN = QUESTIONS.parent / "standin-insights-seed7.json"  # ninety/eval/insight_standin.py, 20 minutes
+STANDIN = QUESTIONS.parent / "standin-insights-seed8076.json"  # ninety/eval/insight_standin.py, 20 minutes
 
 
 # Estimates for the Judge's calls, whose prompt the judge function builds: its instructions

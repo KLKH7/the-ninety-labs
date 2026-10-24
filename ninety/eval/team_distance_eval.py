@@ -101,10 +101,14 @@ def main(argv: list[str] | None = None) -> None:
             f"| {c['missing']:.0%} | {c['fragment_s']:g} s | {r['median']} ({r['min']} to {r['max']}) | "
             f"{s['median']} ({s['min']} to {s['max']}) |"
         )
+    full = [c["ratio"] for c in report["cases"] if c["missing"] == 0]
+    lo, hi = min(r["min"] for r in full), max(r["max"] for r in full)
     lines += [
         "",
-        "Reading: with every player tracked the distance is within a few percent of the truth (a track "
-        "broken often loses its first and last step). A player missing from frames takes his distance "
+        f"Reading: with every player tracked, the distance reads {lo} to {hi} times the truth per five "
+        "minutes. The persistent position error walks, and its walk adds distance (more where players "
+        "run less); a track broken often loses its first and last step. A player missing from frames "
+        "takes his distance "
         'with him, so the phone shows the tracked distance with its coverage, "from the footage '
         "shown\", and does not scale it up. The demo's own tracker is to be graded the same way against "
         "its truth before the number is relied on.",
