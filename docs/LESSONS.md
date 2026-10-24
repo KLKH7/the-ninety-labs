@@ -2757,6 +2757,21 @@ short and actionable. This file is public: no research sources, product names or
   `::test_every_held_out_answer_is_headed_by_what_its_question_asks`. Each fails when its rule is
   mutated (eleven mutations, all caught).
 
+### 235. Every live_job mode gets an end-to-end test on a real clip of its camera type
+- **What happened:** `observe` gained `fixed=True` for the tactical camera's lenses, but the views
+  mode of `ninety/vision/live_job.py` never passed it. Each lens was searched frame by frame as the
+  broadcast's moving gantry, and the fit failed on every frame: on validation seed108, camera OK on
+  0 of 250 frames and no player placed. Its unit tests passed because they ran on a synthetic clip
+  drawn through a broadcast camera, which the broadcast search fits. A phone fixture built from
+  views runs on main (12–17 players, no events) carried the defect downstream.
+- **Rule:** any live_job mode (broadcast, views, and any added later) has an end-to-end test on a
+  real rendered clip of that camera type, at the renderer's own image quality. The test asserts a
+  non-zero placement rate, not only that the run finished.
+- **Check:** `tests/test_vision_live_job.py::test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not`
+  (the flag), and `test_a_real_tactical_clip_places_players_from_every_view` and
+  `test_a_real_broadcast_clip_places_players` in the same file, on two frames of each camera
+  (`tests/fixtures/tactical-seed108`, `broadcast-seed108`). The tactical test fails without the fix.
+
 ### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
 - **What happened:** an audit of the fact-checker's code half found four forms it still let
   through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
