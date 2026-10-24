@@ -2784,4 +2784,4 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
   has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
   variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
-  `replays/`, `docs/eval/` and the fixtures are unchanged.
+  `replays/`, `docs/eval/` and the fixtures are unchanged from main's check on the same texts.
