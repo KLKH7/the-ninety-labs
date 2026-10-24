@@ -82,3 +82,24 @@ def test_check_passes_on_the_same_matches_and_fails_on_a_changed_one(tmp_path):
     (tmp_path / f"seed{ps.TEST[0]}" / "events.jsonl").write_text(json.dumps(ev("tackle", 305.0)) + "\n")
     with pytest.raises(SystemExit, match="not what the rule gives"):
         ps.main(["--sims", str(tmp_path), "--out", str(out), "--check"])
+
+
+def test_a_frozen_split_lists_every_clip_and_hashes_only_those_rendered(tmp_path):
+    from ninety.eval import set_commands
+
+    render = {"views": None, "set": ["stadium=broadcast"]}
+    manifest = {"name": "x", "render_commit": "abc123", "render": render,
+                "clips": [{"split": "test", "seed": 920201, "start": 0.0, "seconds": 10.0},
+                          {"split": "test", "seed": 920202, "start": 10.0, "seconds": 10.0},
+                          {"split": "validation", "seed": 920101, "start": 0.0, "seconds": 10.0}]}
+    d = set_commands.clip_dir(tmp_path, manifest["clips"][0])
+    (d / "images").mkdir(parents=True)
+    (d / "images" / "000000.jpg").write_bytes(b"jpg")
+    for f in ("frames.jsonl", "events.jsonl", "meta.json"):
+        (d / f).write_text("{}\n")
+    (d / "clip.json").write_text(json.dumps({"renderer": {"version": "0.5.17"}}))
+    f = set_commands.freeze(manifest, tmp_path, "test")
+    assert f["count"] == 2 and f["rendered"] == 1 and f["render_commit"] == "abc123"
+    done, pending = f["clips"]
+    assert done["renderer"] == {"version": "0.5.17"} and done["digest"]["image_count"] == 1
+    assert pending["digest"] is None and pending["dir"] == "test/seed920202-250"
