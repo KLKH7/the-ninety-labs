@@ -79,3 +79,18 @@ def test_a_distance_without_a_sound_coverage_stops_the_bundle(tmp_path, away):
     path.write_text(json.dumps({"team_stats": {"distance": {"home": home, "away": away}}}))
     with pytest.raises(SystemExit):
         e2e.read_team_stats(path)
+
+
+def test_the_stats_block_keeps_rows_by_group_in_minute_order_and_refuses_a_row_without_a_group(tmp_path):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    row = {"group": "Pressing", "key": "turnovers", "label": "Turnovers", "unit": "turnovers",
+           "series": [{"minute_to": 2, "home": 3, "away": 1, "confident": True},
+                      {"minute_to": 1, "home": 1, "away": 0, "confident": True}]}
+    path.write_text(json.dumps({"stats": {"bin_min": 5, "rows": [row]}}))
+    (kept,) = e2e.read_stats(path)["rows"]
+    assert [v["minute_to"] for v in kept["series"]] == [1, 2]
+    path.write_text(json.dumps({"stats": {"rows": [{**row, "group": "Vibes"}]}}))
+    with pytest.raises(SystemExit):
+        e2e.read_stats(path)

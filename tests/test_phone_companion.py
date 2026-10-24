@@ -652,3 +652,31 @@ def test_story_described_shows_the_audio_description_said_so_far_never_ahead(bro
     # mutation: drop the t_in filter in renderDescribed -> lines from later in the clip appear
     assert page.locator("#insights .lyric").count() == len(due)
     assert not errors
+
+
+def test_team_stats_add_the_scouts_rows_so_far_at_the_clock_marking_unsure_and_hiding_null(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)  # minute 2
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    match["insight_stats"] = {"bin_min": 5, "rows": [
+        {"group": "Pressing", "key": "turnovers", "label": "Turnovers", "unit": "turnovers", "series": [
+            {"minute_to": 1, "home": 1, "away": 0, "confident": True},
+            {"minute_to": 2, "home": 3, "away": 1, "confident": True},
+            {"minute_to": 3, "home": 9, "away": 9, "confident": True}]},  # still to come: never shown
+        {"group": "Shape", "key": "width", "label": "Width", "unit": "m", "series": [
+            {"minute_to": 2, "home": 41, "away": 38, "confident": False}]},
+        {"group": "Shape", "key": "length", "label": "Length", "unit": "m", "series": [
+            {"minute_to": 2, "home": None, "away": 30, "confident": True}]}]}
+    ctx = page.context
+    ctx.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#lt-stats")
+    page.wait_for_selector("#stat-rows .stat-row")
+    labels = [page.locator("#stat-rows .stat-row").nth(i).get_attribute("aria-label")
+              for i in range(page.locator("#stat-rows .stat-row").count())]
+    home_and_away = " 3, Dunhollow 1"
+    assert any(label.startswith("Turnovers: ") and label.endswith(home_and_away) for label in labels), labels
+    assert any(label.startswith("Width (m): ") and label.endswith("(unsure)") for label in labels), labels
+    assert not any(label.startswith("Length") for label in labels)  # null is not measurable
+    assert page.locator("#stat-rows .stat-group h3", has_text="Pressing").count() == 1
+    assert not errors

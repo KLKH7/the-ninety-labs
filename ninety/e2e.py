@@ -128,6 +128,33 @@ def read_team_stats(path: Path) -> dict:
     return out
 
 
+GROUPS = ("Attack", "Passing", "Pressing", "Shape", "Physical")
+
+
+def read_stats(path: Path) -> dict | None:
+    """MatchInsights' `stats` block (insight-scout, #269): per-team rows by group, each a series of
+    values "so far" to a minute, with whether the value is confident. A row missing its group, key,
+    label or series stops the bundle; the block is optional."""
+    body = json.loads(path.read_text())
+    block = body.get("stats")
+    if block is None:
+        return None
+    rows = []
+    for row in block.get("rows", []):
+        if row.get("group") not in GROUPS or not row.get("key") or not row.get("label"):
+            raise SystemExit(f"{path}: a stats row needs a group in {GROUPS}, a key and a label")
+        series = []
+        for v in row.get("series", []):
+            if not isinstance(v.get("minute_to"), (int, float)) or not isinstance(v.get("confident"), bool):
+                raise SystemExit(f"{path}: stats.{row['key']}: each value needs minute_to and confident")
+            keep = ("minute_to", "home", "away", "confident", "evidence", "coverage")
+            series.append({k: v[k] for k in keep if k in v})
+        rows.append({"group": row["group"], "key": row["key"], "label": row["label"],
+                     "unit": row.get("unit"), "series": sorted(series, key=lambda v: v["minute_to"])})
+    return {"bin_min": block.get("bin_min"), "from_footage": bool(block.get("from_footage", True)),
+            "rows": rows}
+
+
 def teams_of(meta: dict) -> dict | None:
     """The home and away codes the clip was rendered with, or None for a clip without them."""
     params = meta.get("params", {})
@@ -377,6 +404,9 @@ async def run(args: argparse.Namespace) -> dict:
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
         if args.team_stats:
             body["team_stats"] = read_team_stats(args.team_stats)  # measured per-team facts (#269)
+            stats = read_stats(args.team_stats)
+            if stats is not None:
+                body["insight_stats"] = stats  # match.json's own `stats` is the detected events' series
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}

@@ -571,3 +571,6 @@ ion-tab ion-content::part(scroll) {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 150px - env(safe-area-inset-bottom)), transparent calc(100% - 72px - env(safe-area-inset-bottom)));
   mask-image: linear-gradient(to bottom, #000 calc(100% - 150px - env(safe-area-inset-bottom)), transparent calc(100% - 72px - env(safe-area-inset-bottom)));
 }
+/* A value the fact-checker is not confident in is shown, quieter, and says so. */
+.stat-row.unsure .v { opacity: 0.55; }
+.stat-row.unsure .label::after { content: " · unsure"; font-size: 13px; color: var(--text-3); }

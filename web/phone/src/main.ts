@@ -1871,7 +1871,7 @@ function showMatch(t: number) {
   if ($("insights").dataset.mode === "described") renderDescribed($("insights"), t);
   else if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
-  const key = JSON.stringify(st);
+  const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
   if (key === statsKey) return;
   statsKey = key;
   renderStats(st);
@@ -1879,6 +1879,10 @@ function showMatch(t: number) {
 
 /** Match stats as mirrored bars (Apple Sports): the home value at the left edge, the away value at
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
+interface StatsBlock {
+  rows: { group: string; key: string; label: string; unit: string | null; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }[];
+}
+const round1 = (n: number) => Math.round(n * 10) / 10;
 interface TeamStatsFacts {
   from_footage: boolean;
   distance?: Record<"home" | "away", { km: number; coverage: number }>;
@@ -1902,14 +1906,30 @@ function renderStats(st: MatchData["stats"][number]) {
       ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
       ["Pass accuracy %", pct(st.home.passes_completed, st.home.passes_attempted), pct(st.away.passes_completed, st.away.passes_attempted)],
     ]],
+    ["Pressing", []],
+    ["Shape", []],
     ["Physical", ts?.distance ? [["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]] : []],
   ];
+  // The Insight Scout's computed rows (match.json `insight_stats`, #269): each the latest value "so far" at
+  // or before the clock's minute; null is not measurable (not shown), confident:false is "unsure".
+  const block = state.match as unknown as { insight_stats?: StatsBlock } | null;
+  const minute = momentum.minuteOf(viewTime());
+  const unsure = new Set<string>();
+  for (const r of block?.insight_stats?.rows ?? []) {
+    const v = [...r.series].reverse().find((x) => x.minute_to <= minute);
+    if (!v || v.home === null || v.away === null || v.home === undefined || v.away === undefined) continue;
+    if (r.key === "distance_km" && groups.some(([, rows]) => rows.some(([l]) => l === "Distance (km)"))) continue;
+    const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+    if (!v.confident) unsure.add(label);
+    groups.find(([g]) => g === r.group)?.[1].push([label, round1(v.home), round1(v.away)]);
+  }
   const covered = ts?.distance ? Math.round(100 * Math.min(ts.distance.home.coverage, ts.distance.away.coverage)) : null;
   $("stats-note").textContent = covered === null ? "From the footage shown, so far." : `From the footage shown, so far. Distance covers ${covered}% of the players' time.`;
   const row = ([label, h, a]: Row) => {
     const li = document.createElement("li");
     li.className = "stat-row";
-    li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
+    li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}${unsure.has(label) ? " (unsure)" : ""}`);
+    if (unsure.has(label)) li.classList.add("unsure");
     li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
     // The numbers tick up from what the row showed before (ticker.ts).
     const was = shownStats.get(label);
