@@ -105,6 +105,29 @@ def read_cards(path: Path) -> list[dict]:
     return sorted(cards, key=lambda c: c["t"])
 
 
+def read_team_stats(path: Path) -> dict:
+    """The MatchInsights bundle's `team_stats` (insight-scout, #269): each team's tracked distance
+    with how much of its players' time was tracked. Only measured rows go on: a team's km must come
+    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed)."""
+    body = json.loads(path.read_text())
+    stats = body.get("team_stats", body)
+    out: dict = {"from_footage": bool(stats.get("from_footage", True)), "bin_min": stats.get("bin_min")}
+    distance = stats.get("distance") or {}
+    for side in ("home", "away"):
+        d = distance.get(side)
+        if d is None:
+            raise SystemExit(f"{path}: team_stats.distance has no {side}")
+        km, coverage = d.get("km"), d.get("coverage")
+        sound_km = isinstance(km, (int, float)) and km >= 0
+        if not sound_km or not isinstance(coverage, (int, float)) or not 0 <= coverage <= 1:
+            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage from 0 to 1")
+    out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
+                       for side in ("home", "away")}
+    if "possession" in stats:
+        out["possession"] = {side: {"share": stats["possession"][side]["share"]} for side in ("home", "away")}
+    return out
+
+
 def teams_of(meta: dict) -> dict | None:
     """The home and away codes the clip was rendered with, or None for a clip without them."""
     params = meta.get("params", {})
@@ -352,6 +375,8 @@ async def run(args: argparse.Namespace) -> dict:
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
+        if args.team_stats:
+            body["team_stats"] = read_team_stats(args.team_stats)  # measured per-team facts (#269)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}
@@ -424,6 +449,9 @@ def parser() -> argparse.ArgumentParser:
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
     ap.add_argument("--cards", type=Path, default=None,
                     help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
+    ap.add_argument("--team-stats", type=Path, default=None,
+                    help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
+                         "with its coverage) go into match.json for the phone's Team Stats")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 

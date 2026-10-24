@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ninety.match import territory
@@ -50,3 +52,30 @@ def test_no_share_without_a_ball_in_either_half():
 def test_only_vision_s_tracked_ball():
     with pytest.raises(ValueError):
         territory.build(radar([(1.0, 80.0)], source="truth"), FPS)
+
+
+# --- the measured team facts e2e copies into match.json (insight-scout's team_stats, #269) ----------
+
+def test_team_stats_keep_distance_with_its_coverage_and_possession_only_when_written(tmp_path):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    path.write_text(json.dumps({"team_stats": {"from_footage": True, "bin_min": 5, "distance": {
+        "home": {"km": 41.3, "coverage": 0.93, "bins": []},
+        "away": {"km": 39.8, "coverage": 0.9, "bins": []}}}}))
+    stats = e2e.read_team_stats(path)
+    assert stats["distance"] == {"home": {"km": 41.3, "coverage": 0.93},
+                                 "away": {"km": 39.8, "coverage": 0.9}}
+    assert "possession" not in stats  # no gate passed, so no row
+
+
+@pytest.mark.parametrize("away", [{"km": 39.8}, {"km": -1, "coverage": 0.9},
+                                  {"km": 39.8, "coverage": 1.4}])
+def test_a_distance_without_a_sound_coverage_stops_the_bundle(tmp_path, away):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    home = {"km": 41.3, "coverage": 0.93}
+    path.write_text(json.dumps({"team_stats": {"distance": {"home": home, "away": away}}}))
+    with pytest.raises(SystemExit):
+        e2e.read_team_stats(path)

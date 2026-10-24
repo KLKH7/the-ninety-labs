@@ -1809,6 +1809,11 @@ function showMatch(t: number) {
 
 /** Match stats as mirrored bars (Apple Sports): the home value at the left edge, the away value at
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
+interface TeamStatsFacts {
+  from_footage: boolean;
+  distance?: Record<"home" | "away", { km: number; coverage: number }>;
+  possession?: Record<"home" | "away", { share: number }>;
+}
 const shownStats = new Map<string, [number, number]>();
 function renderStats(st: MatchData["stats"][number]) {
   const rows: [string, number, number][] = [
@@ -1817,6 +1822,13 @@ function renderStats(st: MatchData["stats"][number]) {
     ["Passes completed", st.home.passes_completed, st.away.passes_completed],
     ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
   ];
+  // Measured per-team facts when the bundle has them (match.json team_stats, #269): possession only
+  // if its gate passed; distance with how much of the players' time was tracked.
+  const ts = (state.match as (MatchData & { team_stats?: TeamStatsFacts }) | null)?.team_stats;
+  if (ts?.possession) rows.unshift(["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)]);
+  if (ts?.distance) rows.push(["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]);
+  const covered = ts?.distance ? Math.round(100 * Math.min(ts.distance.home.coverage, ts.distance.away.coverage)) : null;
+  $("stats-note").textContent = covered === null ? "From the footage shown, so far." : `From the footage shown, so far. Distance covers ${covered}% of the players' time.`;
   const items = rows
     .filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a))
     .map(([label, h, a]) => {
