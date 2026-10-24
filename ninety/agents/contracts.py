@@ -432,7 +432,8 @@ Step "plan": you get the QUESTION, the CLUBS, the MINUTE now and the TOOLS you m
 what it measures. Choose the one to three tools whose facts answer the question, and the minutes to
 look at (by default the last 15 minutes up to now). Reply with JSON only:
 {"tools": [{"name": "<tool>", "club": "<club name or null>", "minute_from": <int>, "minute_to": <int>}]}
-Reply {"tools": []} if no tool answers it.
+Reply {"tools": []} if no tool answers it. Write that one object and stop: the facts come in the next
+message, so never write the answer step, or any fact, yourself.
 
 Step "answer": you get the QUESTION and the FACTS the tools returned, computed by code, the only
 evidence you may use. Answer in ONE or TWO short sentences, warm and plain, as a friend who knows
@@ -446,13 +447,17 @@ Rules:
 - Only state what the facts show. Every number you write must be a cited fact's value or one of its
   "also" numbers, written with its unit (4 opponents, 3 players, 2.5 seconds), or its minute. Never
   estimate, round differently, add up or compute a new number. Never state a radius or a threshold.
+- Write a stretch of the match as "from minute 6 to minute 21" and a moment as "in minute 19", the
+  fact's own minutes; never "between minutes" or "around minute".
+- Use the fact's own words for what happened (lost the ball, won it back, took out, had no open
+  teammate); a phrase of your own about how well a team did is not checked and will not air.
 - Name each team by its club name exactly as given (London Athletic). Never write home, away, a colour or
   an id. Name a player only as the fact's passer_is or receiver_is gives him.
 - A fact whose confident is false cannot be stated: leave it out.
 - Words about a team's shape (back line, high line, width, compact, behind or ahead of the ball)
   need a shape fact; for pass options say "further forward".
 - If the facts do not answer the question, reply {"text": "", "evidence": []}.
-- Reply with JSON only: {"text": "<sentence>", "evidence": ["<fact id>", ...]}"""
+- Reply with one JSON object only: {"text": "<sentence>", "evidence": ["<fact id>", ...]}"""
 
 
 # ---------------------------------------------------------------------------------------------
