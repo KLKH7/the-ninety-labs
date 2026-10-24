@@ -73,7 +73,7 @@ async def model_plans(questions: list[dict], ask) -> tuple[list, list[float]]:
         try:
             reply = await ask(cm.plan_prompt(question, _Clubs(names)))
             ms.append((time.perf_counter() - t0) * 1000)
-            body = json.loads(reply[reply.index("{") : reply.rindex("}") + 1])
+            body = cm.first_object(reply)  # the plan only, as the service reads it
             out.append((q, [c["name"] for c in cm._calls(body, _Clubs(names), q["minute"])]))
         except Exception:  # noqa: BLE001  an outage or malformed reply: not answered, counted apart
             out.append((q, None))

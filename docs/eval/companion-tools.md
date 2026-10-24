@@ -14,3 +14,12 @@ Wrong:
 - "Should Quarrydale have played it forward there?": labelled pass_options, chose none
 - "Who plays on the right wing for Quarrydale?": labelled lineup, chose ['style']
 - "Which Kestwood player is the holding midfielder?": labelled lineup, chose none
+
+## The published match Companion (live)
+
+- Tool choice: **10/10** right (1.0); 22 not answered by the service (counted apart, lesson 131).
+- By tool: None 4/4, counter_press 1/1, line_breaks 2/2, overloads 1/1, pass_options 2/2
+- Plan latency: {'p50_ms': 1595.6, 'p95_ms': 2521.9, 'n': 32}; answer end to end (plan, tools, answer, check, Judge): {'p50_ms': 1786.1, 'p95_ms': 3298.7, 'n': 32}.
+- How answers ended on the stand-in match: {'code:verified': 24, 'code:unanswerable': 8} (code: the model's draft was refused or failed, and code's checked answer was shown).
+- The agents, as pinned: {'ninety-companion-match': {'definition_sha': '750fea34984653b6', 'version': '2'}, 'ninety-judge': {'definition_sha': '2b04c8ad1ac3c950', 'version': '4'}}.
+- Cost (estimated): {'model': 'gpt-4.1-mini', 'prices_read': '2026-10-19', 'calls': 65, 'input_tokens': 22336, 'output_tokens': 6470, 'usd_estimate': '0.0193', 'how': 'tokens at 4 characters a token (latency_cost.tokens); each Judge call adds its instructions and a reply at the sizes in companion_tools'}.

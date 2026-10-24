@@ -2721,3 +2721,18 @@ short and actionable. This file is public: no research sources, product names or
     two team codes. The rename to LON and LIS changes the scorebug text in every render with
     graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
     codes in their params, so re-rendering one differs in the scorebug only.
+
+### 238. A model's reply is read as the first object it writes, and the live eval keeps what it parsed
+- **What happened:** the published match Companion (v2) answered a plan step with the plan and then
+  kept going: an "answer" step of its own, with facts and fact ids it made up, in the same reply. The
+  plan parser took everything from the first `{` to the last `}`, which is not one JSON object, so
+  every such plan failed. In the first live run (40066697726) 22 of 32 plans were unparseable and 27
+  of 32 answers fell back to code's checked answer. The fan saw only verified text, and the stand-in
+  tests passed, because every scripted reply was exactly one object.
+- **Rule:** a model's plan is the first JSON object in its reply (`companion_match.first_object`), and
+  nothing after it is read, so the made-up facts never reach the tools. The eval reads plans through
+  the same function as the service. A scripted reply in a test includes what the live model actually
+  sent, not only the ideal shape.
+- **Check:** `tests/test_companion_match.py::test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only`
+  and `::test_the_eval_reads_a_plan_as_the_service_does` fail when the parse goes back to first `{` to
+  last `}`.
