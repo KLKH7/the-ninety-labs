@@ -43,7 +43,9 @@ def test_a_set_piece_from_the_last_restarts_spot_with_no_stoppage_is_that_restar
 
 def test_the_kind_rule_agrees_with_the_engine_on_every_restart_of_a_match(monkeypatch):
     """The rule reads only the answer key; the engine knows each restart's kind. Every restart of
-    eight minutes of training seed 7 must be read as the engine gave it."""
+    eight minutes of training seed 7 must be read as the engine gave it. Which kinds a stretch of
+    match holds is the seed's draw (at 65247ba: 4 throw-ins, a free kick and the kick-off), so each
+    kind is also built on purpose below."""
     given, kinds = [], []
     stop, emit = eng.Engine.stop, eng.Engine.emit
 
@@ -59,9 +61,66 @@ def test_the_kind_rule_agrees_with_the_engine_on_every_restart_of_a_match(monkey
     monkeypatch.setattr(eng.Engine, "stop", record_stop)
     monkeypatch.setattr(eng.Engine, "emit", record_emit)
     match = simulate(7, 8)
-    read = [r["kind"] for r in sp.restarts(match.events)]
-    assert len(set(kinds)) >= 4, f"too few kinds of restart to test the rule: {sorted(set(kinds))}"
-    assert read == kinds
+    assert len(kinds) >= 3
+    assert [r["kind"] for r in sp.restarts(match.events)] == kinds
+
+
+def _restart_from(setup) -> tuple[str, str]:
+    """(the engine's kind, the rule's) for the first set piece after `setup` changes a match just
+    kicked off (seed 3, the scenes of tests/test_fouls.py)."""
+    e = eng.Engine(3)
+    e.kickoff("home", setup=True)
+    e.restart = None
+    given = []
+    stop = e.stop
+
+    def record(kind, *a, **kw):
+        given.append(kind)
+        return stop(kind, *a, **kw)
+
+    e.stop = record
+    setup(e)
+    for _ in range(200 * FPS):  # a penalty waits 100 to 140 s (RESTART_DELAY_S)
+        e.step()
+        if any(x["type"] == "set_piece" for x in e.match.events):
+            break
+    return given[-1], sp.restarts(e.match.events)[-1]["kind"]
+
+
+def _rolling(x, y, vx, vy, toucher):
+    def setup(e):
+        e.possessor = e.kicked = e.dribbler = None
+        e.ball = (x, y, 0.0, vx, vy, 0.0)
+        e.last_touch = toucher
+    return setup
+
+
+def _lunge(at_x, ball_x):
+    """a4 lunges into h9 at (at_x, 34), the ball 2.4 m beyond him; everyone else far off."""
+    def setup(e):
+        dfd, att = e.by_id["a4"], e.by_id["h9"]
+        for p in e.players:
+            p.vx = p.vy = 0.0
+            if p not in (att, dfd):
+                p.x, p.y = (2.0, 2.0) if p.team == "home" else (103.0, 66.0)
+        dfd.x, dfd.y, att.x, att.y = at_x, 34.0, at_x + 0.6, 34.0
+        e.possessor = None
+        e.ball = (ball_x, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.lunges[dfd.id] = e.t
+        e.lunge_at[dfd.id] = att.id
+        e.duels()
+    return setup
+
+
+@pytest.mark.parametrize("kind, setup", [
+    ("goal_kick", _rolling(104.6, 30.0, 6.0, 0.0, "h9")),  # home attacks x = 105 and put it out
+    ("corner", _rolling(104.6, 30.0, 6.0, 0.0, "a4")),     # the defending side put it out
+    ("throw_in", _rolling(50.0, 67.6, 0.0, 6.0, "h9")),
+    ("penalty_kick", _lunge(95.0, 98.0)),                  # a foul in the away side's own box
+    ("free_kick", _lunge(60.0, 61.0)),
+])
+def test_the_kind_rule_reads_each_kind_of_restart_as_the_engine_gives_it(kind, setup):
+    assert _restart_from(setup) == (kind, kind)
 
 
 def test_an_offence_while_the_ball_is_out_does_not_change_the_restart_or_where_the_window_starts():
