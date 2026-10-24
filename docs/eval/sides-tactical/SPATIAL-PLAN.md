@@ -98,3 +98,8 @@ worse than a coin (0.433). G's 0.003 gain is therefore evidence working against 
 it adds a wrong track above the gate (12 of 13 right there, against S's 6 of 6). The rule did not
 foresee a sign check; this is put to the Coordinator, not decided here. Until then the live path
 keeps S.
+
+**Decision (Coordinator, Oct 24): G is measured and not adopted; S stays.** Reasons: the transfers
+are sparse (93 over 23 clips); the graph's weight came out against the premise the plan registered,
+so the evidence does not support the model; and G's top bin puts a wrong track above the 0.96 gate
+(12 of 13 right), which matters more than its +0.003 accuracy. No further sides work before the freeze.
