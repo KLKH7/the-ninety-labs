@@ -39,6 +39,7 @@ class MatchInsights:
     minutes: int
     gates: dict = field(default_factory=dict)
     team_stats: dict = field(default_factory=dict)  # the phone's match stats (ninety/intel/team_stats.py)
+    stats: dict = field(default_factory=dict)  # the Stats tab's grouped rows (ninety/intel/stats_table.py)
 
     @classmethod
     def build(
@@ -111,9 +112,11 @@ class MatchInsights:
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
-        return cls(
-            clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames)
-        )
+        mi = cls(clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames))
+        from ninety.intel.stats_table import stats_table
+
+        mi.stats = stats_table(mi)  # the phone's Stats tab, from the same tools the Companion reads
+        return mi
 
     # -- what the tools answer -------------------------------------------------------------
 
@@ -335,6 +338,7 @@ class MatchInsights:
             "gates": self.gates,
             "people": self.people,
             "team_stats": self.team_stats,
+            "stats": self.stats,
             "facts": self.facts,
         }
 
@@ -349,6 +353,7 @@ class MatchInsights:
             int(body["minutes"]),
             dict(body.get("gates") or {}),
             dict(body.get("team_stats") or {}),
+            dict(body.get("stats") or {}),
         )
 
 
