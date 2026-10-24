@@ -180,7 +180,7 @@ def _minute_now(t: float) -> int:
 def first_object(reply: str) -> object:
     """The first JSON object in a model's reply, and nothing after it. The published Companion
     answers a plan with the plan and then goes on to write an "answer" step of its own, with facts
-    it made up (lesson 236): only the plan is read, so nothing it invented reaches the tools."""
+    it made up (lesson 238): only the plan is read, so nothing it invented reaches the tools."""
     return json.JSONDecoder().raw_decode(reply[reply.index("{") :])[0]
 
 

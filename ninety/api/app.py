@@ -51,10 +51,15 @@ REPLAY_DIR = Path(os.environ.get("NINETY_REPLAY_DIR") or ROOT / "runs" / "replay
 
 # Same origin only: the viewer loads its scripts, styles, bundle and video from this host and
 # nothing else, so `?bundle=` cannot point it at another site, and no page may frame it.
+CSP = (b"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+       b"object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+# The phone's view layer (Ionic web components, web/phone/src/ionic.ts) styles its scoped components
+# with <style> elements it writes at run time, which `default-src 'self'` refuses, leaving lists and
+# headers unstyled. The phone's pages alone may apply inline styles; scripts stay 'self' only, and
+# nothing a viewer types is ever put into the page as markup (main.ts writes text, never HTML).
+PHONE_CSP = CSP + b"; style-src 'self' 'unsafe-inline'"
 SECURITY_HEADERS = [
-    (b"content-security-policy",
-     b"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
-     b"object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+    (b"content-security-policy", CSP),
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"no-referrer"),
     (b"cross-origin-opener-policy", b"same-origin"),
@@ -122,6 +127,7 @@ class SecurityHeaders:
             await self.app(scope, receive, send)
             return
         path = scope["path"]
+        phone = path == "/phone" or path.startswith("/phone/")
         if path.startswith(("/assets/", "/phone/assets/")):
             cache = b"public, max-age=31536000, immutable"  # Vite names them by content hash
         elif path.startswith("/bundle/"):
@@ -132,7 +138,9 @@ class SecurityHeaders:
         async def with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = [h for h in message.get("headers", []) if h[0].lower() != b"cache-control"]
-                message["headers"] = [*headers, *SECURITY_HEADERS, (b"cache-control", cache)]
+                csp = PHONE_CSP if phone else CSP
+                security = [(k, csp if k == b"content-security-policy" else v) for k, v in SECURITY_HEADERS]
+                message["headers"] = [*headers, *security, (b"cache-control", cache)]
             await send(message)
 
         await self.app(scope, receive, with_headers)

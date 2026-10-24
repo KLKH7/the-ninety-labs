@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> None:
             "spent). "
         )
         + "The router's word lists and the questions were written by the same author, and the position "
-        "words that send a who-plays question to the team sheet (lesson 237) were added after the first "
+        "words that send a who-plays question to the team sheet (lesson 239) were added after the first "
         "live run's misses on these questions were read: the lineup rows are no longer held out.",
         "",
         f"- Code router: **{c['right']}/{c['answered']}** right ({c['accuracy']}).",
