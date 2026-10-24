@@ -71,6 +71,19 @@ def test_a_match_shorter_than_a_half_is_unchanged(monkeypatch):
     assert e.match.events == f.match.events and e.frame == f.frame
 
 
+def test_the_end_of_the_half_is_in_the_truth(short_half):
+    """Lesson 213: the whistle is a half_time event at its frame, the team that kicks off the
+    second half its team, and it meets the event schema."""
+    from ninety.agents.contracts import schema_validator
+    e = Engine(7)
+    e.kickoff("home", setup=True)
+    play(e, HALF + 1.0)
+    ends = [ev for ev in e.match.events if ev["type"] == "half_time"]
+    assert len(ends) == 1 and ends[0]["team"] == "away"
+    assert ends[0]["t"] == pytest.approx(e.half_time_at, abs=0.01)
+    schema_validator("match_event").validate(ends[0])
+
+
 def test_a_pass_on_its_way_at_the_whistle_ends_there(monkeypatch):
     """The whistle stops a pass that had not arrived, as at a foul (end_kick): its end point is
     where the ball was at the whistle, and it has an outcome. A real pass: the half is set to end

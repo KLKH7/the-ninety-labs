@@ -1,0 +1,50 @@
+{
+ "voice": "en-GB-OllieMultilingualNeural",
+ "format": "audio-24khz-48kbitrate-mono-mp3",
+ "measured": "2026-10-23",
+ "build": {
+  "bundle": {
+   "voice": "en-GB-OllieMultilingualNeural",
+   "lines": 2,
+   "failed": 0,
+   "cached": 0,
+   "synth_requests": 2,
+   "synth_chars": 112,
+   "synth_p50_s": 0.639,
+   "synth_p95_s": 0.639,
+   "bytes": 72720,
+   "chars_total": 112,
+   "usd_at_s1": 0.0017
+  },
+  "lines": {
+   "voice": "en-GB-OllieMultilingualNeural",
+   "lines": 20,
+   "failed": 0,
+   "cached": 0,
+   "synth_requests": 20,
+   "synth_chars": 1219,
+   "synth_p50_s": 0.542,
+   "synth_p95_s": 0.851,
+   "bytes": 514944,
+   "chars_total": 1219,
+   "usd_at_s1": 0.0183
+  }
+ },
+ "live": {
+  "first_request_s": 2.353,
+  "after_sign_in": {
+   "n": 9,
+   "p50_s": 0.441,
+   "p95_s": 0.763,
+   "max_s": 0.763
+  },
+  "speech_request": {
+   "n": 9,
+   "p50_s": 0.441,
+   "p95_s": 0.763,
+   "max_s": 0.763
+  },
+  "chars": 704
+ },
+ "usd_per_char_s1": 1.5e-05
+}
