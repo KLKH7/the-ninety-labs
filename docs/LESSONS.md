@@ -2815,8 +2815,9 @@ short and actionable. This file is public: no research sources, product names or
 
   Name precision fell from 0.999 to 0.939–0.975, and with full tracking team distance read
   0.967–1.204 of the truth, not "within a few percent". A step rule fixed before measuring found no
-  step that tames the error, so the phone now labels the distance with its measured worst on a
-  held-out match (±15%). Two report texts were fixed strings: the
+  step that tames the error, so the phone now labels the distance with its measured worst over
+  every freeze match graded (±21%, the demo's own match; one held-out match alone gave ±15%, narrower
+  than the demo's, caught in review). Two report texts were fixed strings: the
   roles report named runs/u7 whatever it ran on, and the team-distance report kept its "few
   percent". Both stayed true-sounding after the numbers changed.
 - **Rule:** an evaluation quoted in the docs runs on a match simulated at the engine the demo uses,

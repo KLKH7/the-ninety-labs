@@ -300,9 +300,20 @@ def check(
                 reasons.append(
                     f"{f['name']} is the {f['position']} on the team sheet, not the {other['position']}"
                 )
-    for name in sorted(set(sheet_names)):
-        if re.search(rf"\b{re.escape(name)}\b\s+(?:and|to|with)\s+\b{re.escape(name)}\b", claim.text):
-            reasons.append(f"{name} is said as two players")
+    # A fact about two players (a one-two, a pass) said with one of them twice and the other never:
+    # whatever joins the two mentions ("X and X", "X played it to X and back").
+    for f in cited:
+        a, b = f.get("passer"), f.get("receiver")
+        if not a or not b or a == b:
+            continue
+        na, nb = (people.get(t, {}).get("name") or people.get(t, {}).get("sheet_name") for t in (a, b))
+        if not na or not nb or na == nb:
+            continue
+        for one, other in ((na, nb), (nb, na)):
+            if len(re.findall(rf"\b{re.escape(one)}\b", claim.text)) > 1 and not re.search(
+                rf"\b{re.escape(other)}\b", claim.text
+            ):
+                reasons.append(f"{one} is said as two players")
     said_names = {w["name"] for w in about if w.get("name")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):

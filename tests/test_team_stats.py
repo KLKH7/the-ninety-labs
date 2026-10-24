@@ -68,3 +68,20 @@ def test_the_phone_is_told_how_far_the_distance_may_be_off(tmp_path, monkeypatch
     assert stats_table._distance_label() == "Distance covered (tracked, ±15%)"
     monkeypatch.setattr(team_stats, "CALIBRATION", tmp_path / "none.json")
     assert team_stats.team_stats([])["within_pct"] is None
+
+
+def test_the_committed_label_is_the_worst_of_every_freeze_match_graded():
+    # The merge queue's review of #300: a label from one held-out match was narrower than the demo's.
+    import json
+    from pathlib import Path
+
+    from ninety.eval import team_distance_eval as e
+
+    report = json.loads((Path(__file__).parents[1] / "docs" / "eval" / "team-distance.json").read_text())
+    runs = report["runs"]
+    assert "f8076-65247ba3" in runs, "the demo's own match is graded"
+    assert all(name.endswith("-65247ba3") for name in runs), "every match is at the freeze engine"
+    for name, r in runs.items():
+        assert r["within_pct"] == e.label_pct(r["cases"]), name
+    assert report["within_pct"] == max(r["within_pct"] for r in runs.values())
+    assert team_stats.within_pct() == report["within_pct"]

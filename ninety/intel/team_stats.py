@@ -29,8 +29,9 @@ STEP_S = 1.0  # the stat's time scale, the tracked frames' smoothing (see the mo
 # (*design*: past that with the position error to spare) is a track jumping, not a player running.
 MAX_STEP_MPS = 12.0
 BIN_MIN = 5  # the phone's strips: one bar per five match minutes (*design*)
-# How far the tracked distance may sit from the truth, as the phone labels it ("±15%"): measured on a
-# held-out simulated match (ninety/eval/team_distance_eval.py --calibrate, docs/eval/team-distance.md).
+# How far the tracked distance may sit from the truth, as the phone labels it ("±21%"): the worst
+# five-minute bin over every freeze-engine match graded (ninety/eval/team_distance_eval.py --calibrate,
+# docs/eval/team-distance.md).
 CALIBRATION = Path(__file__).with_name("team_distance_calibration.json")
 
 

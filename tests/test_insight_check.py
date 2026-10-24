@@ -910,7 +910,8 @@ def test_one_name_said_as_both_players_of_a_one_two_is_refused():
     ok = f"In minute 2, {LB.name} and {rb.name} played a one-two."
     assert status_for(run(ok, [ONE_TWO["id"]], k, people)) == "verified"
     for bad in (f"In minute 2, {LB.name} and {LB.name} played a one-two.",
-                f"In minute 2, {rb.name} and {rb.name} played a one-two."):
+                f"In minute 2, {rb.name} and {rb.name} played a one-two.",
+                f"In minute 2, {LB.name} played it to {LB.name} and back in a one-two."):
         v = run(bad, [ONE_TWO["id"]], k, people)
         assert status_for(v) == "rejected" and any("said as two players" in r for r in v.reasons), bad
 
