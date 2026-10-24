@@ -1,5 +1,5 @@
 {
- "commit": "f227be9aed331b3a35e4f8c4ac52c2467e8cc281",
+ "commit": "c8b681cfeae77f2609dc5ff91824a2be5a3002d0",
  "seeds": [
   108,
   109,
@@ -29,37 +29,37 @@
  "matched_by_seed": {
   "108": 247,
   "109": 250,
-  "110": 192,
+  "110": 224,
   "112": 0,
   "113": 237,
   "114": 250,
-  "115": 146,
-  "116": 208,
-  "117": 203,
-  "118": 221,
-  "119": 245,
+  "115": 148,
+  "116": 210,
+  "117": 205,
+  "118": 231,
+  "119": 246,
   "120": 174,
-  "121": 233,
-  "122": 0,
+  "121": 235,
+  "122": 7,
   "2041": 228,
-  "2042": 55,
+  "2042": 109,
   "2043": 231,
   "2044": 224,
   "2045": 218,
   "3041": 231,
-  "3042": 215,
+  "3042": 216,
   "3043": 220,
-  "3044": 196,
+  "3044": 227,
   "3045": 201
  },
  "frames": {
-  "on_ground": 2880,
-  "near_goal": 554,
-  "near_centre": 995
+  "on_ground": 2964,
+  "near_goal": 607,
+  "near_centre": 1010
  },
  "pooled": "near_goal",
- "E_X": 0.095,
- "E_Y": 0.35,
- "E_C": 0.295,
- "observations": "the 24 clips' observations at PR #250's pitch.py (sha256 in docs/eval/band-broadcast-observations.sha256 on PR #270), re-gated with PR #270's HEIGHT_BAND (0.987, 1.099); ours-freeze detections on every frame"
+ "E_X": 0.093,
+ "E_Y": 0.355,
+ "E_C": 0.688,
+ "observations": "the 24 clips' observations at PR #250's pitch.py (sha256 in docs/eval/band-broadcast-v2-observations.sha256), re-gated with HEIGHT_BAND (0.966, 1.121) (PR #270); ours-freeze detections on every frame"
 }

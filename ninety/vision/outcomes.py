@@ -36,11 +36,11 @@ NET_DEPTH_M = 2.0  # the net as the renderer draws it (ninety/sim/engine.py, NET
 PENALTY_AREA_X = 16.5  # Law 1
 # The ball's position error, 95th percentile, measured on validation clips (shot-outcomes-plan.md):
 # along the pitch (E_X) and across it (E_Y) within 25 m of a goal line, on the ground; and its
-# distance error within 15 m of the centre spot (E_C). docs/eval/shot-outcomes.json: 554 frames near the
-# goals, 995 near the centre, on 24 validation clips (the across error is larger: it is depth to the gantry).
-E_X = 0.095
-E_Y = 0.35
-E_C = 0.295
+# distance error within 15 m of the centre spot (E_C). docs/eval/shot-outcomes.json: 607 frames near the
+# goals, 1,010 near the centre, on 24 validation clips (the across error is larger: it is depth to the gantry).
+E_X = 0.093
+E_Y = 0.355
+E_C = 0.688
 # Rule 3: frames in the net running, the out-of-play rule's count (events.OUT_FRAMES).
 IN_NET_FRAMES = 3
 # Rule 4 (design): of the players with a side, this share in their own half at the kick-off.
