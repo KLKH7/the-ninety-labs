@@ -134,3 +134,29 @@ baseline is therefore **today's main**: every "before" observation (one shot, fi
 unchanged fit) is re-judged with `observe --regate` on the merged code, and every "after" is judged
 by the same merged `place` and `agree`. The only difference between the two is the cut handling.
 The bar is unchanged.
+
+## Outcome
+
+### Validation clips rendered
+
+Rendered locally at `cca498c`: 108 to 119 (12 clips). 120 to 122 were not rendered: the laptop's
+load (a load average of 30 to 186 on 8 cores, from three tracks at once) made a render take 20 to
+40 minutes, and none of them can cut (`camera_cut` false), so they would only have added non-cut
+frames. Only **110 (3 cuts) and 111 (2 cuts)** cut inside their 10 seconds: 5 cuts on validation.
+112, 113, 115, 117, 118 and 119 may cut but do not within their window (113 and 112 stay on a second
+angle most of the clip). The test set's 900003 had not been looked at.
+
+### Step 1: the cut detector (`uv run python tools/choose.py` on the distances; 5 cuts, 2,983 non-cuts)
+
+| Candidate | Smallest at a cut | Largest at a non-cut | Separates | Best interval | Errors (missed, false) | Threshold |
+|---|---|---|---|---|---|---|
+| H1 colour histogram | 0.245 | 0.567 | no | 0.158 to 0.245 | 2 (0, 2) | 0.197 |
+| H2 the same, top third | 0.244 | 0.742 | no | 0.209 to 0.244 | 3 (0, 3) | 0.226 |
+| **T1 grey thumbnail 32 x 18 (adopted)** | 26.19 | 29.53 | no | 17.87 to 26.19 | **1 (0, 1)** | **21.634** |
+
+No candidate separates: the whip pan on 111 (frame 4485, behind the goal) changes the picture more
+than 111's first cut by every measure. By the plan, the candidate with the fewest errors is
+adopted: **T1 at 21.634 grey levels**, missing no cut on validation and finding one false cut, that
+whip pan. T1 was listed as a contrast, expected to suffer from pans; on these clips a pan moved it
+at most 17.9, which is why it won. Seeds 108, 109 and 112 to 119 have no detected cut, so their
+camera fit is exactly the one on main (`test_a_clip_without_a_cut_is_fitted_exactly_as_before`).
