@@ -56,3 +56,26 @@ same `T1-fused` observations, `sides_tactical`) gives **0.731** outfield accurac
 (`T1a-validation-r4stack.json`), where session D's run on their branch gave 0.681: the tracking and
 kit code differ between the two. S is judged against T1a **at this same commit**, 0.731: the rule's
 intent, the same clips through the same code. The cause of the difference is not chased here.
+
+### Oct 24 (the commit time), after S was adopted and before any number of G: variant G, the possession graph
+
+The Coordinator asked for a third, independent source: the links between players that play makes.
+A detected pass's outcome cannot be used, since events call a pass completed exactly when passer and
+receiver share a side, which would feed the sides back to themselves. The source used is the ball
+going **from one player's possession spell to the next player's** (`events.spells`, consecutive
+spells of two different tracks with no cut between them, as `events.detect` reads a pass): most such
+transfers are completed passes (GROUNDING R3: completion 75 to 88%), whatever the kits say, so each
+is evidence that the two are team-mates. Duels are not detected and are not used.
+
+**The graph evidence of a track:** the mean, over its transfers (to or from it, each counted once), of
+`2 p_u - 1`, where `p_u` is the other track's S probability of being home (from S's leave-one-clip-out
+weights, never its own clip's fit); 0 with no transfer.
+
+**Variant G:** `logistic(w0 + w1 kit + w2 depth + w3 kickoff + w4 graph)`, fitted as S (maximum
+likelihood, track frames as weights, leave one clip out). **Each source alone** is also fitted and
+reported the same way (kit; depth and kick-off together, the spatial prior; graph), and the fusion.
+
+**Decision (fixed now):** G replaces S if its leave-one-clip-out outfield accuracy is at least S's
+(0.750) and its calibration error is at most 0.05. Reported beside it, for the gate: the number of
+tracks at or above 0.96 and their accuracy, against S's 6 tracks at 1.0. Keepers and referees keep
+their own handling (kit and position outliers, `assign_teams`). The 0.96 gate is not moved.
