@@ -309,8 +309,10 @@ def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browse
     assert first.locator(".story-body > figure canvas").count() == 1
     first.locator(".how").click()
     # The Scout's precomputed, fact-checked "why it matters" is in the sheet: no question is sent.
-    page.locator("#how-body").get_by_text("Why it matters").wait_for()
-    assert cards[0]["why"]["answer"]["text"] in page.inner_text("#how-body")
+    page.locator("#how-body .stepper").wait_for()
+    assert cards[0]["why"]["answer"]["text"] in page.inner_text("#how-body")  # why it matters, first
+    assert page.inner_text("#how-body .count-line") == "3 checks · all passed"
+    assert page.locator("#how-body .step").count() == 3
     assert not [u for u in requests if "/api/ask" in u]
     assert not errors
 
@@ -471,4 +473,36 @@ def test_live_is_band_and_pitch_and_the_player_list_appears_when_focus_reaches_i
     assert box["width"] > 100 and box["height"] > 40, box  # and the rows are there, in place
     page.click(".speak >> nth=0")  # one control: read aloud, and describe the play as it happens
     assert page.is_checked("#now-live")
+    assert not errors
+
+
+
+def test_an_answer_headline_reads_naturally_from_its_own_numbers(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    answer = ask(page, "Where are Oakfield overloading?")
+    answers = [p for p in page.evaluate("window.ninetyPhone.seen") if p.get("type") == "answer"]
+    visual = answers[-1]["answer"]["visual"]
+    g = visual["geometry"]
+    n, m = len(g[visual["team"]]), len(g["away" if visual["team"] == "home" else "home"])
+    assert answer.locator(".figure").inner_text() == f"{n} v {m} round the ball"
+    assert not errors
+
+
+def test_the_var_check_puts_the_margin_on_a_scale_and_never_calls_inside_the_band(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False)
+    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "Oakfield", "kind": "offside"}
+
+    def var(geometry):
+        page.evaluate("v => window.ninetyPhone.how(v)", {**base, "geometry": geometry})
+        page.wait_for_function("document.querySelector('#how-title').textContent === 'VAR check'")
+        return page.inner_text("#how-body")
+
+    said = var({**OFFSIDE, "verdict": "too_close", "margin_m": 0.4})
+    assert "Too close to call from the cameras" in said and "Offside," not in said
+    label = page.get_attribute("#how-body .margin-scale", "aria-label")
+    assert label.startswith("0.40 metres ahead") and "within 1.78 metres" in label
+    page.click("#close-how")
+    said = var({**OFFSIDE, "verdict": "unsure"})
+    assert "a defender was out of the cameras' view" in said
+    assert page.locator("#how-body .margin-scale").count() == 0  # no margin to put on a scale
     assert not errors

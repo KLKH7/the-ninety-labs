@@ -182,3 +182,25 @@ ion-footer.composer > :not(.footer-background) { position: relative; z-index: 1;
 @media (min-width: 700px) {
   .roster-row { grid-template-columns: repeat(11, minmax(0, 1fr)); }
 }
+
+/* Every scroll view clears the floating tab bar (64 + 8 + the safe area) and a little air. */
+ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bottom) + 24px); }
+
+/* How we know: a count line, then a connected stepper (each check a circle on a 1 px line). */
+.how-body { padding: 0 16px 40px; }
+.said.lead { margin: 12px 0 0; font-size: 17px; }
+.count-line { margin: 20px 0 8px; font-size: 13px; color: var(--text-2); }
+.stepper { list-style: none; margin: 0; padding: 0; }
+.step { position: relative; display: grid; grid-template-columns: 20px 1fr; gap: 12px; padding-bottom: 24px; }
+.step:not(:last-child)::before { content: ""; position: absolute; left: 9.5px; top: 22px; bottom: 0; width: 1px; background: var(--hairline); }
+.step-dot { width: 20px; height: 20px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.step-body h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+.step-body .fine { margin-top: 6px; }
+
+/* VAR check: the margin on a scale, the no-call band shaded */
+.margin-scale { position: relative; height: 28px; margin: 16px 0 4px; }
+.margin-scale::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--hairline); }
+.band-zone { position: absolute; top: 6px; height: 16px; background: var(--surface); border-radius: 4px; }
+.zero { position: absolute; left: 50%; top: 4px; width: 1px; height: 20px; background: var(--text-2); }
+.mark { position: absolute; top: 6px; width: 16px; height: 16px; margin-left: -8px; border-radius: 8px; background: var(--text); border: 2px solid var(--bg); }
+.scale-labels { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); }

@@ -141,6 +141,31 @@ export function drawable(v: Visual | null | undefined): v is Visual {
 }
 
 /** The headline a picture carries, from its own numbers: "4v2", "6 bypassed". */
+/** An answer's headline, one natural phrase per kind, from the picture's own numbers. */
+export function title(v: Visual): string {
+  const s = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  switch (v.kind) {
+    case "overload":
+      return `${v.count!.for} v ${v.count!.against} round the ball`;
+    case "line_break":
+      return `${s(v.bypassed!, "defender", "defenders")} taken out`;
+    case "pass_options":
+      return `${s(v.players.filter((p) => p.role === "open").length, "teammate", "teammates")} free`;
+    case "counter_press":
+      return `${s(v.players.filter((p) => p.role === "presser").length, "player", "players")} pressing the ball`;
+    case "counter":
+      return `${v.seconds!.toFixed(0)} seconds from winning it to a shot`;
+    case "one_two":
+      return "A one-two";
+    case "shape":
+      return `${teams[v.team]}'s shape`;
+    case "wind":
+      return "How the teams moved";
+    default:
+      return headline(v);
+  }
+}
+
 export function headline(v: Visual): string {
   if (v.kind === "overload" && v.count) return `${v.count.for} v ${v.count.against}`;
   if (v.kind === "line_break" && finite(v.bypassed)) return `${v.bypassed} bypassed`;
@@ -231,14 +256,14 @@ function arrow(v: View, from: { x: number; y: number }, to: { x: number; y: numb
 function pill(v: View, text: string, x: number, y: number, color: string) {
   void color;
   const { ctx } = v;
-  ctx.font = "600 15px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
-  const w = ctx.measureText(text).width + 16;
-  const h = 24;
+  ctx.font = "500 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+  const w = ctx.measureText(text).width + 14;
+  const h = 22;
   const left = Math.max(4, Math.min(v.w - w - 4, x - w / 2));
   const top = Math.max(4, Math.min(v.h - h - 4, y - h / 2));
-  ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
   ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 12);
+  ctx.roundRect(left, top, w, h, 11);
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";

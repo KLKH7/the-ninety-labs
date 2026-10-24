@@ -32,7 +32,7 @@ import {
   team,
   teams,
 } from "./types";
-import { describeVisual, drawVisual, drawable, fromScout, headline } from "./visual";
+import { describeVisual, drawVisual, drawable, fromScout, headline, title } from "./visual";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -115,6 +115,8 @@ function screenOf(x: number, y: number): [number, number] {
     const v = fromScout(sv, t);
     return !!v && drawable(v);
   },
+  // The How we know / VAR check sheet for a visual, as a card's chip opens it.
+  how: (visual: ScoutVisual) => openHow({ t: visual.t ?? 0, visual, source: "code", evidence: [visual.fact] }),
   // A picture built as an answer's would be, for previews and screenshots.
   picture: (sv: ScoutVisual, t: number | null = null) => picture(sv, t),
   // What a drawable visual's headline and words say, from its own data.
@@ -583,7 +585,16 @@ function announce(text: string) {
   if (speaking && "speechSynthesis" in window) {
     speechSynthesis.cancel();
     speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    lockScreen(text);
   }
+}
+
+/** The latest line on the lock screen while read-aloud plays, where the browser shows its Now
+ * Playing card (Media Session). A web page cannot post a Live Activity; this is the nearest it gets. */
+function lockScreen(text: string) {
+  if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  const score = state.match ? `${teams.home} ${$("score-home").textContent}–${$("score-away").textContent} ${teams.away}` : `${teams.home} v ${teams.away}`;
+  navigator.mediaSession.metadata = new MediaMetadata({ title: text, artist: `${score} · ${clock(laptop.time())}`, album: "Ninety" });
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
   b.addEventListener("click", () => {
@@ -878,11 +889,16 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   else if (a.status === "held") body.textContent = "Still being checked, so not shown yet.";
   else if (a.status === "rejected") body.textContent = "The fact-checker turned that answer down, so there's nothing to show.";
   else body.textContent = named(a.text, a.names) || "I can't answer that one. Try a player's speed, an overload or a team's shape.";
-  if (a && a.status === "verified" && a.value !== null) {
-    const big = document.createElement("p");
-    big.className = "figure";
-    big.textContent = `${a.value} ${a.unit ?? ""}`.trim();
-    bubble.append(big);
+  if (a && a.status === "verified") {
+    // The headline: a natural phrase for a picture's kind ("1 v 2 round the ball"), else the figure.
+    const v = a.visual ? fromScout(a.visual, a.t_to) : null;
+    const line = v && drawable(v) ? title(v) : a.value !== null ? `${a.value} ${a.unit ?? ""}`.trim() : "";
+    if (line) {
+      const big = document.createElement("p");
+      big.className = "figure";
+      big.textContent = line;
+      bubble.append(big);
+    }
   }
   bubble.append(body);
   // Who answered, said quietly: "Fact-checked" only when the Judge read it (badgeFor).
@@ -1121,39 +1137,79 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
   return found;
 }
 
+/** The VAR check's margin, on a scale either side of the line: the shaded band is where the Scout
+ * makes no call, within two tracking errors (CALL_M, the Insight Scout's rule, PR #266). */
+const CALL_M = 1.78;
+const SCALE_M = 3; // design: the scale's half-width, past the band with room for a clear call
+function marginScale(v: ScoutVisual): HTMLElement | null {
+  const g = v.geometry;
+  if (g.verdict === "unsure" || g.verdict === "restart" || typeof g.margin_m !== "number") return null;
+  // Offside is ahead of the line (+), onside behind it (-); too close sits inside the band.
+  const signed = g.verdict === "onside" ? -g.margin_m : g.margin_m;
+  const at = (m: number) => `${(50 + (50 * Math.max(-SCALE_M, Math.min(SCALE_M, m))) / SCALE_M).toFixed(1)}%`;
+  const scale = document.createElement("div");
+  scale.className = "margin-scale";
+  scale.setAttribute("role", "img");
+  scale.setAttribute("aria-label", `${Math.abs(signed).toFixed(2)} metres ${signed >= 0 ? "ahead of" : "behind"} the second-last defender; within ${CALL_M} metres we don't call it.`);
+  const band = document.createElement("span");
+  band.className = "band-zone";
+  band.style.left = at(-CALL_M);
+  band.style.right = `calc(100% - ${at(CALL_M)})`;
+  const line = document.createElement("span");
+  line.className = "zero";
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  mark.style.left = at(signed);
+  const labels = document.createElement("div");
+  labels.className = "scale-labels";
+  labels.innerHTML = "<span>Onside</span><span>Too close</span><span>Offside</span>"; // fixed words, no data
+  scale.append(band, line, mark);
+  const wrap = document.createElement("div");
+  wrap.append(scale, labels);
+  return wrap;
+}
+
 async function openHow(h: How) {
   const body = $("how-body");
-  const section = (title: string, ...children: HTMLElement[]) => {
-    const list = document.createElement("ion-list");
-    list.setAttribute("inset", "");
-    const head = document.createElement("ion-list-header");
-    const label = document.createElement("ion-label");
-    label.className = "caps";
-    label.textContent = title;
-    head.append(label);
-    const pad = document.createElement("div");
-    pad.className = "pad-in";
-    pad.append(...children);
-    list.append(head, pad);
-    return list;
-  };
   const p = (text: string, cls = "fine") => {
     const el = document.createElement("p");
     el.className = cls;
     el.textContent = text;
     return el;
   };
-  const parts: HTMLElement[] = [];
+  // A stepper (as setup flows show progress): each check a circle on a line, a title, its evidence.
+  const step = (title: string, ...children: HTMLElement[]) => {
+    const li = document.createElement("li");
+    li.className = "step done";
+    const dot = document.createElement("span");
+    dot.className = "step-dot";
+    dot.setAttribute("aria-hidden", "true");
+    dot.textContent = "✓";
+    const box = document.createElement("div");
+    box.className = "step-body";
+    const h3 = document.createElement("h3");
+    h3.textContent = title;
+    box.append(h3, ...children);
+    li.append(dot, box);
+    return li;
+  };
+  const top: HTMLElement[] = [];
   $("how-title").textContent = isVar(h) ? "VAR check" : "How we know";
-  if (isVar(h) && h.visual) parts.push(section("The call", p(varVerdict(h.visual), "said"), picture(h.visual, h.t, h.names)));
-  if (h.why) parts.push(section("Why it matters", p(h.why.text, "said")));
+  if (isVar(h) && h.visual) {
+    top.push(p(varVerdict(h.visual), "said lead"));
+    const scale = marginScale(h.visual);
+    if (scale) top.push(scale);
+    top.push(picture(h.visual, h.t, h.names));
+  }
+  if (h.why) top.push(p(h.why.text, "said lead"));
+  const steps: HTMLElement[] = [];
   if (bundle) {
     const canvas = document.createElement("canvas");
     canvas.className = "seen";
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}.`);
     const caption = p(`The broadcast picture at ${clock(h.t)}.`);
-    parts.push(section("What the cameras saw", canvas, caption));
+    steps.push(step("What the cameras saw", canvas, caption));
     void drawSeen(canvas, h.t).then((found) => {
       const unsure = found.filter((d) => d.score < 0.8).length;
       const said = found.length
@@ -1162,15 +1218,20 @@ async function openHow(h: How) {
       caption.textContent = `${said} ${bundle!.manifest.detector ? `Detector: ${bundle!.manifest.detector}.` : ""}`.trim();
       canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ") || "nothing detected"}.`);
     });
-  } else parts.push(section("What the cameras saw", p("This phone has no footage from the big screen to show.")));
-  if (h.visual && !isVar(h)) parts.push(section("What was measured", picture(h.visual, h.t, h.names), p("From positions tracked in the video.")));
+  } else steps.push(step("What the cameras saw", p("This phone has no footage from the big screen to show.")));
+  if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), p("From positions tracked in the video.")));
+  else steps.push(step("What was measured", p("From positions tracked in the video.")));
   const checked =
     h.source === "model"
       ? "The Companion agent wrote the sentence. Code checked every number against the cited facts, and the Judge read it before it reached you."
       : "Code worked out every number and put it in a fixed sentence. No AI wrote it.";
   const rows = h.answer ? evidence(h.answer) : [p(`Facts cited: ${h.evidence.join(", ") || "none"}`, "fine ids")];
-  parts.push(section("What the fact-checker did", p(checked, "said"), ...rows));
-  body.replaceChildren(...parts);
+  steps.push(step("What the fact-checker did", p(checked, "said"), ...rows));
+  const count = p(`${steps.length} checks · all passed`, "count-line");
+  const list = document.createElement("ol");
+  list.className = "stepper";
+  list.append(...steps);
+  body.replaceChildren(...top, count, list);
   await howSheet.present();
   requestAnimationFrame(redrawPictures);
   $("how-title").focus();
