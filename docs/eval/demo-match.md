@@ -149,8 +149,35 @@ as the edit's chapters, never as something the system detected, and are never ha
 
 ## Result
 
-Filled in when the rule is applied at the final engine SHA:
-- the engine SHA;
-- the gate table for the top 5 and the chosen seed's score;
-- the segments, chapters and total minutes, and any adjustment;
-- the render checks of each segment.
+Applied on Oct 24 at engine `65247ba3` (the freeze: #275 and #276, half-time), unchanged, all 40
+seeds simulated through `runs/slot.sh` on two workers.
+
+**Seed 8076 wins with 69.9**: 4-1, both sides scored (contested). Goals 5 x 3 = 15, contested 4,
+saves 15 x 1 = 15, shots on target 20 x 1 = 20, set pieces 7 x 0.5 = 3.5, passing moves 62 x 0.2 =
+12.4. Pass completion 80.8%; football-sense mean rank 14.5 against the pool's bar of 20.79.
+
+**Gates:** 15 of 40 seeds pass all four. G1 contract 39 (seed 8074 fails P2: the away keeper
+accelerates at up to 23 m/s² over frames 78379 to 78383, about 52:15, an engine defect reported,
+not part of this rule); G2 completion 31; G3 football sense 20; G4 goals 35.
+
+| Seed | Score | Goals | On target | Saves | Set pieces | Moves | Completion | FS mean rank |
+|---|---:|---|---|---:|---:|---:|---:|---:|
+| 8076 | 69.9 | 4-1 | 14-6 | 15 | 7 | 62 | 80.8% | 14.5 |
+| 8069 | 65.7 | 3-0 | 9-7 | 13 | 15 | 81 | 87.5% | 17.1 |
+| 8085 | 60.1 | 3-0 | 7-7 | 11 | 13 | 78 | 87.6% | 15.3 |
+| 8080 | 59.5 | 4-1 | 10-3 | 8 | 9 | 75 | 83.2% | 19.7 |
+| 8053 | 59.1 | 3-0 | 11-3 | 11 | 13 | 73 | 85.8% | 20.5 |
+
+**The edit:** 17.0 minutes (1,022 s) in 40 segments, inside the target with no adjustment. Chapters:
+the five goals (11:24, 18:43, 21:39, 32:19, 40:01), 15 saves, shots, corners, a free kick, passing
+moves, the kick-off, 45:00 and the end. All five goals fall in the first half, so the second half of
+the edit is saves and chances. The segments, chapters and render commands are in
+[demo-match-8076.json](demo-match-8076.json).
+
+**Half-time at the freeze.** This rule was written when the engine had no half-time; at `65247ba3`
+the referee ends the first half (the `half_time` event, 2700.04 s here) and the second half kicks
+off 5.8 s later, still without a change of ends, so the rule's fixed directions hold. The always-in
+45:00 segment therefore shows the real whistle and the restart. The rule reads no `half_time` event
+beyond ending a passing move at it, as any other event does.
+
+**Render checks:** filled in when the segments are rendered.
