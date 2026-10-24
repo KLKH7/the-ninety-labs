@@ -16,6 +16,8 @@ EVENTS = [
     # Completed, but to a team-mate other than the one it was meant for.
     ev(6, "pass", receiver="h6", intended="h2", outcome="success", distance_m=35, ball_speed_kmh=60),
     ev(7, "tackle", receiver="a9", outcome=None),        # unresolved: did not win the ball either
+    # Short and slow, completed, but meant for someone else: no "cautious pass to h5".
+    ev(8, "pass", receiver="h5", intended="h3", outcome="success", distance_m=8, ball_speed_kmh=30),
     ev(2, "tackle", receiver="a7", outcome="fail"),     # lost the tackle: did not win the ball
     ev(3, "tackle", receiver="a8", outcome="success"),  # won it
     ev(4, "goal", player=None, outcome="goal"),         # no scorer named
@@ -41,7 +43,8 @@ def test_a_pass_is_said_to_go_to_its_receiver_only_when_he_was_the_one_meant(mon
         if case["true"] and (" to h" in text or "picks out" in text):
             (e,) = case["evidence"]
             assert e["intended"] in (None, e["receiver"]), text
-    assert [c for c in built(monkeypatch) if c["true"] and "e001" == c["evidence"][0]["id"]]
+    completed = [c["evidence"][0]["id"] for c in built(monkeypatch) if c["kind"] == "true: completed pass"]
+    assert completed == ["e001"]  # the one completed pass meant for its receiver
 
 
 def test_a_goal_without_a_scorer_gets_no_claim(monkeypatch):
