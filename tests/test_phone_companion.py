@@ -574,3 +574,21 @@ def test_the_territory_strip_is_match_json_s_and_rewinding_it_moves_the_whole_sc
     page.wait_for_function("document.querySelector('#to-live').hidden")
     page.wait_for_function("!document.querySelector('#status').textContent.startsWith('Rewound')")
     assert not errors
+
+
+def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.wait_for_selector("#shot-map:not([hidden])")
+    # The clip's one shot: home's, from (80, 34), saved. Home attacks x = 105, so it is 25 m out, central.
+    dot = page.locator("#shots circle.shot")
+    assert dot.count() == 1
+    assert dot.get_attribute("class") == "shot home on"
+    assert float(dot.get_attribute("cx")) == 34 and float(dot.get_attribute("cy")) == 25
+    assert "saved" in page.inner_text("#shot-list")
+    page.locator("#shot-filter ion-segment-button[value=away]").click()
+    page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
+    # Rewound to before the shot (61.2 s), there is none to show.
+    page.locator("#momentum-strip").focus()
+    page.keyboard.press("Home")
+    page.wait_for_selector("#shot-map", state="hidden")
+    assert not errors

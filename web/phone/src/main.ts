@@ -11,6 +11,7 @@ import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
+import * as shotMap from "./shots";
 import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
@@ -333,6 +334,7 @@ interface DetectedEvent {
   team?: string;
   x?: number;
   y?: number;
+  confidence?: number | null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
@@ -1504,6 +1506,7 @@ function showMatch(t: number) {
     })
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
+  renderShots(t);
   const st = statsAt(m, t);
   const key = JSON.stringify(st);
   if (key === statsKey) return;
@@ -1538,6 +1541,39 @@ function renderStats(st: MatchData["stats"][number]) {
     });
   $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
+}
+
+// --- the shot map: detected shots up to the clock, those the fact-checker would let through -----
+
+let shotFilter: "all" | "home" | "away" = "all";
+let shotsKey = "";
+$("shot-filter").addEventListener("ionChange", (e) => {
+  shotFilter = (e as CustomEvent<{ value: typeof shotFilter }>).detail.value;
+  shotsKey = "";
+  renderShots(viewTime());
+});
+
+function renderShots(t: number) {
+  const min = state.match?.min_confidence ?? 1;
+  const all: shotMap.Shot[] = [...bundleEvents.values()]
+    .filter((e) => e.type === "shot" && e.t <= t && (e.team === "home" || e.team === "away") && e.x !== undefined && e.y !== undefined && (e.confidence ?? 0) >= min)
+    .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null }));
+  $("shot-map").hidden = all.length === 0;
+  const shown = all.filter((s) => shotFilter === "all" || s.team === shotFilter);
+  const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
+  if (key === shotsKey) return;
+  shotsKey = key;
+  const svg = $("shots") as unknown as SVGSVGElement;
+  shotMap.draw(svg, shown);
+  const goals = shown.filter((s) => s.outcome === "goal").length;
+  svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
+  $("shot-list").replaceChildren(
+    ...shown.map((s) => {
+      const li = document.createElement("li");
+      li.textContent = `${momentum.minuteOf(s.t)}′ ${s.player ? playerName(s.player) : teams[s.team]}, ${shotMap.label(s.outcome)}, from the ${zoneFor(s.team, s.x, s.y)}`;
+      return li;
+    }),
+  );
 }
 
 // --- territory per 5 minutes, and rewinding the screen along it --------------------------------

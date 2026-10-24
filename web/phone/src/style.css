@@ -273,3 +273,16 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .strip-axis .ft-label { right: 0; }
 .next-bin { height: 3px; margin-top: 8px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
 .next-fill { height: 100%; background: var(--text-2); }
+
+/* Shot map (shots.ts): a half pitch, goal at the top, the same grass as the radar. */
+.half-pitch { display: block; width: 100%; aspect-ratio: 70 / 56.5; margin-top: 12px; border-radius: 12px; background: var(--pitch); box-shadow: 0 0 0 2px var(--pitch-edge) inset; }
+.half-pitch .turf { fill: var(--pitch); }
+.half-pitch .line { fill: none; stroke: var(--pitch-line); stroke-width: 0.3; }
+.half-pitch .spot { fill: var(--pitch-line); }
+.half-pitch .shot { stroke: #fff; stroke-width: 0.35; }
+.half-pitch .shot.home { fill: var(--home); }
+.half-pitch .shot.away { fill: var(--away); }
+.half-pitch .shot.on { stroke-width: 0.8; }
+.half-pitch .shot.off { fill: none; stroke-width: 0.45; }
+.half-pitch .shot.off.home { stroke: color-mix(in srgb, var(--home) 40%, #fff); }
+.half-pitch .shot.off.away { stroke: color-mix(in srgb, var(--away) 40%, #fff); }

@@ -113,6 +113,19 @@
                 <ul class="stat-rows" id="stat-rows"></ul>
                 <p class="fine">From the footage shown, so far.</p>
               </section>
+
+              <!-- Shot map: detected shots so far, both clubs toward one goal; only when there are any. -->
+              <section class="live-section" id="shot-map" aria-labelledby="shot-map-title" hidden>
+                <h2 class="section-title" id="shot-map-title">Shots</h2>
+                <ion-segment value="all" id="shot-filter" class="seg" aria-label="Whose shots">
+                  <ion-segment-button value="all"><ion-label>Both</ion-label></ion-segment-button>
+                  <ion-segment-button value="home"><ion-label class="home-name"></ion-label></ion-segment-button>
+                  <ion-segment-button value="away"><ion-label class="away-name"></ion-label></ion-segment-button>
+                </ion-segment>
+                <svg id="shots" class="half-pitch" role="img"></svg>
+                <ul class="sr-only" id="shot-list"></ul>
+                <p class="fine">Filled: goal · ringed: saved · hollow: off target or blocked. Each club shooting up the page.</p>
+              </section>
               <p id="now-said" class="now-said" aria-live="polite"></p>
               <p class="fine now-age" id="now-age" aria-hidden="true"></p>
 
