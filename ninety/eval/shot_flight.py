@@ -321,6 +321,8 @@ def clip_seed(root: Path) -> int | None:
     meta = root / "meta.json"
     if meta.exists():
         body = json.loads(meta.read_text())
+        if not isinstance(body, dict):
+            return None  # a meta.json that is not an object has no seed: unknown, never the name's
         if "seed" in body:  # meta.json wins over the name, and a seed it cannot read is unknown
             seed = body["seed"]
             if isinstance(seed, float) and seed.is_integer():

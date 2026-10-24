@@ -436,3 +436,11 @@ def test_each_clip_is_given_only_its_own_crossings(tmp_path, monkeypatch):
     assert seen == {"seed1": {"v1": {"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}},
                     "seed2": {"v1": {"clip": "seed2", "shot": "v1", "y": 36.0, "z": 1.5},
                               "v2": {"clip": "seed2", "shot": "v2", "y": 35.0, "z": 0.5}}}
+
+
+@pytest.mark.parametrize("body", [[], [{"seed": 900001}], "seed", 5, None])
+def test_a_meta_json_that_is_not_an_object_leaves_the_seed_unknown(tmp_path, body):
+    root, det = make_clip(tmp_path, "seed910001")
+    (root / "meta.json").write_text(json.dumps(body))
+    with pytest.raises(SystemExit, match="unknown"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
