@@ -346,3 +346,30 @@ def test_views_give_the_fact_checker_cameras_to_look_again_through(tmp_path):
     assert manifest["agents"]["re_perceived"] == []  # the clip's claim is sure: nothing to look at
     with pytest.raises(SystemExit, match="no <camera>/observations.jsonl"):
         run(tmp_path / "again", "--views", str(tmp_path / "empty"))
+
+
+def test_the_live_fallback_s_judge_shows_in_the_trace_as_it_ruled():
+    # The merge queue's review of #247: the published Judge in the fallback was labelled "not run".
+    async def ask(prompt):
+        return json.dumps({"text": "h7 plays a pass.", "evidence": ["standin-e011"]})
+
+    async def judge(claim, evidence):
+        return e2e.Verdict(ok=True)
+
+    _, claims, _ = asyncio.run(e2e.explain_and_render(STANDIN, "seed900001", False, None, [2], (ask, judge)))
+    steps = [s for c in claims for s in c["steps"] if s["role"] == "judge"]
+    assert steps and all(s["action"] == "verify" for s in steps)
+
+
+def test_a_live_graph_s_judge_steps_are_never_relabelled_as_not_run():
+    from ninety.agents.contracts import Review, TraceStep
+    from ninety.agents.factcheck import Claim
+
+    claim = Claim("h7 plays a pass.", ["e1"])
+    review = Review("m-e1", e2e.Verdict(ok=True), None, claim, "verified", "tactician", (("tactician", 1),),
+                    claim)
+    result = type("R", (), {"trace": [TraceStep("judge", "m-e1", "verify", 120.0, "", "")]})()
+    live = e2e.review_trace(review, result, 2, {"e1": 61.0}, False, "graph live")
+    offline = e2e.review_trace(review, result, 2, {"e1": 61.0}, False, "graph offline")
+    assert [s["action"] for s in live["steps"]] == ["verify"]
+    assert [s["action"] for s in offline["steps"]] == ["skip"]
