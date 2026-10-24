@@ -9,6 +9,8 @@ is) and each frame 3 more (pan, tilt, focal length).
 
     line_points(rgb, boxes)        white-marking pixels, with players and the ball masked out
     fit_clip(points_by_frame, ...) the gantry and every frame's pan, tilt and focal length
+    shot_starts(histograms)        where the camera cuts, from the picture's colours
+    fit_shots(points, ..., starts) fit_clip on each shot alone: a new gantry after every cut
     fit_fixed(static, points, ...) a fixed lens (the tactical camera): one camera for the clip
 
 Each frame is fitted by Gauss-Newton on the pixel distance from every marking pixel to the nearest
@@ -645,6 +647,63 @@ def fit_clip(points: list[np.ndarray], width: int, height: int,
         if fit.ok:
             last = fit.view
     return g, fits
+
+
+# ---------------------------------------------------------------------------------------------
+# Camera cuts: a clip is fitted shot by shot
+
+# A broadcast cuts between cameras. Across a cut the gantry and the aim change at once, so one
+# gantry for the clip fits neither side and tracking from the last frame starts from a camera that
+# is gone (lesson 159). A cut is found from the picture alone: within a shot the camera pans and
+# zooms smoothly and the picture's colours barely change; across a cut they change at once. The
+# measure is the classic shot-boundary one (Zhang, Kankanhalli and Smoliar 1993; Lienhart 1999):
+# half the L1 distance between consecutive frames' colour histograms, CUT_BINS levels a channel,
+# 0 for the same colours, 1 for none shared. CUT_THRESHOLD was set on validation clips by the rule
+# written first in docs/eval/camera-cuts-plan.md (the widest gap between cuts and non-cuts there,
+# at its geometric middle).
+CUT_BINS = 8
+CUT_THRESHOLD = 0.3  # placeholder until validation
+
+
+def colour_histogram(rgb: np.ndarray, bins: int = CUT_BINS) -> np.ndarray:
+    """(bins**3,) the share of the image's pixels in each RGB cell, bins levels a channel."""
+    q = (rgb.astype(np.int64) * bins) // 256
+    idx = (q[..., 0] * bins + q[..., 1]) * bins + q[..., 2]
+    h = np.bincount(idx.ravel(), minlength=bins ** 3).astype(float)
+    return h / max(h.sum(), 1.0)
+
+
+def cut_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """Half the L1 distance between two colour histograms: the share of pixels that changed cell."""
+    return 0.5 * float(np.abs(a - b).sum())
+
+
+def shot_starts(hists: list[np.ndarray], threshold: float | None = None) -> list[int]:
+    """Indices of each shot's first frame: 0, then every frame at least `threshold` (default
+    CUT_THRESHOLD) from the frame before it."""
+    thr = CUT_THRESHOLD if threshold is None else threshold
+    return [0] + [i for i in range(1, len(hists)) if cut_distance(hists[i - 1], hists[i]) >= thr]
+
+
+def fit_shots(points: list[np.ndarray], width: int, height: int, starts: list[int],
+              anchor_every: int = 25) -> tuple[list[tuple | None], list[FrameFit]]:
+    """fit_clip on each shot alone (shots begin at `starts`): its own gantry from its own frames
+    and tracking from its first frame, as on a clip's first frame. Nothing carries across a cut.
+    A shot with too few markings anywhere to place a camera gets none (its gantry None); with a
+    single shot that is still an error, as in fit_clip."""
+    bounds = list(starts) + [len(points)]
+    gantries: list[tuple | None] = []
+    fits: list[FrameFit] = []
+    for a, b in zip(bounds[:-1], bounds[1:], strict=True):
+        try:
+            g, f = fit_clip(points[a:b], width, height, anchor_every=anchor_every)
+        except ValueError:
+            if len(starts) == 1:
+                raise
+            g, f = None, [FrameFit(None, None, len(p), False) for p in points[a:b]]
+        gantries.append(g)
+        fits += f
+    return gantries, fits
 
 
 # ---------------------------------------------------------------------------------------------

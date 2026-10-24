@@ -13,7 +13,9 @@ the counts must agree). For each frame it writes one line:
      "players": [{"bbox", "score", "x", "y", "rgb"}],     # foot point on the pitch, kit colour
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
 
-The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). A
+The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). It
+also cuts between cameras: a cut is found from the images' colours (pitch.shot_starts), and each
+shot is fitted on its own (pitch.fit_shots), its index written as `camera.shot`. A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
 through that one camera.
@@ -55,6 +57,9 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # to 8.2 m (observed, under the plan's 8.5 m) and kept every good frame the heights kept. It sees an
 # isolated wrong frame only: frames wrong the same way agree and pass together. A tie between two
 # neighbours goes to the earlier (fixed with the plan's values, not tuned).
+# A neighbour is looked for within the frame's own shot (`camera.shot`, pitch.shot_starts): the
+# premise is a camera that pans continuously, and across a cut it is another camera
+# (docs/eval/camera-cuts-plan.md). Without a cut every frame is in shot 0, as before.
 # Known limit (lesson 159): frames whose wrong cameras agree with each other still pass, since no
 # check of one frame against another can see them: a whole clip offset the same way (validation
 # seed 108, about 2 to 8 m), and a run of 4 frames on test clip 900003, about 46 m wrong.
@@ -120,15 +125,18 @@ def principal_ground(P: np.ndarray) -> tuple[float, float] | None:
 def agree(rows: list[dict]) -> list[dict]:
     """Keep trusted only the frames the heights trusted whose image centre lands within NEIGHBOUR_M of
     where the nearest other height-trusted frame's does, within NEIGHBOUR_FRAMES (the earlier on a
-    tie); a frame with no such neighbour is not trusted. Untrusted frames lose their positions."""
-    centre = {}
+    tie) in the same shot; a frame with no such neighbour is not trusted. Untrusted frames lose
+    their positions."""
+    centre, shot = {}, {}
     for r in rows:
         cam = r["camera"]
+        shot[r["frame"]] = cam.get("shot", 0)
         if cam.get("heights_ok") and cam.get("P") is not None:
             centre[r["frame"]] = principal_ground(np.array(cam["P"]))
     for r in rows:
         f, c = r["frame"], centre.get(r["frame"])
-        near = sorted((abs(g - f), g) for g in centre if g != f and abs(g - f) <= NEIGHBOUR_FRAMES)
+        near = sorted((abs(g - f), g) for g in centre
+                      if g != f and abs(g - f) <= NEIGHBOUR_FRAMES and shot[g] == shot[f])
         other = centre[near[0][1]] if near else None
         r["camera"]["ok"] = bool(c is not None and other is not None
                                  and math.dist(c, other) <= NEIGHBOUR_M)
@@ -170,7 +178,7 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
     `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
-    rgbs, points = [], []
+    rgbs, points, hists = [], [], []
     counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
@@ -178,18 +186,21 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
         rgbs.append(rgb)
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
+            hists.append(pitch.colour_histogram(rgb))
             continue
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
     if not fixed:
-        gantry, fits = pitch.fit_clip(points, W, H)
+        starts = pitch.shot_starts(hists)
+        gantries, fits = pitch.fit_shots(points, W, H, starts)
     else:
         view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
-        gantry = (view.cx, view.cy, view.cz)
+        starts, gantries = [0], [(view.cx, view.cy, view.cz)]
+    shot_of = np.searchsorted(starts, np.arange(len(fits)), side="right") - 1
     rows = []
-    for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
+    for k, (rgb, fd, fit) in enumerate(zip(rgbs, dets, fits, strict=True)):
         players, balls = [], []
         for d in fd.detections:
             if d.cls == "player":
@@ -200,12 +211,17 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
         rows.append(place({
             "frame": fd.frame, "t": fd.t,
             "camera": {"ok": fit.ok, "median_px": fit.median_px, "points": fit.points,
+                       "shot": int(shot_of[k]),
                        "P": ([[round(float(v), 6) for v in row] for row in fit.view.P()]
                              if fit.view else None)},
             "players": players, "ball": balls,
         }))
     rows = agree(rows)
-    rows[0]["gantry"] = [round(v, 3) for v in gantry]
+    rows[0]["gantry"] = None if gantries[0] is None else [round(v, 3) for v in gantries[0]]
+    if len(starts) > 1:
+        rows[0]["shots"] = [{"frame": rows[s]["frame"],
+                             "gantry": None if g is None else [round(v, 3) for v in g]}
+                            for s, g in zip(starts, gantries, strict=True)]
     if fixed:
         rows[0]["fixed"] = True
     return rows
@@ -245,7 +261,7 @@ def main(argv: list[str] | None = None) -> None:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
     ok = sum(r["camera"]["ok"] for r in rows)
     print(json.dumps({"out": str(a.out), "frames": len(rows), "camera_ok": ok,
-                      "gantry": rows[0].get("gantry")}))
+                      "gantry": rows[0].get("gantry"), "shots": len(rows[0].get("shots", [0]))}))
 
 
 if __name__ == "__main__":

@@ -174,3 +174,79 @@ def test_a_clip_is_tracked_frame_to_frame_and_every_frame_is_ok(pan, small_grid)
     for f, v, a in zip(fits, truths, pts, strict=True):
         assert pitch._median(f.view, a) <= pitch.MAX_MEDIAN_PX
         assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+
+
+# Camera cuts (pitch.shot_starts, pitch.fit_shots; docs/eval/camera-cuts-plan.md).
+
+
+def test_the_cut_distance_is_the_share_of_pixels_whose_colour_cell_changed():
+    a = grass()
+    b = grass()
+    b[:30] = (240, 240, 240)  # half the picture turns white: half its pixels change cell
+    ha, hb = pitch.colour_histogram(a), pitch.colour_histogram(b)
+    assert pitch.cut_distance(ha, ha) == 0.0
+    assert pitch.cut_distance(ha, hb) == pytest.approx(0.5)
+    white = np.full_like(a, 240)
+    assert pitch.cut_distance(ha, pitch.colour_histogram(white)) == pytest.approx(1.0)
+
+
+def test_a_shot_starts_at_every_frame_at_least_the_threshold_from_the_last():
+    h0 = pitch.colour_histogram(grass())
+    half = grass()
+    half[:30] = (240, 240, 240)
+    h1 = pitch.colour_histogram(half)  # 0.5 from h0
+    hists = [h0, h0, h1, h1, h0]
+    assert pitch.shot_starts(hists, threshold=0.5) == [0, 2, 4]  # at the threshold is a cut
+    assert pitch.shot_starts(hists, threshold=0.51) == [0]
+    assert pitch.shot_starts([h0, h1]) == [0, 1]  # the adopted threshold sees half the picture change
+
+
+OTHER_GANTRY = (50.0, -38.0, 15.0)  # another camera on the same stand, 8 m along it
+
+
+def two_shots():
+    first = [view(pan=0.29 - 0.27 * k, tilt=0.14 + 0.01 * k) for k in range(3)]
+    second = [view(pan=0.42 - 0.3 * k, tilt=0.15, focal=3000.0, gantry=OTHER_GANTRY) for k in range(3)]
+    return first + second
+
+
+def test_after_a_cut_each_shot_gets_its_own_gantry_and_every_frame_fits(small_grid):
+    truths = two_shots()
+    pts = [marking_pixels(v) for v in truths]
+    gantries, fits = pitch.fit_shots(pts, W, H, [0, 3], anchor_every=1)
+    assert math.dist(gantries[0], GANTRY) < GANTRY_GROSS_M and math.dist(gantries[1], OTHER_GANTRY) < GANTRY_GROSS_M
+    assert all(f.ok for f in fits)
+    for f, v in zip(fits, truths, strict=True):
+        assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+    # One gantry for both shots, as before the change, cannot fit them all.
+    _, joint = pitch.fit_clip(pts, W, H, anchor_every=1)
+    assert not all(f.ok and pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+                   for f, v in zip(joint, truths, strict=True))
+
+
+def test_a_shot_without_markings_gets_no_camera_and_the_others_are_still_fitted(monkeypatch):
+    calls = []
+
+    def fit_clip(points, w, h, anchor_every=25):
+        calls.append(len(points))
+        if not any(len(p) for p in points):
+            raise ValueError("no frame shows enough pitch markings to place the camera")
+        return GANTRY, [pitch.FrameFit(view(), 0.5, len(p), True) for p in points]
+
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    some, none = np.zeros((100, 2)), np.zeros((0, 2))
+    gantries, fits = pitch.fit_shots([some, some, none, none, some], W, H, [0, 2, 4])
+    assert calls == [2, 2, 1] and gantries == [GANTRY, None, GANTRY]
+    assert [f.ok for f in fits] == [True, True, False, False, True] and fits[2].view is None
+    with pytest.raises(ValueError):  # a clip of one shot with no markings is still an error
+        pitch.fit_shots([none, none], W, H, [0])
+
+
+def test_a_clip_without_a_cut_is_fitted_exactly_as_before(monkeypatch):
+    seen = []
+    monkeypatch.setattr(pitch, "fit_clip",
+                        lambda points, w, h, anchor_every=25: seen.append((points, anchor_every)) or (GANTRY, ["fits"]))
+    pts = [np.zeros((100, 2)) for _ in range(4)]
+    assert pitch.fit_shots(pts, W, H, [0]) == ([GANTRY], ["fits"])
+    assert len(seen) == 1 and seen[0][1] == 25
+    assert len(seen[0][0]) == len(pts) and all(a is b for a, b in zip(seen[0][0], pts, strict=True))
