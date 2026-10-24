@@ -2525,35 +2525,6 @@ short and actionable. This file is public: no research sources, product names or
   fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
   renders byte-identical (seed 122 at main, frames, events, meta and images).
 
-### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
-- **What happened:** an audit of the fact-checker's code half found four forms it still let
-  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
-  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
-  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
-  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
-  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
-  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
-  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
-  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
-  to a player named after it, only the first number after a verb was bound, and Spanish idioms
-  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
-- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
-  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
-  speed the sentence gives to one player against that player's own cited events. Words that are no
-  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
-  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
-  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
-  for its player, holds every distance and speed up to the next player or the end of the clause,
-  and says what it does not cover; any other wording falls back to the check against all cited
-  events.
-- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
-  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
-  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
-  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
-  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
-  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
-  `replays/`, `docs/eval/` and the fixtures are unchanged.
-
 ### 227. A confidence is compared only with a threshold measured on the same reading
 - **What happened:** active perception re-runs the event detector on another camera, or on a 3 s
   window, to re-read a side the fact-checker holds. The first version let any look re-read the side.
@@ -2682,3 +2653,32 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
   `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
   first and the second and third tests fail.
+
+### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
+- **What happened:** an audit of the fact-checker's code half found four forms it still let
+  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
+  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
+  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
+  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
+  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
+  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
+  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
+  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
+  to a player named after it, only the first number after a verb was bound, and Spanish idioms
+  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
+- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
+  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
+  speed the sentence gives to one player against that player's own cited events. Words that are no
+  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
+  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
+  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
+  for its player, holds every distance and speed up to the next player or the end of the clause,
+  and says what it does not cover; any other wording falls back to the check against all cited
+  events.
+- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
+  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
+  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
+  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
+  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
+  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
+  `replays/`, `docs/eval/` and the fixtures are unchanged.

@@ -131,7 +131,7 @@ ORDINAL = re.compile(
     re.I,
 )
 NOT_AN_ORDINAL = re.compile(
-    r"\b(?:final|attacking|defensive|middle|own|opposition)\s+third\b|\bthird[\s-]+man\b"
+    r"\b(?:final|attacking|defensive|middle|own|opposition)[\s-]+third\b|\bthird[\s-]+man\b"
     r"|\bfourth\s+official\b|\b(?:a|one)\s+(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+of\b"
     r"|\btercer\s+hombre\b|\bcuarto\s+de\b|\bd[ée]cimas?\s+de\b|\btercera\s+parte\b",
     re.I,
@@ -199,8 +199,10 @@ FOUND = re.compile(
 # distance or speed at most two words on: a possessive ("h7's crisp 30 m"), "h7, whose ... 30 m", a
 # kicking verb with the player as its subject ("h7 plays a curling 30 m pass", "h7 juega un pase de
 # 30 metros"), and "his/her" when exactly one player is named before it in the sentence (or, if
-# none is, in the sentence before). It then holds every distance and speed up to the next player id,
-# ";" or the end of the sentence ("h7 plays a 12 m pass at 40 km/h"). Any other wording (passives,
+# none is, in the sentence before). A possessive, "whose" or "his" binds only its own noun phrase, the
+# first number ("h4 receives h7's 12 m pass and plays a 30 m pass" binds only 12, to h7); a kicking
+# verb binds every distance and speed up to the next player id, ";", "and"/"y" or the end of the
+# sentence ("h7 plays a 12 m pass at 40 km/h"). Any other wording (passives,
 # "from h7", "de h7") binds nothing and the number is checked against all the cited events.
 _KICKS = (
     "plays|played|hits|hit|sends|sent|fires|fired|drives|drove|strikes|struck|clips|clipped|lofts"
@@ -212,12 +214,14 @@ _GAP = r"(?:[^\W\d_]+\s+)"
 _UNIT_NUMBER_NEXT = rf"(?={NUMBER_PATTERN}[\s-]*(?:{DISTANCE_UNITS}|{SPEED_UNITS})\b)"
 BOUND_TO_PLAYER = re.compile(
     rf"\b(?P<player>{PLAYER_ID})(?:['’]s\s+{_GAP}{{0,2}}|,?\s+whose\s+{_GAP}{{0,2}}"
-    rf"|\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}{{0,2}}){_UNIT_NUMBER_NEXT}",
+    rf"|(?P<verb>\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}{{0,2}})){_UNIT_NUMBER_NEXT}",
     re.I,
 )
 BOUND_TO_PRONOUN = re.compile(rf"\b(?:his|her)\s+{_GAP}{{0,2}}{_UNIT_NUMBER_NEXT}", re.I)
 # Where a binding's clause ends: the next player id, a semicolon, or the end of the sentence.
-CLAUSE_END = re.compile(rf"\b{PLAYER_ID}\b|;|[.!?](?!\d)|$")
+CLAUSE_END = re.compile(rf"\b{PLAYER_ID}\b|;|\b(?:and|y|but|pero|then|luego)\b|[.!?](?!\d)|$", re.I)
+# Dots inside a unit ("k.p.h.") end no clause or sentence: they are masked before either is found.
+UNIT_DOTS = re.compile(r"\b[km]\.p\.h\b\.?", re.I)
 SENTENCE = re.compile(r"(?:[^.!?;]|\.(?=\d))+")
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
@@ -303,18 +307,25 @@ def _number_field(text: str, start: int) -> str | None:
 def _bound_players(text: str) -> dict[int, str]:
     """Where a distance or speed is given to one player (BOUND_TO_PLAYER, BOUND_TO_PRONOUN): each
     such number's start in `text`, and the player's id."""
-    anchors = [(m.end(), m.group("player").lower()) for m in BOUND_TO_PLAYER.finditer(text)]
-    sentences = list(SENTENCE.finditer(text))
+    anchors = [(m.end(), m.group("player").lower(), m.group("verb") is not None)
+               for m in BOUND_TO_PLAYER.finditer(text)]
+    masked = UNIT_DOTS.sub(lambda m: "x" * len(m.group()), text)
+    sentences = list(SENTENCE.finditer(masked))
     for k, sentence in enumerate(sentences):
         for m in BOUND_TO_PRONOUN.finditer(text, sentence.start(), sentence.end()):
-            before = set(PLAYER.findall(text[sentence.start():m.start()].lower()))
+            before = set(PLAYER.findall(masked[sentence.start():m.start()].lower()))
             if not before and k:
                 before = set(PLAYER.findall(sentences[k - 1].group().lower()))
             if len(before) == 1:
-                anchors.append((m.end(), before.pop()))
+                anchors.append((m.end(), before.pop(), False))
     bound: dict[int, str] = {}
-    for start, player in sorted(anchors):
-        end = CLAUSE_END.search(text, start).start()
+    for start, player, verb in sorted(anchors):
+        # A possessive, "whose" or pronoun binds its own noun phrase, the first number; a kicking
+        # verb binds its whole clause.
+        if not verb:
+            bound.setdefault(start, player)  # the anchor ends where its first number starts
+            continue
+        end = CLAUSE_END.search(masked, start).start()
         for pattern in (DISTANCE_NUMBER, SPEED_NUMBER):
             for m in pattern.finditer(text, start, end):
                 bound.setdefault(m.start("number"), player)
