@@ -18,6 +18,7 @@
     "visual": { "anyOf": [{ "type": "null" }, { "$ref": "insight_card.schema.json#/$defs/visual" }], "description": "Optional: what the phone draws beside the answer, taken by code from the first cited insight fact that has one; null or absent draws nothing." },
     "names": { "type": ["object", "null"], "additionalProperties": { "type": "string" }, "description": "Optional: how to label each player the visual or text shows, by track id (a gated team-sheet name or a role, never an id)." },
     "spoken": { "type": ["string", "null"], "description": "Optional: the answer as it is spoken to a screen-reader user or by the Describer, with no visual reference." },
-    "follow_ups": { "type": "array", "items": { "type": "string" }, "maxItems": 3, "description": "Optional: suggested next questions." }
+    "follow_ups": { "type": "array", "items": { "type": "string" }, "maxItems": 3, "description": "Optional: suggested next questions." },
+    "headline": { "type": ["string", "null"], "maxLength": 48, "description": "Optional: the direct answer in a few words, by code from the question's kind and the cited facts: a name for who or which (the role when the name is not confident), a number with its unit for how many or how fast, a place for where; the supporting number stays in text. Null: the phone shows none." }
   }
 }

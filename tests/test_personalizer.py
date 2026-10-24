@@ -270,6 +270,10 @@ LEGAL = {
     "translated": SPANISH,
     "with a cited field added": CLAIM.text + " The pass was 61.0 km/h.",
     "reworded": "h4 finds h9 over 32.5 m in minute 2, and h9 finds h7.",
+    # Spanish units and number words are read, and a true one stands (lesson 219).
+    "with a cited field added in Spanish": SPANISH + " El pase iba a sesenta y un kilómetros por hora.",
+    "with Spanish units": (
+        "En el minuto 2, h4 encuentra a h9 a 32.5 metros, y h9 pasa el balón 12 metros a h7."),
 }
 DEFECTS = {
     # Each is caught by one half of the rule only (lesson 73).
@@ -280,6 +284,15 @@ DEFECTS = {
     "an unsupported number added": (CLAIM.text + " It was his 7th pass.", "not in the cited evidence"),
     "a player outside the evidence": (CLAIM.text + " a5 watches.", "does not appear"),
     "a decimal comma": (SPANISH.replace("32.5", "32,5"), "number 5 is not a cited distance_m"),
+    # Lesson 219: each of these aired before, every number of the claim being kept.
+    "a speed in Spanish words": (SPANISH + " A cincuenta km/h.", "number 50 is not a cited ball_speed_kmh"),
+    "a cited distance as a Spanish speed": (SPANISH + " A 12 kilómetros por hora.",
+                                            "number 12 is not a cited ball_speed_kmh"),
+    "a Spanish ordinal count": (SPANISH + " Fue su séptimo pase.", "number 7th is not in the cited evidence"),
+    "a distance in yards": (SPANISH.replace("32.5 m", "32.5 yardas"), "a unit the evidence does not use"),
+    "a distance given to the other passer": (
+        "En el minuto 2, h4 encuentra a h9 a 32.5 m, y h9 pasa el balón 32.5 metros a h7.",
+        "number 32.5 is not a cited distance_m of h9"),
 }
 
 
@@ -627,7 +640,8 @@ def test_a_partial_outage_counts_rates_and_times_over_answered_requests_only(mon
     report = personalizer_eval.report(rows, "scripted", "a-e", defs={})
     assert "the model answered 4 of them" in report
     assert "| casual | es | 5 | 4 |" in report
-    assert "p50 10 ms, p95 10 ms, max 10 ms" in report
+    # The unanswered request's 3000 ms is not counted. With 4 times, no p95 is shown (lesson 89).
+    assert "(n = 4): p50 10 ms, p95 not shown (4 requests; it needs 20), max 10 ms" in report
     assert "- 1 x server: model failed: TimeoutError" in report.split("did not answer")[1]
     assert "model failed" not in report.split("## Why variants were dropped")[1].split("## Requests")[0]
 
@@ -703,3 +717,69 @@ def test_the_instructions_keep_the_claim_s_clock_for_every_persona():
                  "clock": "00:03"}]
     assert problem(claim, evidence, "At 3 seconds, h10 passes the ball.").startswith("numbers lost")
     assert problem(claim, evidence, "At 00:03, h10 passes the ball.") is None
+
+
+def test_two_claims_with_the_same_words_are_two_requests():
+    # Audit row 9: requests keyed by seed and text counted two identical sentences as one.
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "route": "remote", "dropped": None, "ms": 5.0,
+             "persona": p.persona, "lang": p.lang} for i in (0, 1) for p in personalizer_eval.PROFILES]
+    assert len(personalizer_eval.requests_of(rows)) == 2
+    assert "2 true claims" in personalizer_eval.report(rows, "scripted", "21", defs={})
+
+
+def test_a_p95_is_shown_only_when_it_is_not_the_maximum():
+    from ninety.personalizer import eval as personalizer_eval
+
+    twenty = [float(ms) for ms in range(1, 21)]
+    assert "p95 19 ms" in personalizer_eval.timing(twenty) and "max 20 ms" in personalizer_eval.timing(twenty)
+    assert "p95 not shown (19 requests" in personalizer_eval.timing(twenty[:19])
+
+
+def test_rows_written_before_the_index_still_count_each_request():
+    # The committed run's rows have no index: 20 requests in order, one row per profile each.
+    import json as _json
+
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = _json.loads((personalizer_eval.ROOT / "docs" / "eval" / "personalizer.json").read_text())
+    assert len(rows) % len(personalizer_eval.PROFILES) == 0
+    assert len(personalizer_eval.requests_of(rows)) == len(rows) // len(personalizer_eval.PROFILES) == 20
+
+
+def test_the_outage_guard_counts_requests_by_index():
+    # Two claims with the same words, the second unanswered: two requests, one of them unanswered.
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "persona": p.persona, "lang": p.lang,
+             "route": "remote" if i == 0 else "fallback: timeout", "dropped": None, "ms": 5.0}
+            for i in (0, 1) for p in personalizer_eval.PROFILES]
+    requests = personalizer_eval.requests_of(rows)
+    assert len(requests) == 2 and sum(not personalizer_eval.answered(r) for r in requests.values()) == 1
+
+
+def test_main_refuses_a_run_whose_outage_two_same_worded_claims_would_hide(monkeypatch, tmp_path):
+    # Request 0 unanswered, request 1 answered, the same words: keyed by text they were one answered
+    # request and the outage passed; by index, 1 of 2 is unanswered, over the one-in-five limit.
+    import contextlib
+    import types
+
+    from ninety.personalizer import eval as personalizer_eval
+
+    @contextlib.asynccontextmanager
+    async def published():
+        yield None, "stub"
+
+    rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "persona": p.persona, "lang": p.lang,
+             "route": "fallback: timeout" if i == 0 else "remote", "dropped": None, "ms": 5.0}
+            for i in (0, 1) for p in personalizer_eval.PROFILES]
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [])
+
+    async def ran(*a):
+        return rows
+
+    monkeypatch.setattr(personalizer_eval, "run", ran)
+    args = types.SimpleNamespace(seeds="21", minutes=1.0, limit=2, budget=6.0, out=tmp_path / "p.md")
+    with pytest.raises(personalizer_eval.NothingMeasured):
+        asyncio.run(personalizer_eval._main(args, published))

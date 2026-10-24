@@ -107,3 +107,18 @@ def test_the_team_sheet_keeps_names_shirts_and_positions_and_refuses_a_row_witho
     path.write_text(json.dumps({"lineup": [{"name": "No Id"}]}))
     with pytest.raises(SystemExit):
         e2e.read_lineup(path)
+
+
+@pytest.mark.parametrize("within", [15, None])
+def test_team_stats_carry_how_close_distance_is_measured(tmp_path, within):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    body = {"distance": {"home": {"km": 4.1, "coverage": 0.9}, "away": {"km": 3.8, "coverage": 0.9}}}
+    if within is not None:
+        body["within_pct"] = within
+    path.write_text(json.dumps({"team_stats": body}))
+    assert e2e.read_team_stats(path).get("within_pct") == within
+    path.write_text(json.dumps({"team_stats": {**body, "within_pct": 0}}))
+    with pytest.raises(SystemExit):
+        e2e.read_team_stats(path)

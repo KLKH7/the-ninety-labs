@@ -2722,7 +2722,86 @@ short and actionable. This file is public: no research sources, product names or
     graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
     codes in their params, so re-rendering one differs in the scorebug only.
 
-### 238. On a machine other sessions share, stop your own processes by id, never by a pattern
+### 238. A model's reply is read as the first object it writes, and the live eval keeps what it parsed
+- **What happened:** the published match Companion (v2) answered a plan step with the plan and then
+  kept going: an "answer" step of its own, with facts and fact ids it made up, in the same reply. The
+  plan parser took everything from the first `{` to the last `}`, which is not one JSON object, so
+  every such plan failed. In the first live run (40066697726) 22 of 32 plans were unparseable and 27
+  of 32 answers fell back to code's checked answer. The fan saw only verified text, and the stand-in
+  tests passed, because every scripted reply was exactly one object.
+- **Rule:** a model's plan is the first JSON object in its reply (`companion_match.first_object`), and
+  nothing after it is read, so the made-up facts never reach the tools. The eval reads plans through
+  the same function as the service. A scripted reply in a test includes what the live model actually
+  sent, not only the ideal shape.
+- **Check:** `tests/test_companion_match.py::test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only`
+  and `::test_the_eval_reads_a_plan_as_the_service_does` fail when the parse goes back to first `{` to
+  last `}`.
+
+### 239. A sentence template is tested through the checker it must pass, and a fallback row answers only what it is about
+- **What happened:** the team-sheet sentence ("X plays left-back for London Athletic, by the team
+  sheet") had never passed the fact-checker. Its name gate counted only the tracked players the facts
+  were about, not the sheet row being cited. So no "who plays where" question was ever answered, and
+  the router's lineup score (2/4) measured routing to a tool that could not answer. Meanwhile "who is
+  the best player?" routed to the sheet as well, and with no confident leader the first sheet row
+  answered: the goalkeeper. On the phone, the answer's headline was taken from the picture's number
+  ("6 moves") rather than from what the fan asked.
+- **Rule:** every code template is run through `verify` on the stand-in in a test, not only read. A
+  cited sheet row vouches for its own name, position and club, and a name said with another row's
+  position is refused. A sheet row answers only a question that names a position. The answer carries
+  a `headline` computed by code from the question's kind: a name (or the role, or the club) for who,
+  the number with its unit for how many, the place for where; the supporting number stays in the
+  sentence.
+- **Check:** `tests/test_companion_match.py::test_who_plays_a_position_is_answered_from_that_row_of_the_sheet`,
+  `::test_a_sheet_row_says_only_its_own_name_position_and_club`,
+  `::test_who_is_best_is_never_answered_with_a_name_off_the_sheet` and
+  `::test_every_held_out_answer_is_headed_by_what_its_question_asks`. Each fails when its rule is
+  mutated (eleven mutations, all caught).
+
+### 235. Every live_job mode gets an end-to-end test on a real clip of its camera type
+- **What happened:** `observe` gained `fixed=True` for the tactical camera's lenses, but the views
+  mode of `ninety/vision/live_job.py` never passed it. Each lens was searched frame by frame as the
+  broadcast's moving gantry, and the fit failed on every frame: on validation seed108, camera OK on
+  0 of 250 frames and no player placed. Its unit tests passed because they ran on a synthetic clip
+  drawn through a broadcast camera, which the broadcast search fits. A phone fixture built from
+  views runs on main (12–17 players, no events) carried the defect downstream.
+- **Rule:** any live_job mode (broadcast, views, and any added later) has an end-to-end test on a
+  real rendered clip of that camera type, at the renderer's own image quality. The test asserts a
+  non-zero placement rate, not only that the run finished.
+- **Check:** `tests/test_vision_live_job.py::test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not`
+  (the flag), and `test_a_real_tactical_clip_places_players_from_every_view` and
+  `test_a_real_broadcast_clip_places_players` in the same file, on two frames of each camera
+  (`tests/fixtures/tactical-seed108`, `broadcast-seed108`). The tactical test fails without the fix.
+
+### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
+- **What happened:** an audit of the fact-checker's code half found four forms it still let
+  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
+  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
+  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
+  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
+  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
+  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
+  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
+  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
+  to a player named after it, only the first number after a verb was bound, and Spanish idioms
+  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
+- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
+  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
+  speed the sentence gives to one player against that player's own cited events. Words that are no
+  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
+  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
+  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
+  for its player, holds every distance and speed up to the next player or the end of the clause,
+  and says what it does not cover; any other wording falls back to the check against all cited
+  events.
+- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
+  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
+  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
+  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
+  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
+  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
+  `replays/`, `docs/eval/` and the fixtures are unchanged from main's check on the same texts.
+
+### 240. On a machine other sessions share, stop your own processes by id, never by a pattern
 - **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
   background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
   whose command line holds `until [`, so the other sessions' wait loops alive then were killed

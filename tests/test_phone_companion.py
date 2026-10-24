@@ -716,3 +716,19 @@ def test_without_a_headline_an_answer_falls_back_to_its_pictures_headline(browse
     page.evaluate("([q, a]) => window.ninetyPhone.answer(q, a)", ["Where are Crowmere overloading?", answer])
     assert page.locator("#answers .answer .figure").last.inner_text() == "3 v 1 round the ball"
     assert not errors
+
+
+def test_team_distance_says_how_close_it_is_measured(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    distance = {"home": {"km": 4.1, "coverage": 0.93}, "away": {"km": 3.8, "coverage": 0.9}}
+    match["team_stats"] = {"from_footage": True, "within_pct": 15, "distance": distance}
+    page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#lt-stats")
+    row = page.locator("#stat-rows .stat-row", has_text="Distance (km)")
+    row.wait_for()
+    assert row.locator(".within").inner_text().strip() == "±15%"  # quiet, after the label; no caption
+    assert row.get_attribute("aria-label").endswith(", measured to within 15 percent")
+    assert not errors
