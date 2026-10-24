@@ -284,7 +284,10 @@ def check(
     about = _people(cited, people)
     # A cited team-sheet row says who plays where (never where anyone is): its name with its position.
     rows = [f for f in cited if f.get("kind") == "sheet"]
-    about += [{"name": f["name"], "position": f["position"]} for f in rows]
+    if rows and len(rows) == len(cited):
+        # Only a sentence of sheet rows alone: cited beside a moment, a row would vouch its name for
+        # whoever the moment is about (the goalkeeper's name on another player's pass).
+        about += [{"name": f["name"], "position": f["position"]} for f in rows]
     for f in rows:
         for other in rows:
             if other is not f and re.search(

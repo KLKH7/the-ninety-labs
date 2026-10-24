@@ -790,3 +790,41 @@ def test_a_live_run_asks_one_question_at_a_time_paced(monkeypatch):
     qs = [{"text": "Who is it?", "seed": 920001, "minute": 5, "tool": None} for _ in range(3)]
     asyncio.run(ct.model_plans(qs, ask, ct.PACE_S))
     assert waits == [ct.PACE_S, ct.PACE_S]  # between questions, never before the first
+
+
+def test_a_sheet_row_beside_a_moment_vouches_for_no_name_in_it():
+    # The merge queue's review of #294: the goalkeeper's row cited beside another player's pass let
+    # the goalkeeper's name stand on that pass.
+    from ninety.agents.factcheck import Claim
+
+    mi = standin()
+    calls = [
+        {"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": mi.minutes},
+        {"name": "lineup", "club": None, "minute_from": 1, "minute_to": mi.minutes},
+    ]
+    facts = companion.run_tools(mi, calls)
+    for f in facts:
+        f.setdefault("clubs", mi.fixture.clubs)
+    known = {f["id"]: f for f in facts}
+    gk = known["sheet:home:GK"]
+    lb = next(f for f in facts if f.get("kind") == "line_break" and companion.code_texts(f)
+              and f.get("passer_is") and f["passer_is"] != gk["name"] and f["team"] == "home")
+    true = companion.code_texts(lb)[0]
+    assert companion._verify(Claim(true, [lb["id"]]), known, mi).ok
+    swapped = true.replace(lb["passer_is"], gk["name"])
+    assert not companion._verify(Claim(swapped, [lb["id"], gk["id"]]), known, mi).ok
+
+
+def test_a_headline_shows_no_number_the_sentence_does_not_say():
+    mi = standin()
+    cited = [{"metric": "opponents_bypassed", "value": 4, "unit": "opponents"}]
+    q = "How many players did that pass take out?"
+    assert companion._headline_of("It took out 4 of them.", q, cited, mi) == "4 opponents"
+    assert companion._headline_of("It took out a few of them.", q, cited, mi) is None
+
+
+def test_a_reply_nested_too_deep_to_read_falls_back_to_code():
+    deep = '{"tools": ' + "[" * 100_000 + "]" * 100_000 + "}"
+    ask, _ = scripted(deep)
+    r = asyncio.run(companion.answer_match(Q, insights(), ask))
+    assert r.source == "code" and r.reasons == ("model reply is not the reply format",)

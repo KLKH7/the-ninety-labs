@@ -447,9 +447,19 @@ def _match_answer(
         t_to,
         visual,
         spoken=text,
-        headline=headline(asked[-1], cited, insights) if asked and insights is not None else None,
+        headline=_headline_of(text, asked[-1], cited, insights) if asked and insights is not None else None,
         **extra,
     )
+
+
+def _headline_of(text: str, question: str, cited: list[dict], insights) -> str | None:
+    """The headline, kept only when every number it shows is one the sentence says: the sentence is
+    what the fact-checker passed, for a model's answer as for code's."""
+    head = headline(question, cited, insights)
+    said = re.findall(r"\d+(?:\.\d+)?", text)
+    if head is None or any(n not in said for n in re.findall(r"\d+(?:\.\d+)?", head)):
+        return None
+    return head
 
 
 def clubs_named(text: str, insights) -> list[str]:
@@ -839,7 +849,7 @@ async def answer_match(
         plan_reply = await ask(plan_prompt(question, insights, history))
         try:
             plan = first_object(plan_reply)
-        except (json.JSONDecodeError, TypeError, AttributeError, ValueError):
+        except (json.JSONDecodeError, TypeError, AttributeError, ValueError, RecursionError):
             raise _NotTheFormat("plan") from None
         calls = _calls(plan, insights, minute)
         if not calls:
@@ -852,8 +862,8 @@ async def answer_match(
         reply = await writer(answer_prompt(question, facts, history))
         try:
             claim = parse_claim(reply)
-        except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
-            raise _NotTheFormat(str(exc)) from None
+        except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:
+            raise _NotTheFormat(str(exc)[:200]) from None
         known = {f["id"]: f for f in facts}
         if not claim.text.strip():
             return calls, claim, None, facts
