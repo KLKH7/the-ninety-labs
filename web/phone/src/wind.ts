@@ -7,7 +7,7 @@
 // file and the `import("./wind")` in main.ts removes it.
 
 import { COLORS, type View, attacksRight, zoneFor } from "./pitch";
-import { type Flow, PITCH_X, PITCH_Y, type Team } from "./types";
+import { type Flow, PITCH_X, PITCH_Y, type Team, teams } from "./types";
 
 export const WINDOW_S = 30; // design: about one phase of play
 const PER_TEAM = 140; // particles; design: enough to read the flow, few enough to see the dots
@@ -49,7 +49,7 @@ export function sample(f: Flow, x: number, y: number): [number, number] | null {
 
 /** A team's movement in words: forward or back overall, and where it was strongest. */
 export function describe(f: Flow): string {
-  const name = f.team === "home" ? "Home" : "Away";
+  const name = teams[f.team];
   const sign = attacksRight(f.team) ? 1 : -1;
   let forward = 0;
   let n = 0;
@@ -126,7 +126,7 @@ export class WindMap {
     const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 1 / 60;
     this.last = now;
     const v = this.canvasView();
-    const { ctx, sx, sy } = v;
+    const { ctx, X, Y } = v;
     ctx.globalCompositeOperation = "destination-out";
     ctx.fillStyle = "rgba(0,0,0,0.08)";
     ctx.fillRect(0, 0, v.w, v.h);
@@ -147,8 +147,8 @@ export class WindMap {
         }
         const nx = p.x + vel[0] * SPEED_UP * dt;
         const ny = p.y + vel[1] * SPEED_UP * dt;
-        ctx.moveTo(p.x * sx, p.y * sy);
-        ctx.lineTo(nx * sx, ny * sy);
+        ctx.moveTo(X(p.x), Y(p.y));
+        ctx.lineTo(X(nx), Y(ny));
         p.x = nx;
         p.y = ny;
       }
@@ -156,11 +156,12 @@ export class WindMap {
     }
   }
 
-  /** Reduced motion: one still arrow per crossed cell, its length the cell's speed. */
-  still() {
+  /** Reduced motion, and an answer's picture: one still arrow per crossed cell, its length the
+   * cell's speed. `clear` false draws over what the canvas holds (the pitch). */
+  still(clear = true) {
     const v = this.canvasView();
-    const { ctx, sx, sy } = v;
-    ctx.clearRect(0, 0, v.w, v.h);
+    const { ctx, X, Y } = v;
+    if (clear) ctx.clearRect(0, 0, v.w, v.h);
     ctx.lineWidth = 1.8;
     for (const [team, f] of this.flows) {
       ctx.strokeStyle = team === "home" ? COLORS.home : COLORS.away;
@@ -174,11 +175,14 @@ export class WindMap {
         const cy = (Math.floor(k / f.nx) + 0.5) * ch;
         const len = Math.min(cw * 0.9, Math.hypot(ux, uy) * 1.4);
         if (len < 0.4) return;
-        const a = Math.atan2(uy, ux);
-        const x1 = (cx + Math.cos(a) * len) * sx;
-        const y1 = (cy + Math.sin(a) * len) * sy;
+        const m = Math.atan2(uy, ux);
+        const x0 = X(cx);
+        const y0 = Y(cy);
+        const x1 = X(cx + Math.cos(m) * len);
+        const y1 = Y(cy + Math.sin(m) * len);
+        const a = Math.atan2(y1 - y0, x1 - x0); // on the canvas, where y runs the other way
         ctx.beginPath();
-        ctx.moveTo(cx * sx, cy * sy);
+        ctx.moveTo(x0, y0);
         ctx.lineTo(x1, y1);
         ctx.lineTo(x1 - Math.cos(a - 0.5) * 5, y1 - Math.sin(a - 0.5) * 5);
         ctx.moveTo(x1, y1);

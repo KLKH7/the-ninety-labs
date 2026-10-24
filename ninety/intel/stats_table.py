@@ -13,7 +13,14 @@ import statistics
 from collections.abc import Callable
 
 from ninety.intel.scene import TEAMS
-from ninety.intel.team_stats import BIN_MIN
+from ninety.intel.team_stats import BIN_MIN, within_pct
+
+
+def _distance_label() -> str:
+    """The row says how far it may be off, as measured (docs/eval/team-distance.md)."""
+    pct = within_pct()
+    return f"Distance covered (tracked, ±{pct}%)" if pct is not None else "Distance covered (tracked)"
+
 
 SHAPE_ROWS = (
     ("width", "Width", "m"),
@@ -108,7 +115,7 @@ def _distance(mi) -> Callable[[int], dict]:
 def stats_table(mi) -> dict:
     """The Stats tab's rows, each with a series of "so far" values per BIN_MIN minutes."""
     rows = [
-        ("Attack", "counters", "Counter-attacks ending in a shot", "counters", _count(mi, "counter")),
+        ("Attack", "counters", "Regains that led to a shot", "regains", _count(mi, "counter")),
         ("Attack", "one_twos", "One-twos", "one-twos", _count(mi, "one_two")),
         ("Attack", "crosses", "Crosses", "crosses", _summary(mi.style, "crosses")),
         *[
@@ -164,7 +171,7 @@ def stats_table(mi) -> dict:
             _summary(mi.overloads, "overload_moments"),
         ),
         *[("Shape", key, label, unit, _shape(mi, key)) for key, label, unit in SHAPE_ROWS],
-        ("Physical", "distance_km", "Distance covered (tracked)", "km", _distance(mi)),
+        ("Physical", "distance_km", _distance_label(), "km", _distance(mi)),
     ]
     ends = list(range(BIN_MIN, mi.minutes + BIN_MIN, BIN_MIN))
     out = []

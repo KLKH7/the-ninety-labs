@@ -61,19 +61,20 @@ HANG_S = 60.0  # longer than any timeout here: a call that never answers
 
 
 def claim_on(event_id: str, known: dict[str, dict]) -> Claim:
-    """A true claim about one detected pass, worded from its facts at team level (a detection may name
-    nobody: ninety/vision/events.py, attribution)."""
+    """A true claim about one detected pass, worded from its facts. It names neither player nor side:
+    a detection may name nobody (ninety/vision/events.py, attribution), and the M1 clip's sides were
+    told with team_confidence 0.529, so a claim naming a team is held by the confidence gate
+    (factcheck.MIN_TEAM_CONFIDENCE). This table measures how failures are handled, not team naming,
+    which tests/test_confidence_gate.py covers."""
     e = known[event_id]
-    side = "Away" if e["team"] == "away" else "Home"
-    return Claim(f"{side} complete a pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])
+    return Claim(f"A completed pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])
 
 
 def claim_in_spanish(event_id: str, known: dict[str, dict]) -> str:
     """The same claim worded in Spanish for the stand-in Personalizer: written here, by us, not a
-    model's or a service's translation. The team keeps its name, as the re-check allows."""
+    model's or a service's translation."""
     e = known[event_id]
-    side = "Away" if e["team"] == "away" else "Home"
-    return f"{side} completa un pase de {e['distance_m']} m a {e['ball_speed_kmh']} km/h."
+    return f"Un pase completado de {e['distance_m']} m a {e['ball_speed_kmh']} km/h."
 
 
 def reply(claim: Claim) -> str:
@@ -566,9 +567,17 @@ def main() -> None:
         args.out.mkdir(parents=True, exist_ok=True)
         commit = workflow._commit()  # the engine the seeds were simulated with, and everything else
         reports = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
-        md = f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n{reports}"
+        # The workflow's agents and the Personalizer, as run_live and core.published_ask pin them.
+        from ninety.agents import evidence, foundry
+        from ninety.personalizer.core import personalizer_agent
+
+        defs = evidence.of_code(
+            lambda client: [*foundry.workflow_agents(client).values(), personalizer_agent(client)]
+        )
+        md = (f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n"
+              f"{evidence.md_line(defs)}\n\n{reports}")
         body = {"command": COMMAND + " --live", "commit": commit, "minute": MINUTE,
-                "models": "the published Foundry agents",
+                "models": "the published Foundry agents", evidence.KEY: defs,
                 "grounds": [{"match": t[0]["match"], "rows": t} for t in tables]}
         for name, text in (("failure-table-live.md", md),
                            ("failure-table-live.json", json.dumps(body, indent=1, allow_nan=False) + "\n")):

@@ -16,17 +16,18 @@ KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(M1.events))}
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    # The insight, then its seven variants re-checked (casual, club and player_focus in English;
-    # analyst, casual, club and player_focus in the stand-in's marked Spanish). player_focus is
-    # written because the detected pass names its passer's track: eight Judge calls.
-    "none": ("verified", None, 8, True, 0),
+    # The insight, then its five variants re-checked (casual and player_focus in English; analyst,
+    # casual and player_focus in the stand-in's marked Spanish). player_focus is written because the
+    # detected pass names its passer's track; no club variant, because the M1 clip's side was told at
+    # 0.529, too unsure to tell from a club's view (factcheck.side_known): six Judge calls.
+    "none": ("verified", None, 6, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
-    # The insight still airs; the in-process fallback gives the English variants (casual, club and
-    # player_focus), re-checked the same way, and no Spanish, which is held: four Judge calls.
-    "personalizer down": ("verified", None, 4, True, 0),
+    # The insight still airs; the in-process fallback gives the English variants (casual and
+    # player_focus), re-checked the same way, and no Spanish, which is held: three Judge calls.
+    "personalizer down": ("verified", None, 3, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
     "low confidence": ("held", "low_confidence", 0, False, 2),
@@ -62,7 +63,7 @@ def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the
     assert row["insights"] == [i for i in BASE["insights"] if i["lang"] == "en"]
     assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
     # player_focus too: the detected pass names its passer's track.
-    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es", "club/es",
+    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es",
                                                                  "player_focus/es"]
 
 
@@ -137,7 +138,7 @@ def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_cha
     # is refused, and the baseline fails.
     near_english = personalizer_writing(lambda text: text.replace("complete", "completes"))
     row = baseline_with(near_english)
-    assert len(row["variants_refused"]) == 4 and row["variants_english"] == []  # with player_focus
+    assert len(row["variants_refused"]) == 3 and row["variants_english"] == []  # with player_focus, no club
     assert all("reads as English" in r for r in row["variants_refused"])
     assert not wf.recovered(row, row)["every variant airs without a failure"]
     # The table measures what aired on its own: with the gate gone, the English airs and is caught.
@@ -145,14 +146,14 @@ def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_cha
 
     monkeypatch.setattr(cues, "reads_english", lambda text: False)
     row = baseline_with(near_english)
-    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4
+    assert row["variants_refused"] == [] and len(row["variants_english"]) == 3
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
 def test_the_baseline_fails_when_the_spanish_profiles_are_left_out():
     row = baseline_with(personalizer_writing(lambda text: None))
     assert row["variants_refused"] == [] and row["variants_english"] == []
-    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "club/es", "player_focus/es"]
+    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "player_focus/es"]
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
@@ -398,7 +399,7 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     personalizer_asked: list[str] = []
 
     def spanish(text: str) -> str:  # the claims here are wf.claim_on's, worded as claim_in_spanish's
-        return text.replace("complete a pass of", "completa un pase de").replace(" at ", " a ")
+        return text.replace("A completed pass of", "Un pase completado de").replace(" at ", " a ")
 
     @contextlib.asynccontextmanager
     async def published_ask(credential=None):
@@ -453,6 +454,14 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
     assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
+    # Which definition of each agent ran, in the data and in the report (lesson 216).
+    from ninety.agents import evidence, foundry
+
+    roles = {"ninety-moment-analyst", "ninety-tactician", "ninety-challenger", "ninety-judge",
+             "ninety-personalizer"}
+    assert body[evidence.KEY] == {n: e for n, e in foundry.load_registry().items() if n in roles}
+    data = evidence.read(tmp_path / "failure-table-live.json")[0]
+    assert evidence.read(tmp_path / "failure-table-live.md") == (data, "recorded")
 
 def test_the_worst_personalized_minute_fits_the_superstep_budget():
     # Three moments, both writers rejected on every draft but the Tactician's last, which airs and

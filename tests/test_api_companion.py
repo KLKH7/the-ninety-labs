@@ -292,6 +292,28 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first_then_the_rest_in_ord
     asyncio.run(run())
 
 
+def test_a_late_phone_gets_a_playing_clock_as_it_stands_now(setup):
+    """The relay stores the laptop's once-a-second clock; replayed unchanged, a phone joining 0.8 s
+    later would start 0.8 s behind the big screen. A playing clock is advanced by the time it was
+    held; a paused one is not."""
+    client, app, clock = setup
+    code = pair(client)
+
+    async def run(playing):
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            await laptop.send({"type": "clock", "t": 30.0, "playing": playing})
+            async with asyncio.timeout(RECEIVE_S):
+                while app.rooms[code].latest.get("clock", {}).get("playing") is not playing:
+                    await asyncio.sleep(0)
+            clock.now += 0.8
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                return await phone.receive()
+
+    # mutation: send room.latest unchanged in the catch-up -> t stays 30.0
+    assert asyncio.run(run(True)) == {"type": "clock", "t": 30.8, "playing": True}
+    assert asyncio.run(run(False)) == {"type": "clock", "t": 30.0, "playing": False}
+
+
 def test_a_message_sent_during_a_phones_catch_up_still_reaches_it(setup):
     # Review of #145: the phone must be registered before its catch-up is sent. Registered after,
     # a laptop message arriving while the (slow) catch-up send is in flight reaches nobody.
