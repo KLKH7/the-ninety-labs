@@ -41,7 +41,7 @@
             <ion-header>
               <ion-toolbar class="band-bar" id="live-bar">
                 <ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open" aria-label="Listening and text size"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18 9 6l5 12M5.8 14h6.4"/><path d="M15 18l3-7 3 7M15.9 16h4.2"/></svg></button><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers and moments aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen scroll-events="true" id="live-content">
@@ -173,7 +173,7 @@
           <div class="ion-page">
             <ion-header>
               <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open" aria-label="Listening and text size"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18 9 6l5 12M5.8 14h6.4"/><path d="M15 18l3-7 3 7M15.9 16h4.2"/></svg></button><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen id="ask-content">
@@ -202,7 +202,6 @@
               <ion-segment value="all" id="story-mode" class="seg story-seg" aria-label="Which plays">
                 <ion-segment-button value="all"><ion-label>All plays</ion-label></ion-segment-button>
                 <ion-segment-button value="key"><ion-label>Key plays</ion-label></ion-segment-button>
-                <ion-segment-button value="described"><ion-label>Described</ion-label></ion-segment-button>
               </ion-segment>
               <ol id="insights" class="insights" data-mode="all"></ol>
             </ion-content>
@@ -280,6 +279,10 @@
           <div class="sheet-head">
             <h2 id="settings-title" tabindex="-1">Listening and text</h2>
             <button type="button" class="close" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="group group-first">
+            <label class="setting-row"><span><span class="row-title">Read aloud</span></span>
+              <button type="button" class="speak switch-button" role="switch" aria-checked="false" aria-pressed="false" aria-label="Read new answers and moments aloud"><span class="knob"></span></button></label>
           </div>
           <h3 class="group-title" id="voice-title">Voice</h3>
           <ul class="group" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>

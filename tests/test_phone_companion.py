@@ -558,9 +558,16 @@ def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, sit
 
 def test_the_territory_strip_is_match_json_s_and_rewinding_it_moves_the_whole_screen(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    page.wait_for_selector("#momentum:not([hidden])")
     match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
     (b,) = match["territory"]["bins"]  # the clip's few seconds are one 5-minute spell
+    # A few seconds of seen ball is too little to show: the card stays hidden.
+    assert b["seen_s"] < 30 and page.locator("#momentum").is_hidden()
+    # The same spell as a longer match would have it (40 s of seen ball): the strip shows.
+    b["seen_s"] = 40.0
+    page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_selector("#momentum:not([hidden])")
     assert match["territory"]["source"] == "tracked"
     strip = page.locator("#momentum-strip")
     said = strip.get_attribute("aria-valuetext")
@@ -641,19 +648,6 @@ def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browse
     page.wait_for_selector("#caption:not([hidden])")
     assert page.text_content("#caption") == "London break forward"
     assert page.evaluate("window.ninetySpokenAloud") == ["London break forward"]  # recorded, never voiced
-    assert not errors
-
-
-def test_story_described_shows_the_audio_description_said_so_far_never_ahead(browser, site):  # noqa: F811
-    laptop, page, errors = phone(browser, site, laptop_t=61.4)
-    said = json.loads(page.evaluate("fetch('/bundle/audio.json').then(r => r.text())"))["said"]
-    due = [line for line in said if line["t_in"] <= 61.4]
-    assert due and len(due) < len(said), [line["t_in"] for line in said]  # some said, some still to come
-    page.click("#tab-button-insights")
-    page.click("#story-mode ion-segment-button[value=described]")
-    page.wait_for_selector("#insights .lyric")
-    # mutation: drop the t_in filter in renderDescribed -> lines from later in the clip appear
-    assert page.locator("#insights .lyric").count() == len(due)
     assert not errors
 
 

@@ -574,3 +574,79 @@ ion-tab ion-content::part(scroll) {
 /* A value the fact-checker is not confident in is shown, quieter, and says so. */
 .stat-row.unsure .v { opacity: 0.55; }
 .stat-row.unsure .label::after { content: " · unsure"; font-size: 13px; color: var(--text-3); }
+
+/* ===== STRICT APPLE (Kian, Oct 24): black pages; the clubs' gradient only behind Live's score band;
+   flat #1C1C1E cards, radius 18, no borders, no glass (glass only on the tab bar and sheets); the
+   pitch flat and quiet; titles centred only where Apple Sports centres them (Team Stats, line-ups);
+   "How we know" a quiet grey text link; no monospace, no tracked uppercase. ===== */
+ion-tab > .ion-page { background: #000; }
+#panel-radar > .ion-page {
+  background: var(--grain), linear-gradient(180deg, transparent 0%, transparent 16%, rgba(0, 0, 0, 0.6) 30%, #000 44%),
+    radial-gradient(95% 50% at 0% 0%, var(--field-home), transparent 100%),
+    radial-gradient(95% 50% at 100% 0%, var(--field-away), transparent 100%),
+    linear-gradient(90deg, var(--field-home) 0%, #0c0c14 50%, var(--field-away) 100%);
+  background-color: #000;
+}
+@media (prefers-reduced-transparency: reduce) { #panel-radar > .ion-page { background: #000; } }
+ion-toolbar.band-bar, #panel-ask ion-toolbar.band-bar { --background: #000; --border-color: rgba(84, 84, 88, 0.65); backdrop-filter: none; -webkit-backdrop-filter: none; }
+#live-bar:not(.collapsed) { --background: transparent; --border-color: transparent; }
+
+.card, .insight, .group, .roster-card, .asked {
+  background: #1c1c1e; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-radius: 18px;
+}
+ion-segment.seg { --background: rgba(118, 118, 128, 0.24); border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+ion-segment.seg ion-segment-button { --indicator-color: #636366; }
+
+/* Card titles: left, 17 semibold, as iOS lists head a section; centred only on Team Stats and the
+   line-up cards, as Apple Sports does. */
+.card .section-title { text-align: left; font-size: 17px; font-weight: 600; }
+#live-stats .section-title, .roster-card .card-title { text-align: center; }
+
+/* The pitch: flat, quiet, thin lines, no card around it, no outline, no stripes. */
+.pitch-card { background: transparent; padding: 0; border-radius: 0; }
+#pitch-mode { margin: 0 0 10px; }
+:root, :root.ios { --pitch: #2a4a35; --pitch-stripe: #2a4a35; --pitch-line: rgba(255, 255, 255, 0.45); }
+.card .section-head { justify-content: space-between; }
+.map, .picture canvas, #heat, .half-pitch, .lineup-pitch { box-shadow: none; border-radius: 12px; }
+
+/* "How we know": a quiet grey link at the end of the sentence, as iOS writes "Learn more". */
+.how, .insight .how, .card .how, #panel-ask .how { background: none; padding: 0; min-height: 0; border-radius: 0; font: 400 15px -apple-system, system-ui, sans-serif;
+  color: var(--text-2); vertical-align: baseline; letter-spacing: 0; }
+.how::after { content: " ›"; }
+
+/* One "more" button, top right (Apple Sports' ⋯). */
+.more { width: 32px; height: 32px; margin-right: 10px; border: 0; border-radius: 16px; background: rgba(118, 118, 128, 0.32); color: #fff; display: grid; place-items: center; position: relative; }
+.more::before { content: ""; position: absolute; inset: -6px; } /* a 44 pt target */
+.more svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+
+/* The read-aloud switch row in the settings sheet. */
+.group-first { margin-top: 20px; }
+.switch-button { width: 51px; height: 31px; flex: none; border: 0; border-radius: 16px; background: rgba(120, 120, 128, 0.32); position: relative; padding: 0; margin: 0; }
+.switch-button .knob { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+.switch-button[aria-checked="true"] { background: #34c759; }
+.switch-button[aria-checked="true"] .knob { transform: translateX(20px); }
+.speak.switch-button[aria-pressed="true"] { background: #34c759; color: inherit; }
+
+/* Blind-critic pass 1 (Apple Sports side by side): */
+.live-pane { padding: 4px 12px 0; gap: 10px; }
+.card, .insight, .group, .roster-card { border-radius: 22px; }
+.pitch-card { background: #1c1c1e; padding: 12px; border-radius: 22px; }  /* the pitch inset in a card, not pasted edge to edge */
+.card .section-title, .card-title { color: var(--text); font-size: 17px; font-weight: 600; }
+.live-tabs button { font-size: 18px; font-weight: 600; }
+.club-name { font-size: 15px; font-weight: 600; }
+.band .crest { width: 38px; height: 44px; }
+ion-tab-bar { border: 0; height: 58px; }
+ion-tab-button { font-size: 10px; --padding-top: 6px; }
+ion-tab-button ion-label { font-size: 10px; font-weight: 500; }
+.tab-icon { width: 26px; height: 26px; }
+.more { background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.22); backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); }
+.more svg circle { fill: none; stroke: currentColor; stroke-width: 1.4; }
+/* The band's fields: desaturated, as Apple's maroon-to-indigo, holding to about 45% of the screen. */
+:root { --field-a: oklch(0.32 0.075 270); --field-b: oklch(0.33 0.1 12); }
+#panel-radar > .ion-page {
+  background: var(--grain), linear-gradient(180deg, transparent 0%, transparent 26%, rgba(0, 0, 0, 0.55) 38%, #000 50%),
+    radial-gradient(110% 60% at 0% 0%, var(--field-home), transparent 100%),
+    radial-gradient(110% 60% at 100% 0%, var(--field-away), transparent 100%),
+    linear-gradient(115deg, var(--field-home) 0%, color-mix(in oklch, var(--field-home) 50%, var(--field-away)) 50%, var(--field-away) 100%);
+  background-color: #000;
+}

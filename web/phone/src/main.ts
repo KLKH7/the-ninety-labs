@@ -352,14 +352,6 @@ interface DetectedEvent {
   interceptor?: string | null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
-interface DescribedLine {
-  id: string;
-  t_in: number;
-  t_out: number;
-  text: string;
-  spoken?: string;
-}
-let described: DescribedLine[] = []; // the audio description as said (audio.json), oldest first
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -388,13 +380,11 @@ async function loadBundle() {
     laptop.cuts = cuts;
     bundle = { base, manifest: m };
     bundleFps = m.fps;
-    const [radar, match, cards, audio] = await Promise.all([
+    const [radar, match, cards] = await Promise.all([
       m.radar ? get("radar.json") : null,
       m.match ? get("match.json") : null,
       m.cards ? get("cards.json") : null,
-      get("audio.json").catch(() => null), // the audio description's lines, for Story's transcript
     ]);
-    if (audio && Array.isArray(audio.said)) described = (audio.said as DescribedLine[]).slice().sort((a, b) => a.t_in - b.t_in);
     if (Array.isArray(cards)) bundleCards = (cards as InsightCard[]).filter((c) => c.status === "verified");
     {
       // The detected events: who scored each detected goal, and a player's part in the play.
@@ -438,7 +428,7 @@ function clubColours() {
     grass: read("--pitch"),
     stripe: read("--pitch-stripe"),
     line: read("--pitch-line"),
-    lineWidth: 1.5,
+    lineWidth: 1,
     homeInk: "#ffffff",
     awayInk: "#ffffff",
   };
@@ -740,7 +730,10 @@ function lockScreen(text: string) {
 for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
   b.addEventListener("click", () => {
     speaking = !speaking;
-    for (const x of document.querySelectorAll(".speak")) x.setAttribute("aria-pressed", String(speaking));
+    for (const x of document.querySelectorAll(".speak")) {
+      x.setAttribute("aria-pressed", String(speaking));
+      x.setAttribute("aria-checked", String(speaking));
+    }
     // Read-aloud on also describes the play as it happens: one control for a fan who can't see it.
     const live = $<HTMLInputElement>("now-live");
     if (live.checked !== speaking) {
@@ -1751,7 +1744,6 @@ function renderInsights() {
   // moments (with their diagrams) and goals.
   const list = $("insights");
   const now = viewTime();
-  if (list.dataset.mode === "described") return renderDescribed(list, now);
   const plays = playsUpTo(now);
   playsShown = plays.length;
   const key = list.dataset.mode === "key";
@@ -1814,39 +1806,8 @@ function renderInsights() {
   list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
 }
 
-/** Story's transcript of the audio description (Spotify's lyrics view): every line said so far,
- * the one on air now bright and big, those before it dimmer; never a line still to come. */
-let describedKey = "";
-function renderDescribed(list: HTMLElement, now: number) {
-  const said = described.filter((l) => l.t_in <= now + 1e-6);
-  const key = `${said.length}|${said.length && now <= said[said.length - 1].t_out ? "on" : "off"}`;
-  if (key === describedKey && list.childElementCount) return;
-  describedKey = key;
-  if (!said.length) {
-    const li = document.createElement("li");
-    li.className = "story-empty";
-    li.textContent = described.length ? "The description starts with the first play." : "This match has no audio description.";
-    list.replaceChildren(li);
-    return;
-  }
-  list.replaceChildren(
-    ...said.map((l, i) => {
-      const li = document.createElement("li");
-      li.className = "lyric";
-      // The line with its players named; the spoken form names sides ("Away 11"), so it is not used.
-      const text = named(l.text, undefined).replace(/\s*→\s*/g, " to ");
-      li.textContent = text.charAt(0).toUpperCase() + text.slice(1);
-      const current = i === said.length - 1 && now <= l.t_out;
-      if (current) li.setAttribute("aria-current", "true");
-      return li;
-    }),
-  );
-  list.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
-}
-
 $("story-mode").addEventListener("ionChange", (e) => {
   $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
-  describedKey = "";
   renderInsights();
   requestAnimationFrame(redrawPictures);
 });
@@ -1886,8 +1847,7 @@ function showMatch(t: number) {
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
-  if ($("insights").dataset.mode === "described") renderDescribed($("insights"), t);
-  else if (playsUpTo(t).length !== playsShown) renderInsights();
+  if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
   const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
   if (key === statsKey) return;
@@ -2106,10 +2066,14 @@ $("to-live").addEventListener("click", () => {
 });
 
 let stripKey = "";
+const MIN_TERRITORY_S = 30;
 function renderMomentum(live: number, t: number) {
   const tr = territory();
-  $("momentum").hidden = !tr || !tr.bins.length;
-  if (!tr || !tr.bins.length) return;
+  // With under half a minute of seen ball so far the strip would be a sliver on an empty card, so the
+  // card is hidden until there is something to show (design: MIN_TERRITORY_S).
+  const seenS = tr ? tr.bins.filter((b) => b.t <= live && b.home !== null).reduce((sum, b) => sum + b.seen_s, 0) : 0;
+  $("momentum").hidden = !tr || seenS < MIN_TERRITORY_S;
+  if (!tr || seenS < MIN_TERRITORY_S) return;
   const key = `${Math.floor(live)}|${scrubT === null ? "" : t.toFixed(1)}`;
   if (key === stripKey) return;
   stripKey = key;
