@@ -2176,6 +2176,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k "walks_over_a_set_ball or places_are_set_from"`
   (each fails on main); `scripts/defect_sweep/crossball.py` counts walks over the set ball over a sweep.
 
+### 213. A match has two halves: build what the Laws require, and say plainly what is still missing
+- **What happened:** the engine played 90 minutes as one long half: no whistle at 45:00, no
+  second-half kick-off. For a demo cut from a full match, a judge would see play run straight through
+  half-time. Switching ends was out of reach for the deadline: the attacking direction is fixed by
+  team in about 60 places in the engine and in at least ten readers of its data (the stats, vision,
+  evaluation, the validator), so it needs a direction field in the contract before the engine can
+  change it. The first version also ended the half between a penalty being taken and its shot
+  being struck, because "in progress" was read from the shot alone.
+- **Rule:** a rule of the game is built as far as can be done right, and the rest is written down as
+  a gap in GROUNDING with its reason, never left to look as if it is there. A direction (or any
+  other per-period fact) that many readers derive from the team is a contract field before it is a
+  variable. A state that extends a time limit ("a penalty in progress") names every phase it covers:
+  awarded, taken, struck, until completed.
+- **Check:** `uv run pytest tests/test_half_time.py` (each fails on main); the 90-minute sweep in
+  the pull request: the half-time whistle in every match, the second-half kick-off by the other
+  team, nothing in play across it, the contract met.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those
@@ -2318,6 +2335,23 @@ short and actionable. This file is public: no research sources, product names or
     - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
     - the second still let a body rise on a touch away from the camera.
     The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
+
+
+### 217. The demo runs the system the pitch describes
+- **What happened:** the pitch and the challenge map describe a multi-agent graph (an Analyst picks
+  moments, a Tactician explains, a Challenger offers another reading, the fact-checking agent sends
+  wrong claims back), and the ablation measured it. But `ninety-e2e`, which builds the bundle the
+  viewer and the video show, ran the single Analyst -> fact-checker slice. A judge watching the
+  demo would have seen a different system from the one the README claims. The audit found it by
+  reading `ninety/e2e.py`, not the docs. The graph also checked a Challenger's reading after the
+  Tactician's claim was already verified, and rewrote it when it failed: three model calls in the
+  committed recording spent on a claim that could not air.
+- **Rule:** the path that makes the demo is the path the claims describe; a fallback is named in
+  the bundle and the trace whenever it ran. A check whose outcome cannot change what airs is not
+  run.
+- **Check:** `tests/test_e2e.py::test_the_claim_is_about_the_shot_and_carries_its_numbers` asserts
+  the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
+  and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
 
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
@@ -2469,6 +2503,88 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 230. A threshold measured on one look is re-measured when the look changes, by the same rule
+- **What happened:** the camera trust test's height band (0.901 to 1.002) was measured on renderer
+  0.3's validation clips. On today's renders (0.5.x) the players' height ratio through a right
+  camera is 1.00 to 1.11, so the band rejected every correctly fitted frame: nothing was placed on
+  the pitch, and with the grain defect (lesson 215) hiding behind it, the cause looked like one
+  thing when it was two.
+- **Rule:** a threshold derived from rendered data carries the look it was measured on; when the
+  renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
+  before any number that passes through it is read, and the new value cites both.
+- **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
+  `ninety/eval/band_derive.py` re-derives it.
+- **And:** re-derived, the heights alone trusted a clip whose camera was 28 m wrong in every frame on
+  dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
+  broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
+  `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
+
+### 221. A number matched by value and unit alone passes in the wrong role
+- **What happened:** the insight fact-check let a sentence state any number a cited fact held,
+  written with that number's unit. A planted claim "6 players against 1 player" passed when the
+  true count was 5 against 1, because the fact's other number, 5 extra players, was also in
+  players; "won it back 5 seconds after losing it" passed because the fact also held the 5-second
+  counter-press window. Both numbers were on the fact; neither was the number the sentence said.
+- **Rule:** a fact's numbers carry their role: a distinct unit where they measure different things
+  (`extra players`), and a context where one unit serves two (the other side's count after
+  "against", the window after "within" or "next"). A number written in a context may stand only
+  for a number of that context, and a number of a context only where it is written in it. The same holds for a fact's direction: a sentence that says it went the other way (won back or not,
+  lost or kept, to an open teammate or not, nobody open) is checked against the fact's own field, and the
+  evaluation plants each reversal (the merge queue's review found them passing). A list of wrong phrasings fails open (a second review found 27 of 61
+  paraphrases passing it), and so does a list of direction words (a third found 27 of 64 more): the
+  check is closed by construction now. For a fact whose direction matters, the fact's own phrases,
+  numbers, names and a short list of glue words are taken out of the sentence, and any word left
+  holds it. True sentences in other words are held too; that cost is measured, not hidden. The rule
+  covers only the facts it names; any other fact's direction words are left to the Judge, and the
+  docs say so.
+- **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
+  overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
+  the regain, the extra players said as the own count, both rejected).
+
+### 222. A floor on how many there are can make a share impossible to reach
+- **What happened:** the Insight Scout pushed a fact only when it ranked above 90% of its kind so
+  far, among at least 5. Among 5, the best rank is 4 of 5, 80%, so no fact could ever be pushed
+  until there were 10: the floor and the share were each sensible, and together they made the
+  first cards of every match impossible. A test that expected a card found none.
+- **Rule:** when a gate combines a least count and a share, check that the count can reach the
+  share (a share s needs at least 1 / (1 - s) items), and set the floor from the share.
+- **Check:** `ninety/agents/scout.py` `MIN_SO_FAR` is 10 for `NOTABLE` 0.9;
+  `tests/test_companion_match.py::test_scout_cards_are_verified_and_spaced` plants a notable fact
+  and requires its card.
+
+### 223. A rule about who acted, tested on sentences that start with the club, rejects the ones that start with the player
+- **What happened:** the insight fact-check took the first club a sentence named as the side that
+  acted. Every test sentence began with the club. On the stand-in match, every true line break said
+  by name, "Ben Raimble played a pass that took 6 Fenwick players out of the game", was rejected:
+  the first club named was the opponents, who were counted, not acting.
+- **Rule:** a rule that reads roles out of a sentence is tested on every sentence shape the writers
+  produce (lesson 130): a club written straight after a number is what was counted, and the side
+  is the first club named otherwise; for a line break, the counted club must be the other side.
+- **Check:** `tests/test_insight_check.py` (a named passer with the counted opponents passes; the
+  counted club being the passing side is rejected); `insight_claims` reports no true claim stopped.
+
+### 228. A new test file named after a word another module already owns overwrites that module's tests
+- **What happened:** adding tests for the playing-style tool (`ninety/intel/style.py`), a new file
+  was written to `tests/test_style.py`, which already held the engine's team-style tests. The write
+  replaced them; `git status` showed `M` where a new file shows `??`. This is lesson 196 again.
+- **Rule:** before writing a test file, check that its path is free (`git ls-files tests/<name>`),
+  and name a new test file after its own module's full purpose (`test_playing_style.py`), never a
+  word another package also uses.
+- **Check:** `git status --short tests/` after creating test files: every new file shows `??`.
+
+### 229. Prose a number reader will check is tested through that reader
+- **What happened:** the Referee's summary of Law 11 said "being in an offside position is not an
+  offence by itself; it becomes one when he gets involved". The fact-checker reads number words,
+  so "one" was a number no fact held, and every answer that quoted the summary was refused and fell
+  back to a shorter one. A test that the summaries hold no digits passed: it read the text, not what
+  the checker reads.
+- **Rule:** text that the fact-checker will read (code's sentences, the Law summaries) is tested by
+  running it through the checker's own reader (`factcheck.spelled_as_digits`, then `check`), not by
+  a separate look at the characters.
+- **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
+  `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
 
 ### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
 - **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
