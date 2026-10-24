@@ -40,3 +40,31 @@ def test_team_stats_have_bins_and_no_possession():
     home = stats["distance"]["home"]
     assert home["coverage"] == 1.0 and [b["minute_from"] for b in home["bins"]] == [1, 6, 11]
     assert "possession" not in stats  # no measured gate has opened: the phone hides the row
+
+
+def test_the_step_rule_takes_the_smallest_step_under_the_share_or_none():
+    from ninety.eval import team_distance_eval as e
+
+    rows = [{"step_s": 1.0, "share": 0.2}, {"step_s": 2.0, "share": 0.04}, {"step_s": 3.0, "share": 0.01}]
+    assert e.pick(rows) == 2.0
+    assert e.pick([{"step_s": 1.0, "share": 0.2}, {"step_s": 10.0, "share": 0.1}]) is None
+
+
+def test_the_label_is_the_worst_bin_rounded_up():
+    from ninety.eval import team_distance_eval as e
+
+    cases = [{"ratio": {"min": 0.936, "max": 1.122}}, {"ratio": {"min": 0.856, "max": 0.954}}]
+    assert e.label_pct(cases) == 15
+    assert e.label_pct([{"ratio": {"min": 0.95, "max": 1.05}}]) == 5
+
+
+def test_the_phone_is_told_how_far_the_distance_may_be_off(tmp_path, monkeypatch):
+    from ninety.intel import stats_table
+
+    cal = tmp_path / "cal.json"
+    cal.write_text('{"within_pct": 15}')
+    monkeypatch.setattr(team_stats, "CALIBRATION", cal)
+    assert team_stats.team_stats([])["within_pct"] == 15
+    assert stats_table._distance_label() == "Distance covered (tracked, ±15%)"
+    monkeypatch.setattr(team_stats, "CALIBRATION", tmp_path / "none.json")
+    assert team_stats.team_stats([])["within_pct"] is None

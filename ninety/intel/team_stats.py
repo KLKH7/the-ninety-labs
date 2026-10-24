@@ -16,9 +16,11 @@ and the phone hides the row.
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from ninety.intel.scene import FPS, TEAM_SIZE, TEAMS, minute_of
 
@@ -27,6 +29,13 @@ STEP_S = 1.0  # the stat's time scale, the tracked frames' smoothing (see the mo
 # (*design*: past that with the position error to spare) is a track jumping, not a player running.
 MAX_STEP_MPS = 12.0
 BIN_MIN = 5  # the phone's strips: one bar per five match minutes (*design*)
+# How far the tracked distance may sit from the truth, as the phone labels it ("±15%"): measured on a
+# held-out simulated match (ninety/eval/team_distance_eval.py --calibrate, docs/eval/team-distance.md).
+CALIBRATION = Path(__file__).with_name("team_distance_calibration.json")
+
+
+def within_pct() -> int | None:
+    return json.loads(CALIBRATION.read_text())["within_pct"] if CALIBRATION.exists() else None
 
 
 def _sampled(frames: Sequence[Mapping], step_s: float = STEP_S) -> list[Mapping]:
@@ -67,7 +76,7 @@ def team_stats(frames: Sequence[Mapping]) -> dict:
     by_bin: dict[int, list[Mapping]] = defaultdict(list)
     for f in frames:
         by_bin[(minute_of(float(f["t"])) - 1) // BIN_MIN].append(f)
-    out: dict = {"from_footage": True, "bin_min": BIN_MIN, "distance": {}}
+    out: dict = {"from_footage": True, "bin_min": BIN_MIN, "within_pct": within_pct(), "distance": {}}
     for team in TEAMS:
         whole = distance(frames, team)
         bins = []
@@ -89,4 +98,4 @@ def team_stats(frames: Sequence[Mapping]) -> dict:
     return out
 
 
-__all__ = ["BIN_MIN", "MAX_STEP_MPS", "STEP_S", "distance", "team_stats"]
+__all__ = ["BIN_MIN", "CALIBRATION", "MAX_STEP_MPS", "STEP_S", "distance", "team_stats", "within_pct"]

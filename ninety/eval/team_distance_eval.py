@@ -59,6 +59,34 @@ def noise_share(run: Path, minutes: float, step_s: float, fragment_s: float, see
             "share": round(err_m / true_m, 4) if true_m else None}
 
 
+def pick(rows: list[dict]) -> float | None:
+    """The rule: the smallest step whose noise share is at most NOISE_SHARE; None when none is."""
+    return next((r["step_s"] for r in rows if r["share"] is not None and r["share"] <= NOISE_SHARE), None)
+
+
+def label_pct(cases: list[dict]) -> int:
+    """The phone's label: the worst a five-minute bin read against the truth, any case, rounded up."""
+    worst = max(max(abs(c["ratio"]["min"] - 1), abs(c["ratio"]["max"] - 1)) for c in cases)
+    return math.ceil(round(worst * 100, 6))
+
+
+def step_lines(path: Path) -> list[str]:
+    """What the pre-registered step rule found on the development matches, when it was run."""
+    if not path.exists():
+        return []
+    got = json.loads(path.read_text())
+    shares = ", ".join(f"{r['step_s']:g} s {r['share']:.1%}" for r in got["shares"])
+    found = "chose no step, so the stat stays at one second"
+    if got["chosen_s"]:
+        found = f"chose {got['chosen_s']:g} s"
+    return [
+        "",
+        f"Step: the rule fixed before any share was seen ({got['rule']}, on {', '.join(got['runs'])}) "
+        f"{found}. "
+        f"Noise share by step: {shares}. The error is a walk that a longer step does not average away.",
+    ]
+
+
 def choose(runs: list[Path], minutes: float, fragment_s: float = 30.0) -> dict:
     """The pre-registered rule on the development matches: the smallest step with a small noise share."""
     rows = []
@@ -66,7 +94,7 @@ def choose(runs: list[Path], minutes: float, fragment_s: float = 30.0) -> dict:
         got = [noise_share(r, minutes, step_s, fragment_s) for r in runs]
         err, true = sum(g["error_m"] for g in got), sum(g["true_m"] for g in got)
         rows.append({"step_s": step_s, "share": round(err / true, 4) if true else None})
-    chosen = next((r["step_s"] for r in rows if r["share"] is not None and r["share"] <= NOISE_SHARE), None)
+    chosen = pick(rows)
     return {"runs": [str(r) for r in runs], "rule": f"smallest step with noise share <= {NOISE_SHARE}",
             "shares": rows, "chosen_s": chosen}
 
@@ -125,6 +153,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--minutes", type=float, default=30.0)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--choose", type=Path, nargs="+", help="development runs: apply the step rule and stop")
+    ap.add_argument(
+        "--calibrate", action="store_true", help="a held-out run: write the phone's label from its range"
+    )
     args = ap.parse_args(argv)
     if args.choose:
         got = choose(args.choose, args.minutes)
@@ -143,7 +174,17 @@ def main(argv: list[str] | None = None) -> None:
             g = grade(args.run, args.minutes, missing, fragment_s)
             report["cases"].append(g)
             print(missing, fragment_s, g["ratio"], g["ratio_shown"])
+    # The phone's label: the worst a five-minute bin read against the truth, over every case, rounded
+    # up to a whole percent. Written only from a held-out match (--calibrate).
+    report["within_pct"] = label_pct(report["cases"])
     args.out.write_text(json.dumps(report, indent=1) + "\n")
+    if args.calibrate:
+        team_stats.CALIBRATION.write_text(
+            json.dumps(
+                {"within_pct": report["within_pct"], "run": args.run.name, "source": str(args.out)}, indent=1
+            )
+            + "\n"
+        )
     lines = [
         "# Team distance on the phone, graded against the truth",
         "",
@@ -163,6 +204,10 @@ def main(argv: list[str] | None = None) -> None:
     full = [c["ratio"] for c in report["cases"] if c["missing"] == 0]
     lo, hi = min(r["min"] for r in full), max(r["max"] for r in full)
     lines += [
+        "",
+        f"The phone labels the distance ±{report['within_pct']}%: the worst five-minute bin above, any "
+        "case, rounded up.",
+        *step_lines(args.out.with_name("team-distance-step.json")),
         "",
         f"Reading: with every player tracked, the distance reads {lo} to {hi} times the truth per five "
         "minutes. The persistent position error walks, and its walk adds distance (more where players "
