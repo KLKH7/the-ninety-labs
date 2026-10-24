@@ -8,7 +8,7 @@ from ninety.agents.insight_check import verify
 from ninety.intel.counter_press import WITHIN
 from ninety.intel.teamsheet import Fixture
 
-FX = Fixture(7, "OAK", "FEN")
+FX = Fixture(7, "LON", "LIS")
 CLUBS = FX.clubs  # home London Athletic, away Lisbon Esportes
 LB = FX.sheet("home")[4]  # the left-back on London Athletic's sheet
 

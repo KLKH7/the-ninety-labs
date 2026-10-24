@@ -290,7 +290,7 @@ def test_a_short_track_gets_no_role():
 
 
 def test_who_says_a_name_only_past_its_gate():
-    fx = teamsheet.Fixture(7, "OAK", "FEN")
+    fx = teamsheet.Fixture(7, "LON", "LIS")
     assigned = {"h-t5": {"role": "LB", "share": 0.8, "frames": 100}}
     open_gate = {"name": 0.7, "role": 0.6, "line": 0.5}
     w = roles.who("h-t5", "home", assigned, fx, open_gate)
@@ -310,7 +310,8 @@ def test_team_sheet_is_fictional_and_deterministic():
     from ninety.render.params import TEAM_CODES
     from ninety.sim.engine import FORMATION
 
-    assert set(teamsheet.CLUBS) == set(TEAM_CODES)
+    assert set(TEAM_CODES) <= set(teamsheet.CLUBS)  # every code the renderer draws has a club
+    assert all(name.upper().startswith(code[0]) for code, name in teamsheet.CLUBS.items())
     assert teamsheet.ROLES == tuple(r for r, _, _ in FORMATION)
     a, b = teamsheet.team_sheet(7, "OAK"), teamsheet.team_sheet(7, "OAK")
     assert a == b and a != teamsheet.team_sheet(8, "OAK")
@@ -366,7 +367,7 @@ def test_insights_are_built_from_tracked_frames_only():
 
     f = frame(0, parked("home"), parked("away"))
     with pytest.raises(ValueError, match="tracked"):
-        MatchInsights.build("x", [{**f, "source": "truth"}], [], teamsheet.Fixture(7, "OAK", "FEN"), {})
+        MatchInsights.build("x", [{**f, "source": "truth"}], [], teamsheet.Fixture(7, "LON", "LIS"), {})
 
 
 def test_a_simulated_match_serves_no_insights():

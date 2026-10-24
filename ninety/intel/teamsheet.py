@@ -21,21 +21,25 @@ from __future__ import annotations
 import random
 from dataclasses import asdict, dataclass
 
-# One fictional club per renderer code (ninety/render/params.TEAM_CODES), the names every screen
-# shows (web/viewer/src/teams.ts CLUBS): tests hold all three equal.
+# One fictional club per renderer code (ninety/render/params.TEAM_CODES, plus the demo's LON and LIS),
+# the names every screen shows (web/viewer/src/teams.ts CLUBS): tests hold them equal.
 CLUBS = {
     "ASH": "Ashvale",
     "CRW": "Crowmere",
     "DUN": "Dunhollow",
     "ELM": "Elmwick",
-    "FEN": "Lisbon Esportes",
+    "FEN": "Fenwick",
     "GRV": "Grovely",
     "HLT": "Holtmoor",
     "IVY": "Ivydale",
     "KST": "Kestwood",
     "MRL": "Merlton",
-    "OAK": "London Athletic",
+    "OAK": "Oakfield",
     "QRY": "Quarrydale",
+    # The demo's clubs (Kian, Oct 24): codes of their own, so each name starts with its scorebug
+    # code's letters, as web/viewer/src/teams.ts requires.
+    "LON": "London Athletic",
+    "LIS": "Lisbon Esportes",
 }
 # The 4-3-3 the engine plays (ninety/sim/engine.FORMATION, the same role codes; tests hold them
 # equal): role code, shirt number (the common squad numbering of a 4-3-3, *design*), what a fan calls
@@ -98,7 +102,7 @@ class Starter:
 
 
 # Short names for a score line, where they differ from the full name (Kian, Oct 24).
-SHORT = {"OAK": "London", "FEN": "Lisbon"}
+SHORT = {"LON": "London", "LIS": "Lisbon"}
 
 
 def short_name(code: str) -> str:

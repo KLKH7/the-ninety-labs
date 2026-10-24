@@ -12,7 +12,7 @@ from ninety.agents.contracts import Question, schema_validator
 from ninety.intel.match_insights import MatchInsights
 from ninety.intel.teamsheet import Fixture
 
-FX = Fixture(7, "OAK", "FEN")
+FX = Fixture(7, "LON", "LIS")
 LB = FX.sheet("home")[4]
 
 
