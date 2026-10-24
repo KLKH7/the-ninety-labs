@@ -4,7 +4,8 @@ Status: **applied on Oct 24 (see Result); the demo shows seed 8080 by Kian's cho
 its pool is simulated on the final engine. It is applied once, at the engine SHA the Coordinator
 names after the last engine merges, and its output is recorded below. If the footage then has a
 defect, that is reported and fixed in the renderer; the match is not swapped for a better-looking
-seed, and the weights, gates and windows below are not changed after the sweep.
+seed, and the weights, gates and windows below are not changed after the sweep. That promise was broken once, by a
+stated human choice: the demo shows seed 8080, chosen by Kian after seeing the result (Result).
 
 **What it is for:** the live demo plays one whole simulated 90-minute match, condensed to 15 to 20
 minutes the way a broadcaster cuts a condensed match: every goal is in it, the clock jumps at each
