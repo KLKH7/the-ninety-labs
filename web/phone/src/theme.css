@@ -15,7 +15,7 @@
   --away: #e11d48;
   --crest-home: #1e40af;
   --crest-away: #9f1239;
-  --card: var(--ion-item-background, #fff);
+
   --muted: var(--ion-color-step-600, #5b6472);
   --line: var(--ion-color-step-150, #e3e5e9);
   --warn: #8a6100;
@@ -37,3 +37,9 @@
     --bad: #ff8a8a;
   }
 }
+
+/* Grouped backgrounds, as iOS does: a grey page, white cards (black and #1c1c1e in dark). */
+:root { --page: #f2f2f7; --card: #ffffff; }
+@media (prefers-color-scheme: dark) { :root { --page: #000000; --card: #1c1c1e; } }
+ion-content { --background: var(--page); }
+ion-footer.composer, ion-tab-bar { --background: color-mix(in srgb, var(--page) 82%, transparent); }

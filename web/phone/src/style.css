@@ -145,7 +145,7 @@ ion-footer.composer { padding: 8px 0 10px; }
 .insights { list-style: none; margin: 8px 0 0; padding: 0 16px 24px; display: grid; gap: 12px; }
 .insight { background: var(--card); border-radius: 14px; padding: 14px; }
 .insight-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.insight h3 { margin: 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.insight h3 { margin: 0; font-size: 1.05rem; font-weight: 700; }
 .insight .when { flex: none; font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .insight p { margin: 6px 0 0; font-size: 17px; }
 .why { margin-top: 8px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ion-color-primary); font-size: 16px; }
@@ -177,3 +177,11 @@ body.marks ion-tab-bar[data-open] { position: static; }
 /* The translucent footer's blur layer sits under its content, never over it. */
 ion-footer .footer-background { pointer-events: none; }
 ion-footer.composer > :not(.footer-background) { position: relative; z-index: 1; }
+
+/* "How do we know?" */
+.how { display: block; margin-top: 4px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ion-color-primary); font-size: 16px; }
+.how-body { padding-bottom: 32px; overflow-y: auto; }
+#how-sheet .sheet-body { height: 100%; overflow-y: auto; }
+canvas.seen { display: block; width: 100%; border-radius: 8px; background: #000; }
+#how-title:focus { outline: none; }
+.ids { font: 0.78rem ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }

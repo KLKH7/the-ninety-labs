@@ -306,7 +306,10 @@ interface BundleManifest {
   fps: number;
   t_start: number;
   segments?: { index: number; frame: number; frames: number }[];
-  footage: { frames: number };
+  width: number;
+  height: number;
+  footage: { kind: "video" | "frames"; src: string; frames: number };
+  detector?: string | null;
   teams?: unknown;
   radar?: unknown;
   match?: unknown;
@@ -314,6 +317,7 @@ interface BundleManifest {
 }
 
 let bundleFps = 25;
+let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
@@ -341,6 +345,7 @@ async function loadBundle() {
     showTeams();
     const cuts = timeline(m);
     laptop.cuts = cuts;
+    bundle = { base, manifest: m };
     bundleFps = m.fps;
     const [radar, match, cards] = await Promise.all([
       m.radar ? get("radar.json") : null,
@@ -834,6 +839,7 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
     if (a.visual) li.append(picture(a.visual, a.t_to, a.names));
     if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
     li.append(...evidence(a));
+    li.append(howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names }));
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
   return li;
@@ -969,6 +975,151 @@ $("ask-form").addEventListener("submit", (e) => {
   void ask($<HTMLInputElement>("question").value);
 });
 
+// --- "How do we know?": what the cameras saw, what was measured, what checked it ---------------
+
+interface How {
+  t: number;
+  visual: ScoutVisual | null;
+  source: "code" | "model";
+  evidence: string[];
+  names?: Record<string, string>;
+}
+interface FrameDetections {
+  frame: number;
+  detections: { cls: string; bbox: [number, number, number, number]; score: number }[];
+}
+
+const howSheet = $("how-sheet") as IonModal;
+howSheet.breakpoints = [0, 0.95];
+howSheet.initialBreakpoint = 0.95;
+let detections: Promise<Map<number, FrameDetections>> | null = null;
+
+/** The bundle's detections, by match frame: what the detector found, read once, on first use. */
+function bundleDetections(): Promise<Map<number, FrameDetections>> {
+  if (!bundle) return Promise.resolve(new Map());
+  detections ??= fetch(new URL("detections.jsonl", bundle.base))
+    .then((r) => (r.ok ? r.text() : ""))
+    .then((text) => {
+      const byFrame = new Map<number, FrameDetections>();
+      for (const line of text.split("\n")) {
+        if (!line.trim()) continue;
+        const row = JSON.parse(line) as FrameDetections;
+        byFrame.set(row.frame, row);
+      }
+      return byFrame;
+    });
+  return detections;
+}
+
+function howButton(h: How): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "how";
+  b.textContent = "How do we know?";
+  b.dataset.open = "the label 'How do we know?'";
+  b.addEventListener("click", () => void openHow(h));
+  return b;
+}
+
+/** The broadcast picture at match time `t`, drawn onto `canvas` from the bundle's footage, with
+ * every detection of that frame boxed and its confidence. Resolves to the detections drawn. */
+async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"]> {
+  if (!bundle) return [];
+  const m = bundle.manifest;
+  const frame = Math.round(t * m.fps);
+  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
+  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * m.fps)));
+  canvas.width = m.width;
+  canvas.height = m.height;
+  const ctx = canvas.getContext("2d")!;
+  const picture = await new Promise<CanvasImageSource | null>((resolve) => {
+    if (m.footage.kind === "frames") {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = new URL(`${m.footage.src}${String(index).padStart(5, "0")}.jpg`, bundle!.base).toString();
+    } else {
+      const video = document.createElement("video");
+      video.muted = true;
+      video.preload = "auto";
+      video.src = new URL(m.footage.src, bundle!.base).toString();
+      video.addEventListener("loadedmetadata", () => (video.currentTime = (index + 0.5) / m.fps), { once: true });
+      video.addEventListener("seeked", () => resolve(video), { once: true });
+      video.addEventListener("error", () => resolve(null), { once: true });
+    }
+  });
+  if (picture) ctx.drawImage(picture, 0, 0, m.width, m.height);
+  const found = (await bundleDetections()).get(frame)?.detections ?? [];
+  ctx.lineWidth = Math.max(2, m.width / 400);
+  ctx.font = `700 ${Math.round(m.width / 45)}px system-ui, sans-serif`;
+  for (const d of found) {
+    const [x0, y0, x1, y1] = d.bbox;
+    const sure = d.score >= 0.8; // design: the same cut the caption states
+    ctx.strokeStyle = sure ? "#ffffff" : "#ffd60a";
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.lineWidth = Math.max(3, m.width / 300);
+    ctx.strokeStyle = "#000";
+    ctx.strokeText(`${Math.round(d.score * 100)}%`, x0, y0 - 6);
+    ctx.fillStyle = sure ? "#ffffff" : "#ffd60a";
+    ctx.fillText(`${Math.round(d.score * 100)}%`, x0, y0 - 6);
+    ctx.lineWidth = Math.max(2, m.width / 400);
+  }
+  return found;
+}
+
+async function openHow(h: How) {
+  const body = $("how-body");
+  const section = (title: string, ...children: HTMLElement[]) => {
+    const list = document.createElement("ion-list");
+    list.setAttribute("inset", "");
+    const head = document.createElement("ion-list-header");
+    const label = document.createElement("ion-label");
+    label.className = "caps";
+    label.textContent = title;
+    head.append(label);
+    const pad = document.createElement("div");
+    pad.className = "pad-in";
+    pad.append(...children);
+    list.append(head, pad);
+    return list;
+  };
+  const p = (text: string, cls = "fine") => {
+    const el = document.createElement("p");
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  };
+  const parts: HTMLElement[] = [];
+  if (bundle) {
+    const canvas = document.createElement("canvas");
+    canvas.className = "seen";
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}.`);
+    const caption = p(`The broadcast picture at ${clock(h.t)}.`);
+    parts.push(section("What the cameras saw", canvas, caption));
+    void drawSeen(canvas, h.t).then((found) => {
+      const unsure = found.filter((d) => d.score < 0.8).length;
+      const said = found.length
+        ? `${found.length} things our detector found in this frame, each boxed with how sure it was${unsure ? `; ${unsure} under 80% (yellow)` : ""}.`
+        : "The detector found nothing in this frame.";
+      caption.textContent = `${said} ${bundle!.manifest.detector ? `Detector: ${bundle!.manifest.detector}.` : ""}`.trim();
+      canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ") || "nothing detected"}.`);
+    });
+  } else parts.push(section("What the cameras saw", p("This phone has no footage from the big screen to show.")));
+  if (h.visual) parts.push(section("What it measured", picture(h.visual, h.t, h.names), p("Positions tracked from the video, never the answer key.")));
+  const checked =
+    h.source === "model"
+      ? "The Companion agent wrote the sentence; code checked every number against the cited facts, and the Judge read it before it reached you."
+      : "Code computed every number and put it in a fixed sentence; no AI wrote it, so there was nothing for the Judge to read.";
+  const ids = p(`Facts cited: ${h.evidence.join(", ") || "none"}`, "fine ids");
+  parts.push(section("The check", p(checked, "said"), ids));
+  body.replaceChildren(...parts);
+  await howSheet.present();
+  requestAnimationFrame(redrawPictures);
+  $("how-title").focus();
+}
+$("close-how").addEventListener("click", () => void howSheet.dismiss());
+
 // --- insights: the hidden-stat cards pushed so far -----------------------------------------------
 
 let unread = 0;
@@ -1066,7 +1217,7 @@ function renderInsights() {
         panel.hidden = !open;
         if (open) requestAnimationFrame(redrawPictures);
       });
-      li.append(why, panel);
+      li.append(why, panel, howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names }));
       return li;
     }),
   );

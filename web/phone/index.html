@@ -185,6 +185,16 @@
           </ion-list>
         </div>
       </ion-modal>
+      <!-- How do we know? -->
+      <ion-modal id="how-sheet" can-dismiss="true">
+        <div class="sheet-body" aria-labelledby="how-title">
+          <div class="sheet-head">
+            <h2 id="how-title" tabindex="-1">How do we know?</h2>
+            <button type="button" class="close" id="close-how" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div id="how-body" class="how-body"></div>
+        </div>
+      </ion-modal>
     </ion-app>
     <p class="sr-only" id="announce" aria-live="polite"></p>
     <script type="module" src="./src/main.ts"></script>

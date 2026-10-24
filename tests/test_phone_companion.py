@@ -444,3 +444,18 @@ def test_the_mocks_answers_and_cards_match_the_agents_schemas(browser, site):  #
         if p.get("type") == "answer":
             answer_schema.validate(p["answer"])
     assert not errors
+
+
+def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_check(browser, site):  # noqa: F811
+    """At 61.2 s the cut clip's detections (tests/e2e_clip.py) are on the bundle's frame: the sheet
+    boxes each with its confidence, says so in words, and says which check passed the answer."""
+    laptop, page, errors = phone(browser, site, laptop_t=61.2)
+    answer = ask(page, "Where are Oakfield overloading?")
+    answer.locator(".how").click()
+    seen = "document.querySelector('#how-body canvas.seen')?.getAttribute('aria-label')"
+    page.wait_for_function(f"({seen} || '').includes('percent')")
+    words = page.get_attribute("#how-body canvas.seen", "aria-label")
+    assert words.startswith("The broadcast picture at 1:01")
+    assert "no AI wrote it" in page.inner_text("#how-body")  # a code answer: no Judge to claim
+    assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
+    assert not errors
