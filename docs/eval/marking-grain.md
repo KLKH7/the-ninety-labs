@@ -28,5 +28,34 @@ true camera: the median over frames of the median ground error over a pixel grid
 Seed 112 is a wrong camera that lines its markings up (lesson 148): the players' heights are the
 test that must reject it, and their band is being re-derived for the current renders.
 
-The frozen test set's older look (renderer 0.3.2) was not re-scored: its published numbers stand as
-they were measured, with the detector of their day.
+## The older look and the tactical lenses (the merge bar)
+
+The same fit (`fit_clip`, first 100 frames; `fit_fixed` for a lens), main against this change, with
+no player boxes for either (so they compare; the published runs had boxes), graded against the true
+camera: frames passing the markings test, the median residual, and the ground error (median, p90).
+Software GL is the frozen test set's renderer (0.3.2); GPU GL the pod's (0.5.15). A third variant,
+a raw marking pixel kept only where the blurred image marks it within 1 px (no line widened), is
+shown for comparison and not adopted: it is no better on either look.
+
+| Clip (GL) | Main | This change (blur) | Raw confirmed by blur |
+|---|---|---|---|
+| test 900001 (software) | 100 ok, 1.02 px, **0.11 m** (0.26) | 100 ok, 1.26 px, **0.34 m** (0.78) | 100 ok, 1.16 px, 0.24 m (0.50) |
+| test 900004 (software) | 0 ok, 8.1 px, 33.9 m (34.9) | 100 ok, 0.98 px, 0.16 m (0.57) | 100 ok, 0.93 px, 0.20 m (0.50) |
+| test 900005 (software) | 9 ok, 10.4 px, 0.02 m (0.33) | 100 ok, 1.17 px, 0.055 m (0.17) | 100 ok, 1.10 px, 0.06 m (0.12) |
+| test 900002, 900003 (software, camera cuts) | 0 ok, about 60 m | 0 ok, about 60 m | not run |
+| v2 validation 108 (GPU, broadcast) | grid corner, 0 ok | 100 ok, 0.95 px, 0.11 m (0.11) | 100 ok, 0.75 px, 0.16 m (0.17) |
+| tactical validation 108, tac-l (GPU, `fit_fixed`) | 0 ok, **54.7 px**, 0.046 m | 100 ok, 0.96 px, 0.024 m | 100 ok, 0.82 px, 0.011 m |
+
+What it says:
+- On the GPU look the change is what makes the camera usable, and on a fixed lens it brings the
+  residual (which `fuse.py` adds to its merge gate) from 55 px back to 1 px; the lens was already
+  placed well.
+- On the older look it rescues 900004 and keeps 900005, and **it costs 900001 precision**: 0.11 m
+  to 0.34 m median, 0.26 m to 0.78 m at p90, still inside the strict 1.0 m an event is graded by.
+  Its frames all passed before and after, so the trust tests do not see the change. This is one
+  clip, and the fit's position along the line of sight is known to wander there (lesson 97's
+  clip); it is reported, not explained away.
+- 900002 and 900003, the clips with camera cuts, fail before and after (EVALUATION.md: no events).
+
+The frozen test set's published numbers were measured with the detector of their day and are not
+re-scored here.
