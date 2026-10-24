@@ -2318,3 +2318,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
   holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
   `ninety/eval/band_derive.py` re-derives it.
+- **And:** re-derived, the heights alone trusted a clip whose camera was 28 m wrong in every frame on
+  dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
+  broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
+  `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
