@@ -638,9 +638,9 @@ def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browse
 
 
 def test_story_described_shows_the_audio_description_said_so_far_never_ahead(browser, site):  # noqa: F811
-    laptop, page, errors = phone(browser, site, laptop_t=61.5)
+    laptop, page, errors = phone(browser, site, laptop_t=61.4)
     said = json.loads(page.evaluate("fetch('/bundle/audio.json').then(r => r.text())"))["said"]
-    due = [line for line in said if line["t_in"] <= 61.5]
+    due = [line for line in said if line["t_in"] <= 61.4]
     assert due and len(due) < len(said), [line["t_in"] for line in said]  # some said, some still to come
     page.click("#tab-button-insights")
     page.click("#story-mode ion-segment-button[value=described]")
