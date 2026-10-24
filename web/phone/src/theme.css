@@ -1,0 +1,99 @@
+/* The phone's theme: the design tokens of ~/ninety-notes/phone-ui-proposal/DESIGN.md mapped onto
+   Ionic's variables, loaded after Ionic's CSS (src/ionic.ts imports this last). Monochrome; the
+   only colour is the two clubs'. Light by default, dark when the phone is. */
+:root, :root.ios {
+  --ion-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --raised: #ffffff;
+  --text: #0a0a0a;
+  --text-2: #6e6e73;
+  --text-3: #aeaeb2;
+  --hairline: #e5e5ea;
+  /* Grass, calm not neon (Kian, Oct 24): a muted green, mowing stripes 4% lighter, white markings. */
+  --pitch: #2f6b3f;
+  --pitch-stripe: #357947;
+  --pitch-edge: #24552f;
+  --pitch-line: rgba(255, 255, 255, 0.75);
+  --team-a: #3a68c0; /* London navy */
+  --team-b: #d23a44; /* Lisbon crimson */
+  --live: #e5484d;
+  --ok: #2e7d4f;
+  --hold: #8a6d1e;
+  --band: #000000;
+  --band-ink: #ffffff;
+  --band-2: #a1a1a6;
+  /* the clubs on this screen, set from the bundle's teams (main.ts, showTeams) */
+  --home: var(--team-a);
+  --away: var(--team-b);
+  --crest-home: var(--team-a);
+  --crest-away: var(--team-b);
+  --muted: var(--text-2);
+  --line: var(--hairline);
+  --page: var(--bg);
+  --card: var(--surface);
+  --bad: #b3261e;
+  --warn: var(--hold);
+  --focus: #0a84ff;
+
+  --ion-background-color: var(--bg);
+  --ion-text-color: var(--text);
+  --ion-color-primary: #0a0a0a;
+  --ion-color-primary-rgb: 10, 10, 10;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #000000;
+  --ion-color-primary-tint: #2a2a2a;
+  --ion-item-background: var(--raised);
+  --ion-border-color: var(--hairline);
+  --ion-tab-bar-color: var(--text-2);
+  --ion-tab-bar-color-selected: var(--text);
+}
+/* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
+:root { --crest-a: #0d2547; --crest-b: #ad1c28; --accent-b: #c79a48; }
+/* The band's deep fields (Apple Sports): London's navy and Lisbon's crimson, deep and saturated. */
+:root { --field-a: oklch(0.36 0.11 262); --field-b: oklch(0.4 0.15 24); }
+
+/* Live and Story are Apple Sports, which is dark only (Coordinator, Oct 24: exact match): the dark
+   tokens apply whatever the phone's setting. Ask is Perplexity's light page (below). */
+:root, :root.ios {
+    --bg: #000000;
+    --surface: #111113;
+    --raised: #1c1c1e;
+    --text: #f5f5f7;
+    --text-2: #98989d;
+    --text-3: #636366;
+    --hairline: #2c2c2e;
+    --pitch: #25553a;
+    --pitch-stripe: #2b6344;
+    --pitch-edge: #1c4430;
+    --pitch-line: rgba(255, 255, 255, 0.75);
+    --team-a: #6f8fd6;
+    --team-b: #d9677c;
+    --live: #ff6369;
+    --ok: #4cc38a;
+    --hold: #e2b84b;
+    --bad: #ff8a8a;
+    --ion-color-primary: #f5f5f7;
+    --ion-color-primary-rgb: 245, 245, 247;
+    --ion-color-primary-contrast: #000000;
+    --ion-color-primary-contrast-rgb: 0, 0, 0;
+    --ion-color-primary-shade: #ffffff;
+    --ion-color-primary-tint: #d8d8da;
+    --surface: #1c1c1e;
+  --raised: #2c2c2e;
+  /* Club colours from Kian's crests (Oct 24): London's navy and Lisbon's crimson, each lifted to 3:1
+     on the cards (WCAG graphics); the crests keep their own deep colours, gold is Lisbon's accent. */
+  --team-a: #3a68c0;
+  --team-b: #d23a44;
+  --text-2: rgba(235, 235, 245, 0.6);
+  --text-3: rgba(235, 235, 245, 0.3);
+  --hairline: rgba(84, 84, 88, 0.65);
+  /* Grass halfway between the old near-black and the bright green, less saturated (Kian, Oct 24). */
+  --pitch: #2a4a35;
+  --pitch-stripe: #2f513b;
+  --pitch-edge: #1f3828;
+  --ion-background-color: #000;
+}
+ion-content { --background: var(--bg); }
+ion-footer.composer { --background: color-mix(in srgb, var(--bg) 82%, transparent); }

@@ -275,7 +275,9 @@ def candidates(
                             "reason": "cites unknown events"})
             continue
         last = max(cited, key=lambda e: (e["t"], e["id"]))
-        versions = checked([f"Fact-checked: {cue['text']}"], list(cue["evidence"]))
+        # The line is the checked cue's own words: whether it was checked is told in How we know, not
+        # prefixed to what a fan hears.
+        versions = checked([cue["text"]], list(cue["evidence"]))
         source = "insight"
         if versions and (upgrades or {}).get(cue["id"]):
             text = upgrades[cue["id"]]

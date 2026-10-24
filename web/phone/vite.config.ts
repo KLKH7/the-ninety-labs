@@ -20,7 +20,9 @@ export default defineConfig(({ mode, command }) => {
   return {
     base: "./",
     publicDir: false,
-    server: { proxy: { "/api": { target: API, ws: true } } },
+    // The radar, the match and the club names are the viewer's own modules (../viewer/src), so the
+    // phone and the big screen draw and name things one way.
+    server: { proxy: { "/api": { target: API, ws: true } }, fs: { allow: [resolve(__dirname, ".."), resolve(__dirname, "../viewer/src")] } },
     define: { __PHONE_MOCK__: JSON.stringify(mock) }, // src/env.d.ts
     build: {
       outDir: mock ? "dist-mock" : "dist",

@@ -114,7 +114,7 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
     # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
     assert set(on_air(page)) == {"insight-m-e2"}
-    assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
+    assert "Crowmere 8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
     page.keyboard.press("1")
