@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -71,7 +70,8 @@ def fit(X: np.ndarray, y: np.ndarray, w: np.ndarray, iters: int = 50) -> np.ndar
 
 
 def predict(beta: np.ndarray, x: list[float]) -> float:
-    return float(1 / (1 + math.exp(-(beta[0] + float(np.dot(beta[1:], x))))))
+    """The live path's own probability (sides.p_home) with these weights."""
+    return sides.p_home(x, tuple(float(b) for b in beta))
 
 
 def calibration_error(rows: list[dict]) -> float:
