@@ -23,7 +23,7 @@ from jsonschema import validate
 from ninety.agents import contracts
 from ninety.agents.contracts import Judge, Profile, Variant
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA
-from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
+from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate, side_known
 from ninety.personalizer.core import SOURCE_LANG, WRITTEN, problem
 from ninety.personalizer.language import reads_english
 from ninety.personalizer.translate import MOCK_PREFIX
@@ -33,7 +33,9 @@ SLOT = "top_right"  # the insight's slot (ninety/agents/live.INSIGHT_SLOT)
 
 def profiles_for(main_event: dict, langs: Sequence[str] = contracts.LANGS) -> list[Profile]:
     """Every written persona in every language, except the analyst in English: that one is the
-    verified claim itself. The club and the player are the main event's own."""
+    verified claim itself. The club and the player are the main event's own: no player-focused
+    variant when the detector named nobody, and no club variant when it could not tell the side
+    (factcheck.side_known)."""
     out = []
     for lang in langs:
         for persona in WRITTEN:
@@ -42,6 +44,8 @@ def profiles_for(main_event: dict, langs: Sequence[str] = contracts.LANGS) -> li
             player = main_event.get("player") if persona == "player_focus" else None
             if persona == "player_focus" and player is None:
                 continue  # the detector could not say who it was
+            if persona == "club" and not side_known(main_event):
+                continue  # nor which side it was, firmly enough to tell it from a club's view
             out.append(Profile(persona, lang, main_event.get("team") if persona == "club" else None, player))
     return out
 
@@ -76,8 +80,8 @@ async def verify(
         else:
             as_claim = Claim(variant.text, list(variant.evidence))
             verdict = check(as_claim, known)
-            if verdict.ok:
-                verdict = confidence_gate(as_claim, known)
+            if verdict.ok:  # a club's-side variant names a side however it is worded
+                verdict = confidence_gate(as_claim, known, team_view=variant.persona == "club")
             if verdict.ok and judge is not None:
                 verdict = await judge(as_claim, evidence)
         status = contracts.status_for(verdict)
