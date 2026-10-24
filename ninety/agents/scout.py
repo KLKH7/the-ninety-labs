@@ -40,6 +40,7 @@ MIN_SO_FAR = (
 GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
 DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
+    "counter": "{club} break at speed",
     "shape": "{club}'s back line moves",
     "line_break": "{club} slice through",
     "overload": "{club} have the extra man",
@@ -47,6 +48,7 @@ HEADLINES = {
     "pass_options": "A pass not taken",
 }
 WHY = {
+    "counter": "What makes a counter-attack?",
     "shape": "Why does the back line matter?",
     "line_break": "Why does a pass like that matter?",
     "overload": "Why does an overload matter?",
@@ -56,6 +58,8 @@ WHY = {
 # What the "why?" answer adds to the card's fact: the definition, in code's words. Each is checked
 # like any sentence, so it may state only the fact's own numbers with their units.
 WHY_TEXT = {
+    "counter": "A counter-attack is a quick break straight after winning the ball, before the other side "
+    "can get back: {club} had a shot {value} seconds after winning it.",
     "shape": "A back line further from its own goal squeezes the space in midfield; one closer to it "
     "protects the space behind: in minute {minute} {club}'s was {value} {unit} from their own goal.",
     "line_break": "Analysts call it packing: every opponent a pass gets past no longer stands between the "
@@ -73,6 +77,7 @@ TOOL_OF = {
     "overload": "overloads",
     "counter_press": "counter_press",
     "pass_options": "pass_options",
+    "counter": "style",
     "shape": "team_shape",
 }
 SHAPE_CHANGE_M = companion.SHAPE_CHANGE_M
@@ -122,6 +127,8 @@ def notability(f: Mapping) -> tuple:
         return (f.get("outcome") == "fail" and f.get("target_open") is False, f["value"])
     if kind == "shape":
         return (abs(f.get("change") or 0),)
+    if kind == "counter":
+        return (-f["value"],)
     return ()
 
 
@@ -241,7 +248,7 @@ async def card_for(
 # spotter reads counter-presses and overloads; the space spotter line breaks and pass options; the
 # shape spotter the back line's moves (#228's facts).
 SPOTTERS = {
-    "pressing": ("counter_press", "overload"),
+    "pressing": ("counter_press", "overload", "counter"),
     "space": ("line_break", "pass_options"),
     "shape": ("shape",),
 }

@@ -24,6 +24,7 @@ from ninety.agents.factcheck import Claim, Verdict, parse_claim
 MATCH_TOOLS = (
     "goal_build_up",
     "players",
+    "style",
     "counter_press",
     "overloads",
     "line_breaks",
@@ -35,6 +36,8 @@ TOOL_HELP = {
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
     "before it",
     "players": "players ranked by the opponents their passes took out of the game",
+    "style": "how each club plays: passing channels (left, centre, right), how wide it plays against the "
+    "other club, crosses, the keeper going long or short, counter-attacks (regain to shot), one-twos",
     "counter_press": (
         "turnovers in open play, how many players pressed the ball in the 5 s after, "
         "and how fast it was won back"
@@ -49,6 +52,13 @@ TOOL_HELP = {
 # fan uses for each question, measured on the labelled question set (ninety/eval/companion_tools.py).
 TOOL_WORDS = (
     ("goal_build_up", r"\b(?:goals?|scor\w*|equali[sz]\w*|that finish)\b"),
+    (
+        "style",
+        r"\b(?:style|playing like|play(?:ing)? like this|tactic\w*|approach|long balls?|go(?:ing)? long"
+        r"|cross\w*|wings?|down the (?:left|right|middle)|counter[- ]attack\w*|on the break|one-twos?"
+        r"|wall pass\w*"
+        r"|goal ?keeper|keeper)\b",
+    ),
     ("players", r"\b(?:best|man of the match|stand-?out|star|playing well|who(?:'s| has) been)\b"),
     (
         "counter_press",
@@ -216,6 +226,7 @@ FOLLOW_UPS = {
         "How quickly did {club} win the ball back?",
     ),
     "players": ("Why did {club} score?", "Where are {club} outnumbering them?"),
+    "style": ("Do {club} counter-attack?", "Is their keeper going long?"),
     "counter_press": ("Did {club} have options when they lost it?", "And in the first half?"),
     "overloads": ("How quickly do {club} win the ball back?", "Which passes cut through?"),
     "line_breaks": ("Who has been the best player?", "Where are {club} outnumbering them?"),
@@ -398,6 +409,41 @@ def code_texts(fact: dict) -> list[str]:
         if not fact["value"]:
             return []
         return [f"{club} made {fact['value']} passes with no open teammate further forward {span}."]
+    if metric == "pass_share_by_channel":
+        return [
+            f"{club} played most through the {fact['most']}: {fact['value']}% of their passes {span} "
+            "started there."
+        ]
+    if metric == "median_width":
+        other_club = (
+            next(n for t, n in fact["clubs"].items() if t != fact["team"]) if fact.get("clubs") else ""
+        )
+        return [
+            f"{club} stretched the play {fact['value']} m wide {span}, against {other_club}'s "
+            f"{fact['other_width']} m."
+        ]
+    if metric == "crosses":
+        if not fact["value"]:
+            return []
+        return [
+            f"{club} crossed {_plural(fact['value'], 'time')} {span} and found a teammate "
+            f"{_plural(fact['completed'], 'time')}."
+        ]
+    if metric == "keeper_long_balls":
+        return [
+            f"{club}'s goalkeeper went long {_plural(fact['value'], 'time')} and short "
+            f"{_plural(fact['short'], 'time')} {span}."
+        ]
+    if metric == "regain_to_shot_s":
+        return [
+            f"{span.capitalize()}, {club} won the ball back and had a shot "
+            f"{_num(fact['value'])} seconds later."
+        ]
+    if metric == "one_two":
+        a, b = fact.get("passer_is"), fact.get("receiver_is")
+        if not a or not b:
+            return []
+        return [f"{span.capitalize()}, {a} and {b} played a one-two."]
     if kind == "goal":
         return [f"{club} scored in minute {fact['minute']}."]
     if metric == "opponents_bypassed_by_player":

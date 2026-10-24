@@ -46,7 +46,8 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # The insight tools the Companion chooses from (ninety/agents/companion_match.py). Served here too, read
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
-    "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "lineup",
+    "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
+    "lineup",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape and the insight tools are served but not in the published
@@ -201,6 +202,15 @@ def players(match: str, minute_from: int, minute_to: int, club: str | None = Non
     return _insight(match, "players", minute_from, minute_to, club)
 
 
+def style(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """How each club plays between two match minutes, computed by code from detected passes and
+    tracked shape: share of passes from each channel (left, centre, right as it attacks), its median
+    width against the other club's, crosses (wide final-third passes ending in the box), its keeper's
+    long (32 m or more) and short passes, counter-attacks (open-play regain to shot, seconds) and
+    one-twos. Cite by id; quote a channel's share right after naming the channel."""
+    return _insight(match, "style", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -252,7 +262,7 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    insight = (line_breaks, overloads, counter_press, pass_options, goal_build_up, players, lineup)
+    insight = (line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, lineup)
     for tool in (list_events, match_info, team_shape, *insight):
         server.add_tool(tool)
     return server

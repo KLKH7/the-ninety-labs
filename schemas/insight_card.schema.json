@@ -50,7 +50,8 @@
         "overload",
         "counter_press",
         "pass_options",
-        "shape"
+        "shape",
+        "counter"
       ]
     },
     "headline": {
@@ -213,7 +214,10 @@
             "pass_options",
             "counter_press",
             "shape",
-            "wind_map"
+            "wind_map",
+            "channels",
+            "counter",
+            "one_two"
           ]
         },
         "fact": {
@@ -240,7 +244,7 @@
         },
         "geometry": {
           "type": "object",
-          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id].",
+          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id]. channels: bands [{channel, y0, y1, share}], minute_from, minute_to. counter: from (regain), to (shot), seconds. one_two: from, via, to.",
           "properties": {
             "from": {
               "$ref": "#/$defs/point"
@@ -333,6 +337,50 @@
             },
             "players": {
               "$ref": "#/$defs/points"
+            },
+            "bands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "channel",
+                  "y0",
+                  "y1",
+                  "share"
+                ],
+                "properties": {
+                  "channel": {
+                    "enum": [
+                      "left",
+                      "centre",
+                      "right"
+                    ]
+                  },
+                  "y0": {
+                    "type": "number"
+                  },
+                  "y1": {
+                    "type": "number"
+                  },
+                  "share": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            },
+            "minute_from": {
+              "type": "integer"
+            },
+            "minute_to": {
+              "type": "integer"
+            },
+            "via": {
+              "$ref": "#/$defs/point"
+            },
+            "seconds": {
+              "type": "number"
             }
           }
         }

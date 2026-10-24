@@ -60,6 +60,9 @@ def facts_and_summaries(mi) -> list[dict]:
         hi = lo + cm.WINDOW_MIN - 1
         for tool in ("line_breaks", "overloads", "counter_press", "pass_options"):
             rows += getattr(mi, tool)(lo, hi)["summary"]
+        rows += mi.players(lo, hi)["facts"]
+        rows += mi.style(lo, hi)["summary"]
+    rows += [f for kind in ("counter", "one_two") for f in mi.facts.get(kind, ())]
     return rows
 
 

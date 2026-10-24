@@ -4,59 +4,59 @@
  "minutes": 30.0,
  "by_missing": {
   "0.0": {
-   "facts": 1476,
-   "true_claims": 476,
+   "facts": 1916,
+   "true_claims": 504,
    "true_wrongly_stopped": 0,
    "unsure_claims": 312,
    "unsure_held": 312,
    "unsure_passed": 0,
-   "planted": 4239,
-   "planted_caught": 4239,
+   "planted": 4415,
+   "planted_caught": 4415,
    "caught_by_kind": {
-    "number": 1403,
-    "spelled": 447,
-    "club": 392,
-    "id": 93,
-    "name": 90,
-    "kind": 476,
-    "minute": 476,
-    "uncited": 476,
-    "team word": 386
+    "number": 1435,
+    "spelled": 451,
+    "club": 402,
+    "id": 111,
+    "name": 108,
+    "kind": 504,
+    "minute": 504,
+    "uncited": 504,
+    "team word": 396
    },
    "missed_by_kind": {},
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.112,
-    "p95": 0.163
+    "p50": 0.127,
+    "p95": 0.261
    }
   },
   "0.05": {
-   "facts": 1482,
-   "true_claims": 249,
+   "facts": 1922,
+   "true_claims": 277,
    "true_wrongly_stopped": 0,
    "unsure_claims": 540,
    "unsure_held": 540,
    "unsure_passed": 0,
-   "planted": 1885,
-   "planted_caught": 1885,
+   "planted": 2211,
+   "planted_caught": 2211,
    "caught_by_kind": {
-    "number": 627,
-    "spelled": 159,
-    "club": 221,
-    "id": 32,
-    "name": 31,
-    "kind": 99,
-    "minute": 249,
-    "uncited": 249,
-    "team word": 218
+    "number": 659,
+    "spelled": 163,
+    "club": 231,
+    "id": 50,
+    "name": 49,
+    "kind": 277,
+    "minute": 277,
+    "uncited": 277,
+    "team word": 228
    },
    "missed_by_kind": {},
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.111,
-    "p95": 0.139
+    "p50": 0.121,
+    "p95": 0.194
    }
   }
  },

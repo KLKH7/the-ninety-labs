@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape
+from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape, style
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
@@ -77,6 +77,10 @@ class MatchInsights:
             ],
         }
         clubs = fixture.clubs
+        # Playing style's atoms: the detected passes, the counter-attacks and the one-twos.
+        facts["pass"] = style.passes(events)
+        facts["counter"] = style.counters(events)
+        facts["one_two"] = style.one_twos(facts["pass"])
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = [
             {
@@ -255,6 +259,31 @@ class MatchInsights:
         if team is not None:
             out = [r for r in out if r["team"] == team]
         return {"facts": out, "summary": []}
+
+    def style(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """How each club played over the minutes: its passing channels, its width beside the other
+        club's, its crosses, its keeper's distribution, and its counter-attacks and one-twos."""
+        team = self.team(club)
+        teams = [team] if team else list(TEAMS)
+        clubs = self.fixture.clubs
+        rows = [p for p in self.facts.get("pass", ()) if minute_from <= p["minute"] <= minute_to]
+        summary = []
+        for t in teams:
+            for got in (
+                style.channels(rows, t, minute_from, minute_to, clubs[t]),
+                style.width(self.facts.get("shape", []), t, minute_from, minute_to, clubs),
+                style.crosses(rows, t, minute_from, minute_to, clubs[t]),
+                style.keeper(rows, t, minute_from, minute_to, clubs[t], self.people),
+            ):
+                if got is not None:
+                    summary.append(got)
+        moments = [
+            {**f, "club": clubs[f["team"]]}
+            for kind in ("counter", "one_two")
+            for f in self.facts.get(kind, ())
+            if minute_from <= f["minute"] <= minute_to and f["team"] in teams
+        ]
+        return {"facts": moments[:MAX_FACTS], "summary": summary}
 
     def lineup(self, club: str | None = None) -> dict:
         """The team sheets, and who of the tracked players may be named and how."""

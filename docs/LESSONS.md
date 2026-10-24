@@ -2315,3 +2315,12 @@ short and actionable. This file is public: no research sources, product names or
   is the first club named otherwise; for a line break, the counted club must be the other side.
 - **Check:** `tests/test_insight_check.py` (a named passer with the counted opponents passes; the
   counted club being the passing side is rejected); `insight_claims` reports no true claim stopped.
+
+### 228. A new test file named after a word another module already owns overwrites that module's tests
+- **What happened:** adding tests for the playing-style tool (`ninety/intel/style.py`), a new file
+  was written to `tests/test_style.py`, which already held the engine's team-style tests. The write
+  replaced them; `git status` showed `M` where a new file shows `??`. This is lesson 196 again.
+- **Rule:** before writing a test file, check that its path is free (`git ls-files tests/<name>`),
+  and name a new test file after its own module's full purpose (`test_playing_style.py`), never a
+  word another package also uses.
+- **Check:** `git status --short tests/` after creating test files: every new file shows `??`.

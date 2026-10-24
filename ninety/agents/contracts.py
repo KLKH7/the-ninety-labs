@@ -78,7 +78,10 @@ Author = Literal["tactician", "challenger"]
 DescriptionSource = Literal["model", "code"]
 AnswerStatus = Literal["verified", "held", "rejected", "unanswerable"]
 # The overlays the phone can draw for an answer or a card (schemas/insight_card.schema.json).
-VISUAL_KINDS = ("line_break", "overload", "pass_options", "counter_press", "shape", "wind_map")
+VISUAL_KINDS = (
+    "line_break", "overload", "pass_options", "counter_press", "shape", "wind_map",
+    "channels", "counter", "one_two",
+)
 Role = Literal[
     "analyst", "tactician", "challenger", "fact_checker", "judge",
     "producer", "personalizer", "describer", "companion", "vision_auditor", "data_agent",

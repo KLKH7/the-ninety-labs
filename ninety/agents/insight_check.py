@@ -73,6 +73,9 @@ UNIT_WORDS = {
     ),
     "s": ("s", "seconds", "second", "secs", "sec"),
     "passes": ("passes", "pass"),
+    "%": ("%", "percent", "per cent"),
+    "crosses": ("crosses", "cross", "times", "time"),
+    "times": ("times", "time"),
     "turnovers": ("turnovers", "turnover", "times"),
     "regains": ("regains", "regain", "times"),
     "overloads": ("overloads", "overload", "times"),
@@ -82,6 +85,8 @@ UNIT_WORDS = {
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
 KIND_WORDS = {
+    "one_two": r"one[- ]twos?|wall pass\w*",
+    "counter": r"counter[- ]attack\w*|on the break",
     "overload": (
         r"overload\w*|outnumber\w*|numbers? up|numerical (?:advantage|superiority)|extra (?:man|men|player)"
     ),
