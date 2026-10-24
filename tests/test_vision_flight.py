@@ -320,3 +320,26 @@ def test_deriving_on_a_test_seed_is_refused(tmp_path):
     src.write_text("", encoding="utf-8")
     with pytest.raises(SystemExit, match="refused"):
         fl.main([str(src), "--derive"])
+
+
+def test_the_height_has_its_own_standard_error_and_it_covers_the_true_height():
+    # A height test (the ball under the crossbar, PR #271) needs the height's standard error, not
+    # the place's: from a gantry the place's is about four times larger. A standard error that is
+    # right covers the true height within 2 of itself on about 95% of frames (a normal error); the
+    # bar is 0.90, so one too small to trust fails. Too large cannot be tested from a few draws:
+    # one draw's frames share its error (coverage within 1 measured 0.97 on these four draws and
+    # 0.83 on eight), so what is pinned from above is only that it is not the place's.
+    path = kick_and_bounces()
+    errs, z_ses, ses = [], [], []
+    for seed in range(1, 5):
+        out = fl.heights(observations(path, views(path), seed=seed), k=K_TRUE)
+        for (_, _, _, z), r in zip(path, out, strict=True):
+            b = r["ball"][0]
+            if b["flight"] is not None:
+                errs.append(abs(b["z"] - z))
+                z_ses.append(b["z_se"])
+                ses.append(b["se"])
+    errs, z_ses = np.array(errs), np.array(z_ses)
+    assert len(errs) > 200
+    assert np.mean(errs <= 2 * z_ses) >= 0.90
+    assert np.median(z_ses) < np.median(ses)
