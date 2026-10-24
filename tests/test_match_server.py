@@ -1,6 +1,7 @@
 """The match MCP server serves a fixed list of matches, the same whether computed or precomputed."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -85,3 +86,32 @@ def test_team_shape_filters_by_minute():
     minute = facts[0]["minute"]
     assert match_server.team_shape("seed900001", minute + 1, 99)["facts"] == [
         f for f in facts if f["minute"] > minute]
+
+
+def test_re_perceive_looks_again_through_a_camera_the_clip_has(tmp_path, monkeypatch):
+    from ninety.match import detected
+
+    views = tmp_path / detected.M1_CLIP / "tactical1"
+    views.mkdir(parents=True)
+    obs = Path(__file__).resolve().parent / "fixtures" / "observations-seed900001.jsonl"
+    (views / "observations.jsonl").write_text(obs.read_text())
+    monkeypatch.setattr(match_server, "VIEWS_DIR", str(tmp_path))
+    match_server._perceiver.cache_clear()
+    try:
+        look = match_server.re_perceive(detected.M1_CLIP, "v00001", "tactical1", "window")
+        assert look["found"]["type"] == "pass" and look["found"]["team"] == "away"
+        assert match_server.re_perceive(detected.M1_CLIP, "v00001", "tactical2", "window")["found"] is None
+    finally:
+        match_server._perceiver.cache_clear()
+
+
+def test_re_perceive_without_camera_views_says_so_and_refuses_what_it_cannot_look_at():
+    from ninety.match import detected
+
+    match_server._perceiver.cache_clear()
+    look = match_server.re_perceive(detected.M1_CLIP, "v00001", "tactical1", "window")
+    assert look["found"] is None and "no per-camera observations" in look["why"]
+    with pytest.raises(ValueError, match="no detected events"):
+        match_server.re_perceive("seed7", "e1", "tactical1", "window")
+    with pytest.raises(ValueError, match="no detected event"):
+        match_server.re_perceive(detected.M1_CLIP, "nope", "tactical1", "window")

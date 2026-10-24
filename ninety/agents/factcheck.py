@@ -54,7 +54,7 @@ WORD_NUMBER = re.compile(
 NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
-    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)",
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another|side)\b)",  # "one side's back line": no count
     re.I,
 )
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
@@ -113,6 +113,35 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+# Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
+# confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
+# ones 0.447 to 0.985. A claim that names a team is held unless every detected event it cites had
+# its side told above the highest wrong side, 0.96. This is no guarantee: it is the maximum of 5
+# wrong sides, so a new wrong side would exceed it about 1 time in 6 (exchangeability), and it was
+# measured on passes only, yet applies to every event. It holds most team claims on today's vision
+# (9 of the 11 right sides too), which is the point until the side is told reliably (#200, #202).
+# Re-measure when the side decision changes.
+MIN_TEAM_CONFIDENCE = 0.96
+# A claim that names a side, in English or Spanish (ninety/personalizer/core.TEAM_WORDS): "home",
+# "away", "the hosts", "the visitors", "the visiting side", "local", "visitantes", "los de casa".
+# It errs on holding: "away from goal" is held too.
+TEAM_NAMED = re.compile(
+    r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
+
+
+def side_known(event: Mapping) -> bool:
+    """Whether a team may be named from this event: a ground-truth event (no detection confidence),
+    or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
+    from an event (the template graphics, the Describer) asks this, as the confidence gate does. A
+    shape fact (ninety/intel/shape.py) carries the least sure side of the players it was computed
+    from, gated the same way."""
+    if event.get("type") == "shape":
+        side = event.get("team_confidence")
+        return side is not None and side > MIN_TEAM_CONFIDENCE
+    if event.get("confidence") is None:
+        return True
+    side = event.get("team_confidence")
+    return side is not None and side > MIN_TEAM_CONFIDENCE
 
 
 @dataclass
@@ -457,16 +486,19 @@ def check(
 
 
 def confidence_gate(
-    claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE
+    claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE, team_view: bool = False
 ) -> Verdict:
     """Holds back a claim that cites a detected event the detector is not sure of.
 
     Only detected events carry a confidence (ninety/match/facts.compact); ground-truth events in
     the pre-M1 recordings have none and pass. A shape fact (ninety/intel/shape.py) is unsure when
-    too few of the team were tracked for it (`confident` false), and holds a claim the same way.
-    The verdict's category, `low_confidence`, makes the claim held, not rejected
-    (ninety/agents/contracts.status_for): the claim may be right, but nothing airs until a
-    confident detection supports it.
+    too few of the team were tracked for it (`confident` false), and holds a claim the same way. A
+    claim that names a team ("home", "away") is held too unless every detected event it cites had
+    its side told with `team_confidence` above MIN_TEAM_CONFIDENCE; an unknown side counts as
+    unsure. With `team_view` (a variant written from one club's side, whatever its words: "our
+    side", "they") every claim is a team claim. The verdict's category, `low_confidence`, makes the
+    claim held, not rejected (ninety/agents/contracts.status_for): the claim may be right, but
+    nothing airs until a confident detection supports it.
     """
     reasons = [
         f"event {i} was detected with confidence {known[i]['confidence']:.2f}, "
@@ -479,6 +511,15 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
+    if TEAM_NAMED.search(claim.text) or team_view:
+        for i in claim.evidence:
+            event = known.get(i, {})
+            side = event.get("team_confidence")
+            # A detected event (it has a confidence) whose side is unknown counts as unsure.
+            if not side_known(event):
+                told = "unknown" if side is None else f"{side:.2f}"
+                reasons.append(f"event {i}'s side was told with confidence {told}, not above "
+                               f"{MIN_TEAM_CONFIDENCE:.2f}: a claim naming a team waits for a surer side")
     return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)
 
 
