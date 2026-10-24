@@ -2586,6 +2586,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
 
+### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
+- **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
+  heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called
+  creepy, in the one feature built for fans who listen instead of watch. Meanwhile we had an Azure AI
+  Speech resource, and the Describer pinned a neural voice (Ryan) that nothing on the phone used.
+  Nobody had chosen either voice by listening.
+- **Rule:** the voice is picked by ear from samples made in the voices that could ship (Oct 23:
+  all 17 British neural voices and two HD voices; Kian chose en-GB-OllieMultilingualNeural). It is
+  pinned in one place (`ninety/speech/voice.py`), and every path that speaks reads it: the bundle's
+  pre-generated lines, the Live route and the Describer. The phone plays the bundle's audio first,
+  then the Live route, and uses the device's voice only when neither has the line.
+- **Check:** `tests/test_speech.py::test_every_path_that_speaks_reads_the_one_pinned_voice`,
+  `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
+  `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
+  first and the second and third tests fail.
+
 ### 236. A model's reply is read as the first object it writes, and the live eval keeps what it parsed
 - **What happened:** the published match Companion (v2) answered a plan step with the plan and then
   kept going: an "answer" step of its own, with facts and fact ids it made up, in the same reply. The

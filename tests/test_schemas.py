@@ -18,6 +18,8 @@ STRICT = {
     "agent_trace": "agent_trace.jsonl",
     "companion_message": "companion_message.jsonl",
     "minimap": "minimap.jsonl",
+    # truth events around the end of the first half (lesson 213): engine output, seed 7, a 70 s half
+    "match_event": "match_event.jsonl",
 }
 MIRRORS = {"viewer_question": Question, "viewer_answer": Answer, "agent_trace": TraceStep}
 
@@ -170,3 +172,10 @@ def test_focus_and_question_take_either_form(player):
     question = {**rows("viewer_question")[0], "player": player}
     schema_validator("viewer_question").validate(question)
     Question(**question)
+
+
+def test_the_event_fixture_holds_the_end_of_the_half():
+    """Lesson 213: the contract's fixture carries the half_time event, then the kick-off that starts
+    the second half."""
+    types = [r["type"] for r in rows("match_event")]
+    assert "half_time" in types and "kickoff" in types[types.index("half_time"):]
