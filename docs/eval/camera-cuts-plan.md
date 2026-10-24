@@ -112,3 +112,16 @@ position error (`ninety.eval.event_report`), whether 900003's frames 5970 to 597
 wrong) are still trusted, and the pass F1 against `event-report-v2.md`. Reported whatever it shows.
 
 ## Outcome
+### Amendment (2026-10-24, after seeds 110 and 111's distances were seen, before any other validation clip's, and before any fit with cuts)
+
+- **Seen:** on 111 a whip pan of the behind-goal camera (the aim swings across the pitch in two
+  frames, the picture smeared between) changes the histogram by 0.567, more than one of 111's true
+  cuts (0.478). The plan counts it as a non-cut (its camera neither moves nor changes angle), and
+  that stays so: no candidate may separate, and the "fewest errors" branch then decides.
+- **What the plan left open:** in that branch, the threshold. It is the geometric mean of the two
+  distances either side of the best interval (the largest value at or below it and the smallest
+  above), rounded to 3 decimals; when several intervals tie on errors, the one with fewer missed
+  cuts, then the lower.
+- **Why it matters little for the fit, to be checked, not assumed:** a whip pan moves the aim further
+  than tracking follows (pitch.STEP_SD), so starting again there is what the fit needs anyway. Each
+  false cut's effect on trusted frames is reported.
