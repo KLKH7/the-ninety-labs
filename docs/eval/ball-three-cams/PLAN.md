@@ -158,3 +158,12 @@ observations; the same run reproduces D's fixed band (1.002, 1.151). Validation,
 camera fit, both bands, the driver and the scorer. The 30 test clips are detected, fitted, judged and
 scored once at it; the one test clip fitted before (900001, at 4ae7357, unread) is fitted again and
 its earlier file is never read.
+
+### Oct 24, later, before any test clip was judged or scored: the trust gate B3, a new freeze
+
+The Coordinator adopted gate B3 for the broadcast (heights and the marking fit's own verdict; PR
+#270, `docs/eval/gate-b3.md`), chosen on validation. The freeze moves to **this commit**: the same
+detection, fit, bands, driver and scorer, with B3. Validation re-scored with it (`validation.json`):
+strict recall 0.590, precision 0.799, coverage 0.724 (with the heights alone: 0.594, 0.760,
+0.766). The test clips' detections and fits, made at e9dcee44 with the same detection and fit code,
+are re-judged and scored at this commit; nothing of them has been read.
