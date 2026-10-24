@@ -276,7 +276,8 @@ def test_the_analyst_evaluation_grades_the_events_it_sends_inline(monkeypatch):
     monkeypatch.setattr(ae.foundry, "chat_client", lambda credential: object())
     monkeypatch.setattr(ae.foundry, "slice_agents", lambda client: ["analyst", "judge"])
     monkeypatch.setattr(ae.foundry, "pinned", lambda local: (f"ninety-{local}", "1"))
-    rows, _ = asyncio.run(ae._drafts(None, [7], {7: known}))
+    monkeypatch.setattr(ae.evidence, "record", lambda locals_: {})  # no published definitions here
+    rows = asyncio.run(ae._drafts(None, [7], {7: known}))[0]
     assert "seed7-inline" in prompts[0] and '"e1"' in prompts[0] and '"e2"' not in prompts[0]
     assert '"e2"' in prompts[1] and '"e1"' not in prompts[1]  # each minute's own events only
     verdicts = [r["verdict"] for r in rows]

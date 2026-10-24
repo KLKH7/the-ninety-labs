@@ -69,7 +69,19 @@ def real_detections(seed: int = 900001) -> set[str] | None:
     report has no such clip."""
     report = json.loads(EVENT_REPORT.read_text())
     clip = next((c for c in report["clips"] if c["seed"] == seed), None)
-    return None if clip is None else {p["detected_id"] for p in clip["events"]["time_only"]["pairs"]}
+    if clip is None:
+        return None
+    # The report names detected events by id: trust an id only while it is still the same event in
+    # the committed fixture (same type), or a regenerated fixture
+    # would be graded by another event's match.
+    fixture = {e["id"]: e for e in detected.load(detected.FIXTURES / f"detected-seed{seed}.jsonl")}
+    out = set()
+    for p in clip["events"]["time_only"]["pairs"]:
+        e = fixture.get(p["detected_id"])
+        if e is None or e["type"] != p["type"]:
+            raise ValueError(f"{EVENT_REPORT.name}: {p['detected_id']} is not the event it matched")
+        out.add(p["detected_id"])
+    return out
 
 
 def measure(path: Path) -> dict:

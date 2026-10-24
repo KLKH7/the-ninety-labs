@@ -757,3 +757,29 @@ def test_the_outage_guard_counts_requests_by_index():
             for i in (0, 1) for p in personalizer_eval.PROFILES]
     requests = personalizer_eval.requests_of(rows)
     assert len(requests) == 2 and sum(not personalizer_eval.answered(r) for r in requests.values()) == 1
+
+
+def test_main_refuses_a_run_whose_outage_two_same_worded_claims_would_hide(monkeypatch, tmp_path):
+    # Request 0 unanswered, request 1 answered, the same words: keyed by text they were one answered
+    # request and the outage passed; by index, 1 of 2 is unanswered, over the one-in-five limit.
+    import contextlib
+    import types
+
+    from ninety.personalizer import eval as personalizer_eval
+
+    @contextlib.asynccontextmanager
+    async def published():
+        yield None, "stub"
+
+    rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "persona": p.persona, "lang": p.lang,
+             "route": "fallback: timeout" if i == 0 else "remote", "dropped": None, "ms": 5.0}
+            for i in (0, 1) for p in personalizer_eval.PROFILES]
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [])
+
+    async def ran(*a):
+        return rows
+
+    monkeypatch.setattr(personalizer_eval, "run", ran)
+    args = types.SimpleNamespace(seeds="21", minutes=1.0, limit=2, budget=6.0, out=tmp_path / "p.md")
+    with pytest.raises(personalizer_eval.NothingMeasured):
+        asyncio.run(personalizer_eval._main(args, published))
