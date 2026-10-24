@@ -58,7 +58,7 @@ def test_the_band_holds_its_ends_and_on_the_broadcast_the_markings_must_agree():
     assert observe.place(row(hi - 0.002))["camera"]["ok"]
     assert not observe.place(row(lo - 0.01))["camera"]["ok"]
     assert not observe.place(row(hi + 0.01))["camera"]["ok"]
-    # Gate B3 (lesson 231): heights in the band and markings that do not fit is not a camera.
+    # Gate B3 (lesson 230): heights in the band and markings that do not fit is not a camera.
     assert not observe.place(row(markings_ok=False))["camera"]["ok"]
     assert observe.place(row(markings_ok=False))["camera"]["heights_ok"] is False
     # A fixed lens is judged by its heights alone.

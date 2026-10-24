@@ -54,7 +54,7 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # (half the marking pixels within 1.5 px), which trusted 198 badly wrong frames on validation and
 # kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is kept as
 # `markings_ok` and guides the fit from frame to frame (pitch.fit_clip). On the broadcast it is
-# required again as well as the heights (gate B3; lesson 231), chosen on validation before any test
+# required again as well as the heights (gate B3; lesson 230), chosen on validation before any test
 # score: on tactical1's 23 validation clips the heights alone trusted 654 badly wrong frames, the
 # worst 51.7 m (one clip's camera 28 m wrong in every frame, which no frame-to-frame check sees),
 # and both together 360, the worst 14.1 m, keeping 97.8% of good frames against 98.1%
