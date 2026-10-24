@@ -364,7 +364,10 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
             out.append("it says the pass missed an open teammate; the cited pass did not")
         if TO_OPEN.search(text) and not any(f.get("target_open") is True for f in passes):
             out.append("it says the pass found an open teammate; the cited pass did not")
-        if LOST.search(text) and not any(f.get("outcome") == "fail" for f in passes):
+        # "lost the ball" may be a cited turnover's, not the pass's: with a press fact cited too, it
+        # is left to the closed check (which holds) rather than rejected.
+        turnover = bool(presses or regains)
+        if LOST.search(text) and not turnover and not any(f.get("outcome") == "fail" for f in passes):
             out.append("it says the pass was lost; the cited pass was completed")
         if COMPLETED.search(text) and not any(f.get("outcome") == "success" for f in passes):
             out.append("it says the pass was completed; the cited pass was lost")
@@ -389,11 +392,13 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
 # (tests/test_insight_check.py). A known reversal (`polarity_reasons`) is rejected. Only the
 # metrics in DIRECTED are covered: any other fact's direction words are left to the Judge.
 GLUE = frozenset(
-    """a an the and but then while with in of to from for on at by as it its their his her they them
-    there this that these those when after before had has have was were is are be been being so also
-    just only all both each one minute minutes time times second seconds s m around near ball player
-    players teammate teammates team-mate team-mates side play open further forward up pitch ahead same
-    straight away again moment""".split()
+    # No word here may carry direction (the merge queue's fifth review took out open, teammate,
+    # again, all, each, one, only, away, straight and same, and its sixth "that was it" took out it,
+    # this, that, so, also and just): a direction must come in the fact's own
+    # phrases, or the sentence is held.
+    """a an the and but then while with in of to from for on at by as their his her they them there
+    when after before had has have was were is are be been being both minute minutes time times second
+    seconds s m around near ball player players side play further forward up pitch ahead moment""".split()
 )
 DIRECTED = (
     "pressers",
@@ -424,7 +429,7 @@ def _approved(f: Mapping) -> list[str]:
         out += (
             [r"won (?:it|the ball) back"]
             if f.get("regained")
-            else [r"(?:did not|didn't|never|could not|couldn't) win (?:it|the ball) back"]
+            else [r"(?:did not|didn't|never|could not|couldn't) (?:win|won|get|got) (?:it|the ball) back"]
         )
         return out
     if metric == "regains_within_5s":
@@ -476,6 +481,7 @@ def _approved(f: Mapping) -> list[str]:
             if not f.get("value")
             else [
                 rf"built {_N} overloads?",
+                r"built an overload",
                 rf"{_N} overloads?",
                 r"most often in their (?:own|middle|final) third",
                 r"(?:on the (?:left|right)|in the centre)",
@@ -492,9 +498,18 @@ def direction_reasons(
     if not directed:
         return []
     rest = spelled_as_digits(text)  # "three players pressing" is "3 players pressing"
-    for f in directed:
-        for phrase in sorted(_approved(f), key=len, reverse=True):
-            rest = re.sub(phrase, " ", rest, flags=re.I)
+    # Take out the longest matches first, wherever they are, so a short phrase never eats the middle
+    # of a longer one ("an overload" inside "built an overload").
+    spans = sorted(
+        ((m.start(), m.end()) for f in directed for p in _approved(f) for m in re.finditer(p, rest, re.I)),
+        key=lambda se: (se[0] - se[1], se[0]),
+    )
+    taken: list[tuple[int, int]] = []
+    for a, b in spans:
+        if all(b <= c or a >= d for c, d in taken):
+            taken.append((a, b))
+    for a, b in sorted(taken, reverse=True):
+        rest = rest[:a] + " " + rest[b:]
     for name in sorted({*dict(clubs).values(), *names, *LABEL.values()}, key=len, reverse=True):
         rest = re.sub(rf"\b{re.escape(name)}(?:'s)?\b", " ", rest, flags=re.I)
     words = [w for w in re.findall(r"[a-z]+(?:[-'][a-z]+)*", rest.lower()) if w not in GLUE]

@@ -575,7 +575,7 @@ PINNED = [
     ("Lisbon Esportes lost the ball and could not win it back.", "cp:v8"),
     ("Lisbon Esportes lost the ball 2 times in open play and never won it back within 5 seconds.", "cps:z"),
     ("London Athletic had 3 teammates free further up the pitch and kept the ball.", "po:v9"),
-    ("London Athletic completed the pass, and it found an open teammate.", "po:v9"),
+    ("London Athletic completed the pass and found an open teammate.", "po:v9"),
     (
         "London Athletic had 3 teammates free further up the pitch, but the pass went elsewhere and was "
         "lost.",
@@ -634,3 +634,127 @@ REVERSALS3 = [
 @pytest.mark.parametrize("text, fids", REVERSALS3)
 def test_no_reversal_of_the_fourth_review_passes(text, fids):
     assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "verified", text
+
+
+# The merge queue's fifth review: 40 reversals made of glue words and the fact's own phrases, and 20
+# true sentences (its new40.py). No reversal passes; no true sentence is rejected.
+REVERSALS4 = [  # glue-only / idiom reversals; all should NOT be verified
+    (f"{L} lost the ball but had it again straight away.", "cp:v8"),
+    (f"{L} lost the ball and had the ball again.", "cp:v8"),
+    (f"{L} lost the ball and it was theirs again.", "cp:v8"),
+    (f"{L} lost the ball and then the ball was on their side again.", "cp:v8"),
+    (f"{L} lost the ball but the ball came to them at the same moment.", "cp:v8"),
+    (f"{L} lost the ball and had the ball in their possession.", "cp:v8"),
+    (f"{L} lost the ball and it was all theirs.", "cp:v8"),
+    (f"{L} lost the ball but had it after only a second.", "cp:v8"),
+    (f"{L} lost the ball and then had it within 2 seconds.", "cp:v8"),
+    (f"{L} lost the ball and the ball was with them again within 5 seconds.", "cp:v8"),
+    (f"{L} lost the ball and pressed, and it was theirs.", "cp:v8"),
+    (f"{L} lost the ball and had no ball after 3 seconds.", "cp:v7"),
+    (f"{L} lost the ball and the ball stayed away from them.", "cp:v7"),
+    (f"{L} lost the ball and it was gone for good.", "cp:v7"),
+    (f"{L} lost the ball and that was it.", "cp:v7"),
+    (f"{L} lost the ball and then it was the other side's ball.", "cp:v7"),
+    (f"{L} lost the ball but it was the same for all of the time.", "cp:v7"),
+    (f"{H} had 3 open teammates ahead and the pass was to a marked player.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass was to an open teammate.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was to one of them.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass went to them.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was in the same place as the open teammate.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was on the open teammate.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was theirs.", "po:v9"),
+    (f"{H} had 4 passes with an open teammate ahead.", "po:n4"),
+    (f"{H} had 4 passes with a teammate open ahead.", "po:n4"),
+    (f"{H} had 4 passes with all teammates open ahead.", "po:n4"),
+    (f"{H} had 4 passes with one open teammate there.", "po:n4"),
+    (f"{H} had 4 passes with each teammate open.", "po:n4"),
+    (f"{H} had 4 passes, all with open teammates further forward.", "po:n4"),
+    (f"{L} lost the ball 4 times and had it again each time from minute 1 to minute 15.", "cps:z"),
+    (f"{L} won it back 2 times, all of the time from minute 1 to minute 15.", "cps:z"),
+    (f"{H} had 3 extra players, but only 1 player was there.", "ov:v3"),
+    (f"{H} had an overload, but it was the same as the other side.", "ov:v3"),
+    (f"{H} had 3 extra players and then the other side had them too.", "ov:v3"),
+    (f"{H} had 3 extra players but the other side had all of them.", "ov:v3"),
+    (
+        f"{L} lost the ball and won it back, and {H} had 3 open teammates ahead and kept the ball.",
+        "cp:v8,po:v9",
+    ),
+    (
+        f"{L} lost the ball but had it again, and {H} had 3 open teammates ahead and the pass was to an "
+        f"open teammate.",
+        "cp:v8,po:f1",
+    ),
+    (f"{L} lost the ball, and {H} had 3 extra players but only 1 player was there.", "cp:v7,ov:v3"),
+    (f"{L} lost the ball and had it again straight away, with 3 players pressing.", "cp:v8"),
+]
+TRUE4 = [
+    (f"{L} lost the ball and won it back within 5 seconds.", "cp:v7"),
+    (f"{L} lost the ball and 3 players pressed it.", "cp:v7"),
+    (f"{L} lost the ball, sent 1 player to press and did not win it back.", "cp:v8"),
+    (f"{L} lost the ball and 1 player pressed, but they never won it back.", "cp:v8"),
+    (f"{L} lost the ball 4 times in open play and made 2 regains.", "cps:t"),
+    (f"{L} made 2 regains from minute 1 to minute 15.", "cps:t"),
+    (f"{L} had no regains from minute 1 to minute 15.", "cps:z"),
+    (f"{H} had 3 open teammates ahead and completed the pass.", "po:v9"),
+    (f"{H} completed the pass and found an open teammate.", "po:v9"),
+    (f"{H} had 3 teammates free further forward and kept the ball.", "po:v9"),
+    (f"{H} lost the pass; the pass went elsewhere with 3 teammates open.", "po:f1"),
+    (f"{H} lost the ball and the pass went elsewhere.", "po:f1"),
+    (f"{H} had 4 passes with no open teammate ahead from minute 1 to minute 15.", "po:n4"),
+    (f"{H} made 4 passes with no open teammate further forward.", "po:n4"),
+    (f"{H} had 3 extra players around the ball in minute 12.", "ov:v3"),
+    (f"{H} built an overload in minute 12.", "ov:v3"),
+    (f"{H} had 4 players against 1 player around the ball in minute 12.", "ov:v3"),
+    (
+        f"{L} lost the ball and won it back, and {H} had 3 open teammates ahead and completed the pass.",
+        "cp:v7,po:v9",
+    ),
+    (f"{L} lost the ball with 1 player pressing, and {H} built an overload in minute 12.", "cp:v8,ov:v3"),
+    (f"{H} had 3 open teammates ahead and completed the pass in minute 31.", "po:v9"),
+]
+
+
+@pytest.mark.parametrize("text, fids", REVERSALS4)
+def test_no_glue_only_reversal_passes(text, fids):
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "verified", text
+
+
+@pytest.mark.parametrize("item", TRUE4)
+def test_no_true_sentence_of_the_fifth_review_is_rejected(item):
+    text, fids = item[0], item[1]
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "rejected", text
+
+
+# The glue list is pinned: each word taken out of it because it carries direction holds a sentence
+# that would otherwise pass (put it back in GLUE and the test turns red).
+GLUE_PINS = [  # each sentence's only word outside the fact's phrases, names and glue is the pinned one
+    ("Lisbon Esportes lost the ball and had it again.", "cp:v8"),  # again (and it)
+    ("Lisbon Esportes lost the ball and had the ball again.", "cp:v8"),  # again
+    ("London Athletic had 4 passes open from minute 1 to minute 15.", "po:n4"),  # open
+    ("London Athletic had 4 passes with a teammate from minute 1 to minute 15.", "po:n4"),  # teammate
+    ("Lisbon Esportes lost the ball and had it.", "cp:v8"),  # it
+    ("Lisbon Esportes lost the ball and that was the ball.", "cp:v7"),  # that
+    ("Lisbon Esportes lost the ball and had the ball straight.", "cp:v8"),  # straight
+    ("Lisbon Esportes lost the ball and had the same ball.", "cp:v8"),  # same
+    ("Lisbon Esportes lost the ball away.", "cp:v8"),  # away
+    ("Lisbon Esportes lost the ball only.", "cp:v7"),  # only
+    ("Lisbon Esportes lost the ball and had all the ball.", "cp:v8"),  # all
+    ("Lisbon Esportes lost the ball and had one.", "cp:v8"),  # one
+]
+
+
+@pytest.mark.parametrize("text, fid", GLUE_PINS)
+def test_direction_words_are_not_glue(text, fid):
+    assert status_for(verify(Claim(text, [fid]), K2, CLUBS, NAMED, NAMES)) != "verified", text
+
+
+@pytest.mark.parametrize(
+    "text, fid",
+    [
+        ("Lisbon Esportes had no regains from minute 1 to minute 15.", "cps:z"),
+        ("London Athletic built an overload in minute 12.", "ov:v3"),
+    ],
+)
+def test_review_phrases_are_pinned(text, fid):
+    v = verify(Claim(text, [fid]), K2, CLUBS, NAMED, NAMES)
+    assert v.ok, (text, v.reasons)
