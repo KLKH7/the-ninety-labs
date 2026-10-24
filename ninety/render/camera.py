@@ -8,6 +8,7 @@ principal point is the image centre.
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from dataclasses import dataclass
@@ -288,6 +289,7 @@ class Director:
         self.cuts = cuts
         self.angle = "main"
         self._cut_until = -1.0
+        self._edit_hold_until = -1.0  # the restart's wide shot after an edit cut holds until here
         self._cut_kind = ""  # "", "netL", "netR" or "tight". Empty is the gantry.
         self.net: dict | None = None  # the goal the mesh and the low angle are still showing
 
@@ -317,6 +319,7 @@ class Director:
         out (demo v1's critic, #4 and #15)."""
         self._cut_kind = ""
         self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        self._edit_hold_until = self._cut_until
         self.aim = None
         self.zoom_v = 0.0
 
@@ -498,6 +501,12 @@ class Director:
 
         if inside(0.0):
             return ax, ay
+        if not inside(1.0):
+            # The ball and where it will be a lag on are too far apart for one shot (a long ball).
+            # The aim trails a target moving at the ball's pace by that lag (_ease), so aiming at
+            # the ball itself leaves the picture a lag behind it and the ball runs out of shot.
+            # Aimed where the ball will be, the trailing aim is on the ball (lesson 205).
+            return balls[1][0], balls[1][1]
         lo, hi = 0.0, 1.0  # at t = 1 the ball is at the centre of the picture
         for _ in range(14):
             mid = (lo + hi) / 2
@@ -602,10 +611,14 @@ class Director:
         want = self._better(ball_x, ball_y) if self.cuts else ""
         # The hold covers every angle, including the return to the gantry, so an action on the
         # edge of the rule cannot bounce the camera back and forth. A goal starts the low angle at
-        # once, even over a hold. Near the edit's next cut nothing changes: the cut is the change.
+        # once, even over a hold, except the hold after an edit cut: that cut was itself a change of
+        # shot, so a goal soon after the restart is seen on the gantry and the low angle comes up
+        # once the hold ends, while the goal is still fresh (_net_due; lesson 205). Near the edit's
+        # next cut nothing changes: the cut is the change.
         steady = cut_in is not None and cut_in < CUT_HOLD_S
         due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady
-        if (fresh_goal and self.cuts and self._scorer is None) or due:
+        after_edit = self.t < self._edit_hold_until - 1e-9
+        if (fresh_goal and self.cuts and self._scorer is None and not after_edit) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
         if self._cut_kind == "scorer":
@@ -798,3 +811,95 @@ def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
         for f in range(e["frame"], kick):
             out[f] = flag
     return out
+
+
+# The tactical views: two fixed lenses side by side on the main gantry, both at one mount
+# (params.TacticalParams), each holding one half of the pitch for the whole match, so vision sees
+# every player whatever the broadcast follows. A club analysis camera stands as these do: at halfway,
+# high, with all four corners in shot and never moved during the match (docs/GROUNDING.md V7).
+TACTICAL_VIEWS = ("tac-l", "tac-r")  # the left lens covers x 0 to halfway, the right halfway to 105
+TACTICAL_SIZE = (1920, 1080)  # each lens: the sharper of the guide's two broadcast sizes (section 2)
+# Each half reaches this far past halfway, so a player on the line is whole in one view or the
+# other (*design*: 2.5 m either side, 5 m shared, about two strides).
+TACTICAL_OVERLAP_M = 5.0
+# What a lens must hold: its half of the pitch from the ground to a tall player's head (*design*:
+# 2 m), every corner of that box at least this share of the picture inside its edge (*design*).
+TACTICAL_HEAD_M = 2.0
+TACTICAL_MARGIN = 0.01
+TACTICAL_PITCH = (105.0, 68.0)  # Law 1, the pitch the engine plays on (ninety/sim/engine.py)
+
+
+def _aimed(position: Vec, pan: float, tilt: float) -> Vec:
+    """The point one metre along a lens panned `pan` from +y toward +x and tilted `tilt` below the
+    horizon (vision's pitch.View convention)."""
+    ct = math.cos(tilt)
+    return (position[0] + math.sin(pan) * ct, position[1] + math.cos(pan) * ct, position[2] - math.sin(tilt))
+
+
+def _longest_focal(position: Vec, pan: float, tilt: float, points: list[Vec], w: int, h: int) -> float:
+    """The longest focal length (px) at which every point sits inside the margin, 0 if one is behind."""
+    cam = Camera(position, _aimed(position, pan, tilt), 60.0, w, h)
+    half_w, half_h = (0.5 - TACTICAL_MARGIN) * w, (0.5 - TACTICAL_MARGIN) * h
+    f = math.inf
+    for p in points:
+        x, y, z = cam.to_camera(p)
+        if z <= 1e-6:
+            return 0.0
+        if x:
+            f = min(f, half_w * z / abs(x))
+        if y:
+            f = min(f, half_h * z / abs(y))
+    return f
+
+
+def _solve_lens(position: Vec, x_lo: float, x_hi: float, w: int, h: int) -> tuple[float, float, float]:
+    """(pan, tilt, vertical FOV in degrees) of the tightest lens that holds x_lo..x_hi of the pitch.
+
+    The tightest fit is the longest focal length, maximised over the aim: a grid over every aim that
+    sees the pitch from the gantry (pan within a right angle of +y, tilt 0 to 80 degrees), then
+    finer grids round the best. The fit is smooth in the aim, so the refinement finds its top."""
+    points = [
+        (x, y, z) for x in (x_lo, x_hi) for y in (0.0, TACTICAL_PITCH[1]) for z in (0.0, TACTICAL_HEAD_M)
+    ]
+    best = max(
+        (_longest_focal(position, pan, tilt, points, w, h), pan, tilt)
+        for pan in (math.radians(d) for d in range(-90, 91, 2))
+        for tilt in (math.radians(d) for d in range(0, 81, 2))
+    )
+    step = math.radians(2.0)
+    while step > 1e-5:
+        step /= 4
+        _, pan0, tilt0 = best
+        best = max(
+            (_longest_focal(position, pan0 + i * step, tilt0 + j * step, points, w, h), pan0 + i * step,
+             tilt0 + j * step)
+            for i in range(-4, 5)
+            for j in range(-4, 5)
+        )
+    f, pan, tilt = best
+    return pan, tilt, math.degrees(2 * math.atan(h / 2 / f))
+
+
+@functools.lru_cache(maxsize=64)
+def _tactical(height_m: float, back_m: float, offset_x_m: float) -> tuple[Camera, Camera]:
+    w, h = TACTICAL_SIZE
+    position = (TACTICAL_PITCH[0] / 2 + offset_x_m, -back_m, height_m)
+    mid, lap = TACTICAL_PITCH[0] / 2, TACTICAL_OVERLAP_M / 2
+    out = []
+    for x_lo, x_hi in ((0.0, mid + lap), (mid - lap, TACTICAL_PITCH[0])):
+        pan, tilt, fov = _solve_lens(position, x_lo, x_hi, w, h)
+        out.append(Camera(position, _aimed(position, pan, tilt), fov, w, h))
+    return out[0], out[1]
+
+
+def tactical_views(params) -> list[Camera]:
+    """The two fixed tactical lenses for a clip's mount (params.TacticalParams, or RenderParams), in
+    TACTICAL_VIEWS order. No roll and a centred principal point, as every camera here."""
+    t = getattr(params, "tactical", params)
+    return list(_tactical(float(t.height_m), float(t.back_m), float(t.offset_x_m)))
+
+
+def pan_tilt(cam: Camera) -> tuple[float, float]:
+    """A camera's pan (from +y toward +x) and tilt (below the horizon), in radians."""
+    fwd = _norm(_sub(cam.target, cam.position))
+    return math.atan2(fwd[0], fwd[1]), -math.asin(fwd[2])

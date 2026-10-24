@@ -116,6 +116,34 @@ def test_ground_truth_never_lands_in_the_renders_container(tmp_path, monkeypatch
     assert sorted(n.rsplit("/", 1)[1] for n in truth.store) == sorted(job.TRUTH_FILES * 3)
 
 
+def fake_render_with_views(seed, out, seconds, overrides, page):
+    fake_render(seed, out, seconds, overrides, page)
+    for name in ("tac-l", "tac-r"):
+        view = Path(out) / "views" / name
+        (view / "images").mkdir(parents=True)
+        (view / "images" / "00000.jpg").write_bytes(b"jpg")
+        (view / "frames.jsonl").write_text("{}\n")
+        (view / "events.jsonl").write_text("{}\n")
+        (view / "clip.json").write_text("{}")
+
+
+def test_a_views_answer_key_is_sealed_with_the_clips(tmp_path, monkeypatch):
+    # Each view folder holds its own frames.jsonl and events.jsonl: true positions, boxes and events,
+    # the answer key as much as the clip's own. In the readable renders container they would sit
+    # beside vision's input (lesson 192). Fails on a seal that matched only the clip's top level.
+    monkeypatch.setattr(job, "check_clip", lambda d: {"passed": {"labels_complete": True}})
+    c, truth, log = containers()
+    job.run_job(job.job_config(ENV), c, fake_render_with_views, fake_browser, tmp_path, truth)
+    assert not [n for n in c.store if n.endswith(job.TRUTH_FILES)]
+    assert "truth:v1/train/seed1/views/tac-l/frames.jsonl" in log.order
+    assert "renders:v1/train/seed1/views/tac-r/images/00000.jpg" in log.order
+    # each view's own clip.json goes too, before the clip's, which marks the whole clip arrived
+    seed1 = [n for n in log.order if "/seed1/" in n]
+    assert "renders:v1/train/seed1/views/tac-l/clip.json" in seed1
+    assert seed1[-1] == "renders:v1/train/seed1/clip.json"
+    assert len(truth.store) == 3 * 3 * len(job.TRUTH_FILES)  # the clip and its two views, three seeds
+
+
 def test_a_finished_seed_is_skipped_on_retry(tmp_path, monkeypatch):
     monkeypatch.setattr(job, "check_clip", lambda d: {"passed": {"labels_complete": True}})
     c, truth, _ = containers(existing=["v1/train/seed2/clip.json"])
@@ -128,7 +156,9 @@ def test_a_clip_that_fails_its_checks_is_reported_not_uploaded(tmp_path, monkeyp
     c, truth, _ = containers()
     done = job.run_job(job.job_config(ENV), c, fake_render, fake_browser, tmp_path, truth)
     assert done["failed"] == [2]
-    assert "v1/failed/seed2.json" in c.store
+    # A check report quotes the answer key (contract messages name true events and positions), so it
+    # is sealed with it (lesson 192); in renders it would sit beside vision's input.
+    assert "v1/failed/seed2.json" in truth.store and not any("failed" in n for n in c.store)
     assert not any(n.startswith("v1/train/seed2/") for n in c.store)
 
 
