@@ -24,8 +24,8 @@ these rules, written before any of its matches was simulated, together with the 
   ordinary play comes from the frozen test set.
 - **Written:** `ninety/eval/possession_set.py` writes `docs/eval/possession-set.json`: each clip's
   split, seed, start and length, and per split the totals of each event type the windows hold.
-  Which clip holds what is not written. A test checks that re-running it on the matches gives the
-  same bytes.
+  Which clip holds what is not written. Re-running it with `--check` on the matches fails unless
+  it gives the same bytes.
 - **Render:** the broadcast with its labels, `stadium=broadcast`, every frame
   (`dead_ball_cut=false`, as datasets and the shot-outcome set), no tactical views:
   `uv run ninety-render --seed <S> --start <start> --seconds 10 --set stadium=broadcast

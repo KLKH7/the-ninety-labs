@@ -14,8 +14,9 @@ So this set is rendered for it, by these rules, written before any of its matche
 - **Matches:** seeds 920101 to 920115 (**validation**) and 920201 to 920230 (**test**), the first
   35 minutes of each, used by nothing else: clear of the training seeds (below 900000), the frozen
   test sets (900001 to 900030), the shot-outcome set (910001 to 910016) and the demo (8001 to
-  8050). Seed 920001 was simulated once, before this was written, only to time a 90-minute
-  simulation on a shared laptop; it is in neither split and its events were not read.
+  8050). A 90-minute simulation of seed 920001 was started before this was written, only to time
+  it on a shared laptop, and stopped before it finished; it is in neither split and nothing of it
+  was read.
   `uv run ninety-sim --seed <S> --minutes 35 --out <sims>/seed<S>`, at the render commit below.
   The engine plays the match frame by frame from kick-off, so the first 35 minutes of a longer
   match are the same frames; 35 minutes keeps the simulation and the render of a late window cheap.
@@ -53,8 +54,9 @@ So this set is rendered for it, by these rules, written before any of its matche
   the seeds give; they are reported as counts, never as a rate.
 - **Written:** `ninety/eval/set_piece_set.py` writes `docs/eval/set-piece-set.json`: each clip's
   split, seed, start and length, and the totals of each kind per split. Which clip holds which
-  kind is not written, so the test split's labels stay unread until it is scored. A test checks
-  that re-running it on the matches gives the same bytes.
+  kind is not written, so the test split's labels stay unread until it is scored. Re-running it
+  with `--check` on the matches fails unless it gives the same bytes (a test checks that `--check`
+  catches a changed match; the 45 matches are too long to simulate in CI).
 - **Render:** the broadcast with its labels, `stadium=broadcast` (the look the demo shows),
   `dead_ball_cut=true`, no tactical views, the render commit's own renderer and checks:
   `uv run ninety-render --seed <S> --start <start> --seconds <seconds> --set stadium=broadcast

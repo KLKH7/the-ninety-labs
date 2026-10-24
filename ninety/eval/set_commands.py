@@ -1,7 +1,8 @@
 """The commands that render and validate a pre-registered set's clips, one line per clip.
 
     uv run python -m ninety.eval.set_commands docs/eval/set-piece-set.json --out runs/set-piece-set \\
-        [--split test] | xargs -P 4 -I{} sh -c {}
+        [--split test] > clips.sh
+    tr '\\n' '\\0' < clips.sh | xargs -0 -n 1 -P 4 sh -c    # 4 at a time; -I would cap a line at 255 bytes
 
 Reads the set's manifest (ninety/eval/set_piece_set.py, possession_set.py and shot_outcome_set.py
 write it): each clip is rendered at its start and length with the set's render settings, into
