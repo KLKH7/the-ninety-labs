@@ -1,7 +1,7 @@
 """The image stage of event detection: images + detections -> observations on the pitch.
 
     uv run --group vision python -m ninety.vision.observe <clip> \\
-        --detections <detections.jsonl> --out <observations.jsonl>
+        --detections <detections.jsonl> --out <observations.jsonl> [--fixed]
 
 Reads the clip's `images/` and the detections file (ninety/vision/detections.py), nothing else: not
 frames.jsonl, events.jsonl, clip.json or meta.json, which hold the answer key and the render
@@ -12,6 +12,11 @@ the counts must agree). For each frame it writes one line:
      "camera": {"ok", "median_px", "points", "P"},       # estimated from the markings (pitch.py)
      "players": [{"bbox", "score", "x", "y", "rgb"}],     # foot point on the pitch, kit colour
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
+
+The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). A
+lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
+pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
+through that one camera.
 
 Positions are null on a frame whose camera fit is not ok. A player's place is the bottom centre
 of his box (where his feet meet the ground); the ball's is its box centre taken to be on the
@@ -38,10 +43,23 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # ninety/render/scene.py; the band absorbs the spread); a camera at the wrong distance or zoom
 # scales every player the same wrong way. The frame's median ratio must lie in HEIGHT_BAND: the
 # 1st to 99th percentile of that ratio on validation frames whose ground mapping is within 1.0 m
-# (docs/eval/detector-plan.md, step B; docs/eval/detector-derive.json). It replaced the marking test
+# (docs/eval/detector-plan.md, step B). Re-derived by that rule for the current renders (lesson 230),
+# on the clips docs/eval/ball-three-cams/PLAN.md fixed for it: tactical1's 23 validation clips
+# (renderer 0.5.15, the test clips' look), broadcast, the camera fit with the grain blur (lesson
+# 215), 4,563 good frames of 5,500 (docs/eval/band-broadcast.json, ninety/eval/band_derive.py; the
+# same rule on dataset v2's validation clips, renderer 0.5.9, gives 0.987 to 1.099,
+# docs/eval/band-broadcast-v2.json). The band of renderer 0.3 (0.901 to 1.002,
+# docs/eval/detector-derive.json) rejected every right camera there: the ratio on right cameras sits
+# about 5 to 8% higher now (cause not established). It replaced the marking test
 # (half the marking pixels within 1.5 px), which trusted 198 badly wrong frames on validation and
-# kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is still kept as
-# `markings_ok`, and still guides the fit from frame to frame (pitch.fit_clip).
+# kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is kept as
+# `markings_ok` and guides the fit from frame to frame (pitch.fit_clip). On the broadcast it is
+# required again as well as the heights (gate B3; lesson 230), chosen on validation before any test
+# score: on tactical1's 23 validation clips the heights alone trusted 654 badly wrong frames, the
+# worst 51.7 m (one clip's camera 28 m wrong in every frame, which no frame-to-frame check sees),
+# and both together 360, the worst 14.1 m, keeping 97.8% of good frames against 98.1%
+# (docs/eval/band-broadcast.json, `candidates`). A fixed lens is judged by its heights only: its
+# markings test was measured only before the grain fix (lesson 215), where it failed most good frames.
 # A frame the heights trust must also agree with its neighbours (`agree`): a broadcast camera pans
 # continuously, under 0.02 rad a frame (pitch.STEP_SD), so the ground point at the image centre
 # moves little from frame to frame. A frame is kept only if that point lies within NEIGHBOUR_M of
@@ -56,7 +74,7 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
-HEIGHT_BAND = (0.901, 1.002)
+HEIGHT_BAND = (0.966, 1.121)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
@@ -133,9 +151,10 @@ def agree(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def place(row: dict) -> dict:
-    """Judge the frame's camera by its players' heights and, when it is trusted, place every
-    detection on the pitch through it (players at the foot point, the ball one radius up)."""
+def place(row: dict, markings: bool = True) -> dict:
+    """Judge the frame's camera by its players' heights and, with `markings` (the broadcast), its
+    marking fit's own verdict too; when it is trusted, place every detection on the pitch through
+    it (players at the foot point, the ball one radius up)."""
     cam = row["camera"]
     P = np.array(cam["P"]) if cam.get("P") is not None else None
     ratio = height_ratio(row["players"], P) if P is not None else None
@@ -143,7 +162,7 @@ def place(row: dict) -> dict:
     # With no player to measure, the heights cannot judge the camera, and the markings' verdict
     # stands (one frame of 3,250 on validation, untrusted either way).
     if ratio is not None:
-        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1]
+        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1] and (cam["markings_ok"] or not markings)
     else:
         ok = bool(P is not None and cam["markings_ok"])
     cam["height_ratio"] = None if ratio is None else round(ratio, 4)
@@ -160,18 +179,29 @@ def place(row: dict) -> dict:
     return row
 
 
-def observe(images: list[Path], dets: list, load) -> list[dict]:
-    """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files."""
+def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[dict]:
+    """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
+    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
     rgbs, points = [], []
+    counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
         boxes = [d.bbox for d in fd.detections if d.score >= SCORE_MIN]
         rgbs.append(rgb)
-        points.append(pitch.line_points(rgb, boxes))
+        if not fixed:
+            points.append(pitch.line_points(rgb, boxes))
+            continue
+        mask = pitch.line_mask(rgb, boxes)
+        counts = mask.astype(np.uint32) if counts is None else counts + mask
+        points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
-    gantry, fits = pitch.fit_clip(points, W, H)
+    if not fixed:
+        gantry, fits = pitch.fit_clip(points, W, H)
+    else:
+        view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
+        gantry = (view.cx, view.cy, view.cz)
     rows = []
     for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
         players, balls = [], []
@@ -187,9 +217,11 @@ def observe(images: list[Path], dets: list, load) -> list[dict]:
                        "P": ([[round(float(v), 6) for v in row] for row in fit.view.P()]
                              if fit.view else None)},
             "players": players, "ball": balls,
-        }))
+        }, markings=not fixed))
     rows = agree(rows)
     rows[0]["gantry"] = [round(v, 3) for v in gantry]
+    if fixed:
+        rows[0]["fixed"] = True
     return rows
 
 
@@ -204,22 +236,25 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("clip", type=Path, nargs="?", help="the clip's folder (images/)")
     ap.add_argument("--detections", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--fixed", action="store_true",
+                    help="a fixed lens (the tactical camera): one camera for the whole clip")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
                          "without the camera fit (its cameras are kept)")
     a = ap.parse_args(argv)
     if a.regate is not None:
         rows = []
-        for x in a.regate.read_text().splitlines():
-            if x.strip():
-                rows.append(place(json.loads(x)))
+        lines = [json.loads(x) for x in a.regate.read_text().splitlines() if x.strip()]
+        fixed = bool(lines and lines[0].get("fixed"))
+        for x in lines:
+            rows.append(place(x, markings=not fixed))
         rows = agree(rows)
     else:
         if a.clip is None or a.detections is None:
             ap.error("a clip and --detections, or --regate")
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
-        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")))
+        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")), fixed=a.fixed)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")

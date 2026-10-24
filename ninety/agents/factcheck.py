@@ -7,6 +7,12 @@ cited events, or the minute. Anything else is rejected with a reason the writer 
 Evidence may also hold computed facts (ninety/intel/stats.py `Fact.as_dict()`: metric, value, unit,
 scope). A cited fact's value counts only when it is written with the fact's unit ("31.2 km/h" for a
 km/h fact), never as a bare number, and a fact scoped to a player (`player:h7...`) cites that player.
+
+Evidence may hold team-shape facts too (ninety/intel/shape.py, `type: shape`). A claim about a
+team's shape must cite one, its numbers must be the facts' (a distance in metres, an area in square
+metres, a count of players), its team must be the fact's, and its words must agree with the fact: a
+line that "pushed up" has a positive change, a "high line" stands above the reference range, and so
+on (`shape_reasons`). A shape fact built on too few tracked players is held by the confidence gate.
 """
 
 from __future__ import annotations
@@ -55,6 +61,14 @@ DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
 SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{SPEED_UNITS}\b", re.I)
+# An area: "900 m²", "900m2", "900 sq m", "900 square metres" (a shape fact's unit, m²).
+AREA_UNITS = r"(?:m²|m2|sq\.?\s*m|square\s+(?:metres|meters|metre|meter))"
+AREA_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{AREA_UNITS}(?!\w)", re.I)
+# A count of players: "7 players", "seven home players" (read as digits first), "all 7 outfielders".
+PLAYERS_NUMBER = re.compile(
+    rf"(?P<number>{NUMBER_PATTERN})\s+(?:(?:home|away|of\s+their|of\s+its|outfield)\s+)?"
+    r"(?:players|men|outfielders|outfield\s+players)\b", re.I,
+)
 MINUTE_NUMBER = re.compile(
     rf"(?:\bminute\s+(?P<minute_a>{NUMBER_PATTERN})\b|"
     rf"(?P<minute_b>{NUMBER_PATTERN})\s+minutes?\b|"
@@ -121,6 +135,8 @@ def _normalize_clock(clock: str) -> str:
 
 def _number_field(text: str, start: int) -> str | None:
     for field_name, pattern in (
+        ("area_m2", AREA_NUMBER),
+        ("players", PLAYERS_NUMBER),
         ("distance_m", DISTANCE_NUMBER),
         ("ball_speed_kmh", SPEED_NUMBER),
         ("minute", MINUTE_NUMBER),
@@ -195,11 +211,30 @@ def _unit_follows(text: str, end: int, unit: str) -> bool:
     return re.match(rf"\s*{re.escape(unit)}(?!\w)", text[end:], re.I) is not None
 
 
+def _is_shape(item: Mapping) -> bool:
+    return item.get("type") == "shape"
+
+
+def shape_values(evidence: list[dict], unit: str) -> set[float]:
+    """What a cited shape fact in `unit` lets a claim state: its value, and the size of its change
+    from the minute before ("pushed up 8 m" for a change of +8, "dropped 5 m" for -5)."""
+    values: set[float] = set()
+    for row in evidence:
+        if _is_shape(row) and row["unit"] == unit:
+            values.add(float(row["value"]))
+            if row.get("change") is not None:
+                values.add(abs(float(row["change"])))
+    return values
+
+
 def allowed_numbers(events: list[dict]) -> set[float]:
     """Numbers a claim may state bare: event fields and counts. A fact's value is not one of them:
-    it needs its unit (see `check`)."""
-    events = [e for e in events if not _is_fact(e)]
-    values: set[float] = {float(len(events))}
+    it needs its unit (see `check`). Of a shape fact, only a count of players and its minute may
+    stand bare; shape facts are not events, so they add nothing to the counts of events."""
+    shapes = [e for e in events if _is_shape(e)]
+    events = [e for e in events if not _is_fact(e) and not _is_shape(e)]
+    values: set[float] = {float(len(events))} | shape_values(shapes, "players")
+    values.update(float(row["minute"]) for row in shapes)
     for event in events:
         values.update(float(event[name]) for name in NUMBER_FIELDS if name in event)
         if event.get("type") == "stat":
@@ -207,6 +242,129 @@ def allowed_numbers(events: list[dict]) -> set[float]:
     values.update(float(n) for n in Counter(e["type"] for e in events).values())
     values.update(float(n) for n in Counter((e["team"], e["type"]) for e in events).values())
     return values
+
+
+# ---------------------------------------------------------------------------------------------
+# Team shape (ninety/intel/shape.py): the words a claim about shape uses, and what each must agree
+# with in the cited shape facts.
+# ---------------------------------------------------------------------------------------------
+
+# Reference ranges in professional matches (docs/GROUNDING.md S6 to S9: Rico-González et al., 2022,
+# a systematic review of positional data): own goal line to the defensive line 22 to 28 m, team
+# width 35 to 48 m, team area (convex hull) reported from 750 to 1,831 m². A word of degree says the
+# team is outside the range: a "high line" above 28 m, a "deep block" below 22 m, "narrow" below
+# 35 m, "compact" below 750 m².
+DEEP_LINE_M, HIGH_LINE_M = 22, 28
+NARROW_M = 35
+COMPACT_M2 = 750
+# Words that make a claim a claim about shape: it must cite a shape fact.
+SHAPE_TERMS = re.compile(
+    r"\b(?:back\s+(?:line|four|five)|defensive\s+(?:line|block)|(?:high|higher|deep|deeper|low|mid)\s+"
+    r"(?:line|block)|compact(?:ness)?|narrow(?:er|ed|s|ing)?\b(?!\s+angle)|width|team\s+shape|"
+    r"(?:their|its|the)\s+shape|between\s+the\s+lines|(?:behind|ahead\s+of|in\s+front\s+of)\s+the\s+ball)\b",
+    re.I,
+)
+TEAM_WORD = re.compile(r"\b(home|away)\b", re.I)
+_M = rf"(?P<n>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b"
+# (words, metric, test on the fact's value, test on its change). A comparative word ("pushed up")
+# needs a change from the minute before; a word of degree ("high line") reads the value.
+SHAPE_WORDS = (
+    (re.compile(r"\b(?:push(?:ed|es|ing)?\s+(?:up|higher|forward)|step(?:ped|s|ping)?\s+up|"
+                r"(?:raised|lifted)\s+(?:the|its|their)\s+(?:line|block)|higher\s+line|moved\s+up)\b", re.I),
+     "line_height", None, lambda c: c > 0),
+    (re.compile(r"\b(?:dropp(?:ed|ing)|drops?|fell|falls?|sank|sinks?|retreat(?:ed|s|ing)?)\s+"
+                r"(?:back|deep(?:er)?|off)\b|\bsat\s+deeper\b|\bdeeper\s+(?:line|block)\b", re.I),
+     "line_height", None, lambda c: c < 0),
+    (re.compile(r"\bhigh\s+(?:line|block)\b", re.I), "line_height", lambda v: v > HIGH_LINE_M, None),
+    (re.compile(r"\b(?:deep|low)\s+(?:line|block)\b|\b(?:sat|sitting|sits)\s+deep\b", re.I),
+     "line_height", lambda v: v < DEEP_LINE_M, None),
+    (re.compile(r"\bnarrow(?:er|ed|ing)\b|\bnarrows\b|\btucked\s+in\b", re.I),
+     "width", None, lambda c: c < 0),
+    (re.compile(r"\bnarrow\b(?!\s+angle)", re.I), "width", lambda v: v < NARROW_M, None),
+    (re.compile(r"\b(?:wider|widen(?:ed|s|ing)?|spread\s+wide)\b", re.I), "width", None, lambda c: c > 0),
+    (re.compile(r"\b(?:more\s+compact|compacted|tighten(?:ed|s|ing)?|squeez(?:ed|es|ing)|closed\s+up)\b",
+                re.I),
+     "area", None, lambda c: c < 0),
+    (re.compile(r"(?<!more\s)(?<!less\s)\bcompact\b", re.I), "area", lambda v: v < COMPACT_M2, None),
+    (re.compile(r"\b(?:less\s+compact|stretched|spread\s+out|opened\s+up|loosened)\b", re.I),
+     "area", None, lambda c: c > 0),
+)
+# A number written next to a metric's words is that metric's: its value, or the size of its change.
+# Each pattern holds one number, the `n` group.
+_LINE_WORDS = (r"push(?:ed|es|ing)?\s+(?:up|higher|forward)|step(?:ped|s|ping)?\s+up|moved\s+up|"
+               r"dropp(?:ed|ing)\s+(?:back|deeper|off)|retreat(?:ed|s|ing)?|(?:back|defensive)\s+line|line")
+SHAPE_NUMBERS = tuple((re.compile(p, re.I), metrics) for p, metrics in (
+    (rf"\b(?:{_LINE_WORDS})\D{{0,30}}?{_M}", ("line_height",)),
+    (rf"\b(?:width|narrow(?:er|ed)|wider|widened)\D{{0,20}}?{_M}", ("width",)),
+    (rf"{_M}\s+(?:wide|across)\b", ("width",)),
+    (rf"\blength\D{{0,20}}?{_M}", ("length",)),
+    (rf"{_M}\s+(?:long|from\s+front\s+to\s+back)\b", ("length",)),
+    (rf"{_M}\s+(?:between|separat\w*)\b", ("back_to_mid", "mid_to_front")),
+    (rf"\b(?:between\s+the\s+lines|gap)\D{{0,20}}?{_M}", ("back_to_mid", "mid_to_front")),
+    (rf"(?P<n>{NUMBER_PATTERN})\s+(?:\w+\s+){{0,3}}?(?:behind|goal-side\s+of)\s+the\s+ball",
+     ("behind_ball",)),
+    (rf"(?P<n>{NUMBER_PATTERN})\s+(?:\w+\s+){{0,3}}?(?:ahead\s+of|in\s+front\s+of)\s+the\s+ball",
+     ("ahead_of_ball",)),
+))
+# Words that make a number next to a metric its change, not its value ("pushed up 8 m", "2 more
+# players behind the ball"); without one, the number is the value ("a line 38 m from goal").
+CHANGE_WORDS = re.compile(
+    r"\b(?:push\w*|step\w*|mov\w*|dropp\w*|drops?|retreat\w*|narrow\w+|wid\w+|stretch\w*|by|higher|"
+    r"deeper|further|more|fewer|extra|less)\b", re.I,
+)
+SHAPE_NAMES = {"line_height": "line height", "width": "width", "area": "area", "length": "length",
+               "back_to_mid": "gap between the lines", "mid_to_front": "gap between the lines",
+               "behind_ball": "count behind the ball", "ahead_of_ball": "count ahead of the ball"}
+
+
+def _row_numbers(row: Mapping, change: bool = True) -> set[float]:
+    """A fact's value, and with `change` the size of its change from the minute before."""
+    moved = {abs(float(row["change"]))} if change and row.get("change") is not None else set()
+    return {float(row["value"])} | moved
+
+
+def shape_reasons(text: str, evidence: list[dict]) -> list[str]:
+    """Why a claim's words about team shape disagree with the shape facts it cites (none: they agree).
+    `text` has its number words already in digits."""
+    rows = [r for r in evidence if _is_shape(r)]
+    if not rows and not SHAPE_TERMS.search(text):
+        return []
+    if not rows:
+        term = SHAPE_TERMS.search(text).group()
+        return [f"'{term}' is a claim about team shape: cite the shape fact it rests on"]
+    reasons: list[str] = []
+    named = {m.lower() for m in TEAM_WORD.findall(text)}
+    if named and not named & {r["team"] for r in rows}:
+        cited = sorted({r["team"] for r in rows})
+        reasons.append(f"the cited shape facts are {cited}'s, not {sorted(named)}'s")
+    teams = [(m.start(), m.group().lower()) for m in TEAM_WORD.finditer(text)]
+
+    def of(at: int) -> list[dict]:
+        """The cited shape facts a word at `at` is about: those of the team named last before it
+        ("home pushed up while away dropped back"), or of every cited team when none is named."""
+        before = [team for start, team in teams if start < at]
+        return [r for r in rows if r["team"] == before[-1]] if before else rows
+
+    for words, metric, on_value, on_change in SHAPE_WORDS:
+        for m in words.finditer(text):
+            facts = [r for r in of(m.start()) if r["metric"] == metric]
+            name = SHAPE_NAMES[metric]
+            if not facts:
+                reasons.append(f"'{m.group()}' is about the {name}: cite that shape fact")
+            elif on_change and not any(r.get("change") is not None and on_change(r["change"]) for r in facts):
+                changes = [r.get("change") for r in facts]
+                reasons.append(f"'{m.group()}' disagrees with the cited {name} change ({changes})")
+            elif on_value and not any(on_value(r["value"]) for r in facts):
+                values = [r["value"] for r in facts]
+                reasons.append(f"'{m.group()}' disagrees with the cited {name} ({values} {facts[0]['unit']})")
+    for pattern, metrics in SHAPE_NUMBERS:
+        for m in pattern.finditer(text):
+            n = m.group("n")
+            facts = [r for r in of(m.start("n")) if r["metric"] in metrics]
+            change = CHANGE_WORDS.search(m.group()) is not None
+            if not any(float(n) in _row_numbers(r, change) for r in facts):
+                reasons.append(f"number {n} is not the cited {SHAPE_NAMES[metrics[0]]}")
+    return reasons
 
 
 def check(
@@ -249,6 +407,12 @@ def check(
             }
             if expected_field in FIELD_UNITS:
                 values |= _fact_values(evidence, FIELD_UNITS[expected_field])
+            if expected_field == "distance_m":
+                values |= shape_values(evidence, "m")
+            elif expected_field == "area_m2":
+                values |= shape_values(evidence, "m²")
+            elif expected_field == "players":  # a count of players: any count a bare number may be
+                values |= allowed
             if value not in values:
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
@@ -287,6 +451,7 @@ def check(
         found = {(p.get("player"), p.get("receiver")) for p in passes}
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
+    reasons += shape_reasons(text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
 
@@ -297,15 +462,22 @@ def confidence_gate(
     """Holds back a claim that cites a detected event the detector is not sure of.
 
     Only detected events carry a confidence (ninety/match/facts.compact); ground-truth events in
-    the pre-M1 recordings have none and pass. The verdict's category, `low_confidence`, makes the
-    claim held, not rejected (ninety/agents/contracts.status_for): the claim may be right, but
-    nothing airs until a confident detection supports it.
+    the pre-M1 recordings have none and pass. A shape fact (ninety/intel/shape.py) is unsure when
+    too few of the team were tracked for it (`confident` false), and holds a claim the same way.
+    The verdict's category, `low_confidence`, makes the claim held, not rejected
+    (ninety/agents/contracts.status_for): the claim may be right, but nothing airs until a
+    confident detection supports it.
     """
     reasons = [
         f"event {i} was detected with confidence {known[i]['confidence']:.2f}, "
         f"below {min_confidence:.2f}: cite a confident detection"
         for i in claim.evidence
         if i in known and known[i].get("confidence") is not None and known[i]["confidence"] < min_confidence
+    ] + [
+        f"shape fact {i} rests on {known[i]['tracked']} of {known[i]['of']} {known[i]['team']} players "
+        f"tracked, fewer than the {known[i]['need']} it needs: cite a confident shape fact"
+        for i in claim.evidence
+        if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
     return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)
 

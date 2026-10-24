@@ -1,0 +1,48 @@
+{
+  "notes": {
+    "purpose": "The tactical fine-tune (docs/eval/finetune-tactical/PLAN.md): ours-tactical continues from ours-freeze (--init) on the tactical views' tiles of dataset tactical's 120 training clips. Every training setting equals finetune-v2freeze.json; only the time cap differs. Set before any clip was rendered.",
+    "val_seeds": "v2freeze's 24 validation seeds, unchanged (dataset-tactical.json).",
+    "time_cap": "150 minutes: about 4 times ours-freeze's images (30 minutes on a 4090), so the run may stop at the cap; it then keeps its best validation checkpoint and its manifest says it was stopped."
+  },
+  "val_seeds": [
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "stride": 5,
+  "resolution": 640,
+  "train": {
+    "epochs": 8,
+    "batch_size": 4,
+    "grad_accum_steps": 4,
+    "lr": 5e-05,
+    "lr_encoder": 7.5e-05,
+    "early_stopping": true,
+    "early_stopping_patience": 3,
+    "checkpoint_interval": 5,
+    "num_workers": 8,
+    "seed": 7
+  },
+  "time_cap_minutes": 150
+}
