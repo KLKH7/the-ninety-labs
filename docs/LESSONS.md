@@ -289,6 +289,9 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+- **Again (Oct 23):** `uv run ruff check . | tail -1 && git commit ... && git push` committed and
+  pushed a branch with 2 lint errors: `tail` succeeded, so `&&` went on. Gate on the command itself
+  (`uv run ruff check . && ...`), never on a pipe that trims its output.
 
 ### 30. Run the commands you document
 - **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
