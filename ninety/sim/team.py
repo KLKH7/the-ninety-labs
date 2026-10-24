@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ninety.sim.offball import LENGTH_MAX_M
 from ninety.sim.style import COUNTER_PRESS_ENGAGE_M, ENGAGE_M, PRESS_GAP_M, Style
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -47,10 +48,15 @@ class TeamBrain:
     changed_at: float = -99.0
     line_x: float = 0.0
     front_x: float = 0.0  # where the forwards wait out of possession (T3)
+    midfield_gap: float = LINE_GAPS_M["midfield"]  # the midfield line ahead of the defence (T3)
     ranked: list[str] = field(default_factory=list)  # out of possession: soonest to the ball first
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
     marked: set[str] = field(default_factory=set)  # O2: the attackers those markers have
+    # T3: whom the press is on (the carrier, or the kick in flight) and the presser and cover named for it,
+    # held while that stays the same.
+    press_on: object = None
+    held_pressers: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.block = self.block or self.style.level("line_height")
@@ -71,11 +77,23 @@ class TeamBrain:
         # The block holds while the ball is in front of it; a ball inside it pulls the line back
         # toward the box, so the defence stays between the ball and the goal.
         depth = min(depth, max(LINE_FLOOR_M, ball_from_goal - GOAL_SIDE_OF_BALL_M))
-        self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         # T3: the forwards wait at the team's line of engagement, so that when the ball comes
         # inside it the first presser is already close; never past the ball, and never closer
         # to their own goal than the front of the block.
         front = max(depth + LINE_GAPS_M["attack"], min(ball_from_goal, self.engage_from_goal_m))
+        # R8: without the ball the team is more compact than with it, so it is no longer than the
+        # cap it keeps in possession (O6): when the forwards wait high, as a high press does up to a
+        # goal kick, the line steps up behind them. The forwards wait at most at the ball, so the
+        # line stays well goal-side of it. Until October 2026 only the team on the ball was capped,
+        # and a high press stood 49 m long (77 m with a low line), its back line in its own half.
+        depth = max(depth, front - LENGTH_MAX_M)
+        self.line_x = own_goal_x(self.team) + forward(self.team) * depth
+        # T3: like the forwards, the midfield line never stands past the ball. With the ball inside
+        # the block it recovers to level with the ball, between it and the line, rather than waiting
+        # upfield of play (recovery runs are a large share of high-intensity running out of
+        # possession, Ade et al. 2016; the level is *design*). Until October 2026 it kept 12 m ahead
+        # of the line wherever the ball was, so a ball 30 m from goal had the midfield behind it.
+        self.midfield_gap = min(LINE_GAPS_M["midfield"], max(0.0, ball_from_goal - depth))
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
         self.ranked = [] if has_ball else sorted(time_to_ball, key=time_to_ball.get)
         # The suggestion: first presser, then cover. Each named player still decides (P17).
@@ -111,6 +129,7 @@ class TeamBrain:
         line = ROLE_LINE.get(role)
         if line is None or self.in_possession:
             return None
-        x = self.front_x if line == "attack" else self.line_x + forward(self.team) * LINE_GAPS_M[line]
+        gap = self.midfield_gap if line == "midfield" else LINE_GAPS_M[line]
+        x = self.front_x if line == "attack" else self.line_x + forward(self.team) * gap
         y = PITCH_Y / 2 + (anchor_y - PITCH_Y / 2) * SQUEEZE + (ball_y - PITCH_Y / 2) * BALL_SIDE
         return min(PITCH_X - 1, max(1.0, x)), min(PITCH_Y - 1, max(1.0, y))

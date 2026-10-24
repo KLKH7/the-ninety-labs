@@ -43,8 +43,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "docs" / "eval" / "latency-cost.json"
 REPORT = ROOT / "docs" / "eval" / "latency-cost.md"
 RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
-# The template cues for seed 7's first five minutes (docs/EVALUATION.md: 108 cues for seed 7, five
-# minutes): what the casual persona's graphics say, a floor for what a spoken description says.
+# The template cues for seed 7's first five minutes (docs/EVALUATION.md): what the casual persona's
+# graphics say, a floor for what a spoken description says.
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
