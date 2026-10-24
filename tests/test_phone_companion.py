@@ -592,3 +592,20 @@ def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(brows
     page.keyboard.press("Home")
     page.wait_for_selector("#shot-map", state="hidden")
     assert not errors
+
+
+def test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks(browser, site):  # noqa: F811
+    """Kian heard the system voice from a test run (Oct 24): read-aloud starts only on a tap, and
+    under automation (navigator.webdriver) a line is recorded, never handed to speechSynthesis."""
+    laptop, page, errors = phone(browser, site, bundle=False)
+    page.evaluate("() => { window.__spoke = 0; speechSynthesis.speak = () => { window.__spoke += 1; }; }")
+    assert page.get_attribute(".speak >> nth=0", "aria-pressed") == "false"
+    page.evaluate("window.ninetyPhone.announce('A line with read-aloud off')")  # words on screen, no voice
+    assert page.text_content("#announce") == "A line with read-aloud off"
+    assert page.evaluate("window.ninetySpokenAloud") is None
+    page.click(".speak >> nth=0")
+    page.evaluate("window.ninetyPhone.announce('A line with read-aloud on')")
+    page.wait_for_function("(window.ninetySpokenAloud || []).length > 0")
+    # mutation: call speechSynthesis.speak in speakAloud under webdriver -> __spoke > 0
+    assert page.evaluate("window.__spoke") == 0
+    assert not errors

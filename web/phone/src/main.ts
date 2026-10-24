@@ -11,6 +11,7 @@ import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
+import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
@@ -104,6 +105,7 @@ function screenOf(x: number, y: number): [number, number] {
 
 // Read by tests/test_phone.py.
 (window as unknown as { ninetyPhone: object }).ninetyPhone = {
+  announce: (text: string) => announce(text),
   seen,
   state,
   laptop,
@@ -611,7 +613,7 @@ function announce(text: string) {
   $("announce").textContent = text;
   if (speaking && "speechSynthesis" in window) {
     speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    speakAloud(text);
     lockScreen(text);
   }
 }

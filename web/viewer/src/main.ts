@@ -256,8 +256,9 @@ async function start() {
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
       : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
-  const rememberedVoice = store.get("voice");
-  voiceBox.checked = rememberedVoice !== "0";
+  // The voice is off until a fan picks audio description on this page: a remembered choice never
+  // starts it speaking on load.
+  voiceBox.checked = false;
   const applyVoice = () => {
     // With the voice on, the live region stays quiet so a screen reader does not say it twice.
     onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
@@ -282,7 +283,8 @@ async function start() {
   });
 
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
-  const setPersona = (p: Persona, focus = false) => {
+  const setPersona = (p: Persona, focus = false, picked = true) => {
+    if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
     persona = p;
     store.set("persona", p);
     document.body.dataset.persona = p;
@@ -441,7 +443,7 @@ async function start() {
     playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
     requestAnimationFrame(frame);
   };
-  setPersona(persona);
+  setPersona(persona, false, false);
   document.body.dataset.state = "ready";
   requestAnimationFrame(frame);
 }
