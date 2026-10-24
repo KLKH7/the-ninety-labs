@@ -772,3 +772,21 @@ def test_the_headline_reaches_the_phone_and_matches_the_schema():
     body = answer_json(r.answer)
     schema_validator("viewer_answer").validate(body)
     assert body["headline"] == r.answer.headline and body["headline"]
+
+
+def test_a_live_run_asks_one_question_at_a_time_paced(monkeypatch):
+    from ninety.eval import companion_tools as ct
+
+    waits = []
+
+    async def sleep(s):
+        waits.append(s)
+
+    async def ask(prompt):
+        return '{"tools": []}'
+
+    monkeypatch.setattr(ct.asyncio, "sleep", sleep)
+    monkeypatch.setitem(ct.SEEDS, "920001", ["Kestwood", "Ashvale"])
+    qs = [{"text": "Who is it?", "seed": 920001, "minute": 5, "tool": None} for _ in range(3)]
+    asyncio.run(ct.model_plans(qs, ask, ct.PACE_S))
+    assert waits == [ct.PACE_S, ct.PACE_S]  # between questions, never before the first

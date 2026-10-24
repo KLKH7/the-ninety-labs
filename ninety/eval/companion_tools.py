@@ -65,9 +65,17 @@ def score(plans: list[tuple[dict, list[str] | None]]) -> dict:
     }
 
 
-async def model_plans(questions: list[dict], ask) -> tuple[list, list[float]]:
+# Seconds between questions in a live run (*design*): the first run, asking back to back, met 48
+# rate-limit refusals (HTTP 429) from the student subscription's deployment, so one question at a
+# time, paced, measures the model rather than the quota. Not timed in any latency.
+PACE_S = 3.0
+
+
+async def model_plans(questions: list[dict], ask, pace: float = 0.0) -> tuple[list, list[float]]:
     out, ms = [], []
-    for q in questions:
+    for k, q in enumerate(questions):
+        if k and pace:
+            await asyncio.sleep(pace)
         names = cm_clubs(q)
         question = Question("eval", None, q["text"], 60.0 * (q["minute"] - 1) + 30)
         t0 = time.perf_counter()
@@ -277,7 +285,9 @@ def main(argv: list[str] | None = None) -> None:
             f"- Plan latency: {m['plan_latency']}; answer end to end (plan, tools, answer, check, Judge): "
             f"{m['answer_latency']}.",
             f"- How answers ended on the stand-in match: {m['answers']} (code: the model's draft was "
-            "refused or failed, and code's checked answer was shown).",
+            "refused or failed, and code's checked answer was shown); "
+            f"{m.get('service_errors', 0)} of them because the service failed (counted apart: the "
+            "model's writing was not tested there).",
             f"- The agents, as pinned: {m['agents']}.",
             f"- Cost (estimated): {m['cost']}.",
         ]
@@ -321,10 +331,11 @@ async def live(questions: list[dict]) -> dict:
         used["calls"] += 1
         return await models.judge(claim, evidence)
 
-    plans, plan_ms = await model_plans(questions, ask)
+    plans, plan_ms = await model_plans(questions, ask, PACE_S)
     mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
     ends, ms, rows, ups = Counter(), [], [], []
     for q in questions:
+        await asyncio.sleep(PACE_S)
         a, b = SEEDS[str(q["seed"])]
         text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
         question = Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1)
@@ -350,6 +361,9 @@ async def live(questions: list[dict]) -> dict:
         "plans": score(plans),
         "plan_latency": latency(plan_ms),
         "answers": dict(ends),
+        # Answers where the service itself failed (a rate limit, an outage): code answered, and the
+        # model's writing was never tested on them.
+        "service_errors": sum("model service error" in r["reasons"] for r in rows),
         "answer_latency": latency(ms),
         "follow_ups": follow_up_quality(ups, mi),
         "rows": rows,
