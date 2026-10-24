@@ -221,3 +221,54 @@ def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_o
 def test_the_fixed_band_is_the_committed_validation_measurement():
     body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
     assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
+
+
+def hooped(primary, secondary, h=60, w=24, band=6):
+    """A player box of a shirt in horizontal hoops, primary and secondary alternating, on grass."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[:, :] = (40, 140, 50)  # grass behind
+    for y in range(h):
+        img[y, 4:w - 4] = secondary if (y // band) % 2 else primary
+    return img
+
+
+def test_a_hooped_shirt_reads_as_both_its_colours():
+    blue, white = (32, 46, 162), (242, 242, 242)
+    img = hooped(blue, white)
+    bbox = [0, 0, 24, 60]
+    two = observe.read_kit(img, bbox, "R4")
+    dark, light = np.array(two[:3]), np.array(two[3:])
+    assert np.abs(dark - blue).max() < 3 and np.abs(light - white).max() < 3
+    assert observe.KIT_READER == "R4"
+
+
+def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
+    from types import SimpleNamespace
+    box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz),
+                                                                 [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3))
+    shirt = hooped((32, 46, 162), (242, 242, 242))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
+    assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
+
+
+def test_skin_is_found_by_the_published_rule_and_kits_are_not():
+    px = np.array([[200, 140, 110], [170, 120, 90], [23, 60, 25], [242, 242, 242], [20, 20, 20],
+                   [32, 46, 162]], float)
+    assert observe.skin(px).tolist() == [True, True, False, False, False, False]
+
+
+def test_r5_reads_a_dark_kit_without_the_arms_skin():
+    # A dark-green shirt with black stripes and bare arms across the patch: R4's lighter colour is the
+    # skin; R5 drops the skin first, so its lighter colour is the green.
+    img = np.zeros((60, 24, 3), np.uint8)
+    img[:, :] = (40, 140, 50)
+    for y in range(60):
+        img[y, 4:20] = (23, 60, 25) if (y // 4) % 2 else (12, 12, 12)
+    img[12:30, 4:7] = img[12:30, 17:20] = (200, 140, 110)  # arms
+    bbox = [0, 0, 24, 60]
+    turf = (np.array([40.0, 140.0, 50.0]), 0.02)  # the grass as measured on the pitch (the live path)
+    r4, r5 = observe.read_kit(img, bbox, "R4", turf), observe.read_kit(img, bbox, "R5", turf)
+    assert r4[3] > 150 and abs(r5[3] - 23) < 5 and abs(r5[4] - 60) < 5
