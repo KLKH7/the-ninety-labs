@@ -1,0 +1,73 @@
+{
+  "seeds": [
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "broadcast": {
+    "frames": 6000,
+    "good": 4885,
+    "bad": 1115,
+    "band": [
+      0.987,
+      1.099
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 780,
+        "bad_trusted": 335,
+        "good_kept": 4821,
+        "good_kept_share": 0.9869,
+        "bad_trusted_by_seed": {
+          "112": 118,
+          "119": 217
+        },
+        "bad_trusted_worst_m": 57.141
+      },
+      "B2 heights": {
+        "bad_rejected": 767,
+        "bad_trusted": 348,
+        "good_kept": 4782,
+        "good_kept_share": 0.9789,
+        "bad_trusted_by_seed": {
+          "115": 2,
+          "119": 249,
+          "122": 15,
+          "2042": 82
+        },
+        "bad_trusted_worst_m": 56.81
+      },
+      "B3 both": {
+        "bad_rejected": 899,
+        "bad_trusted": 216,
+        "good_kept": 4719,
+        "good_kept_share": 0.966,
+        "bad_trusted_by_seed": {
+          "119": 216
+        },
+        "bad_trusted_worst_m": 1.292
+      }
+    }
+  }
+}

@@ -52,13 +52,31 @@ def test_players_a_camera_makes_too_tall_or_too_short_are_not_trusted_and_not_pl
         assert all(d["x"] is None for d in r["players"]) and r["ball"][0]["x"] is None
 
 
-def test_the_band_holds_its_ends_and_the_markings_no_longer_decide():
+def test_the_band_holds_its_ends_and_on_the_broadcast_the_markings_must_agree():
     lo, hi = observe.HEIGHT_BAND
-    assert observe.place(row(lo + 0.002, markings_ok=False))["camera"]["ok"]  # heights decide now
+    assert observe.place(row(lo + 0.002))["camera"]["ok"]
     assert observe.place(row(hi - 0.002))["camera"]["ok"]
     assert not observe.place(row(lo - 0.01))["camera"]["ok"]
     assert not observe.place(row(hi + 0.01))["camera"]["ok"]
-    assert observe.place(row(markings_ok=False))["camera"]["markings_ok"] is False  # kept, for the record
+    # Gate B3 (lesson 230): heights in the band and markings that do not fit is not a camera.
+    assert not observe.place(row(markings_ok=False))["camera"]["ok"]
+    assert observe.place(row(markings_ok=False))["camera"]["heights_ok"] is False
+    # A fixed lens is judged by its heights alone.
+    assert observe.place(row(markings_ok=False), markings=False)["camera"]["ok"]
+
+
+def test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted():
+    # Validation seed 2042's failure: every frame's camera 28 m wrong the same way, players the
+    # right height through it (the same camera, moved), the marking fit failing. The neighbours
+    # agree with each other, so only the markings can stop it.
+    rows = []
+    for f in range(11):
+        r = wrong_place_row(28.0, f)
+        r["camera"]["ok"] = False  # the marking fit's own verdict
+        rows.append(observe.place(r))
+    rows = observe.agree(rows)
+    assert not any(r["camera"]["ok"] for r in rows)
+    assert all(r["players"][0]["x"] is None for r in rows)
 
 
 def test_with_no_player_to_measure_the_markings_verdict_stands():
@@ -67,8 +85,9 @@ def test_with_no_player_to_measure_the_markings_verdict_stands():
 
 
 def test_the_band_is_the_committed_validation_measurement():
-    body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())
-    assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
+    body = json.loads((ROOT / "docs/eval/band-broadcast.json").read_text())
+    assert list(observe.HEIGHT_BAND) == body["broadcast"]["band"] == [0.966, 1.121]
+    assert not any(s >= 900000 for s in body["seeds"])  # validation clips only
 
 
 def view_at(dx: float) -> pitch.View:
@@ -180,3 +199,25 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
     assert dd.KEEP_GOOD == body["keep_good"] == 0.95
     assert body["adopted"] == "C2"
+
+
+def test_a_frame_is_judged_by_the_band_it_is_given():
+    assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
+    assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]
+
+
+def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_own(tmp_path, monkeypatch):
+    monkeypatch.setattr(observe, "FIXED_HEIGHT_BAND", (1.05, 1.15))
+    monkeypatch.setattr(observe, "HEIGHT_BAND", (0.90, 1.00))  # 1.10 is in the one band, not the other
+    rows = [row(1.10) | {"frame": k, "t": k / 25} for k in range(3)]
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    for fixed, expect in ((True, True), (False, False)):
+        first = rows[0] | ({"fixed": True} if fixed else {})
+        src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
+        observe.main(["--regate", str(src), "--out", str(out)])
+        assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
+
+
+def test_the_fixed_band_is_the_committed_validation_measurement():
+    body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
+    assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
