@@ -131,7 +131,7 @@ ORDINAL = re.compile(
     re.I,
 )
 NOT_AN_ORDINAL = re.compile(
-    r"\b(?:final|attacking|defensive|middle|own|opposition)\s+third\b|\bthird[\s-]+man\b"
+    r"\b(?:final|attacking|defensive|middle|own|opposition)[\s-]+third\b|\bthird[\s-]+man\b"
     r"|\bfourth\s+official\b|\b(?:a|one)\s+(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+of\b"
     r"|\btercer\s+hombre\b|\bcuarto\s+de\b|\bd[ée]cimas?\s+de\b|\btercera\s+parte\b",
     re.I,

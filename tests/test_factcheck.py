@@ -450,6 +450,7 @@ def test_an_ordinal_in_words_must_be_in_the_evidence(text, reason):
     "h7 finds h9 with his first touch.",
     "h7 picks up the second ball and finds h9.",
     "h7 finds h9 in the final third.",
+    "h7 plays the attacking-third pass to h9.",  # hyphenated, as the window stats write it
     "h7 finds h9 with a third-man run.",
     "h7 finds h9, and the fourth official looks on.",
     "h7 has a third of the passes and finds h9.",
