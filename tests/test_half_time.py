@@ -69,3 +69,53 @@ def test_a_match_shorter_than_a_half_is_unchanged(monkeypatch):
     f.kickoff("home", setup=True)
     play(f, 30.0)
     assert e.match.events == f.match.events and e.frame == f.frame
+
+
+def test_a_pass_on_its_way_at_the_whistle_ends_there(monkeypatch):
+    """The whistle stops a pass that had not arrived, as at a foul (end_kick): its end point is
+    where the ball was at the whistle, and it has an outcome. A real pass: the half is set to end
+    two frames after one is struck, while it is still on its way."""
+    e = Engine(3)
+    e.kickoff("home", setup=True)
+    monkeypatch.setattr(engine, "HALF_S", 1e9)
+    while not (e.kicked and e.kicked["type"] == "pass" and e.t - e.kicked["t"] <= DT + 1e-6):
+        e.step()
+    struck = e.kicked
+    monkeypatch.setattr(engine, "HALF_S", e.t + 2 * DT)
+    play(e, e.t + 3 * DT)
+    assert e.half_time_at is not None  # premise: the whistle came while it was on its way
+    assert struck["outcome"] is not None and struck["end_x"] is not None
+
+
+def test_the_half_waits_while_the_penalty_is_in_flight_and_only_then(short_half):
+    """Law 7: struck, the penalty is completed when it goes in or out, stops, or is played by anyone
+    but the keeper; the half ends no sooner. A touch by a defender completes it."""
+    e = Engine(3)
+    e.kickoff("home", setup=True)
+    play(e, HALF - 2.0)
+    e.possessor, e.set_by, e.throw_by, e.dribbler, e.kicked = None, None, None, None, None
+    e.stop("penalty_kick", "home", (PITCH_X - 11.0, PITCH_Y / 2))
+    play(e, HALF + 200.0)
+    shot = next(ev for ev in e.match.events if ev["type"] == "shot" and ev["t"] >= HALF - 2.0)
+    ends = [ev for ev in e.match.events if ev["t"] >= shot["t"] and ev is not shot
+            and ev["type"] in ("goal", "out_of_play", "deflection", "possession_change", "interception")]
+    assert e.half_time_at >= ends[0]["t"]  # not while it was on its way
+    # a defender's touch completes it; the keeper's does not
+    f = Engine(3)
+    f.kickoff("home", setup=True)
+    f.penalty_shot = f.emit("shot", "home", PITCH_X - 11.0, PITCH_Y / 2, player="h9")
+    f.possessor, f.restart, f.from_restart = None, None, None
+    f.ball = (PITCH_X - 5.0, PITCH_Y / 2, 0.3, 20.0, 0.0, 0.0)
+    assert f.penalty_in_progress()
+    f.emit("deflection", "away", PITCH_X - 2.0, PITCH_Y / 2, player=f.keeper("away").id)
+    assert f.penalty_in_progress()
+    f.emit("deflection", "away", PITCH_X - 2.0, PITCH_Y / 2, player="a4")
+    assert not f.penalty_in_progress()
+
+
+def test_when_away_kicks_off_the_match_home_kicks_off_the_second_half(short_half):
+    e = Engine(11)
+    e.kickoff("away", setup=True)
+    play(e, HALF + 60.0)
+    second = next(k for k in e.match.events if k["type"] == "kickoff" and k["t"] >= e.half_time_at)
+    assert second["team"] == "home"
