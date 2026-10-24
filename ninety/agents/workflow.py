@@ -553,11 +553,12 @@ class FactChecker(Executor):
             started = time.perf_counter()
             with telemetry.stage_span("fact_check", attempt=draft.attempt):
                 checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate)
-            if checked.judge_seconds is not None:
-                run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
-                         time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
+            self.judged(case, checked)
             if checked.verdict.category == "low_confidence" and run.perceiver is not None:
-                checked = await self.look_again(case, draft, scope, checked)
+                looked = await self.look_again(case, draft, scope, checked)
+                if looked is not checked:  # checked again on the confirmed readings: its Judge call shows
+                    self.judged(case, looked)
+                checked = looked
             draft.verdict, draft.status = checked.verdict, status_for(checked.verdict)
             await run.write_claim(case, draft)
             reasons = "; ".join(checked.verdict.reasons)
@@ -576,6 +577,12 @@ class FactChecker(Executor):
                 detail = f"{draft.author}'s claim" + (f": {reasons}" if reasons else "")
             run.step("fact_checker", case.moment.id, ACTION[draft.status], started, detail)
         await ctx.send_message(ToProducer(case))
+
+    def judged(self, case: Case, checked) -> None:
+        """The Judge's step on the trace, whenever a check asked it, with how long it took."""
+        if checked.judge_seconds is not None:
+            self.run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
+                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
 
     async def look_again(self, case: Case, draft: Draft, scope: dict[str, dict], checked):
         """Active perception (ninety/agents/perceive.py): a claim held on a doubtful detection is

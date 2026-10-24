@@ -40,8 +40,9 @@ from ninety.agents.factcheck import MIN_CONFIDENCE, TEAM_NAMED, side_known
 
 # Design (the Coordinator's brief): a look is at most a 3 s window of video.
 WINDOW_S = 3.0
-# The event scorer's rules for "the same event" (docs/EVALUATION.md, event detection: same type and
-# team, within 1.0 s; the lenient spot rule, 2.0 m).
+# The event scorer's rules for "the same event" (docs/EVALUATION.md, event detection): the same type,
+# within 1.0 s, and the lenient spot rule, 2.0 m. Not the team: a look never re-reads a side
+# (`recheck`), so a side told differently is still the same event, and can only keep a claim held.
 MATCH_S = 1.0
 MATCH_M = 2.0
 # Design: at most three looks a match minute (CPU, not a model call, but a minute's re-checks must not

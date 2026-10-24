@@ -245,7 +245,9 @@ def _names(text: str, side_known: bool = True, compact: bool = False,
     """Ids as a commentator says them. A squad id is its side's shirt number ("Home's number 11", then
     "number 8"). A tracked player has no shirt number the tracker read, so a track id is never said as
     a number: he is "a home player", then "a team-mate", only when the line's side was told surely;
-    otherwise "a player", then "another player" (a track id's letter is the side the gate holds).
+    otherwise "a player", then "another player" (a track id's letter is the tracker's side vote, which
+    the voice says only when the gate passes it; the graphic's id still shows it: EVALUATION.md, known
+    residual).
     The same player named again is "the same player". `compact` (a short version) drops the side."""
     sides: set[str] = set()
     seen: dict[str, str] = {}

@@ -258,6 +258,11 @@ def test_a_claim_on_an_unsure_detection_airs_only_when_another_camera_confirms_i
     (review,) = result.reviews
     assert (review.aired is not None) == aired
     assert [s for s in result.trace if s.action == "re_perceive"]
+    # Review of #267: the gate held the claim before the Judge saw it; a claim checked again after a
+    # confirming look did reach the Judge, and its step is on the trace after the looks.
+    first_look = next(n for n, s in enumerate(result.trace) if s.action == "re_perceive")
+    judged_after = any(s.role == "judge" for s in result.trace[first_look:])
+    assert judged_after == aired
 
 
 def test_a_team_claim_on_an_unsure_side_is_never_aired_by_a_look():

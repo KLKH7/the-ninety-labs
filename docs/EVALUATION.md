@@ -530,7 +530,10 @@ reliably (#200, #202); re-measure then. Held, not rejected: the claim may be rig
 writer that names a side asks the same rule (`factcheck.side_known`): a template graphic or the
 Describer's own line about an event whose player is unknown says "a player", not the team; the
 Describer model's line goes through the same gate; the Personalizer asks for no club's-side variant,
-and holds one written anyway. **Known residual:** a track id (`a-t9`) encodes the side by its
+and holds one written anyway. A shape fact carries the side confidence of the least sure player it
+was computed from (1.0 from ground truth), and the same rule gates it: a team claim on an unsure one
+is held, and the Describer's shape line says "one side". Tracked frames carry no side confidence
+yet, so on the live path every shape line says "one side" until they do. **Known residual:** a track id (`a-t9`) encodes the side by its
 letter, from the same decision; it is not held, as naming the track is how the agents say who.
 
 **Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
