@@ -1,5 +1,8 @@
 """Pick the demo video's match footage by the rule in docs/eval/demo-clip.md, not by browsing renders.
 
+SUPERSEDED (Oct 23): the demo plays the condensed full match (docs/eval/demo-match.md,
+scripts/demo_match.py). This rule is kept as the record of what was pre-registered and never runs.
+
     uv run python scripts/demo_clip.py            # at the freeze commit, through runs/slot.sh
 
 Prints the chosen seed and window, the events that qualify it, and the render command.
@@ -41,8 +44,12 @@ def first_window(events: list[dict], minutes: float = MINUTES) -> float | None:
     return None
 
 
+SUPERSEDED_BY = "docs/eval/demo-match.md"
+
+
 def main() -> None:
-    from ninety.sim.engine import simulate
+    sys.exit(f"superseded by {SUPERSEDED_BY}: this rule is never applied")
+    from ninety.sim.engine import simulate  # the rule as it was registered, kept for the record
 
     for seed in range(FIRST_SEED, LAST_SEED + 1):
         events = simulate(seed, MINUTES).events

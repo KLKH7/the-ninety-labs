@@ -6,6 +6,7 @@ loudly instead of silently rendering something the labels do not describe.
 
 New random draws are appended after the original sequence, so a seed keeps the camera, kits and
 lighting it already had. Weather and the camera cut are the exception: they are chosen at the end.
+The tactical cameras' draws come last of all, so adding them moved nothing a seed already had.
 """
 
 from __future__ import annotations
@@ -24,6 +25,11 @@ KIT_CONTRAST = ("normal", "low", "broadcast")
 # in the stands, hoardings and a surround all round, more varied boards, softer mowing) is set only for
 # footage a viewer watches (the demo clip), never drawn from a seed, so no dataset changes look.
 STADIUM = ("plain", "broadcast")
+# The streams a clip writes besides the broadcast. none: the broadcast only. tactical: also the two
+# fixed whole-pitch lenses on the gantry (camera.tactical_views), each written as a clip of its own
+# under views/<name>/, from the same match and scene, frame for frame. Never drawn from a seed: it adds
+# streams and leaves the broadcast byte-identical, so it is not an override of what a clip looks like.
+VIEWS = ("none", "tactical")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
@@ -54,6 +60,19 @@ class CameraParams:
     pan_lag_s: float = 0.6  # time constant of the follow filter
     lead_s: float = 0.35  # aim ahead of the ball by its velocity times this
     shake_m: float = 0.08  # amplitude of handheld-style aim jitter
+
+
+@dataclass(frozen=True)
+class TacticalParams:
+    """Where the two fixed tactical lenses stand: side by side on the main gantry, both at one point.
+
+    Aim and lens are solved from the position so each covers its half of the pitch
+    (camera.tactical_views); only the mount is drawn. Defaults are the nominal mount: halfway, about
+    1:1 height to distance back (docs/GROUNDING.md V7)."""
+
+    height_m: float = 28.0  # above the pitch
+    back_m: float = 32.0  # behind the near touchline
+    offset_x_m: float = 0.0  # along the touchline from halfway
 
 
 @dataclass(frozen=True)
@@ -101,6 +120,8 @@ class RenderParams:
     away_code: str = "CRW"
     boards: tuple[str, ...] = BOARD_BRANDS
     stadium: str = "plain"
+    views: str = "none"
+    tactical: TacticalParams = field(default_factory=TacticalParams)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -108,6 +129,9 @@ class RenderParams:
         if self.stadium == "plain":
             # Absent means plain (web/render reads it so): a training clip's clip.json is what it was.
             del d["stadium"]
+        if self.views == "none":
+            # Absent means the broadcast only: a clip without views keeps the clip.json it had.
+            del d["views"], d["tactical"]
         return d
 
 
@@ -253,23 +277,38 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         away_pattern=rng.choice(PATTERNS),
         camera_cut=rng.random() < 0.30,
     )
+    # The tactical mount (*design* ranges round the nominal 28 m up, 32 m back, docs/GROUNDING.md V7),
+    # drawn for every seed whether or not it writes the views, so a seed's mount never depends on it.
+    base = replace(
+        base,
+        tactical=TacticalParams(
+            height_m=round(rng.uniform(24, 32), 2),
+            back_m=round(rng.uniform(28, 38), 2),
+            offset_x_m=round(rng.uniform(-3, 3), 2),
+        ),
+    )
     return apply_overrides(base, overrides)
 
 
 def apply_overrides(p: RenderParams, overrides: dict) -> RenderParams:
-    cam_fields = {f.name for f in fields(CameraParams)}
+    nested = {
+        "camera": {f.name for f in fields(CameraParams)},
+        "tactical": {f.name for f in fields(TacticalParams)},
+    }
     top_fields = {f.name for f in fields(RenderParams)}
-    cam_kw, top_kw = {}, {}
+    sub_kw: dict[str, dict] = {name: {} for name in nested}
+    top_kw = {}
     for k, v in overrides.items():
-        key = k.removeprefix("camera.")
-        if k.startswith("camera.") and key in cam_fields:
-            cam_kw[key] = v
-        elif k in top_fields and k != "camera":
+        group, _, key = k.partition(".")
+        if group in nested and key in nested[group]:
+            sub_kw[group][key] = v
+        elif k in top_fields and k not in nested:
             top_kw[k] = v
         else:
             raise ValueError(f"unknown render parameter: {k}")
-    if cam_kw:
-        top_kw["camera"] = replace(p.camera, **cam_kw)
+    for group, kw in sub_kw.items():
+        if kw:
+            top_kw[group] = replace(getattr(p, group), **kw)
     p = replace(p, **top_kw)
     validate(p)
     return p
@@ -282,6 +321,7 @@ def validate(p: RenderParams) -> None:
         ("occlusion", OCCLUSION),
         ("kit_contrast", KIT_CONTRAST),
         ("stadium", STADIUM),
+        ("views", VIEWS),
     ):
         if getattr(p, name) not in allowed:
             raise ValueError(f"{name} must be one of {allowed}, got {getattr(p, name)!r}")
