@@ -28,7 +28,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 FPS = 25
-TOUCH_ACTIONS = {"foot", "strike", "chest", "thigh", "hands", "throw", "dive"}
+TOUCH_ACTIONS = {"foot", "strike", "bowl", "chest", "thigh", "hands", "throw", "dive"}
 REACH_M = 1.0  # a body on the ball is within this of it (precision: wider than any contact)
 STOPS = {"out_of_play", "foul", "offside", "goal"}
 RESTARTS = {"set_piece", "kickoff"}
