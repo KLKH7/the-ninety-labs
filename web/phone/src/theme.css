@@ -10,8 +10,8 @@
   --text-2: #6e6e73;
   --text-3: #aeaeb2;
   --hairline: #e5e5ea;
-  --pitch: #1f3d2b;
-  --pitch-line: rgba(255, 255, 255, 0.55);
+  --pitch: #17191a; /* desaturated near-black (theScore, MLS): no grass green */
+  --pitch-line: rgba(255, 255, 255, 0.28);
   --team-a: #1b2f5b; /* Oakfield, navy */
   --team-b: #7a1f33; /* Fenwick, claret */
   --live: #e5484d;
@@ -55,8 +55,8 @@
     --text-2: #98989d;
     --text-3: #636366;
     --hairline: #2c2c2e;
-    --pitch: #16301f;
-    --pitch-line: rgba(255, 255, 255, 0.45);
+    --pitch: #1c1e20;
+    --pitch-line: rgba(255, 255, 255, 0.26);
     --team-a: #6f8fd6;
     --team-b: #d9677c;
     --live: #ff6369;
@@ -75,4 +75,4 @@
 :root { --crest-a: #1b2f5b; --crest-b: #7a1f33; }
 
 ion-content { --background: var(--bg); }
-ion-footer.composer, ion-tab-bar { --background: color-mix(in srgb, var(--bg) 82%, transparent); }
+ion-footer.composer { --background: color-mix(in srgb, var(--bg) 82%, transparent); }

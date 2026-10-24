@@ -22,9 +22,15 @@
           <form id="pair-form" novalidate>
             <label for="code">Pairing code</label>
             <input id="code" name="code" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="6" inputmode="text" aria-describedby="pair-error" />
-            <button type="submit" class="primary" id="connect">Connect</button>
+            <button type="submit" class="primary" id="connect" disabled>Connect</button>
             <p id="pair-error" class="error" role="alert"></p>
           </form>
+          <h2 class="section-title">How to find the code</h2>
+          <ol class="how-to">
+            <li>Look at the big screen at kick-off or at a chapter break.</li>
+            <li>The code is in the bottom corner, beside a small QR code.</li>
+            <li>Scan the QR code with your camera, or type the six letters here.</li>
+          </ol>
         </ion-content>
       </div>
 
@@ -33,19 +39,30 @@
         <ion-tab tab="radar" id="panel-radar" role="tabpanel" aria-labelledby="tab-button-radar">
           <div class="ion-page">
             <ion-header>
-              <ion-toolbar class="band-bar">
+              <ion-toolbar class="band-bar" id="live-bar">
                 <ion-title><span class="mini-score score-line"></span></ion-title>
                 <ion-buttons slot="end"><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers and moments aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
-            <ion-content fullscreen>
+            <ion-content fullscreen scroll-events="true" id="live-content">
               <section class="band" aria-label="Score">
                 <div class="fixture">
-                  <div class="club"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter home-letter"></text></svg><span class="club-name home-name">Oakfield</span></div>
-                  <div class="centre"><output class="score" id="score" aria-live="off">– : –</output><span class="minute"><span class="live-dot" aria-hidden="true"></span><output id="clock" aria-live="off">0:00</output></span></div>
-                  <div class="club"><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter away-letter"></text></svg><span class="club-name away-name">Fenwick</span></div>
+                  <div class="side">
+                    <span class="side-score" id="score-home" aria-hidden="true">–</span>
+                    <svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter home-letter"></text></svg>
+                    <span class="club-name home-name">Oakfield</span>
+                  </div>
+                  <div class="centre">
+                    <output id="clock" aria-live="off">0:00</output>
+                    <p class="status" id="status" role="status" data-state="off">Not connected</p>
+                  </div>
+                  <div class="side">
+                    <span class="side-score" id="score-away" aria-hidden="true">–</span>
+                    <svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter away-letter"></text></svg>
+                    <span class="club-name away-name">Fenwick</span>
+                  </div>
                 </div>
-                <p class="status" id="status" role="status" data-state="off">Not connected</p>
+                <output class="sr-only" id="score" aria-live="off">– : –</output>
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 

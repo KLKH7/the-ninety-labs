@@ -244,6 +244,7 @@ $("pair-form").addEventListener("submit", (e) => {
 codeInput.addEventListener("input", () => {
   const v = normalise(codeInput.value).slice(0, CODE_LENGTH);
   if (v !== codeInput.value) codeInput.value = v;
+  $<HTMLButtonElement>("connect").disabled = !validCode(v); // as a TV-code form: on once it can work
 });
 
 // --- tabs (WAI-ARIA tabs pattern: arrow keys move between them, Home and End to the ends) ------
@@ -632,6 +633,12 @@ function showSheet(open: boolean) {
   } else if (!open && sheetUp) void playerSheet.dismiss();
 }
 
+// Live's sticky header: the score band collapses to one row once it scrolls away (Apple Sports).
+$("live-content").addEventListener("ionScroll", (e) => {
+  const y = (e as CustomEvent<{ scrollTop: number }>).detail.scrollTop;
+  $("live-bar").classList.toggle("collapsed", y > 120);
+});
+
 // The Match tab's Pitch and Stats.
 $("match-seg").addEventListener("ionChange", (e) => {
   const v = (e as CustomEvent<{ value: string }>).detail.value;
@@ -885,8 +892,9 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   li.append(asked, bubble, badge);
   if (a && a.status === "verified") {
     // Only a checked answer draws its picture: the picture carries the same numbers as the text.
+    // The evidence chip at the end of the sentence it supports (as answer engines cite a source).
+    body.append(" ", howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names, answer: a }));
     if (a.visual) bubble.append(picture(a.visual, a.t_to, a.names));
-    bubble.append(howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names, answer: a }));
     if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
@@ -1062,7 +1070,7 @@ function howButton(h: How): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "how";
-  b.textContent = isVar(h) ? "VAR check ›" : "How we know ›";
+  b.textContent = isVar(h) ? "VAR check" : "How we know";
   b.addEventListener("click", () => void openHow(h));
   return b;
 }
@@ -1229,9 +1237,8 @@ function renderInsights() {
       const li = document.createElement("li");
       li.className = `insight ${c.team}`;
       li.dataset.id = c.id;
-      const minute = document.createElement("time");
-      minute.className = "minute-col";
-      minute.textContent = `${c.minute}′`;
+      // One sentence with its evidence chip at the end, the minute in grey under it, then the small
+      // diagram; a 3 pt rule in the club's colour down the left (Apple Sports' play-by-play).
       const body = document.createElement("div");
       body.className = "story-body";
       const head = document.createElement("h3");
@@ -1239,13 +1246,17 @@ function renderInsights() {
       head.textContent = named(c.headline, c.names);
       const text = document.createElement("p");
       text.textContent = named(c.text, c.names);
-      body.append(head, text);
-      if (c.spoken) li.setAttribute("aria-label", `${c.minute}th minute. ${c.spoken}`);
-      if (c.visual) body.append(picture(c.visual, c.t, c.names));
-      body.append(
+      text.append(
+        " ",
         howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
       );
-      li.append(minute, body);
+      const minute = document.createElement("time");
+      minute.className = "when-line";
+      minute.textContent = `${c.minute}′ · ${teams[c.team]}`;
+      body.append(head, text, minute);
+      if (c.spoken) li.setAttribute("aria-label", `${c.minute}th minute. ${c.spoken}`);
+      if (c.visual) body.append(picture(c.visual, c.t, c.names));
+      li.append(body);
       return li;
     }),
   );
@@ -1265,6 +1276,8 @@ function showMatch(t: number) {
   const chapter = c ? chapterLabel(c, teams) : "";
   if (line.textContent !== chapter) line.textContent = chapter;
   const score = `${s.home} – ${s.away}`;
+  $("score-home").textContent = String(s.home);
+  $("score-away").textContent = String(s.away);
   if ($("score").textContent !== score) {
     $("score").textContent = score;
     $("score").setAttribute("aria-label", `Score: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
@@ -1350,7 +1363,9 @@ async function refreshFlow() {
 function frame(now: number) {
   const t = laptop.time();
   $("clock").textContent = link ? clock(t) : "–:––";
-  const mini = `${teams.home} ${state.match ? $("score").textContent : "v"} ${teams.away} · ${link ? clock(t) : "–:––"}`;
+  const mini = state.match
+    ? `${teams.home}  ${$("score-home").textContent}   ${link ? clock(t) : "–:––"}   ${$("score-away").textContent}  ${teams.away}`
+    : `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
   for (const el of document.querySelectorAll(".score-line")) if (el.textContent !== mini) el.textContent = mini;
   if (link) {
     if (!laptop.heard) setStatus("waiting", "Waiting");

@@ -214,8 +214,7 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     assert phone.is_visible("#mockbar")  # the mock says so on every screen
 
     phone.fill("#code", "12")
-    phone.click("#connect")
-    assert "6 letters and digits" in phone.inner_text("#pair-error")
+    assert phone.is_disabled("#connect")  # a TV-code form: Connect is on only once a code could work
     phone.fill("#code", "zzzzzz")  # well formed, but no laptop shows it
     phone.click("#connect")
     phone.wait_for_function("document.querySelector('#pair-error').textContent.includes('No screen')")
@@ -292,7 +291,7 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     # A code answer: the cited fact in a fixed sentence. "Fact-checked" is only for the Judge's.
     assert answer.locator(".badge").text_content() == "Computed from mock positions"
     how = answer.locator(".how")
-    assert how.text_content() == "How we know ›"
+    assert how.text_content() == "How we know"  # a small chip at the end of the sentence
     how.click()  # one tap opens the sheet with the evidence
     evidence = phone.locator("#how-body")
     evidence.locator(".evidence").wait_for()
