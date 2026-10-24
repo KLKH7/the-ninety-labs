@@ -394,3 +394,47 @@ def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
     passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
     assert passes == [("pass", "home", "fail")]
     assert any(e["type"] == "out_of_play" for e in events)
+
+
+def side_scene(per_side_home, frames=12):
+    """Blue (home, deeper) and red players standing still, `per_side_home` blue ones in every frame."""
+    out = []
+    for f in range(frames):
+        blue = [(20.0 + 2 * k, 5.0 + 5 * (k % 12), BLUE) for k in range(per_side_home)]
+        red = [(80.0 + 2 * k, 5.0 + 5 * k, RED) for k in range(5)]
+        out.append(row(f, blue + red))
+    return out
+
+
+def test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure():
+    # Law 3: at most 11 a side on the pitch, keeper included. Eleven is a team; twelve is two kits
+    # read as one, and then no side in the clip is sure.
+    for n, sure in ((11, True), (12, False)):
+        tracks = tr.track_players(side_scene(n))
+        info = tr.assign_teams(tracks)
+        sided = [t for t in tracks if t.team is not None]
+        assert sided
+        assert (info["law3"] is None) is sure
+        assert all((t.side_confidence > 0) is sure for t in sided)
+
+
+def bp(frame, x, y):
+    return tr.BallPoint(frame, x, y, 0.9)
+
+
+def test_a_pass_the_ball_could_not_have_made_is_held():
+    # 0.3 m is a ball still at his feet (CONTROL_M); and a ball struck at 3 km/h cannot cover 16 m
+    # in 1 s, it only slows. A 16 m pass struck at 60 km/h and taken a second later stands.
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 50.3, 34.0), 13.7)
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 3.1)
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 60.0)
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), None)
+
+
+def test_the_speed_check_allows_both_ends_position_error_and_no_more():
+    # Over 1 s, 16 m less twice the 1.26 m position error is 13.48 m: a strike of 48.53 km/h
+    # (13.48 m/s) reaches it, 48.4 km/h does not.
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 48.53)
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 48.4)
+    edge = ev.CONTROL_M  # a pass exactly at the feet's reach is still no pass
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 50.0 + edge, 34.0), 30.0)
