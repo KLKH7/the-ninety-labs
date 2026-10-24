@@ -88,5 +88,17 @@ kick-off falls in these matches.
 
 ## Counts
 
-Filled in from `docs/eval/set-piece-set.json` once the chooser has run: windows per split and
-restarts of each kind per split, with the windows dropped for overlap.
+From `docs/eval/set-piece-set.json`, chosen at `65247ba` on 2026-10-24 (`--check` gives the same
+bytes). Restarts of each kind the kept windows hold:
+
+| Split | Clips | Throw-in | Goal kick | Corner | Free kick | Penalty | Kick-off | Dropped (overlap) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Validation (15 matches) | 70 | 16 | 16 | 15 | 23 | 0 | 15 | 9 |
+| Test (30 matches) | 143 | 39 | 31 | 30 | 38 | 3 | 30 | 20 |
+
+Both splits together show 3,356.8 s. Every kind but the penalty reaches its target; a kind can pass
+it because a window kept for one kind also holds the others. The 3 test penalties are reported as
+counts only, and validation has none. The test split's clips are frozen, unrendered, in
+`docs/eval/set-piece-set-test-frozen.json`. One validation clip (seed 920101 from 16.84 s, a throw-in
+through a cut over match frames 572 to 874, 352 frames) was rendered at `65247ba` as a sample: it
+passes `ninety-validate` and every `ninety-render-check` check.

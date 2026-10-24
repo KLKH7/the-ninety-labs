@@ -55,4 +55,16 @@ kick-off falls in these matches.
 
 ## Counts
 
-Filled in from `docs/eval/possession-set.json` once the chooser has run.
+From `docs/eval/possession-set.json`, chosen at `65247ba` on 2026-10-24 (`--check` gives the same
+bytes). Events the kept windows hold:
+
+| Split | Clips | Possession changes | Interceptions | Tackles |
+|---|---:|---:|---:|---:|
+| Validation (15 matches) | 30 | 73 | 25 | 44 |
+| Test (30 matches) | 60 | 156 | 57 | 79 |
+
+Against the targets set above (60 of each type in test): possession changes and tackles reach them;
+interceptions come to 57, three short (46 of 57 detected would give a 95% Wilson interval of 0.69
+to 0.89, against 0.68 to 0.88 for 48 of 60). The windows are not supplemented. The test split's clips are frozen, unrendered, in
+`docs/eval/possession-set-test-frozen.json`. One validation clip (seed 920101 from 1410 s) was
+rendered at `65247ba` as a sample: it passes `ninety-validate` and every `ninety-render-check` check.

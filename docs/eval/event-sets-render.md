@@ -11,8 +11,11 @@ render commit `65247ba36343c640fe7673c772a1cbc0ac19c07e` and nowhere else: each 
 Measured on the maintainer's laptop (8 cores, shared with two other sessions, load 55 to 85): a
 4 s clip took 12 minutes and a 14 s clip about 2 to 3 hours, the simulation up to the window
 included. On the Azure render job (2 vCPU, nothing else running) a 10 s clip took 365 to 660 s
-(`infra/README.md`). The sets are about 300 clips of 10 to 30 s; on a CPU machine with 32 cores
-running 16 at a time, that is a few hours. Only synthetic renders and this public repo go to the
+(`infra/README.md`). The sets are 303 clips (213 set-piece, 90 possession; 4,257 s shown in all);
+on a CPU machine with 32 cores running 16 at a time, that is a few hours. Two validation clips are
+rendered already (one of each set, seed 920101; [set-piece-set.md](set-piece-set.md)); steps 2 and
+3 below have not been run, as no machine was reachable. Only synthetic renders and this public
+repo go to the
 machine; no credential does.
 
 ## 1. The command lists (on the Mac, from this branch)
