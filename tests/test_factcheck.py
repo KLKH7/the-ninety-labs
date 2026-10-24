@@ -361,3 +361,161 @@ def test_number_words_combine_only_into_one_well_formed_number(text, digits):
     from ninety.agents.factcheck import spelled_as_digits
 
     assert spelled_as_digits(text) == digits
+
+
+# Lesson 219: the forms the reader still missed. Each planted form aired on the old check; each true
+# form must still pass (lesson 11: false rejections are measured too).
+# Two cited passes: h7's was 12 m at 40 km/h, h4's 30 m at 70 km/h.
+TWO = {
+    "p1": {"id": "p1", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
+           "minute": 2, "distance_m": 12, "ball_speed_kmh": 40},
+    "p2": {"id": "p2", "type": "pass", "team": "home", "player": "h4", "receiver": "h7", "outcome": "success",
+           "minute": 3, "distance_m": 30, "ball_speed_kmh": 70},
+}
+# One pass of 50 m at 31 km/h.
+LONG = {"id": "p31", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
+        "minute": 2, "distance_m": 50, "ball_speed_kmh": 31}
+
+
+@pytest.mark.parametrize("text, reason", [
+    ("h7 juega un pase a cincuenta km/h a h9.", "number 50 is not a cited ball_speed_kmh"),
+    # 50 is the pass's distance, so read bare it passed: as a speed it must be the cited speed
+    ("h7 juega un pase a 50 kilómetros por hora a h9.", "number 50 is not a cited ball_speed_kmh"),
+    ("h7 juega un pase a 50 km por hora a h9.", "number 50 is not a cited ball_speed_kmh"),
+    ("h7 da un pase de treinta metros a h9.", "number 30 is not a cited distance_m"),
+    ("h7 da un pase de ciento veinte metros a h9.", "number 120 is not a cited distance_m"),
+    ("h7 da siete pases a h9.", "number 7 is not in the cited evidence"),
+    ("h7 encuentra a h9 en el minuto cincuenta.", "number 50 is not a cited minute"),
+    ("h7 encuentra a h9 en el minuto 50.", "number 50 is not a cited minute"),
+    ("h7 da once pases a h9.", "number 11 is not in the cited evidence"),
+])
+def test_a_planted_spanish_number_is_rejected(text, reason):
+    verdict = check(Claim(text, ["p31"]), {"p31": LONG})
+    assert not verdict.ok and reason in verdict.reasons
+
+
+@pytest.mark.parametrize("text", [
+    "h7 juega un pase a treinta y un km/h a h9.",
+    "h7 juega un pase a treinta y uno kilómetros por hora a h9.",
+    "h7 juega un pase a 31 kilometros por hora a h9.",
+    "h7 da un pase de cincuenta metros a h9.",
+    "h7 da un pase de 50 metros a h9 en el minuto dos.",  # "un" is the article, not a count
+    "h7 encuentra a h9 en el minuto 2.",
+    "h7 gana el uno contra uno y encuentra a h9.",
+    "h7 es uno de los mejores y encuentra a h9.",
+    "Once again h7 finds h9 over 50 m.",  # the English adverb, not "11"
+    "h7, del once inicial, encuentra a h9.",
+])
+def test_a_true_spanish_number_passes(text):
+    assert check(Claim(text, ["p31"]), {"p31": LONG}).ok
+
+
+@pytest.mark.parametrize("text, reason", [
+    ("h7 plays his seventh pass to h9.", "number 7th is not in the cited evidence"),
+    ("h7 finds h9 in the ninth minute.", "number 9th is not a cited minute"),
+    ("h7 finds h9 in the twenty-first minute.", "number 21st is not a cited minute"),
+    ("h7 finds h9 in the ninth-minute move.", "number 9th is not a cited minute"),
+    ("h7 finds h9 in the first minute.", "number 1st is not a cited minute"),
+    ("h7 finds h9 with his third pass.", "number 3rd is not in the cited evidence"),
+    ("h7 da su séptimo pase a h9.", "number 7th is not in the cited evidence"),
+    ("h7 encuentra a h9 en el noveno minuto.", "number 9th is not a cited minute"),
+])
+def test_an_ordinal_in_words_must_be_in_the_evidence(text, reason):
+    verdict = check(Claim(text, ["p31"]), {"p31": LONG})
+    assert not verdict.ok and reason in verdict.reasons
+
+
+@pytest.mark.parametrize("text", [
+    "h7 finds h9 in the second minute.",
+    "h7 finds h9 in the 2nd minute.",
+    "h7 finds h9 first time.",
+    "h7 finds h9 in the second half.",
+    "h7 finds h9 with his first touch.",
+    "h7 picks up the second ball and finds h9.",
+    "h7 finds h9 in the final third.",
+    "h7 finds h9 with a third-man run.",
+    "h7 finds h9, and the fourth official looks on.",
+    "h7 has a third of the passes and finds h9.",
+    "h7 encuentra a h9 en el segundo minuto.",
+    "h7 encuentra a h9 en la primera parte.",
+    "h7 encuentra a h9 con un tercer hombre.",
+])
+def test_a_word_that_is_no_ordinal_count_passes(text):
+    # Two passes cited, so a "first" misread as 1 is no count the evidence holds.
+    assert check(Claim(text, ["p1", "p2"]), TWO).ok
+
+
+@pytest.mark.parametrize("text", [
+    "h7 plays a 50 yards pass to h9.",  # the digits are the cited distance_m; the unit is not metres
+    "h7 plays a 50-yard pass to h9.",
+    "h7 plays a 50 yd pass to h9.",
+    "h7 plays it 50 feet to h9.",
+    "h7 hits it at 31 mph to h9.",
+    "h7 hits it at 31 m/s to h9.",
+    "h7 hits it at 31 metres per second to h9.",
+    "h7 hits it 50 km to h9.",
+    "h7 hits it fifty yards to h9.",
+    "h7 da un pase de cincuenta yardas a h9.",
+    "h7 da un pase a 31 millas por hora a h9.",
+])
+def test_a_number_in_a_unit_we_do_not_publish_is_rejected(text):
+    # "50 yards" is not 50 m, and "31 mph" is not 31 km/h: refused whatever the digits, never converted.
+    verdict = check(Claim(text, ["p31"]), {"p31": LONG})
+    assert not verdict.ok and any("a unit the evidence does not use" in r for r in verdict.reasons)
+
+
+@pytest.mark.parametrize("text", [
+    "h7 plays a 50 m pass to h9 at 31 km/h.",
+    "h7 plays a 50-metre pass to h9 at 31kmh.",
+    "h7 plays a 50 meter pass to h9 at 31 kilometres per hour.",
+    "h7 plays a 50 metre pass to h9 at 31 kilometers an hour.",
+])
+def test_a_number_in_our_units_passes(text):
+    assert check(Claim(text, ["p31"]), {"p31": LONG}).ok
+
+
+def test_a_unit_glued_with_a_hyphen_is_read_as_its_field():
+    # "a 2-metre pass" was read as a bare 2, which the cited minute let through.
+    verdict = check(Claim("h7 plays a 2-metre pass to h9.", ["p31"]), {"p31": LONG})
+    assert verdict.reasons == ["number 2 is not a cited distance_m"]
+
+
+
+
+@pytest.mark.parametrize("text, reason", [
+    ("h7's 30 m pass finds h9.", "number 30 is not a cited distance_m of h7"),
+    ("h7's crisp low 70 km/h pass finds h9.", "number 70 is not a cited ball_speed_kmh of h7"),
+    ("h7 plays a 30 m pass to h9.", "number 30 is not a cited distance_m of h7"),
+    ("h4 hits a 40 km/h ball to h7.", "number 40 is not a cited ball_speed_kmh of h4"),
+    ("h7, whose 30 m pass found h9, was found by h4.", "number 30 is not a cited distance_m of h7"),
+    ("h4 found h7. Then h7 sent his 30 m pass on.", "number 30 is not a cited distance_m of h7"),
+    ("h7 pasa el balón 30 metros a h9.", "number 30 is not a cited distance_m of h7"),
+    ("h7's thirty m pass finds h9.", "number 30 is not a cited distance_m of h7"),
+])
+def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
+    # Each number is in the evidence, so the old check passed them all: it is the other pass's.
+    verdict = check(Claim(text, ["p1", "p2"]), TWO)
+    assert verdict.reasons == [reason]
+
+
+@pytest.mark.parametrize("text", [
+    "h7's 12 m pass finds h9, and h4's 30 m pass found h7.",
+    "h7 plays a 12 m pass at 40 km/h to h9; h4 hit a 70 km/h ball to h7.",
+    "h7, whose 12 m pass found h9, was found by h4.",
+    "h4 found h7. Then h7 sent his 12 m pass on.",
+    "h4 finds h7 with his 30 m pass.",  # two players named: "his" binds nothing
+    "h7 pasa el balón 12 metros a h9.",
+    "A 30 m pass from h4 finds h7, who plays 12 m to h9.",  # "from h4" and "who" bind nothing
+    "h9 meets h7's 12 m pass.",
+    "h4 finds h7, who plays his 12 m pass to h9.",  # three players named: "his" binds nothing
+    "h7 da un pase de 12 metros a h9, y h4 juega una pelota de 30 metros a h7.",  # articles, not 1
+])
+def test_a_number_bound_to_its_own_player_passes(text):
+    assert check(Claim(text, ["p1", "p2"]), TWO).ok
+
+
+def test_a_number_bound_to_a_player_may_be_a_fact_scoped_to_him():
+    assert check(Claim("h7's 151 m so far, at up to 27.3 km/h.", [RUN["id"], SPEED["id"]]), FACTS).ok
+    other = {**RUN, "id": "a7run", "scope": "player:a7:window:0.00-95.20", "value": 90.0}
+    verdict = check(Claim("h7's 90 m so far.", [RUN["id"], "a7run"]), {**FACTS, "a7run": other})
+    assert verdict.reasons == ["number 90 is not a cited distance_m of h7"]

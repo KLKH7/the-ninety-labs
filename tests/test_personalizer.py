@@ -270,6 +270,10 @@ LEGAL = {
     "translated": SPANISH,
     "with a cited field added": CLAIM.text + " The pass was 61.0 km/h.",
     "reworded": "h4 finds h9 over 32.5 m in minute 2, and h9 finds h7.",
+    # Spanish units and number words are read, and a true one stands (lesson 219).
+    "with a cited field added in Spanish": SPANISH + " El pase iba a sesenta y un kilómetros por hora.",
+    "with Spanish units": (
+        "En el minuto 2, h4 encuentra a h9 a 32.5 metros, y h9 pasa el balón 12 metros a h7."),
 }
 DEFECTS = {
     # Each is caught by one half of the rule only (lesson 73).
@@ -280,6 +284,15 @@ DEFECTS = {
     "an unsupported number added": (CLAIM.text + " It was his 7th pass.", "not in the cited evidence"),
     "a player outside the evidence": (CLAIM.text + " a5 watches.", "does not appear"),
     "a decimal comma": (SPANISH.replace("32.5", "32,5"), "number 5 is not a cited distance_m"),
+    # Lesson 219: each of these aired before, every number of the claim being kept.
+    "a speed in Spanish words": (SPANISH + " A cincuenta km/h.", "number 50 is not a cited ball_speed_kmh"),
+    "a cited distance as a Spanish speed": (SPANISH + " A 12 kilómetros por hora.",
+                                            "number 12 is not a cited ball_speed_kmh"),
+    "a Spanish ordinal count": (SPANISH + " Fue su séptimo pase.", "number 7th is not in the cited evidence"),
+    "a distance in yards": (SPANISH.replace("32.5 m", "32.5 yardas"), "a unit the evidence does not use"),
+    "a distance given to the other passer": (
+        "En el minuto 2, h4 encuentra a h9 a 32.5 m, y h9 pasa el balón 32.5 metros a h7.",
+        "number 32.5 is not a cited distance_m of h9"),
 }
 
 

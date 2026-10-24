@@ -54,13 +54,98 @@ WORD_NUMBER = re.compile(
 NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
-    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)",
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)"
+    r"|\buno\s+(?:contra|a)\s+uno\b|\buno(?=\s+de\b)",  # Spanish: one-on-one, "one of"
     re.I,
 )
-DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
-SPEED_UNITS = r"(?:km/h|kph)"
-DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
-SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{SPEED_UNITS}\b", re.I)
+# Spanish number words: the Personalizer writes Spanish variants and they are re-checked here, so
+# "cincuenta km/h" and "treinta y uno" are numbers too. As with English, words combine only as
+# Spanish writes one number. "un" and "una" are read only inside a number ("veintiún", "treinta y
+# una"): alone they are the article "a". "once" (11) is also the English adverb, so it is read
+# only before a unit or a counted noun, or after "minuto" (`_ES_ONCE`).
+ES_VALUES = (
+    {"cero": 0, "uno": 1, "una": 1, "un": 1}
+    | {w: i for i, w in enumerate("dos tres cuatro cinco seis siete ocho nueve diez once doce trece "
+                                  "catorce quince".split(), 2)}
+    | {w: i for i, w in enumerate("dieciséis diecisiete dieciocho diecinueve veinte veintiuno "
+                                  "veintidós veintitrés veinticuatro veinticinco veintiséis veintisiete "
+                                  "veintiocho veintinueve".split(), 16)}
+    | {"dieciseis": 16, "veintiuna": 21, "veintiún": 21, "veintiun": 21, "veintidos": 22,
+       "veintitres": 23, "veintiseis": 26}
+    | {w: 10 * i for i, w in enumerate("treinta cuarenta cincuenta sesenta setenta ochenta noventa"
+                                       .split(), 3)}
+    | {"cien": 100, "ciento": 100, "quinientos": 500, "quinientas": 500, "setecientos": 700,
+       "setecientas": 700, "novecientos": 900, "novecientas": 900}
+    | {f"{p}cient{g}s": n * 100 for p, n in (("dos", 2), ("tres", 3), ("cuatro", 4), ("seis", 6),
+                                            ("ocho", 8)) for g in "oa"}
+)
+
+
+def _alt(words: Iterable[str]) -> str:
+    return rf"(?:{'|'.join(sorted(words, key=len, reverse=True))})"
+
+
+_ES_TAIL = _alt(w for w, n in ES_VALUES.items() if 1 <= n <= 9)
+_ES_UNIT = _alt(w for w, n in ES_VALUES.items() if 1 <= n <= 9 and w not in ("un", "una"))
+_ES_TEEN = _alt(w for w, n in ES_VALUES.items() if 10 <= n <= 29 and w not in ("un", "una"))
+_ES_TENS = _alt(w for w, n in ES_VALUES.items() if n in range(30, 100, 10))
+_ES_HUNDREDS = _alt(w for w, n in ES_VALUES.items() if n >= 100 and w != "cien")
+_ES_BELOW_100 = rf"(?:{_ES_TENS}(?:\s+y\s+{_ES_TAIL}\b)?|{_ES_TEEN}|{_ES_UNIT}|cero)"
+_ES_BELOW_1000 = rf"(?:{_ES_HUNDREDS}(?:\s+{_ES_BELOW_100}\b)?|cien|{_ES_BELOW_100})"
+ES_WORD_NUMBER = re.compile(
+    rf"\b(?:(?:{_ES_BELOW_1000}\s+)?mil(?:\s+{_ES_BELOW_1000}\b)?|{_ES_BELOW_1000})\b", re.I
+)
+_ES_ONCE = re.compile(
+    r"(?:(?<=minuto\s)once\b|\bonce(?=[\s-]+(?:m|metros?|km/h|kil[oó]metros|minutos?|segundos?"
+    r"|pases|disparos|tiros|goles|veces|yardas|pies|millas|jugadores)\b))",
+    re.I,
+)
+# Ordinals in words ("his seventh pass", "the ninth minute", "the twenty-first minute") are read
+# as their digit form ("7th"), which the number checks already read (lesson 130). "first" and
+# "second" are football's words for halves, touches, balls and time ("first time", "a second
+# yellow"), so they are read only before "minute"; Spanish likewise ("primer minuto"). Fractions
+# and the pitch's thirds are no ordinal ("the final third", "a third of", "the fourth official").
+ORDINAL_VALUES = (
+    {w: i for i, w in enumerate("first second third fourth fifth sixth seventh eighth ninth tenth "
+                                "eleventh twelfth thirteenth fourteenth fifteenth sixteenth "
+                                "seventeenth eighteenth nineteenth".split(), 1)}
+    | {w: 10 * i for i, w in enumerate("twentieth thirtieth fortieth fiftieth sixtieth seventieth "
+                                       "eightieth ninetieth".split(), 2)}
+    | {"hundredth": 100}
+    | {f"{w}{g}": i for i, w in enumerate("primer segund tercer cuart quint sext séptim octav noven "
+                                          "décim".split(), 1) for g in "oa"}
+    | {"primer": 1, "tercer": 3, "septimo": 7, "septima": 7, "decimo": 10, "decima": 10}
+)
+_ORD_LEADS = ("first", "second", "primer", "primero", "primera", "segundo", "segunda")
+_ORD_TAIL = _alt(w for w, n in ORDINAL_VALUES.items() if 1 <= n <= 9 and w.isascii() and w.endswith(
+    ("st", "nd", "rd", "th")))
+ORDINAL = re.compile(
+    rf"\b(?:{_TENS}[\s-]+{_ORD_TAIL}"
+    rf"|{_alt(w for w in ORDINAL_VALUES if w not in _ORD_LEADS)}"
+    rf"|{_alt(_ORD_LEADS)}(?=[\s-]+minut[eo]\b))\b",
+    re.I,
+)
+NOT_AN_ORDINAL = re.compile(
+    r"\b(?:final|attacking|defensive|middle|own|opposition)\s+third\b|\bthird[\s-]+man\b"
+    r"|\bfourth\s+official\b|\b(?:a|one)\s+(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+of\b"
+    r"|\btercer\s+hombre\b|\bcuarto\s+de\b|\bd[ée]cimas?\s+de\b|\btercera\s+parte\b",
+    re.I,
+)
+DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters|metro|metros)"
+SPEED_UNITS = r"(?:km/h|kph|kmh|(?:km|kil[oó]met(?:re|er|ro)s?)\s+(?:per|an|por)\s+(?:hour|hora))"
+DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{DISTANCE_UNITS}\b", re.I)
+SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{SPEED_UNITS}\b", re.I)
+# Units no fact of ours is in: every distance we publish is in metres and every speed in km/h, so
+# "12 yards" is not 12 m and "33 mph" is not 33 km/h. A number in one of them is refused, whatever
+# its digits, rather than converted: the writer restates it in our unit.
+UNPUBLISHED_UNITS = (
+    r"(?:yards?|yds?|yardas?|feet|foot|ft|pies?|inch(?:es)?|mph|mps|m/s|knots?|nudos?|miles?|millas?"
+    r"|(?:km|kil[oó]met(?:re|er|ro)s?)(?!/h)(?!\s+(?:per|an|por)\s+(?:hour|hora)\b)"
+    r"|(?:m|met(?:re|er|ro)s?)\s+(?:per|por)\s+(?:second|segundo))"
+)
+UNPUBLISHED_NUMBER = re.compile(
+    rf"(?P<number>{NUMBER_PATTERN})[\s-]*(?P<unit>{UNPUBLISHED_UNITS})(?![\w/])", re.I
+)
 # An area: "900 m²", "900m2", "900 sq m", "900 square metres" (a shape fact's unit, m²).
 AREA_UNITS = r"(?:m²|m2|sq\.?\s*m|square\s+(?:metres|meters|metre|meter))"
 AREA_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{AREA_UNITS}(?!\w)", re.I)
@@ -70,15 +155,15 @@ PLAYERS_NUMBER = re.compile(
     r"(?:players|men|outfielders|outfield\s+players)\b", re.I,
 )
 MINUTE_NUMBER = re.compile(
-    rf"(?:\bminute\s+(?P<minute_a>{NUMBER_PATTERN})\b|"
-    rf"(?P<minute_b>{NUMBER_PATTERN})\s+minutes?\b|"
+    rf"(?:\bminut[eo]\s+(?P<minute_a>{NUMBER_PATTERN})\b|"
+    rf"(?P<minute_b>{NUMBER_PATTERN})\s+minut[eo]s?\b|"
     rf"(?P<minute_c>{NUMBER_PATTERN})'|"
-    rf"\b(?P<minute_d>{NUMBER_PATTERN})(?:st|nd|rd|th)\s+minute\b)",
+    rf"\b(?P<minute_d>{NUMBER_PATTERN})(?:st|nd|rd|th)[\s-]+minut[eo]\b)",
     re.I,
 )
 SECOND_NUMBER = re.compile(
     rf"(?:\bsecond\s+(?P<second_a>{NUMBER_PATTERN})\b|"
-    rf"(?P<second_b>{NUMBER_PATTERN})\s+seconds?\b|"
+    rf"(?P<second_b>{NUMBER_PATTERN})\s+(?:second|segundo)s?\b|"
     rf":(?P<second_c>\d{{1,2}})(?!\d))",
     re.I,
 )
@@ -100,6 +185,27 @@ FOUND = re.compile(
     rf"\b(?:finds|found|picks out|picked out)\s+(?P<player>{PLAYER_ID})\b",
     re.I,
 )
+# A distance or speed the sentence gives to one player must be a value of that player's own cited
+# events (or a fact scoped to him), not just of some cited event: "h7's 30 m pass" is false when
+# h7's pass was the 12 m one and 30 m was h4's. Bound, and only these forms: a possessive ("h7's
+# [up to two words] 30 m"), "h7, whose ... 30 m", a kicking verb with the player as its subject
+# ("h7 plays a 30 m pass", "h10 pasa el balón 14 metros"), and "his/her ... 30 m" in a sentence
+# naming only one player. Any other wording (passives, "from h7", "de h7") binds nothing and the
+# number is checked against all the cited events as before.
+_KICKS = (
+    "plays|played|hits|hit|sends|sent|fires|fired|drives|drove|strikes|struck|clips|clipped|lofts"
+    "|lofted|threads|threaded|curls|curled|whips|whipped|pings|pinged|rolls|rolled|slides|slid"
+    "|shoots|shot|passes|passed|pasa|pasó|juega|jugó|envía|envió|envia|envio|lanza|lanzó|dispara"
+    "|disparó|golpea|golpeó|manda|mandó"
+)
+_GAP = r"(?:[^\W\d_]+\s+)"
+_UNIT_NUMBER_NEXT = rf"(?={NUMBER_PATTERN}[\s-]*(?:{DISTANCE_UNITS}|{SPEED_UNITS})\b)"
+BOUND_TO_PLAYER = re.compile(
+    rf"\b(?P<player>{PLAYER_ID})(?:['’]s\s+{_GAP}{{0,2}}|,?\s+whose\s+{_GAP}{{0,2}}"
+    rf"|\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}?){_UNIT_NUMBER_NEXT}",
+    re.I,
+)
+BOUND_TO_PRONOUN = re.compile(rf"\b(?:his|her)\s+{_GAP}{{0,2}}{_UNIT_NUMBER_NEXT}", re.I)
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
 FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
@@ -135,6 +241,7 @@ def _normalize_clock(clock: str) -> str:
 
 def _number_field(text: str, start: int) -> str | None:
     for field_name, pattern in (
+        ("unpublished", UNPUBLISHED_NUMBER),
         ("area_m2", AREA_NUMBER),
         ("players", PLAYERS_NUMBER),
         ("distance_m", DISTANCE_NUMBER),
@@ -149,6 +256,32 @@ def _number_field(text: str, start: int) -> str | None:
                 if number_start == start:
                     return field_name
     return None
+
+
+def _bound_players(text: str) -> dict[int, str]:
+    """Where a distance or speed is given to one player (BOUND_TO_PLAYER, BOUND_TO_PRONOUN): the
+    number's start in `text`, and the player's id."""
+    bound = {m.end(): m.group("player").lower() for m in BOUND_TO_PLAYER.finditer(text)}
+    for sentence in re.finditer(r"(?:[^.!?;]|\.(?=\d))+", text):
+        players = set(PLAYER.findall(sentence.group().lower()))
+        if len(players) == 1:
+            (player,) = players
+            for m in BOUND_TO_PRONOUN.finditer(sentence.group()):
+                bound.setdefault(sentence.start() + m.end(), player)
+    return bound
+
+
+def _player_values(evidence: list[dict], player: str, field_name: str) -> set[float]:
+    """The values of `field_name` in the cited events `player` made, and in the cited facts scoped
+    to him in that field's unit."""
+    return {
+        float(e[field_name]) for e in evidence
+        if not _is_fact(e) and e.get("player") == player and e.get(field_name) is not None
+    } | {
+        float(f["value"]) for f in evidence
+        if _is_fact(f) and f["unit"] == FIELD_UNITS[field_name]
+        and (found := FACT_PLAYER.match(str(f.get("scope", "")))) and found.group("player") == player
+    }
 
 
 def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) -> set[str]:
@@ -193,17 +326,53 @@ def _word_value(phrase: str) -> int:
     return total + current
 
 
+def _es_value(phrase: str) -> int:
+    """The value of one well-formed Spanish number in words (ES_WORD_NUMBER matched it)."""
+    total = current = 0
+    for word in re.findall(r"[^\W\d_]+", phrase.lower()):
+        if word == "mil":
+            total, current = total + max(current, 1) * 1000, 0
+        elif word != "y":
+            current += ES_VALUES[word]
+    return total + current
+
+
+def _ordinal_digits(m: re.Match) -> str:
+    """An ordinal in words as its digit form: "seventh" is "7th", "twenty-first" is "21st"."""
+    *tens, last = re.split(r"[\s-]+", m.group().lower())
+    n = sum(WORD_VALUES[w] for w in tens) + ORDINAL_VALUES[last]
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
 def spelled_as_digits(text: str) -> str:
-    """The text with every number written in words replaced by its digits ("fifty km/h" becomes
-    "50 km/h"), so the number checks read it like any other."""
-    idioms = [range(m.start(), m.end()) for m in NOT_A_COUNT.finditer(text)]
+    """The text with every number written in words, English or Spanish, replaced by its digits
+    ("fifty km/h" and "cincuenta km/h" become "50 km/h", "his seventh pass" becomes "his 7th
+    pass"), so the number checks read it like any other."""
+    def spans(pattern: re.Pattern, text: str) -> list[range]:
+        return [range(m.start(), m.end()) for m in pattern.finditer(text)]
+
+    not_ordinals = spans(NOT_AN_ORDINAL, text)
+    text = ORDINAL.sub(
+        lambda m: m.group() if any(m.start() in s for s in not_ordinals) else _ordinal_digits(m), text
+    )
+    idioms = spans(NOT_A_COUNT, text)
 
     def digits(m: re.Match) -> str:
         if any(m.start() in span for span in idioms):
             return m.group()
         return str(_word_value(m.group()))
 
-    return WORD_NUMBER.sub(digits, text)
+    text = WORD_NUMBER.sub(digits, text)
+    idioms = spans(NOT_A_COUNT, text)
+
+    def es_digits(m: re.Match) -> str:
+        if any(m.start() in span for span in idioms):
+            return m.group()
+        if m.group().lower() == "once" and not _ES_ONCE.match(text, m.start()):
+            return m.group()  # the English adverb
+        return str(_es_value(m.group()))
+
+    return ES_WORD_NUMBER.sub(es_digits, text)
 
 
 def _unit_follows(text: str, end: int, unit: str) -> bool:
@@ -393,12 +562,18 @@ def check(
             reasons.append(f"clock {clock} is not a cited clock")
     text = spelled_as_digits(claim.text)
     clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(text)]
+    bound = _bound_players(text)
     for match in NUMBER.finditer(text):
         if any(match.start() in span for span in clock_spans):
             continue
         value = float(match.group("n"))
         expected_field = _number_field(text, match.start())
-        if expected_field:
+        if expected_field == "unpublished":
+            reasons.append(
+                f"number {match.group()} is in a unit the evidence does not use: "
+                "state distances in metres and speeds in km/h"
+            )
+        elif expected_field:
             values = {
                 float(event[name])
                 for event in evidence
@@ -417,6 +592,10 @@ def check(
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
+            elif (player := bound.get(match.start())) and expected_field in FIELD_UNITS and (
+                value not in _player_values(evidence, player, expected_field)
+            ):
+                reasons.append(f"number {match.group()} is not a cited {expected_field} of {player}")
         elif value not in allowed and not any(
             float(f["value"]) == value and _unit_follows(text, match.end(), str(f["unit"]))
             for f in evidence
