@@ -273,3 +273,40 @@ def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, 
     single, dets1 = clean_clip(tmp_path / "b")
     live_job.run(single, tmp_path / "out1", lambda: (lambda rows: read_detections(dets1)), {})
     assert seen == [True, True, False]
+
+
+REAL_VIEWS = Path(__file__).parent / "fixtures" / "tactical-seed108"
+
+
+def test_a_real_tactical_clip_places_players_from_every_view(tmp_path):
+    """Lesson 235: two frames of validation seed108's tactical views as rendered (JPEG q85; the
+    detections ours-tactical made on them), through the whole views mode. Every view's camera is
+    trusted and most of its players are placed on the pitch; before the fix, none were."""
+    from ninety.vision.detections import read_detections
+
+    dets = {v: read_detections(REAL_VIEWS / f"detections-{v}.jsonl") for v in TAC}
+    report = live_job.run(REAL_VIEWS / "clip", tmp_path,
+                          lambda: (lambda rows: dets[Path(rows[0]["image"]).parts[-3]]), {})
+    assert report["camera_ok"] == 2
+    for v in TAC:
+        placed = tmp_path / "views" / v / "observations.jsonl"
+        rows = [json.loads(x) for x in placed.read_text().splitlines()]
+        players = [p for r in rows for p in r["players"]]
+        assert all(r["camera"]["ok"] for r in rows), v
+        assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0, v
+
+
+REAL_BROADCAST = Path(__file__).parent / "fixtures" / "broadcast-seed108"
+
+
+def test_a_real_broadcast_clip_places_players(tmp_path):
+    """Lesson 235: the broadcast mode on two frames of validation seed108 as rendered (JPEG q85;
+    ours-freeze's detections of them): the camera is trusted and most players are placed."""
+    from ninety.vision.detections import read_detections
+
+    dets = read_detections(REAL_BROADCAST / "detections.jsonl")
+    report = live_job.run(REAL_BROADCAST / "clip", tmp_path, lambda: (lambda rows: dets), {})
+    assert report["camera_ok"] == 2
+    rows = [json.loads(x) for x in (tmp_path / "observations.jsonl").read_text().splitlines()]
+    players = [p for r in rows for p in r["players"]]
+    assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0

@@ -116,7 +116,13 @@ def main(argv: list[str] | None = None) -> None:
     seeds = [int(s) for s in a.seeds.split(",")]
     if any(refused(s) for s in seeds):
         raise SystemExit(f"refused: {[s for s in seeds if refused(s)]} are test or reserved seeds")
-    body = {"step": a.step, "seeds": seeds, "commit": git_commit()}
+    # A clip whose live run failed (the camera could not be placed on any frame) is reported, not
+    # graded: neither camera's run of it exists to join.
+    ran = [s for s in seeds
+           if all((a.runs / f"seed{s}" / c / "run.json").is_file() for c in ("broadcast", "views"))]
+    body = {"step": a.step, "seeds": ran, "not_run": [s for s in seeds if s not in ran],
+            "commit": git_commit()}
+    seeds = ran
     if a.step == "error":
         body |= views_error(a.runs, a.clips, seeds)
     else:
