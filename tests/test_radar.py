@@ -199,6 +199,16 @@ def observations_clip() -> list[dict]:
     return rows
 
 
+def test_a_frame_fused_from_the_fixed_views_has_no_broadcast_footprint():
+    """Observations fused from the tactical lenses carry each view's fit, not the broadcast camera's
+    matrix: the broadcast picture's footprint is unknown there, never an error or a guess."""
+    rows = observations_clip()
+    rows[0]["camera"] = {"ok": True, "views": {"tac-l": {"ok": True}, "tac-r": {"ok": False}}}
+    body = radar.build(tracked_clip(), rows, W, H)
+    assert body["views"][0]["footprint"] is None
+    assert body["views"][1]["footprint"] is not None
+
+
 @pytest.fixture(scope="module")
 def browser():
     if not (DIST / "index.html").exists():

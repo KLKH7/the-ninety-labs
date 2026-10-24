@@ -17,7 +17,7 @@ import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, teamNames } from "../../viewer/src/teams";
+import { fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -523,7 +523,13 @@ function buildRadar() {
 }
 
 function rosterIds(): string[] {
-  if (state.radarFrom === "bundle" && state.radar) return state.radar.ids().map((p) => p.id);
+  // From tracking, a player can come back under a new track after an occlusion, so the line-up is
+  // who is on the pitch now (at most eleven a side), not every track the clip ever had.
+  if (state.radarFrom === "bundle" && state.radar) {
+    const now = state.radar.at(viewTime(), false);
+    const ids = now?.players.map((p) => p.id) ?? [];
+    return ids.length ? ids : state.radar.ids().map((p) => p.id);
+  }
   return state.minimap?.roster ?? [];
 }
 
@@ -549,6 +555,12 @@ function crestSvg(club: string, side: "home" | "away"): string {
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
+/** A player the line-up cannot name, by where he has mostly played ("Left defender"). */
+function roleWords(side: "home" | "away", x: number, y: number): string {
+  const [flank, depth] = spot(side, x, y).split(" · ");
+  return `${flank} ${depth === "defence" ? "defender" : depth === "midfield" ? "midfielder" : "forward"}`;
+}
+
 /** Where a player has mostly been, in two words a line-up uses ("Left · defence"). */
 function spot(side: "home" | "away", x: number, y: number): string {
   const z = zoneFor(side, x, y); // "defensive third, on the left"
@@ -564,16 +576,19 @@ function renderRoster(roster: string[]) {
     b.type = "button";
     b.className = `who ${team(id)}`;
     b.dataset.player = id;
+    // A tracked player without a team-sheet name has no shirt we know: no number, and his label is
+    // where he plays ("Left midfielder") until the line-up names him.
+    const at = avg.get(id);
+    const unnamed = isTrack(id) && playerName(id) === playerLabel(id, teams);
     const num = document.createElement("span");
     num.className = "num";
-    num.textContent = shirt(id);
+    num.textContent = unnamed ? "" : shirt(id);
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = playerName(id);
+    name.textContent = unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
     const where = document.createElement("span");
     where.className = "where";
-    const at = avg.get(id);
-    where.textContent = at ? spot(team(id), at[0], at[1]) : "";
+    where.textContent = at && !unnamed ? spot(team(id), at[0], at[1]) : "";
     b.append(num, name, where);
     b.setAttribute("aria-label", playerName(id));
     if (at) {
@@ -611,13 +626,14 @@ function renderRoster(roster: string[]) {
         const g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", `translate(${at[0].toFixed(1)} ${(68 - at[1]).toFixed(1)})`);
         g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
-        g.querySelector("text")!.textContent = shirt(id);
+        g.querySelector("text")!.textContent = isTrack(id) && playerName(id) === playerLabel(id, teams) ? "" : shirt(id);
         pitch.append(g);
       }
       const cols = document.createElement("p");
       cols.className = "roster-cols";
       cols.setAttribute("aria-hidden", "true");
-      cols.innerHTML = "<span>#</span><span>Name</span><span>Mostly</span>";
+      const anyWhere = ids.some((id) => avg.has(id) && !(isTrack(id) && playerName(id) === playerLabel(id, teams)));
+      cols.innerHTML = anyWhere ? "<span>#</span><span>Name</span><span>Mostly</span>" : "<span>#</span><span>Player</span><span></span>";
       const row = document.createElement("div");
       row.className = "roster-row";
       row.append(...ids.map(button));
@@ -2010,6 +2026,7 @@ function showPane(pane: LivePane, focus = false) {
   }
   document.body.dataset.pane = pane;
   if (pane === "pitch") summaryAt = -1;
+  if (pane === "players" && state.radar) renderRoster(rosterIds()); // who is on the pitch now
 }
 for (const p of LIVE_PANES) {
   const tab = $(`lt-${p}`);
