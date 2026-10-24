@@ -21,6 +21,7 @@ from ninety.agents import referee
 from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
+from ninety.intel.teamsheet import POSITIONS
 
 
 def companion_match_agent(client):
@@ -85,7 +86,11 @@ TOOL_WORDS = (
         r"|wall pass\w*|how (?:are|is) [\w' ]+ playing"
         r"|goal ?keeper|keeper)\b",
     ),
-    ("players", r"\b(?:best|man of the match|stand-?out|star|playing well|who(?:'s| has) been)\b"),
+    (
+        "players",
+        r"\b(?:best|man of the match|stand-?out|star|playing well|who(?:'s| has) been|dangerous|threat"
+        r"|influential|creative|key (?:man|player))\b",
+    ),
     (
         "counter_press",
         r"\b(?:los(?:e|es|ing|t)|giv(?:e|es|ing) (?:it|the ball) away|turnovers?|press(?:ing)?"
@@ -118,9 +123,43 @@ MAX_TOOLS = 3
 WINDOW_MIN = 15  # the stats' window (docs/GROUNDING.md S4): a question about now looks this far back
 
 
+# A position as a fan names it, to the role code of the 4-3-3, with its shirt number from the team
+# sheet (ninety/intel/teamsheet.POSITIONS): "the right wing", "their number 9", "the keeper". A
+# centre-back is one of two, so the bare word names none.
+FAN_WORDS = {
+    "GK": r"goal ?keeper|keeper|goalie",
+    "RB": r"right[- ]back",
+    "LB": r"left[- ]back",
+    "RCB": r"right centre[- ]back",
+    "LCB": r"left centre[- ]back",
+    "CM": r"holding midfielder|defensive midfielder",
+    "RW": r"right wing(?:er)?",
+    "RCM": r"right[- ]sided midfielder",
+    "ST": r"striker|centre[- ]forward",
+    "LCM": r"left[- ]sided midfielder",
+    "LW": r"left wing(?:er)?",
+}
+ROLE_WORDS = tuple((role, rf"{FAN_WORDS[role]}|number {number}\b") for role, number, _, _ in POSITIONS)
+ASKS_WHO = r"\b(?:who|whose|which|name\w*)\b"
+
+
+def asked_role(text: str) -> str | None:
+    """The role a question asks the player of ("Who plays on the right wing?": RW), or None when it
+    asks who without naming a position, or names one without asking who."""
+    lowered = text.lower()
+    if not re.search(ASKS_WHO, lowered):
+        return None
+    return next((role for role, words in ROLE_WORDS if re.search(rf"\b(?:{words})", lowered)), None)
+
+
 def route(text: str) -> list[str]:
     lowered = text.lower()
-    return [tool for tool, words in TOOL_WORDS if re.search(words, lowered)][:MAX_TOOLS]
+    tools = [tool for tool, words in TOOL_WORDS if re.search(words, lowered)]
+    if asked_role(text):
+        # Who plays a position is the team sheet's to answer, before any word the position shares
+        # with another tool ("wing" with style, "number" with overloads).
+        tools = ["lineup", *(t for t in tools if t != "lineup")]
+    return tools[:MAX_TOOLS]
 
 
 @dataclass(frozen=True)
@@ -408,8 +447,112 @@ def _match_answer(
         t_to,
         visual,
         spoken=text,
+        headline=_headline_of(text, asked[-1], cited, insights) if asked and insights is not None else None,
         **extra,
     )
+
+
+def _headline_of(text: str, question: str, cited: list[dict], insights) -> str | None:
+    """The headline, kept only when every number it shows is one the sentence says: the sentence is
+    what the fact-checker passed, for a model's answer as for code's."""
+    head = headline(question, cited, insights)
+    said = re.findall(r"\d+(?:\.\d+)?", text)
+    if head is None or any(n not in said for n in re.findall(r"\d+(?:\.\d+)?", head)):
+        return None
+    return head
+
+
+def clubs_named(text: str, insights) -> list[str]:
+    """The clubs a question names, by full or short name ("Lisbon's left-back")."""
+    from ninety.intel.teamsheet import short_name
+
+    fx = insights.fixture
+    out = []
+    for team, code in (("home", fx.home_code), ("away", fx.away_code)):
+        full = fx.clubs[team]
+        if any(re.search(rf"\b{re.escape(n)}\b", text, re.I) for n in {full, short_name(code)}):
+            out.append(full)
+    return out
+
+
+def _short(insights, club: str | None) -> str | None:
+    from ninety.intel.teamsheet import short_name
+
+    fx = insights.fixture
+    by = {fx.clubs["home"]: fx.home_code, fx.clubs["away"]: fx.away_code}
+    return short_name(by[club]) if club in by else club
+
+
+# The kind of a question, for its headline: who or which asks a name, how many or how fast a number,
+# where a place. Anything else (why, is, how are they playing) has no one-word answer.
+QUESTION_KINDS = (
+    ("number", r"\bhow (?:many|much|often|quick\w*|fast|long|far|wide|soon)\b"),
+    ("who", r"^\W*(?:who|whose|which)\b|\bwho\b|\bname\b"),
+    ("where", r"\bwhere\b"),
+)
+CHANNEL_PHRASE = {"left": "Down the left", "right": "Down the right", "centre": "Through the middle"}
+
+
+def question_kind(text: str) -> str | None:
+    lowered = text.lower()
+    return next((k for k, words in QUESTION_KINDS if re.search(words, lowered)), None)
+
+
+def _figure(f: dict) -> str | None:
+    if f.get("value") is None or not f.get("unit"):
+        return None
+    v, unit = _num(f["value"]), f["unit"]
+    if f.get("metric") == "regains_within_5s":
+        return f"{v} {'regain' if v == '1' else 'regains'} in 5 s"  # the window the sentence says
+    if unit == "%":
+        return f"{v}%"
+    if unit in ("m", "s", "km/h"):
+        return f"{v} {unit}"
+    return f"{v} {unit[:-1] if v == '1' and unit.endswith('s') else unit}"
+
+
+def _place(f: dict) -> str | None:
+    third = channel = None
+    if f.get("metric") == "overload_moments" and f.get("most"):
+        third, channel = f["most"].split("-")
+    elif f.get("metric") == "extra_players":
+        third, channel = f.get("third"), f.get("channel")
+    elif f.get("metric") == "pass_share_by_channel":
+        channel = f.get("most")
+    if channel not in CHANNEL_PHRASE:
+        return None
+    return CHANNEL_PHRASE[channel] + (f", {third} third" if third else "")
+
+
+def _who(f: dict, insights) -> str | None:
+    if f.get("kind") == "sheet":
+        return f.get("name")
+    # passer_is / player_is hold a name only past the role gate, else the role ("London Athletic's
+    # left-back"): the headline says what the sentence may say, with the club's short name.
+    who = f.get("player_is") or f.get("passer_is")
+    if not who:
+        return None
+    for club in insights.fixture.clubs.values():
+        if who.startswith(f"{club}'s "):
+            return f"{_short(insights, club)}'s {who[len(club) + 3:]}"
+    return who
+
+
+def headline(question: str, cited: list[dict], insights) -> str | None:
+    """The direct answer to the question in a few words, from the cited facts only: the player for
+    who or which (his name when it is confident, else his role, else the club), the number with its
+    unit for how many or how fast, the place for where; the supporting number stays in the sentence.
+    A question of another kind is headed by the lead number, or by nothing."""
+    kind = question_kind(question)
+    if kind == "who":
+        got = next((h for f in cited if (h := _who(f, insights))), None)
+        got = got or next((_short(insights, f["club"]) for f in cited if f.get("club")), None)
+    elif kind == "where":
+        got = next((p for f in cited if (p := _place(f))), None)
+    else:
+        got = None
+    got = got or next((n for f in cited if (n := _figure(f))), None)
+    return got[:48] if got else None
 
 
 def _people(insights) -> dict:
@@ -469,8 +612,8 @@ def code_texts(fact: dict) -> list[str]:
             return []
         opp = next(n for t, n in fact["clubs"].items() if t != fact["team"]) if fact.get("clubs") else "their"
         return [
-            f"{span.capitalize()}, {who} played a pass that took {fact['value']} {opp} players "
-            "out of the game."
+            f"{span.capitalize()}, {who} played a pass that took {fact['value']} {opp} "
+            f"{'player' if fact['value'] == 1 else 'players'} out of the game."
         ]
     if metric == "opponents_bypassed_total":
         if not fact["value"]:
@@ -536,7 +679,7 @@ def code_texts(fact: dict) -> list[str]:
         ]
     if metric == "one_two":
         a, b = fact.get("passer_is"), fact.get("receiver_is")
-        if not a or not b:
+        if not a or not b or a == b:  # one name twice is no one-two a fan would believe
             return []
         return [f"{span.capitalize()}, {a} and {b} played a one-two."]
     if kind == "offside":
@@ -603,7 +746,7 @@ def code_match_answer(
     clubs = insights.fixture.clubs
     for f in facts:
         f.setdefault("clubs", clubs)
-    named = [n for n in clubs.values() if re.search(rf"\b{re.escape(n)}\b", question.text, re.I)]
+    named = clubs_named(question.text, insights)
     if len(named) == 1:
         # A question about one club hears about that club first (its facts before the other's); the
         # fact-check still binds the sentence to the right side.
@@ -611,6 +754,17 @@ def code_match_answer(
     if re.search(r"\b(?:which|who|whose)\b", question.text, re.I):
         # "Which pass…?", "Who…?": a moment with a player in it, before a club's total.
         facts = sorted(facts, key=lambda f: f.get("t") is None)
+    role = asked_role(question.text)
+    if role is None:
+        # A team-sheet row answers only who plays a position: "who is the best player?" is never
+        # answered with the first name on the sheet.
+        facts = [f for f in facts if f.get("kind") != "sheet"]
+    else:
+        # "Who is Lisbon's left-back?": that row of the named club's sheet (else either club's), first.
+        facts = sorted(
+            facts,
+            key=lambda f: (f.get("kind") != "sheet" or f.get("role") != role, f.get("club") not in named),
+        )
     asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
     if asked is not None:
         # A referee question: an offside reading first when it is about offside, then the Laws the
@@ -695,7 +849,7 @@ async def answer_match(
         plan_reply = await ask(plan_prompt(question, insights, history))
         try:
             plan = first_object(plan_reply)
-        except (json.JSONDecodeError, TypeError, AttributeError, ValueError):
+        except (json.JSONDecodeError, TypeError, AttributeError, ValueError, RecursionError):
             raise _NotTheFormat("plan") from None
         calls = _calls(plan, insights, minute)
         if not calls:
@@ -708,8 +862,8 @@ async def answer_match(
         reply = await writer(answer_prompt(question, facts, history))
         try:
             claim = parse_claim(reply)
-        except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
-            raise _NotTheFormat(str(exc)) from None
+        except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:
+            raise _NotTheFormat(str(exc)[:200]) from None
         known = {f["id"]: f for f in facts}
         if not claim.text.strip():
             return calls, claim, None, facts

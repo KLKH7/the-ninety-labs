@@ -2736,3 +2736,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only`
   and `::test_the_eval_reads_a_plan_as_the_service_does` fail when the parse goes back to first `{` to
   last `}`.
+
+### 239. A sentence template is tested through the checker it must pass, and a fallback row answers only what it is about
+- **What happened:** the team-sheet sentence ("X plays left-back for London Athletic, by the team
+  sheet") had never passed the fact-checker. Its name gate counted only the tracked players the facts
+  were about, not the sheet row being cited. So no "who plays where" question was ever answered, and
+  the router's lineup score (2/4) measured routing to a tool that could not answer. Meanwhile "who is
+  the best player?" routed to the sheet as well, and with no confident leader the first sheet row
+  answered: the goalkeeper. On the phone, the answer's headline was taken from the picture's number
+  ("6 moves") rather than from what the fan asked.
+- **Rule:** every code template is run through `verify` on the stand-in in a test, not only read. A
+  cited sheet row vouches for its own name, position and club, and a name said with another row's
+  position is refused. A sheet row answers only a question that names a position. The answer carries
+  a `headline` computed by code from the question's kind: a name (or the role, or the club) for who,
+  the number with its unit for how many, the place for where; the supporting number stays in the
+  sentence.
+- **Check:** `tests/test_companion_match.py::test_who_plays_a_position_is_answered_from_that_row_of_the_sheet`,
+  `::test_a_sheet_row_says_only_its_own_name_position_and_club`,
+  `::test_who_is_best_is_never_answered_with_a_name_off_the_sheet` and
+  `::test_every_held_out_answer_is_headed_by_what_its_question_asks`. Each fails when its rule is
+  mutated (eleven mutations, all caught).
