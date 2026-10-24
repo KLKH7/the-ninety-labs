@@ -54,9 +54,21 @@ COUNTER = {
     "visual": {"kind": "counter_press"},
 }
 OVERLOAD = {
-    "id": "ov:v3", "kind": "overload", "metric": "extra_players", "team": "home", "club": "Oakfield",
-    "minute": 12, "t": 700.0, "value": 3, "unit": "extra players", "lo": 3, "hi": 3, "confident": True,
-    "own_players": 4, "other_players": 1, "also": [[4, "players"], [1, "players", r"\bagainst\s+$"]],
+    "id": "ov:v3",
+    "kind": "overload",
+    "metric": "extra_players",
+    "team": "home",
+    "club": "Oakfield",
+    "minute": 12,
+    "t": 700.0,
+    "value": 3,
+    "unit": "extra players",
+    "lo": 3,
+    "hi": 3,
+    "confident": True,
+    "own_players": 4,
+    "other_players": 1,
+    "also": [[4, "players"], [1, "players", r"\bagainst\s+$"]],
 }
 KNOWN = {f["id"]: f for f in (LINE_BREAK, COUNTER, OVERLOAD)}
 NAMED = {
@@ -89,8 +101,8 @@ def run(text, evidence=("lb:v1",), known=KNOWN, people=NAMED):
         ("Oakfield's left-back cut through 4 Fenwick players with one pass.", ("lb:v1",)),
         ("Fenwick won it back 2.4 seconds after losing it, with 3 players around the ball.", ("cp:v7",)),
         ("Fenwick won the ball back within five seconds, with three players pressing.", ("cp:v7",)),
-    ("In minute 12, Oakfield had 4 players against 1 player around the ball.", ("ov:v3",)),
-    ("Oakfield had 3 extra players around the ball in minute 12.", ("ov:v3",)),
+        ("In minute 12, Oakfield had 4 players against 1 player around the ball.", ("ov:v3",)),
+        ("Oakfield had 3 extra players around the ball in minute 12.", ("ov:v3",)),
     ],
 )
 def test_true_claims_pass(text, evidence):
@@ -116,10 +128,14 @@ def test_true_claims_pass(text, evidence):
         ("Oakfield bypassed 4 opponents.", (), "cite"),
         ("Oakfield bypassed 4 opponents.", ("lb:v99",), "unknown"),
         ("Fenwick won it back 3 seconds after losing it.", ("cp:v7",), "number"),
-    ("Fenwick won it back 5 seconds after losing it.", ("cp:v7",), "number"),  # the window, not the regain
-    ("Fenwick had 3 players near the ball in the next 2.4 seconds.", ("cp:v7",), "number"),
-    ("Oakfield had 3 players against 4 players around the ball.", ("ov:v3",), "number"),
-    ("Oakfield had 4 players against 3 players around the ball.", ("ov:v3",), "number"),  # 3 is the extra
+        (
+            "Fenwick won it back 5 seconds after losing it.",
+            ("cp:v7",),
+            "number",
+        ),  # the window, not the regain
+        ("Fenwick had 3 players near the ball in the next 2.4 seconds.", ("cp:v7",), "number"),
+        ("Oakfield had 3 players against 4 players around the ball.", ("ov:v3",), "number"),
+        ("Oakfield had 4 players against 3 players around the ball.", ("ov:v3",), "number"),  # 3 is the extra
     ],
 )
 def test_planted_false_claims_are_rejected(text, evidence, why):
@@ -151,3 +167,92 @@ def test_a_wrong_claim_on_an_unsure_fact_is_rejected_not_held():
 
 def test_ordinary_english_is_not_a_team_word():
     assert run("Oakfield pulled Fenwick away from their goal and bypassed 4 players in minute 23.").ok
+
+
+# Polarity: the merge queue's review found sentences that reverse a fact passing (lesson 11).
+PRESS_LOST = {
+    "id": "cp:v8",
+    "kind": "counter_press",
+    "metric": "pressers",
+    "team": "away",
+    "club": "Fenwick",
+    "minute": 30,
+    "t": 1790.0,
+    "value": 1,
+    "unit": "players",
+    "lo": 1,
+    "hi": 1,
+    "confident": True,
+    "regained": False,
+    "regain_s": None,
+    "also": [[5.0, "s", WITHIN]],
+}
+OPTIONS = {
+    "id": "po:v9",
+    "kind": "pass_options",
+    "metric": "open_teammates_ahead",
+    "team": "home",
+    "club": "Oakfield",
+    "minute": 31,
+    "t": 1850.0,
+    "value": 3,
+    "unit": "teammates",
+    "lo": 3,
+    "hi": 3,
+    "confident": True,
+    "outcome": "success",
+    "target_open": True,
+    "also": [[1, "passes"]],
+}
+POLARITY = {f["id"]: f for f in (COUNTER, PRESS_LOST, OPTIONS)}
+
+
+@pytest.mark.parametrize(
+    "text, fid",
+    [
+        ("Fenwick won the ball back after losing it.", "cp:v8"),
+        ("Fenwick won it back within 5 seconds.", "cp:v8"),
+        ("Fenwick never won it back.", "cp:v7"),
+        ("Oakfield lost a pass with no open teammate further forward.", "po:v9"),
+        ("Oakfield played it with nobody open ahead.", "po:v9"),
+        ("Oakfield had 3 open teammates ahead but lost the pass.", "po:v9"),
+        ("Oakfield had 3 teammates free, but the pass went elsewhere.", "po:v9"),
+    ],
+)
+def test_a_sentence_that_reverses_the_fact_is_rejected(text, fid):
+    v = verify(Claim(text, [fid]), POLARITY, CLUBS, NAMED, NAMES)
+    assert not v.ok and status_for(v) == "rejected", v
+
+
+@pytest.mark.parametrize(
+    "text, fid",
+    [
+        ("Fenwick won it back 2.4 seconds after losing it.", "cp:v7"),
+        ("Fenwick lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
+        ("Oakfield had 3 teammates free and the pass found an open teammate.", "po:v9"),
+    ],
+)
+def test_a_sentence_that_keeps_the_facts_direction_passes(text, fid):
+    v = verify(Claim(text, [fid]), POLARITY, CLUBS, NAMED, NAMES)
+    assert v.ok, v.reasons
+
+
+def test_none_of_something_needs_a_zero():
+    summary = {
+        "id": "ov:home:m1-15",
+        "kind": "overload",
+        "metric": "overload_moments",
+        "team": "home",
+        "club": "Oakfield",
+        "minute_from": 1,
+        "minute_to": 15,
+        "value": 2,
+        "unit": "overloads",
+        "confident": True,
+    }
+    v = verify(
+        Claim("Oakfield built no overloads from minute 1 to minute 15.", [summary["id"]]),
+        {summary["id"]: summary},
+        CLUBS,
+    )
+    assert not v.ok

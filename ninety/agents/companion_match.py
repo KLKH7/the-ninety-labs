@@ -129,7 +129,7 @@ def run_tools(insights, calls: list[dict]) -> list[dict]:
     for c in calls:
         if c["name"] == "lineup":
             rows = [
-                {**s, "id": f"sheet:{team}:{s['role']}", "kind": "sheet", "team": team}
+                {**s, "id": f"sheet:{team}:{s['role']}", "kind": "sheet", "team": team, "confident": True}
                 for team, sheet in insights.lineup(c["club"])["sheets"].items()
                 for s in sheet
             ]
