@@ -163,7 +163,7 @@ def offline_analyst(events: list[dict], plant: bool):
         event = most_interesting(by_minute.get(minute, []))
         if event is None:
             return json.dumps({"text": "", "evidence": []})
-        claim = Claim(_text(event, "analyst") + ".", [event["id"]])
+        claim = Claim(describe.as_sentence(_text(event, "analyst") + "."), [event["id"]])
         if plant and calls == 1:
             claim = tamper(claim)
         return json.dumps({"text": claim.text, "evidence": claim.evidence})
@@ -281,8 +281,11 @@ def offline_models(events: list[dict]) -> Models:
         return json.dumps({"moments": picks})
 
     async def tactician(prompt: str) -> str:
+        # A sentence, as a co-commentator would say it, from the event's own fields; not the graphic's
+        # compact form ("h11 → h8, 17 m, 53 km/h"), which the template already shows.
         event = by_id[json.loads(prompt)["moment"]["main_event"]]
-        return json.dumps({"text": _text(event, "analyst") + ".", "evidence": [event["id"]]})
+        text = describe.as_sentence(_text(event, "analyst") + ".")
+        return json.dumps({"text": text, "evidence": [event["id"]]})
 
     async def challenger(prompt: str) -> str:
         return json.dumps({"agree": True})

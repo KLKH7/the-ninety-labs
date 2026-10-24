@@ -91,7 +91,7 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     out, manifest = run(tmp_path)
     claim = only_claim(out)
     assert claim["status"] == "accepted" and claim["verdict"] == "verified" and claim["evidence"] == ["e2"]
-    assert claim["text"] == "h8 shot, on target, 101 km/h."
+    assert claim["text"] == "h8 shoots at 101 km/h, on target."
     assert claim["mode"] == "graph offline" and manifest["agents"]["mode"] == "graph offline"
     assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 1}
     # The graph ran: the Analyst picked, the Tactician wrote, the Challenger read it, the checker
@@ -161,7 +161,7 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert fell == {"minute": 2, "error": "RuntimeError"}  # the type only: no service text on screen
     claim = only_claim(out)
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
-    assert claim["status"] == "accepted" and claim["text"] == "h8 shot, on target, 101 km/h."
+    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots at 101 km/h, on target."
     assert [c for c in cues(out) if c["kind"] == "insight"]
 
 

@@ -91,10 +91,10 @@ def model_answering(text: str, asked: list | None = None):
 def test_a_supported_model_line_is_said_first_and_the_code_line_is_its_fallback():
     track, _ = d.describe(EVENTS, [CLAIM], upgrades={CLAIM["id"]: MODEL_LINE})
     line = said_for(track, CLAIM["id"])
-    assert line.source == "model" and line.text == MODEL_LINE and "Home 8" in line.spoken
+    assert line.source == "model" and line.text == MODEL_LINE and "Home's number 8" in line.spoken
     lines, _ = d.candidates(EVENTS, [CLAIM], {CLAIM["id"]: MODEL_LINE})
     (claim_line,) = [x for x in lines if x.key == CLAIM["id"]]
-    assert claim_line.versions == [MODEL_LINE, f"Fact-checked: {CLAIM['text']}"]
+    assert claim_line.versions == [MODEL_LINE, CLAIM["text"]]
     (cue,) = [c for c in d.audio_cues(track) if c["evidence"] == ["e1", "e2"]]
     assert cue["verified"] is True and cue["text"] == line.spoken
 
@@ -102,7 +102,7 @@ def test_a_supported_model_line_is_said_first_and_the_code_line_is_its_fallback(
 def test_a_model_line_with_an_unsupported_number_is_replaced_by_the_code_line():
     track, refused = d.describe(EVENTS, [CLAIM], upgrades={CLAIM["id"]: "h8 shoots at 143 km/h"})
     line = said_for(track, CLAIM["id"])
-    assert line.source == "insight" and line.text == f"Fact-checked: {CLAIM['text']}"
+    assert line.source == "insight" and line.text == CLAIM["text"]
     assert any(r["text"] == "h8 shoots at 143 km/h" and "143" in r["reason"] for r in refused)
 
 
@@ -128,7 +128,7 @@ def test_a_model_line_that_would_push_a_goal_late_falls_back_to_the_code_line():
     goal = event(3, 15.0, "goal", x=104.0, player="h8")  # room for the short line, not the long one
     track, _ = d.describe([*EVENTS, goal], [CLAIM], upgrades={CLAIM["id"]: long})
     line = said_for(track, CLAIM["id"])
-    assert line.short and line.source == "insight" and line.text == f"Fact-checked: {CLAIM['text']}"
+    assert line.short and line.source == "insight" and line.text == CLAIM["text"]
     assert said_for(track, "e3").lag_s <= d.MAX_LAG_S
 
 
