@@ -20,3 +20,9 @@ sees it (lesson 159). It needs an absolute reference, not another per-frame test
 
 Reproduce: `python -m ninety.vision.observe --regate <D's observation> --out <file>` for each clip,
 then grade each trusted frame's matrix against the clip's `frames.jsonl` (offline).
+
+**Seed 112** (the camera #250 fits 45 m wrong): 0 of 250 frames trusted under B3, on both its
+dataset v2 and its tactical1 validation clip. **Not measured here:** the frozen test set's older
+look (900001 and the rest of renderer 0.3's test clips); their published numbers stand as measured.
+**Left for the failure table:** seed 2044 (about 14 m wrong, markings lined up), no fix before the
+freeze.
