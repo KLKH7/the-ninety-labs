@@ -261,16 +261,29 @@ def plan_prompt(question: Question, insights, history=()) -> str:
     )
 
 
-def answer_prompt(question: Question, facts: list[dict], history=()) -> str:
+def answer_prompt(question: Question, facts: list[dict], history=(), insights=None) -> str:
+    """The answer step's message. Each fact carries `say_as`, code's own sentences for it that the
+    fact-checker passes, for the model to word its answer from rather than paraphrase."""
+    known = {f["id"]: f for f in facts}
     return json.dumps(
         {
             "step": "answer",
             "question": question.text,
             "history": _history(history),
-            "facts": [_for_prompt(f) for f in facts],
+            "facts": [{**_for_prompt(f), "say_as": _say_as(f, known, insights)} for f in facts],
         },
         separators=(",", ":"),
     )
+
+
+def _say_as(fact: dict, known: dict, insights) -> list[str]:
+    if insights is None:
+        return []
+    try:
+        texts = code_texts({**fact, "clubs": fact.get("clubs") or insights.fixture.clubs})
+    except (KeyError, TypeError, ValueError, StopIteration):  # a fact code has no sentence for
+        return []
+    return [t for t in texts if _verify(Claim(t, [fact["id"]]), known, insights).ok]
 
 
 # When a question names a stretch of the match ("in the first half", "the last ten minutes"), the
@@ -860,7 +873,7 @@ async def answer_match(
         # hands the facts over, and the same fact-check gates what comes back.
         rules = any(c["name"] == "referee" for c in calls)
         writer = referee_ask if referee_ask is not None and rules else ask
-        reply = await writer(answer_prompt(question, facts, history))
+        reply = await writer(answer_prompt(question, facts, history, insights))
         try:
             claim = parse_claim(reply)
         except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:

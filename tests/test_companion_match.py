@@ -841,3 +841,39 @@ def test_a_reply_nested_too_deep_to_read_falls_back_to_code():
     ask, _ = scripted(deep)
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "code" and r.reasons == ("model reply is not the reply format",)
+
+
+def test_the_answer_step_is_given_only_sentences_the_checker_passes():
+    from ninety.agents.factcheck import Claim
+
+    mi = standin()
+    tools = ("counter_press", "line_breaks")
+    calls = [{"name": n, "club": None, "minute_from": 6, "minute_to": 20} for n in tools]
+    facts = companion.run_tools(mi, calls)
+    known = {f["id"]: f for f in facts}
+    body = json.loads(companion.answer_prompt(Question("s", None, "q", 1200.0), facts, (), mi))
+    said = [(f, t) for f in body["facts"] for t in f["say_as"]]
+    assert said, "some fact can be said"
+    for f, text in said:
+        assert companion._verify(Claim(text, [f["id"]]), known, mi).ok, text
+    assert all(f["say_as"] == [] for f in body["facts"] if not f.get("confident"))
+
+
+def test_a_say_as_sentence_returned_word_for_word_airs_as_the_models():
+    mi = standin()
+    q = Question("s", None, "How quickly do London Athletic win the ball back?", 60.0 * 20)
+    call = {"name": "counter_press", "club": "London Athletic", "minute_from": 6, "minute_to": 20}
+    plan = json.dumps({"tools": [call]})
+    seen = {}
+
+    async def ask(prompt):
+        body = json.loads(prompt)
+        if body["step"] == "plan":
+            return plan
+        f = next(f for f in body["facts"] if f["say_as"])
+        seen["text"] = f["say_as"][0]
+        return json.dumps({"text": f["say_as"][0], "evidence": [f["id"]]})
+
+    r = asyncio.run(companion.answer_match(q, mi, ask))
+    assert r.source == "model", r.reasons
+    assert r.answer.text == seen["text"]
