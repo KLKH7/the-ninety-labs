@@ -27,6 +27,11 @@ export class PhonePanel {
   private sentPlaying = false;
   private code = "";
 
+  /** Whether a pairing code is up, so the big screen's card has something to show. */
+  get paired(): boolean {
+    return this.code !== "";
+  }
+
   /** `bundle` is the bundle's path on this origin; `auto` pairs at once (the big screen shows its
    * QR code without a click). */
   constructor(
@@ -87,6 +92,10 @@ export class PhonePanel {
     // The SVG is built by the library from our own URL; nothing a viewer typed goes into it.
     $("phone-qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
     $("phone-code").textContent = code;
+    // The big screen's card: a short address and the code in two groups of three, as TV apps write it.
+    $("pair-qr").innerHTML = qr.createSvgTag({ cellSize: 3, margin: 1, scalable: true });
+    $("pair-url").textContent = `${location.host}/phone`;
+    $("pair-code").textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
     const link = $<HTMLAnchorElement>("phone-link");
     link.href = url;
     link.textContent = new URL("phone/", location.href).toString();

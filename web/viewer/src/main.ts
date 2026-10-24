@@ -1,7 +1,7 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
-import { setupMatch } from "./match";
+import { pairCardUp, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, teamNames } from "./teams";
@@ -404,6 +404,14 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
+    if (big) {
+      const up = phone.paired && pairCardUp(b.match?.chapters ?? [], m.fps, v);
+      const card = $("pair-card");
+      if (card.hidden === up) {
+        card.hidden = !up;
+        card.classList.toggle("still", reduceMotionBox.checked);
+      }
+    }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;

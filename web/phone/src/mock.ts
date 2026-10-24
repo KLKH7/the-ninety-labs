@@ -164,7 +164,7 @@ function mockText(v: Visual, names?: Record<string, string>): { title: string; t
   };
   switch (v.kind) {
     case "overload":
-      return { title: `${club} overload`, text: `${club} had ${v.count!.for} players against ${v.count!.against} round the ball at ${clock(v.t)}.`, value: v.count!.for, unit: "players" };
+      return { title: `${club} overload`, text: `${club} had ${v.count!.for} player${v.count!.for === 1 ? "" : "s"} against ${v.count!.against} round the ball at ${clock(v.t)}.`, value: v.count!.for, unit: v.count!.for === 1 ? "player" : "players" };
     case "line_break":
       return { title: `${club} break the lines`, text: `${who("passer")}'s pass to ${who("receiver")} went past ${v.bypassed} defender${v.bypassed === 1 ? "" : "s"}.`, value: v.bypassed!, unit: "bypassed" };
     case "pass_options": {

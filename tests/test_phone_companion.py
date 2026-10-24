@@ -151,7 +151,7 @@ QUESTIONS = [
 
 
 def ask(page, text: str):
-    page.click("#tab-ask")
+    page.click("#tab-button-ask")
     n = page.locator("#answers .answer:not(.pending)").count()
     page.fill("#question", text)
     page.click("#ask-button")
@@ -298,11 +298,11 @@ def test_insights_show_only_cards_up_to_the_clock_and_why_opens_the_checked_answ
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     cards = page.evaluate("window.ninetyPhone.state.insights")
     assert cards and all(c["t"] <= 50.2 for c in cards)  # never a card from later in the replay
-    page.click("#tab-insights")
-    assert page.get_attribute("#tab-insights", "aria-selected") == "true"
-    assert page.is_visible("#panel-insights")
+    page.click("#tab-button-insights")
+    assert page.get_attribute("#tab-button-insights", "aria-selected") == "true"
+    page.wait_for_selector("#insights-title")
     first = page.locator("#insights .insight").first
-    assert first.locator("h3").inner_text() == cards[0]["headline"]
+    assert first.locator("h3").text_content() == cards[0]["headline"]
     assert first.locator(":scope > figure canvas").count() == 1
     why = first.locator(".why")
     assert why.get_attribute("aria-expanded") == "false"
@@ -317,13 +317,20 @@ def test_insights_show_only_cards_up_to_the_clock_and_why_opens_the_checked_answ
 
 def test_the_tabs_move_with_the_arrow_keys(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
-    page.focus("#tab-radar")
+    focused = lambda tab: page.wait_for_function(f"document.activeElement.id === 'tab-button-{tab}'")  # noqa: E731
+    assert page.get_attribute("#tab-button-radar", "tabindex") == "0"  # one tab stop for the bar
+    assert page.get_attribute("#tab-button-ask", "tabindex") == "-1"
+    page.focus("#tab-button-radar")
     page.keyboard.press("ArrowRight")
-    assert page.evaluate("document.activeElement.id") == "tab-ask" and page.is_visible("#panel-ask")
+    focused("ask")
+    page.wait_for_selector("#ask-form")
     page.keyboard.press("End")
-    assert page.evaluate("document.activeElement.id") == "tab-insights"
+    focused("insights")
+    page.wait_for_selector("#insights-title")
     page.keyboard.press("ArrowRight")  # round to the first
-    assert page.evaluate("document.activeElement.id") == "tab-radar" and page.is_hidden("#panel-insights")
+    focused("radar")
+    page.wait_for_selector("#insights-title", state="hidden")
+    assert page.get_attribute("#tab-button-radar", "aria-selected") == "true"
     assert not errors
 
 
@@ -413,7 +420,7 @@ def test_the_phone_shows_the_bundles_cards_up_to_the_clock_with_their_pictures(b
     laptop, page, errors = phone(browser, url, laptop_t=61)
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert [c["id"] for c in page.evaluate("window.ninetyPhone.state.insights")] == ["c1"]  # c2 is at 62.5
-    page.click("#tab-insights")
+    page.click("#tab-button-insights")
     card = page.locator("#insights .insight").first
     assert card.locator("h3").inner_text() == "Crowmere overload early"
     assert card.locator(":scope > figure").get_attribute("data-headline") == "3v1"  # the fact's own points

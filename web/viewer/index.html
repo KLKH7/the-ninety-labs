@@ -34,6 +34,14 @@
           <video id="video" muted playsinline preload="auto" aria-hidden="true"></video>
           <canvas id="frames" aria-hidden="true" hidden></canvas>
           <canvas id="overlay" tabindex="0" role="img" aria-label="On-screen graphics"></canvas>
+          <!-- The big screen's pairing card: bottom right, clear of the graphics' lower-third, up briefly at kick-off and at each chapter. -->
+          <div class="pair-card" id="pair-card" role="group" aria-label="Follow on your phone" hidden>
+            <div class="pair-qr" id="pair-qr" role="img" aria-label="QR code that opens the phone companion"></div>
+            <div class="pair-text">
+              <span class="pair-kicker">Follow on your phone</span>
+              <span class="pair-line">Open <b id="pair-url"></b> · code <b class="pair-code" id="pair-code"></b></span>
+            </div>
+          </div>
         </div>
         <div class="controls">
           <button type="button" id="play" aria-label="Play">Play</button>

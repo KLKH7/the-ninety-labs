@@ -26,14 +26,19 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 
 ## Viewer and phone companion (`web/viewer`, `web/phone`)
 
-The viewer and the phone ship as plain HTML, CSS and JavaScript. One package reaches the page a
-viewer opens: qrcode-generator, which draws the viewer's "Connect your phone" QR code. The rest
-build them, and none reaches a page. Pinned in `web/viewer/package-lock.json` and
-`web/phone/package-lock.json` (the phone has no runtime dependency).
+The viewer and the phone ship as plain HTML, CSS and JavaScript. Two packages reach a page: in the
+viewer, qrcode-generator, which draws the pairing QR code; in the phone, Ionic's web components
+(@ionic/core, pinned exactly in `web/phone/package.json`), its view layer in iOS mode, with what
+they bring into the bundle (ionicons, the Stencil runtime, tslib). The rest build them, and none
+reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-lock.json`.
 
 | Package | Used for | Licence |
 |---|---|---|
 | qrcode-generator 2.0.4 (viewer, in the page) | the QR code of the phone's address | MIT |
+| @ionic/core 9.0.6 (phone, in the page) | tabs, headers, segments, lists, sheets: the phone's view layer | MIT |
+| ionicons 8.1.0 (through @ionic/core, in the page) | the icon component Ionic loads | MIT |
+| @stencil/core 4.45.2 (through @ionic/core, its runtime in the page) | the runtime of Ionic's web components | MIT |
+| tslib 2.8.1 (through @ionic/core, in the page) | TypeScript helpers | 0BSD |
 | vite 6.4.4, and through it esbuild, rollup, postcss, nanoid and 57 more | dev server and build | MIT |
 | typescript 5.9.3 | type checking | Apache-2.0 |
 | @types/node | types for the build config | MIT |

@@ -7,6 +7,7 @@
 // ?code=ABC234&clip=seed7&bundle=/bundle/ joins straight away (the big screen's QR code); ?mock=1
 // reads the mock feed.
 
+import "./ionic";
 import { RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import { nameIds, teamNames } from "../../viewer/src/teams";
@@ -123,6 +124,7 @@ function screenOf(x: number, y: number): [number, number] {
   },
 };
 
+if (params.get("marks") === "1") document.body.classList.add("marks"); // open choices, for review
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 // --- pairing ---------------------------------------------------------------------------------
@@ -222,8 +224,6 @@ function backToPairing(why: Closed) {
   link = null;
   document.body.dataset.state = "pair";
   $("live").hidden = true;
-  $("tabs").hidden = true;
-  $("scoreline").hidden = true;
   $("pair").hidden = false;
   setStatus("off", "Not connected");
   pairError.textContent = CLOSED_WORDS[why];
@@ -233,7 +233,6 @@ function showLive() {
   document.body.dataset.state = "live";
   $("pair").hidden = true;
   $("live").hidden = false;
-  $("tabs").hidden = false;
   $("mockbar").hidden = !feed.mock;
   setStatus("waiting", "Waiting");
 }
@@ -251,16 +250,19 @@ codeInput.addEventListener("input", () => {
 
 const TABS: Tab[] = ["radar", "ask", "insights"];
 
+type IonTabs = HTMLElement & { select(tab: string): Promise<boolean> };
+type IonModal = HTMLElement & { present(): Promise<void>; dismiss(): Promise<boolean>; isOpen: boolean; breakpoints?: number[]; initialBreakpoint?: number };
+
 function showTab(tab: Tab, focus = false) {
   state.tab = tab;
   for (const t of TABS) {
-    const button = $(`tab-${t}`);
+    const button = $(`tab-button-${t}`);
     const on = t === tab;
     button.setAttribute("aria-selected", String(on));
     button.tabIndex = on ? 0 : -1;
-    $(`panel-${t}`).hidden = !on;
-    if (on && focus) button.focus();
   }
+  // ion-tabs shows the panel; keyboard focus follows once it has.
+  void ($("live") as IonTabs).select(tab).then(() => focus && $(`tab-button-${tab}`).focus());
   document.body.dataset.tab = tab;
   if (tab === "insights") {
     unread = 0;
@@ -269,10 +271,24 @@ function showTab(tab: Tab, focus = false) {
   if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
 }
 
+$("live").addEventListener("ionTabsDidChange", (e) => {
+  const tab = (e as CustomEvent<{ tab: Tab }>).detail.tab;
+  if (tab !== state.tab) showTab(tab);
+});
+// Ionic's tab buttons carry no tab stop of their own (the link inside has neither href nor
+// tabindex), so the bar gets a roving one: the selected tab is in the Tab order, the others are
+// reached with the arrow keys (WAI-ARIA tabs pattern), and Enter or Space opens the focused tab.
 for (const t of TABS) {
-  const button = $(`tab-${t}`);
+  const button = $(`tab-button-${t}`);
+  button.tabIndex = t === state.tab ? 0 : -1;
+  button.setAttribute("aria-selected", String(t === state.tab));
   button.addEventListener("click", () => showTab(t));
   button.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      showTab(t, true);
+      return;
+    }
     const i = TABS.indexOf(state.tab);
     const to =
       e.key === "ArrowRight" ? TABS[(i + 1) % TABS.length] : e.key === "ArrowLeft" ? TABS[(i + TABS.length - 1) % TABS.length] : e.key === "Home" ? TABS[0] : e.key === "End" ? TABS[TABS.length - 1] : null;
@@ -341,6 +357,10 @@ async function loadBundle() {
 }
 
 function showTeams() {
+  for (const side of ["home", "away"] as const) {
+    for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
+    for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
+  }
   $("legend-home").textContent = `${teams.home} →`;
   $("legend-away").textContent = `← ${teams.away}`;
   $("map-sides").textContent = `${teams.home} attack to the right of the radar, ${teams.away} to the left.`;
@@ -517,9 +537,64 @@ function liveDescription(t: number, pos: Positions) {
   $("now-age").textContent = Number.isFinite(saidAt) && age >= 3 ? `(${age} s ago)` : "";
 }
 
+let speaking = false;
+/** Says a line in the live region; with read-aloud on, also speaks it (the speaker button). */
 function announce(text: string) {
   $("announce").textContent = text;
+  if (speaking && "speechSynthesis" in window) {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  }
 }
+for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
+  b.addEventListener("click", () => {
+    speaking = !speaking;
+    for (const x of document.querySelectorAll(".speak")) x.setAttribute("aria-pressed", String(speaking));
+    if (!speaking && "speechSynthesis" in window) speechSynthesis.cancel();
+  });
+}
+
+// --- the player sheet (ion-modal with a grabber and two heights) --------------------------------
+
+const playerSheet = $("player-sheet") as IonModal;
+playerSheet.breakpoints = [0, 0.6, 0.95];
+playerSheet.initialBreakpoint = 0.6;
+// The heat map is drawn at the sheet's size, so draw it again once the sheet is up.
+playerSheet.addEventListener("ionModalDidPresent", () => state.card && showCard(state.card));
+let sheetUp = false; // presented with present(): ion-modal's own isOpen stays false
+playerSheet.addEventListener("ionModalWillPresent", () => (sheetUp = true));
+playerSheet.addEventListener("ionModalWillDismiss", () => (sheetUp = false));
+let keepSelection = false; // the sheet closed to ask about its player: he stays picked
+playerSheet.addEventListener("ionModalDidDismiss", () => {
+  if (!keepSelection && state.selected !== null) select(null);
+  keepSelection = false;
+});
+/** Close the sheet for the Ask tab, keeping its player as the question's subject. */
+function askAboutPlayer() {
+  keepSelection = true;
+  $("player").hidden = true;
+  void playerSheet.dismiss();
+  showTab("ask");
+}
+$("ask-about").addEventListener("click", () => {
+  askAboutPlayer();
+  requestAnimationFrame(() => $("question").focus());
+});
+function showSheet(open: boolean) {
+  $("player").hidden = !open;
+  if (open && !sheetUp) {
+    sheetUp = true;
+    void playerSheet.present();
+  } else if (!open && sheetUp) void playerSheet.dismiss();
+}
+
+// The Match tab's Pitch and Stats.
+$("match-seg").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  $("seg-pitch").hidden = v !== "pitch";
+  $("seg-stats").hidden = v !== "stats";
+  if (v === "pitch") requestAnimationFrame(() => (summaryAt = -1));
+});
 
 const trail: { frame: number; x: number; y: number }[] = [];
 function drawMap(t: number) {
@@ -550,8 +625,8 @@ function select(id: string | null, fromLaptop = false) {
   for (const b of document.querySelectorAll<HTMLButtonElement>("#roster .who")) {
     b.setAttribute("aria-pressed", String(b.dataset.player === id));
   }
-  $("player").hidden = id === null;
-  $("pick-hint").hidden = id !== null || state.radar === null;
+  showSheet(id !== null);
+  $("pick-hint").hidden = state.radar === null;
   if (id) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
@@ -560,11 +635,9 @@ function select(id: string | null, fromLaptop = false) {
     void refreshCard(true);
     if (fromLaptop) announce(`The big screen is following ${playerName(id)}.`);
     else if (state.tab === "radar") {
-      // Focus moves to the card, so a screen reader lands on it; the page scrolls just enough to show it.
-      requestAnimationFrame(() => {
-        $("player-title").focus({ preventScroll: true });
-        $("player").scrollIntoView({ block: "nearest", behavior: reduceMotion.matches ? "auto" : "smooth" });
-      });
+      // Focus moves to the sheet's title, so a screen reader lands on it.
+      playerSheet.addEventListener("ionModalDidPresent", () => $("player-title").focus(), { once: true });
+      if (sheetUp) requestAnimationFrame(() => $("player-title").focus());
     }
   }
   $("ask-who").textContent = id ? playerName(id) : "the match";
@@ -595,7 +668,7 @@ async function refreshCard(force = false) {
   } catch (e) {
     if (e instanceof GroundTruth) {
       state.selected = null;
-      $("player").hidden = true;
+      showSheet(false);
     }
     $("card-note").textContent = e instanceof ApiError && e.status === 404 ? "No positions for this player yet." : (e as Error).message;
   } finally {
@@ -653,7 +726,8 @@ function chip(q: string, onTab: Tab | null) {
   b.className = "chip";
   b.textContent = q;
   b.addEventListener("click", () => {
-    if (onTab) showTab(onTab);
+    if (onTab === "ask" && sheetUp) askAboutPlayer();
+    else if (onTab) showTab(onTab);
     void ask(q);
   });
   return b;
@@ -1008,9 +1082,16 @@ function showMatch(t: number) {
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
   const c = chapterAt(m.chapters, bundleFps, v);
   const line = $("scoreline");
-  line.hidden = false;
-  const text = `${teams.home} ${s.home} – ${s.away} ${teams.away}${c ? ` · ${chapterLabel(c, teams)}` : ""}`;
-  if (line.textContent !== text) line.textContent = text;
+  line.hidden = !c;
+  const chapter = c ? chapterLabel(c, teams) : "";
+  if (line.textContent !== chapter) line.textContent = chapter;
+  const score = `${s.home} – ${s.away}`;
+  if ($("score").textContent !== score) {
+    $("score").textContent = score;
+    $("score").setAttribute("aria-label", `Score: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
+  }
+  $("match-card").hidden = false;
+  $("no-stats").hidden = true;
   const st = statsAt(m, t);
   const key = JSON.stringify(st);
   if (key === statsKey) return;
@@ -1090,6 +1171,8 @@ async function refreshFlow() {
 function frame(now: number) {
   const t = laptop.time();
   $("clock").textContent = link ? clock(t) : "–:––";
+  const mini = `${teams.home} ${state.match ? $("score").textContent : "v"} ${teams.away} · ${link ? clock(t) : "–:––"}`;
+  for (const el of document.querySelectorAll(".score-line")) if (el.textContent !== mini) el.textContent = mini;
   if (link) {
     if (!laptop.heard) setStatus("waiting", "Waiting");
     else if (laptop.stale()) setStatus("waiting", "Screen lost");
@@ -1124,9 +1207,6 @@ function frame(now: number) {
 }
 
 $("mockbar").hidden = !feed.mock;
-// The sticky header's height, so a focused element is never scrolled under it (style.css).
-const header = document.querySelector<HTMLElement>(".sticky")!;
-new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", `${header.offsetHeight + 8}px`)).observe(header);
 renderChips();
 renderInsights();
 requestAnimationFrame(frame);

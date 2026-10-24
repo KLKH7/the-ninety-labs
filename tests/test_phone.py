@@ -140,6 +140,11 @@ def mock_pair(browser, site, *, play=True, minimap_body=None):
     return laptop, phone, errors, requests
 
 
+def sheet_closed(page):
+    """Wait until the player sheet (an ion-modal) has finished closing: until then it covers the page."""
+    page.wait_for_function("!document.querySelector('#player-sheet').classList.contains('show-modal')")
+
+
 def phone_t(phone) -> float:
     return float(phone.get_attribute("#map", "data-t"))
 
@@ -239,6 +244,8 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     assert "Heat map of Fenwick 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
     assert phone.inner_text("#heat-span").startswith("Covering ")
     # The same choice without the map, for a screen reader: the roster's buttons.
+    phone.click("#close-player")
+    sheet_closed(phone)
     phone.click("#roster-box summary")
     phone.get_by_role("button", name="Oakfield 4", exact=True).click()
     assert phone.inner_text("#player-title") == "Oakfield 4"
@@ -251,7 +258,8 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     phone.click("#roster-box summary")
     phone.get_by_role("button", name="Fenwick 7", exact=True).click()
     phone.get_by_role("button", name="What is Fenwick 7's top speed?").click()  # on the player card
-    assert phone.get_attribute("#tab-ask", "aria-selected") == "true"  # the answer is on the Ask tab
+    sheet_closed(phone)  # the sheet closes for the Ask tab
+    assert phone.get_attribute("#tab-button-ask", "aria-selected") == "true"  # the answer is on the Ask tab
     answer = phone.locator("#answers .answer").first
     answer.wait_for()
     assert answer.get_attribute("data-status") == "verified"
@@ -274,7 +282,8 @@ def test_an_injected_question_is_refused_and_shown_only_as_text(browser, mock_si
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     phone.click("#roster-box summary")
     phone.get_by_role("button", name="Fenwick 7", exact=True).click()
-    phone.click("#tab-ask")
+    phone.click("#ask-about")
+    sheet_closed(phone)
     phone.fill("#question", INJECTION)
     phone.click("#ask-button")
     answer = phone.locator("#answers .answer").first
@@ -306,8 +315,9 @@ def test_every_payload_the_phone_receives_matches_its_schema(browser, mock_site)
     laptop.select_option("#focus", "h9")  # the laptop's focus: the phone follows it
     phone.wait_for_function("document.querySelector('#player-title').textContent.startsWith('Oakfield 9')")
     phone.get_by_role("button", name="How far has Oakfield 9 run?").click()
+    sheet_closed(phone)
     phone.locator("#answers .answer").first.wait_for()
-    phone.click("#tab-radar")
+    phone.click("#tab-button-radar")
     phone.click("#wind-toggle")
     phone.wait_for_function("document.querySelector('#wind').dataset.t")
     payloads = seen(phone)
@@ -673,7 +683,8 @@ def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
 def answered(page, text: str):
     page.click("#roster-box summary")
     page.get_by_role("button", name="Fenwick 7", exact=True).click()
-    page.click("#tab-ask")
+    page.click("#ask-about")  # from his sheet: the question is about him
+    sheet_closed(page)
     page.fill("#question", text)
     page.click("#ask-button")
     answer = page.locator("#answers .answer:not(.pending)").first

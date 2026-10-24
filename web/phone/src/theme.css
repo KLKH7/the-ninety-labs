@@ -1,0 +1,39 @@
+/* The phone's theme: Ionic's variables, after Ionic's CSS (src/ionic.ts imports this last). */
+:root, :root.ios {
+  --ion-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --ion-color-primary: #c2410c;
+  --ion-color-primary-rgb: 194, 65, 12;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #ab390b;
+  --ion-color-primary-tint: #c85424;
+  --accent: #c2410c;
+  --band: #111418;
+  --band-ink: #ffffff;
+  --band-2: #b8bec8;
+  --home: #3b82f6;
+  --away: #e11d48;
+  --crest-home: #1e40af;
+  --crest-away: #9f1239;
+  --card: var(--ion-item-background, #fff);
+  --muted: var(--ion-color-step-600, #5b6472);
+  --line: var(--ion-color-step-150, #e3e5e9);
+  --warn: #8a6100;
+  --bad: #b3261e;
+  --focus: #0a84ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root, :root.ios {
+    --ion-color-primary: #ff8a3d;
+    --ion-color-primary-rgb: 255, 138, 61;
+    --ion-color-primary-contrast: #111111;
+    --ion-color-primary-contrast-rgb: 17, 17, 17;
+    --ion-color-primary-shade: #e07935;
+    --ion-color-primary-tint: #ff9650;
+    --accent: #ff8a3d;
+    --home: #60a5fa;
+    --away: #fb7185;
+    --warn: #f2c14e;
+    --bad: #ff8a8a;
+  }
+}

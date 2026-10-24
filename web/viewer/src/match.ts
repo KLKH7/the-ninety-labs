@@ -40,6 +40,17 @@ export function chapterLabel(c: Pick<Chapter, "label">, teams: TeamNames): strin
   return c.label.replace(/, (home|away)$/, (_, side: "home" | "away") => ` · ${teams[side]}`);
 }
 
+/** How long the big screen's pairing card stays up at kick-off and after each chapter starts (design:
+ * long enough to scan, short enough not to sit on the play). */
+export const PAIR_CARD_S = 20;
+
+/** Whether the pairing card is up at video time `v`: the clip's first PAIR_CARD_S seconds, and the
+ * same after each chapter starts. */
+export function pairCardUp(chapters: Pick<Chapter, "index">[], fps: number, v: number): boolean {
+  if (v < PAIR_CARD_S) return true;
+  return chapters.some((c) => v >= c.index / fps && v - c.index / fps < PAIR_CARD_S);
+}
+
 /** The chapter on screen at video time `v`. */
 export function chapterAt(chapters: Chapter[], fps: number, v: number): Chapter | null {
   const i = Math.floor(v * fps);
@@ -207,6 +218,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     scoreAt: (t: number) => scoreAt(m, t),
     statsAt: (t: number) => statsAt(m, t),
     skipAt: (v: number) => skipAt(m.chapters, fps, v),
+    pairCardUp: (chapters: { index: number }[], f: number, v: number) => pairCardUp(chapters, f, v),
   };
   return { tick, step };
 }

@@ -242,13 +242,26 @@ def test_a_bundle_without_match_json_has_no_match_mode(browser, site):  # noqa: 
 PANELS = ("#radar-section", "#match-stats", "#trace", "#pipeline", "#show-boxes", "#show-radar")
 
 
+def test_the_pairing_card_is_up_at_kick_off_and_each_chapter_then_goes(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    chapters = [{"index": 0}, {"index": 25 * 600}]  # a chapter starting 10 minutes into the video
+    up = lambda v: page.evaluate(f"window.ninetyMatch.pairCardUp({json.dumps(chapters)}, 25, {v})")  # noqa: E731
+    assert up(0.0) and up(19.9)  # PAIR_CARD_S: 20 s from kick-off
+    assert not up(20.1) and not up(599.9)  # then gone, until...
+    assert up(600.0) and up(619.9) and not up(620.1)  # ...20 s from the next chapter's start
+    assert not errors
+    page.context.close()
+
+
 def test_the_big_screen_shows_the_broadcast_score_chapters_and_qr_and_nothing_else(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=match/")
     assert page.get_attribute("body", "data-screen") == "big"
     for hidden in PANELS:  # on the phone instead
         assert not page.is_visible(hidden), hidden
-    for shown in ("#stage", "#score", "#chapters", "#clock", "#phone-panel"):
+    for shown in ("#stage", "#score", "#chapters", "#clock"):
         assert page.is_visible(shown), shown
+    # Pairing is the TV card over the picture (up once a code exists), not a side panel.
+    assert not page.is_visible("#phone-panel") and page.locator("#pair-card").count() == 1
     assert not page.is_checked("#show-boxes")  # the detector's boxes are not broadcast graphics
     page.keyboard.press("d")
     assert not page.is_checked("#show-boxes")
@@ -288,7 +301,9 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    page.wait_for_selector("#phone-pairing:not([hidden])")  # no click
+    page.wait_for_selector("#pair-card")  # no click: the TV's pairing card is up at kick-off
+    assert page.inner_text("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
+    assert page.locator("#pair-qr svg").count() == 1
     link = page.get_attribute("#phone-link", "href")
     assert "code=K7MP3Q" in link and "bundle=%2Fmatch%2F" in link
     seek(page, 40)
