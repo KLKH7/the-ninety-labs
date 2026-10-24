@@ -43,8 +43,9 @@ def test_mcp_with_the_key_lists_the_match_tools():
     response = call("k" * 64, "k" * 64)
     assert response.status_code == 200
     names = sorted(t["name"] for t in response.json()["result"]["tools"])
-    insight = ["line_breaks", "overloads", "counter_press", "pass_options", "lineup"]
-    assert names == sorted(["list_events", "match_info", "team_shape", *insight])
+    from ninety.mcp import match_server
+
+    assert names == sorted(match_server.SERVED)  # the Analyst's tools, team shape and the insight tools
 
 
 def test_mcp_answers_a_tool_call():
