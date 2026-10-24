@@ -2305,3 +2305,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 234. A foul that only the data knows about is not a foul on screen
+- **What happened:** Kian watched a test clip with a foul in it and could not tell a foul had
+  happened. The engine had stopped play: within 0.5 s of each whistle on seed 7, at most one of 22
+  players was still running. But the picture showed players drifting to a stop, no whistle and no
+  one reacting. The fall itself (#223) was not in that clip's render yet.
+- **Rule:** an event a viewer must follow gets a cue they can see or hear, drawn from the engine's
+  own record of it (the foul's frame, its fouler and the fouled player, their positions), never by
+  moving anyone. A cue that would contradict a truth field, such as turning a body away from its
+  `heading`, is drawn where the truth says nothing: here the head turns, and the hand goes up.
+- **Check:**
+  - `tests/test_render_fouls.py`: the reactions start at the foul frame, are gone after REACT_S,
+    reach the three nearest team-mates and not the fouled man, and the head turns toward him;
+    nothing happens without a foul.
+  - `tests/test_render_mesh.py`: the page and Python draw the raised hand and the turned head the
+    same way, within 1.5 cm on every marker.
+  - A clip with no foul renders byte-identical to the renderer before this change.

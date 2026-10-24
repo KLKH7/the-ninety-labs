@@ -40,6 +40,12 @@ build them, and none reaches a page. Pinned in `web/viewer/package-lock.json` an
 | source-map-js (through vite) | source maps | BSD-3-Clause |
 | picocolors (through vite) | coloured terminal output | ISC |
 
+## Sound
+
+The referee's whistle on the broadcast's mp4 is synthesised by our own code
+(`ninety/render/audio.py`: a tone with a flutter, generated sample by sample with the Python
+standard library). No recording or third-party sound is used, so there is nothing to license.
+
 ## Data
 
 | Data | Used for | Source and terms |
