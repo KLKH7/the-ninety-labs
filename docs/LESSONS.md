@@ -2613,3 +2613,23 @@ short and actionable. This file is public: no research sources, product names or
   a separate look at the characters.
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 236. A late joiner is sent the state as it stands now, not as it was last stored
+- **What happened:** the companion relay stored the big screen's once-a-second clock and replayed
+  it unchanged to a phone that joined late. A phone could start up to a second behind the screen it
+  follows until the next message; the phone clock test failed two runs in three, and the mock relay
+  did the same.
+- **Rule:** state that runs on by itself (a playing clock) is advanced by how long it was held
+  before it is replayed; state that does not (a paused clock, a focus) is replayed as stored. The
+  mock relay asks the laptop for its clock as it stands now, as the server computes it.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_a_playing_clock_as_it_stands_now`
+  (fails with the stored message replayed); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`.
+
+### 237. Tests and screenshot runs never speak aloud
+- **What happened:** browser tests and screenshot scripts turned read-aloud on and the headless
+  browser spoke with the Mac's system voice; Kian heard it from a test run.
+- **Rule:** every voice the screens use goes through one function (`web/viewer/src/speech.ts`,
+  `speakAloud`), which under automation (`navigator.webdriver`) records the line instead of
+  speaking it; recorded audio and tones stay silent too. Read-aloud is off until a fan turns it on.
+- **Check:** `tests/test_phone_companion.py::test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks`
+  (fails if `speakAloud` calls `speechSynthesis` under webdriver).

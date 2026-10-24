@@ -1407,6 +1407,7 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
     dd.textContent = v;
     panel.append(dt, dd);
   }
+  if (!a.evidence.length) return [panel]; // nothing to cite: no empty "Facts cited" heading
   const technical = document.createElement("details");
   technical.className = "technical";
   const summary = document.createElement("summary");

@@ -754,3 +754,7 @@ ion-modal { --backdrop-opacity: 0.45; }
 .evidence dt { float: left; clear: left; padding: 11px 0; color: var(--text-2); }
 .evidence dd { margin: 0; padding: 11px 0 11px 120px; text-align: right; border-bottom: 0.5px solid rgba(84, 84, 88, 0.65); }
 .evidence dd:last-of-type { border-bottom: 0; }
+/* "Facts cited": a disclosure row, with its chevron, as iOS writes one. */
+.technical summary { color: var(--text-2); font-size: 15px; }
+.technical summary::after { content: " ›"; }
+.technical[open] summary::after { content: " ⌄"; }
