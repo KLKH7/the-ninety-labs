@@ -302,6 +302,26 @@ def test_who_says_a_name_only_past_its_gate():
     assert roles.who("h-t9", "home", assigned, fx, open_gate)["say"] == "a London Athletic player"
 
 
+def test_a_name_binds_to_one_player_at_a_time():
+    fx = teamsheet.Fixture(7, "OAK", "FEN")
+    gate = {"name": 0.7, "role": 0.6, "line": 0.5}
+    assigned = {t: {"role": "LB", "share": 0.8, "frames": 100} for t in ("h-t5", "h-t6", "h-t7")}
+    people = {t: roles.who(t, "home", assigned, fx, gate) for t in assigned}
+    name = fx.sheet("home")[4].name
+    # h-t5 then h-t6: one left-back's track broken in two, never on the pitch together, keep the name.
+    sequential = roles.one_track_per_name(
+        {t: people[t] for t in ("h-t5", "h-t6")}, {"h-t5": (0.0, 100.0), "h-t6": (101.0, 300.0)}
+    )
+    assert [w["name"] for w in sequential.values()] == [name, name]
+    # h-t7 is there at the same time as h-t6: they cannot both be him, so neither is named.
+    spans = {"h-t5": (0.0, 100.0), "h-t6": (101.0, 300.0), "h-t7": (250.0, 400.0)}
+    both = roles.one_track_per_name(people, spans)
+    assert both["h-t5"]["name"] == name
+    for t in ("h-t6", "h-t7"):
+        assert both[t]["name"] is None and both[t]["number"] is None
+        assert both[t]["say"] == "London Athletic's left-back" and both[t]["sheet_name"] == name
+
+
 def test_no_calibration_names_nobody(tmp_path):
     assert roles.gates(tmp_path / "missing.json") == {"name": None, "role": None, "line": None}
 
