@@ -67,6 +67,10 @@
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 
+              <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
+                <ion-segment-button value="players"><ion-label>Players</ion-label></ion-segment-button>
+                <ion-segment-button value="flow" id="flow-button"><ion-label>Flow</ion-label></ion-segment-button>
+              </ion-segment>
               <div class="pitch-wrap">
                 <div class="map" id="map-box">
                   <canvas id="map" role="img" aria-label="Pitch"></canvas>
@@ -96,11 +100,14 @@
               <p class="fine now-age" id="now-age" aria-hidden="true"></p>
 
               <!-- Quiet rows under the pitch: picking a player without the map, and the play in words. -->
-              <div class="rows" id="now-box">
+              <p class="fine pad" id="wind-note" hidden></p>
+              <section class="live-section" aria-labelledby="roster-summary">
                 <details class="roster" id="roster-box">
-                  <summary id="roster-summary">Players</summary>
+                  <summary id="roster-summary"><span class="section-title">Players</span></summary>
                   <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
                 </details>
+              </section>
+              <div class="rows" id="now-box">
                 <label class="row check"><span>Describe the play as it happens</span><input type="checkbox" id="now-live" /></label>
                 <button type="button" class="row row-button" id="now">What's happening now?</button>
               </div>
@@ -186,10 +193,21 @@
           </ion-list>
           <div class="chips pad" id="chips" role="group" aria-label="Ask about this player"></div>
           <ion-list inset><ion-item lines="none"><button type="button" class="row-button" id="ask-about">Ask about him <span aria-hidden="true">›</span></button></ion-item></ion-list>
+          <section class="sheet-section" id="involved-box" hidden>
+            <h3 class="section-title">In the play</h3>
+            <ul class="kv" id="involved"></ul>
+            <p class="fine">From the events our detector found, so far.</p>
+          </section>
+          <section class="sheet-section" id="compare-box">
+            <h3 class="section-title">Compare with…</h3>
+            <div class="chips wrap" id="compare-chips" role="group" aria-label="Compare with another player"></div>
+            <ul class="stat-rows" id="compare-rows" hidden></ul>
+          </section>
           <ion-list inset>
             <ion-list-header><ion-label class="caps" id="heat-title">Heat map</ion-label></ion-list-header>
             <div class="pad-in">
               <canvas id="heat" role="img" aria-label="Heat map"></canvas>
+              <p class="fine" id="avg-pos"></p>
               <p class="fine" id="heat-legend"></p>
               <p class="fine" id="heat-span"></p>
               <p class="fine" id="card-note">Computed by code from tracked positions.</p>

@@ -466,13 +466,14 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     assert not errors
 
 
-def test_live_is_band_and_pitch_and_the_player_list_appears_when_focus_reaches_it(browser, site):  # noqa: F811
+def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reaches_it(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
+    assert page.is_visible("#roster-box summary")  # Players: a visible way to any player
     box = page.locator("#now-box").bounding_box()
-    assert box["width"] <= 1 and box["height"] <= 1  # nothing under the pitch on screen
-    page.focus("#roster-box summary")  # a keyboard or screen-reader user tabs in
+    assert box["width"] <= 1 and box["height"] <= 1  # the describe controls are off screen...
+    page.focus("#now-live")  # ...until a keyboard or screen-reader user reaches them
     box = page.locator("#now-box").bounding_box()
-    assert box["width"] > 100 and box["height"] > 40, box  # and the rows are there, in place
+    assert box["width"] > 100 and box["height"] > 40, box
     page.click(".speak >> nth=0")  # one control: read aloud, and describe the play as it happens
     assert page.is_checked("#now-live")
     assert not errors
@@ -530,4 +531,18 @@ def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, sit
     assert f"Shots: Crowmere {last['home']['shots']}, Dunhollow {last['away']['shots']}" in labels
     home, away = last["home"]["passes_completed"], last["away"]["passes_completed"]
     assert f"Passes completed: Crowmere {home}, Dunhollow {away}" in labels
+    assert not errors
+
+
+
+def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#roster-box summary")
+    page.get_by_role("button", name="Oakfield 7", exact=True).click()
+    page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
+    assert "average position" in page.inner_text("#avg-pos")
+    page.locator("#compare-chips").get_by_role("button", name="Fenwick 7", exact=True).click()
+    page.wait_for_selector("#compare-rows:not([hidden]) .stat-row")
+    labels = [page.locator("#compare-rows .stat-row").nth(i).get_attribute("aria-label") for i in range(3)]
+    assert labels[0].startswith("Speed now (km/h): Oakfield 7 ") and ", Fenwick 7 " in labels[0]
     assert not errors

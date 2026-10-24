@@ -14,7 +14,7 @@ import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
-import { COLORS, type Positions, aspect, describeHeat, describePlay, drawHeat, drawPitch, fit, radarFromMinimap } from "./pitch";
+import { COLORS, type Positions, aspect, describeHeat, describePlay, drawHeat, drawPitch, fit, radarFromMinimap, zoneFor } from "./pitch";
 import {
   type AnswerMessage,
   type InsightCard,
@@ -322,7 +322,18 @@ interface BundleManifest {
 let bundleFps = 25;
 let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
-let bundleEvents = new Map<string, { player?: string | null; team?: string }>(); // detected events, by id
+interface DetectedEvent {
+  id: string;
+  t: number;
+  type: string;
+  player?: string | null;
+  receiver?: string | null;
+  outcome?: string | null;
+  team?: string;
+  x?: number;
+  y?: number;
+}
+let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -357,13 +368,13 @@ async function loadBundle() {
       m.cards ? get("cards.json") : null,
     ]);
     if (Array.isArray(cards)) bundleCards = (cards as InsightCard[]).filter((c) => c.status === "verified");
-    if (match) {
-      // The detected events, for who scored each detected goal (match.json names the event).
+    {
+      // The detected events: who scored each detected goal, and a player's part in the play.
       const r = await fetch(new URL("events.jsonl", base));
       if (r.ok) {
         for (const line of (await r.text()).split("\n")) {
           if (!line.trim()) continue;
-          const e = JSON.parse(line) as { id: string; player?: string | null; team?: string };
+          const e = JSON.parse(line) as DetectedEvent;
           bundleEvents.set(e.id, e);
         }
       }
@@ -492,7 +503,7 @@ function renderRoster(roster: string[]) {
     b.type = "button";
     b.className = `who ${team(id)}`;
     b.dataset.player = id;
-    b.textContent = shirt(id);
+    b.textContent = playerName(id);
     b.setAttribute("aria-label", playerName(id));
     b.setAttribute("aria-pressed", "false");
     b.addEventListener("click", () => {
@@ -626,8 +637,8 @@ for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
 // --- the player sheet (ion-modal with a grabber and two heights) --------------------------------
 
 const playerSheet = $("player-sheet") as IonModal;
-playerSheet.breakpoints = [0, 0.6, 0.95];
-playerSheet.initialBreakpoint = 0.6;
+playerSheet.breakpoints = [0, 0.6, 1];
+playerSheet.initialBreakpoint = 1; // player analysis opens at full height
 // The heat map is drawn at the sheet's size, so draw it again once the sheet is up.
 playerSheet.addEventListener("ionModalDidPresent", () => state.card && showCard(state.card));
 let sheetUp = false; // presented with present(): ion-modal's own isOpen stays false
@@ -706,6 +717,7 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
     if (fromLaptop) announce(`The big screen is following ${playerName(id)}.`);
@@ -770,11 +782,113 @@ function showCard(c: PlayerCard) {
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
   heat.setAttribute("aria-label", `Heat map of ${playerName(c.player)}: ${describeHeat(c.heat, team(c.player))}`);
+  // His average position: the heat map's own shares, weighted over its cells' centres.
+  const total = c.heat.cells.reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    let ax = 0;
+    let ay = 0;
+    c.heat.cells.forEach((share, k) => {
+      ax += share * ((k % c.heat.nx) + 0.5) * (105 / c.heat.nx);
+      ay += share * (Math.floor(k / c.heat.nx) + 0.5) * (68 / c.heat.ny);
+    });
+    ax /= total;
+    ay /= total;
+    v.ctx.beginPath();
+    v.ctx.arc(v.X(ax), v.Y(ay), 6, 0, Math.PI * 2);
+    v.ctx.lineWidth = 2.5;
+    v.ctx.strokeStyle = "#fff";
+    v.ctx.stroke();
+    $("avg-pos").textContent = `The ring is his average position: his ${zoneFor(team(c.player), ax, ay)}.`;
+  } else $("avg-pos").textContent = "";
+  showInvolved(c.player, c.t_to);
   const busiest = Math.max(...c.heat.cells);
   $("heat-legend").textContent = `Brighter means more time there; the brightest square is ${Math.round(busiest * 100)}% of the time.`;
   $("card-note").textContent =
     `Updated at ${clock(c.t_to)}. Computed by code from ${feed.mock ? "the mock positions" : "positions tracked from the video"}; ` +
     "speed now is the average over the last second.";
+}
+
+/** His part in the play so far, counted from the detected events (hidden when there are none). */
+function showInvolved(id: string, t: number) {
+  const mine = [...bundleEvents.values()].filter((e) => e.t <= t);
+  const rows: [string, number][] = [
+    ["Passes", mine.filter((e) => e.type === "pass" && e.player === id).length],
+    ["Passes received", mine.filter((e) => e.type === "pass" && e.receiver === id && e.outcome === "success").length],
+    ["Shots", mine.filter((e) => e.type === "shot" && e.player === id).length],
+  ];
+  const any = bundleEvents.size > 0 && rows.some(([, n]) => n > 0);
+  $("involved-box").hidden = !any;
+  $("involved").replaceChildren(
+    ...rows.map(([label, n]) => {
+      const li = document.createElement("li");
+      const k = document.createElement("span");
+      k.textContent = label;
+      const v = document.createElement("span");
+      v.className = "kv-v";
+      v.textContent = String(n);
+      li.append(k, v);
+      return li;
+    }),
+  );
+}
+
+/** Compare with another player: both cards, side by side as mirrored rows. */
+function renderCompareChips(id: string) {
+  const others = rosterIds().filter((o) => o !== id);
+  $("compare-rows").hidden = true;
+  $("compare-chips").replaceChildren(
+    ...others.map((o) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `chip who-chip ${team(o)}`;
+      b.textContent = playerName(o);
+      b.addEventListener("click", () => void compare(id, o));
+      return b;
+    }),
+  );
+}
+
+async function compare(a: string, b: string) {
+  const t = state.card?.t_to ?? Math.round(laptop.time() * 10) / 10;
+  let ca: PlayerCard;
+  let cb: PlayerCard;
+  try {
+    [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
+  } catch (e) {
+    $("compare-rows").hidden = false;
+    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+    return;
+  }
+  const rows: [string, number, number, number][] = [
+    ["Speed now (km/h)", ca.speed_kmh, cb.speed_kmh, 1],
+    ["Top speed (km/h)", ca.peak_kmh, cb.peak_kmh, 1],
+    ["Distance (m)", ca.distance_m, cb.distance_m, 0],
+  ];
+  const head = document.createElement("li");
+  head.className = "compare-head";
+  head.innerHTML = '<span class="na"></span><span class="nb"></span>';
+  head.querySelector(".na")!.textContent = playerName(a);
+  head.querySelector(".nb")!.textContent = playerName(b);
+  $("compare-rows").replaceChildren(
+    head,
+    ...rows.map(([label, x, y, places]) => {
+      const li = document.createElement("li");
+      li.className = "stat-row";
+      li.setAttribute("aria-label", `${label}: ${playerName(a)} ${x.toFixed(places)}, ${playerName(b)} ${y.toFixed(places)}`);
+      li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
+      li.querySelector(".home-v")!.textContent = x.toFixed(places);
+      li.querySelector(".away-v")!.textContent = y.toFixed(places);
+      li.querySelector(".label")!.textContent = label;
+      const sum = Math.max(1e-9, x + y);
+      (li.querySelector(".home-bar") as HTMLElement).style.width = `calc(${(50 * x) / sum}% - 1px)`;
+      (li.querySelector(".away-bar") as HTMLElement).style.width = `calc(${(50 * y) / sum}% - 1px)`;
+      (li.querySelector(".home-bar") as HTMLElement).style.background = `var(--${team(a)})`;
+      (li.querySelector(".away-bar") as HTMLElement).style.background = `var(--${team(b)})`;
+      for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
+      return li;
+    }),
+  );
+  $("compare-rows").hidden = false;
 }
 
 // --- questions -------------------------------------------------------------------------------
@@ -1433,10 +1547,15 @@ let windWords: typeof import("./wind").describe | null = null;
 let flowAt = 0;
 let flowBusy = false;
 
+$("pitch-mode").addEventListener("ionChange", (e) => {
+  const flow = (e as CustomEvent<{ value: string }>).detail.value === "flow";
+  if (flow !== state.wind) $("wind-toggle").click();
+});
 $("wind-toggle").addEventListener("click", async () => {
   state.wind = !state.wind;
   $("wind-toggle").setAttribute("aria-pressed", String(state.wind));
   windCanvas.hidden = !state.wind;
+  $("map").classList.toggle("faint", state.wind); // the players fade under the flow
   $("wind-words").hidden = !state.wind;
   if (state.wind && !wind) {
     const mod = await import("./wind");
@@ -1467,6 +1586,8 @@ async function refreshFlow() {
     windCanvas.dataset.t = String(t);
   } catch (e) {
     $("wind-words").textContent = e instanceof GroundTruth ? e.message : `Could not load the wind map: ${(e as Error).message}`;
+    $("wind-note").hidden = false;
+    $("wind-note").textContent = "Flow isn't available for this match yet.";
   } finally {
     flowBusy = false;
   }

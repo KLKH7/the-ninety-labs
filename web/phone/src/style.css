@@ -222,3 +222,29 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 /* Every pitch: rounded 12, a 2 px outline a shade darker than the grass. */
 .map, .picture canvas, #heat { border-radius: 12px; box-shadow: 0 0 0 2px var(--pitch-edge); }
 .map { margin: 2px; }
+
+/* Live: Players | Flow above the pitch; the Players list grouped by club */
+#pitch-mode { margin: 4px 16px 8px; width: auto; }
+#map.faint { opacity: 0.45; }
+.roster summary { min-height: 52px; }
+.roster summary .section-title { margin: 0; }
+.roster-row { grid-template-columns: 1fr; gap: 0; }
+.roster-team { margin: 12px 0 4px; font-size: 13px; color: var(--text-2); }
+.roster .who { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0; border-radius: 0; background: none; color: var(--text);
+  font-weight: 400; font-size: 17px; text-align: left; border-bottom: 0.5px solid var(--hairline); }
+.roster .who::before { content: ""; width: 12px; height: 12px; border-radius: 6px; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2px var(--hairline); flex: none; }
+.roster .who.home::before { background: var(--home); }
+.roster .who.away::before { background: var(--away); }
+.roster .who::after { content: "›"; margin-left: auto; color: var(--text-3); font-size: 22px; }
+.roster .who[aria-pressed="true"] { outline: none; font-weight: 600; }
+
+/* Player sheet sections */
+.sheet-section { padding: 0 20px; margin-top: 24px; }
+.sheet-section .section-title { margin: 0 0 8px; }
+.kv { list-style: none; margin: 0; padding: 0; }
+.kv li { display: flex; justify-content: space-between; min-height: 44px; align-items: center; border-bottom: 0.5px solid var(--hairline); font-size: 15px; color: var(--text-2); }
+.kv .kv-v { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.chips.wrap { flex-wrap: wrap; overflow: visible; padding: 0; }
+.compare-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); padding: 12px 0 4px; }
+#compare-rows { margin-top: 8px; }
+#player { height: 100%; overflow-y: auto; padding-bottom: 40px; } /* the sheet scrolls to Compare with… */
