@@ -62,7 +62,11 @@ higher score. The scorer's rule is `vision_score.match` at threshold 0.5.
 CPUs by the pod's cgroup quota), which is too few CPUs to render the test set in software GL
 alongside the GPU renders. So:
 
-- **Training (120) and validation (24)** render on the L40 at GL=gpu, 10 workers (each clip took under one CPU; 45 clips an hour at 2 workers, about 220 at 10). Before
+- **Training (120) and validation (24)** render on that RTX PRO 6000 (its GL check reports "NVIDIA
+  RTX PRO 6000 Blackwell Server Edition" through ANGLE on Vulkan) at GL=gpu, 10 workers. Ten fit
+  the 13.6-CPU quota because throughput scaled almost linearly with workers (45.3 clips an hour at
+  2 workers, 222.8 at 10, in the pod's run logs): 4.9 times the rate
+  for 5 times the workers, so the workers were not contending for CPU. Before
   the first dataset clip, the pod checks that it renders on the GPU and is deterministic: seed 3
   rendered twice in fresh browsers, every file of the clip and its views byte-identical. Every
   image folder is scanned for black frames (an image under a fifth of its folder's median size).
