@@ -758,3 +758,4 @@ ion-modal { --backdrop-opacity: 0.45; }
 .technical summary { color: var(--text-2); font-size: 15px; }
 .technical summary::after { content: " ›"; }
 .technical[open] summary::after { content: " ⌄"; }
+.stat-row .within { color: var(--text-3); font-size: 13px; }
