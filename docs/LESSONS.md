@@ -2322,3 +2322,15 @@ short and actionable. This file is public: no research sources, product names or
   dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
   broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
   `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
+
+### 233. A variant is compared with its reference at the same commit, not with the reference's old number
+- **What happened:** the sides plan's spatial variant S was to ship if it beat T1a, recorded as 0.681
+  outfield accuracy. Run again on the branch S was built on, the same observations through the same
+  measure gave T1a 0.731: the tracking and kit code differ between that branch and the one T1a was
+  first run on. Compared with the old number, S (0.750) would have looked 0.07 better; at the same
+  commit it is 0.02 better.
+- **Rule:** a decision rule that compares two variants runs both at one commit, on the same inputs,
+  and the comparison is recorded before the new variant's number is read. A number carried over from
+  another branch is context, never the bar.
+- **Check:** `docs/eval/sides-tactical/SPATIAL-PLAN.md`, Deviations (T1a re-run at the commit, before
+  any S number), and `T1a-validation-r4stack.json` next to `S-validation.json`.
