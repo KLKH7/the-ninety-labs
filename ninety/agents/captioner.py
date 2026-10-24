@@ -8,8 +8,9 @@ the shot, the events just before it and the moment's label.
 A caption airs only if the whole fact-checking agent passes it, as the Describer's lines do
 (ninety/agents/describer.py): the code half (factcheck.check: ids, numbers, players), the label
 check (factcheck.label_reasons: no fan's word the code did not give that moment, such as a
-"screamer" from 12 m), the kind check (`kind_reasons`: a save is never captioned as a goal, nor a
-goal as a save), and then the Judge. A caption either half refuses, or a model or Judge that
+"screamer" from 12 m), the kind check (`kind_reasons`: a word list that holds a save captioned in a
+goal's words and a goal in a save's; phrasings it does not name are left to the Judge), and then
+the Judge. A caption either half refuses, or a model or Judge that
 errs or is late, leaves the code-written caption, and the record says why.
 
     uv run ninety-e2e <clip> --out <bundle> --match --captioner foundry   # the published agent
@@ -40,13 +41,18 @@ from ninety.match.facts import compact
 # written while the bundle is built, before anything airs, so this bounds how long that can wait.
 MODEL_TIMEOUT_S = 15.0
 # What a caption may not say of a moment's kind: a goal is not saved or missed, a save is not a
-# score. The Judge also sees the caption, but the code half does not leave this to a model.
+# score. These are word lists (denylists) that narrow the Judge's job, not a guarantee: a wrong-kind
+# phrasing they do not name is left to the Judge. A word that wrongly holds a true caption only
+# keeps the code caption.
 SAVE_WORDS = re.compile(
-    r"\b(?:save[sd]?|saving|denied|kept out|keeps? it out|stopped|stops|parr(?:y|ied|ies)|tipped|tips"
-    r"|turned away|miss(?:es|ed)?|wide|over the bar|off target|blocked)\b", re.I)
+    r"\b(?:save[sd]?|saving|denied|kept out|keeps? it out|stop(?:ped|s)?|parr(?:y|ied|ies)|tipped|tips"
+    r"|turned away|miss(?:es|ed)?|wide|over the bar|off target|blocked|hand to it|claws?|smother\w*"
+    r"|gather(?:s|ed)|rejected|woodwork|past the post|round the post)\b", re.I)
 GOAL_WORDS = re.compile(
-    r"\b(?:scor(?:es?|ed|ing)|goals?|net(?:s|ted)?|finds? the net|buries|buried|beats? the keeper"
-    r"|beaten the keeper|past the keeper|opens? the scoring)\b", re.I)
+    r"\b(?:scor(?:es?|ed|ing)|goals?|net(?:s|ted)?|finds? the net|buries|buried|beats? the (?:goal)?keeper"
+    r"|beaten the (?:goal)?keeper|past the (?:goal)?keeper|opens? the scoring|equalis\w+|equaliz\w+"
+    r"|pulls? one back|gives? (?:them|\w+) the lead|puts? [\w ]{1,20}?ahead|lashes it in|hammers it home"
+    r"|slots? (?:it )?home|finish(?:es|ed)|celebrat\w+|\d\s*-\s*\d)\b", re.I)
 
 
 def kind_reasons(text: str, kind: str) -> list[str]:

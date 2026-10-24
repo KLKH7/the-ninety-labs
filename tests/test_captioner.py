@@ -229,6 +229,18 @@ def test_an_unpublished_captioner_refuses_to_run(monkeypatch):
     ("a thunderbolt from h9, 26 m out", "goal", True),
     ("a goalkeeper's day at the office", "save", True),
     ("saved by the keeper", "save", True),
+    ("h9 beats the goalkeeper", "save", False),
+    ("h9 puts the home side ahead", "save", False),
+    ("it is 1-0", "save", False),
+    ("h9 pulls one back", "save", False),
+    ("h9 lashes it in", "save", False),
+    ("the keeper claws it away", "goal", False),
+    ("what a stop", "goal", False),
+    ("the keeper gets a hand to it", "goal", False),
+    ("it flashes past the post", "goal", False),
+    ("Great stop by the keeper from h9's rocket", "save", True),
+    ("A thunderbolt from h9, 26 m out at 112 km/h!", "goal", True),
+    ("h9 is denied from 26 m", "save", True),
 ])
 def test_a_save_is_never_captioned_as_a_goal_nor_a_goal_as_a_save(text, kind, ok):
     assert (kind_reasons(text, kind) == []) is ok
