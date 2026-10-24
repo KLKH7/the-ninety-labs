@@ -2176,6 +2176,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k "walks_over_a_set_ball or places_are_set_from"`
   (each fails on main); `scripts/defect_sweep/crossball.py` counts walks over the set ball over a sweep.
 
+### 213. A match has two halves: build what the Laws require, and say plainly what is still missing
+- **What happened:** the engine played 90 minutes as one long half: no whistle at 45:00, no
+  second-half kick-off. For a demo cut from a full match, a judge would see play run straight through
+  half-time. Switching ends was out of reach for the deadline: the attacking direction is fixed by
+  team in about 60 places in the engine and in at least ten readers of its data (the stats, vision,
+  evaluation, the validator), so it needs a direction field in the contract before the engine can
+  change it. The first version also ended the half between a penalty being taken and its shot
+  being struck, because "in progress" was read from the shot alone.
+- **Rule:** a rule of the game is built as far as can be done right, and the rest is written down as
+  a gap in GROUNDING with its reason, never left to look as if it is there. A direction (or any
+  other per-period fact) that many readers derive from the team is a contract field before it is a
+  variable. A state that extends a time limit ("a penalty in progress") names every phase it covers:
+  awarded, taken, struck, until completed.
+- **Check:** `uv run pytest tests/test_half_time.py` (each fails on main); the 90-minute sweep in
+  the pull request: the half-time whistle in every match, the second-half kick-off by the other
+  team, nothing in play across it, the contract met.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those
