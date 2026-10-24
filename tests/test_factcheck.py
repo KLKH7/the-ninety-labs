@@ -427,6 +427,30 @@ def test_idioms_and_true_seconds_in_spanish_pass(text):
     assert check(Claim(text, ["p1", "p2"]), TWO).ok
 
 
+@pytest.mark.parametrize("text, number", [
+    ("h7 plays a two-on-three m pass to h9.", "3"),
+    ("h7 plays a one-on-three m pass to h9.", "3"),
+    ("h7 finds h9 at three v four km/h.", "4"),
+    ("h7 finds h9 in the two on four minute.", "4"),
+    ("h7 finds h9 with three on four players near the ball.", "4"),
+    ("h7 juega un pase de dos contra tres metros a h9.", "3"),
+])
+def test_a_number_after_an_n_on_m_idiom_with_a_unit_is_still_checked(text, number):
+    # Review of #268: "two-on-three" is a word, but "two-on-three m" ends in a number with its unit
+    # (or a counted noun), which must be in the evidence like any other.
+    verdict = check(Claim(text, ["p1", "p2"]), TWO)
+    assert not verdict.ok and any(f"number {number} " in r for r in verdict.reasons), verdict.reasons
+
+
+@pytest.mark.parametrize("text", [
+    "h7 and h9 make a two-on-three in midfield.",
+    "h7 and h9 work a three v four on the right.",
+    "h7 y h9 juegan un dos contra tres en el medio.",
+])
+def test_an_n_on_m_idiom_with_no_unit_after_it_is_a_word(text):
+    assert check(Claim(text, ["p1", "p2"]), TWO).ok
+
+
 @pytest.mark.parametrize("text, reason", [
     ("h7 plays his seventh pass to h9.", "number 7th is not in the cited evidence"),
     ("h7 finds h9 in the ninth minute.", "number 9th is not a cited minute"),
@@ -563,6 +587,12 @@ def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     "h9 meets h7's 12 m pass at the end of a 30 m move.",
     "h7 plays a 12 m pass; a 30 m ball follows.",
     "h7 plays a 12 m pass and then a 30 m ball comes back.",
+    # each clause ender on its own (review of #268: "but", "then" and their Spanish forms were unpinned)
+    "h7 plays a 12 m pass, but a 30 m ball comes back.",
+    "h7 plays a 12 m pass, then a 30 m ball comes back.",
+    "h7 juega un pase de 12 m, pero un balón de 30 m vuelve.",
+    "h7 juega un pase de 12 m, luego un balón de 30 m vuelve.",
+    "h7 juega un pase de 12 m y un balón de 30 m vuelve.",
 ])
 def test_a_number_bound_to_its_own_player_passes(text):
     assert check(Claim(text, ["p1", "p2"]), TWO).ok

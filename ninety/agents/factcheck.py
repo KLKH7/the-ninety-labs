@@ -51,14 +51,23 @@ WORD_NUMBER = re.compile(
 )
 # Number words that are no count: football's idioms (a one-two, a one-on-one, a one-touch pass, a
 # two-footed tackle, a one-handed save) and the pronoun "one" ("one of", "no one").
+# An N-on-M ("a two-on-one") is a word only when no unit or counted noun follows it: in "a
+# two-on-three m pass" the "three" is a distance, checked like any other (review of #268).
+_NO_UNIT_AFTER = (
+    r"(?![\s-]*(?:m|metres?|meters?|metros?|km|km/h|kph|kmh|k\.p\.h|kil[oó]met\w*|yards?|yds?|yardas?"
+    r"|feet|foot|ft|pies|mph|m\.p\.h|minutes?|minutos?|seconds?|secs?|segundos?|players|men|outfielders"
+    r"|jugadores|hombres|passes|pases|shots|tiros|disparos|goals|goles|times|veces)(?![\w/]))"
+)
 NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
     r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another|side)\b)"  # "one side's back line": no count
     r"|\b(?:one|two|three|four)[\s-](?:on|v(?:s\.?|\.)?)[\s-](?:one|two|three|four)\b"  # a two-on-one
+    + _NO_UNIT_AFTER +
     # Spanish: one-on-one ("uno contra uno", "un dos contra uno"), "one of", beating a man ("se va
     # de uno"), "a hundred per cent", "at full tilt" ("a mil por hora"), "with both feet"
-    r"|\b(?:uno|dos|tres|cuatro)\s+(?:contra|a)\s+(?:uno|dos|tres|cuatro)\b|\buno(?=\s+de\b)"
+    r"|\b(?:uno|dos|tres|cuatro)\s+(?:contra|a)\s+(?:uno|dos|tres|cuatro)\b" + _NO_UNIT_AFTER +
+    r"|\buno(?=\s+de\b)"
     r"|\b(?:va|van|fue|ir|irse|marcha|marchó)\s+de\s+uno\b|\bcien\s+por\s+cien\b"
     r"|\bmil\s+por\s+hora\b|\b(?:los|las|ambos)\s+dos\s+pies\b",
     re.I,
