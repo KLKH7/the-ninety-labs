@@ -1179,7 +1179,10 @@ const METRIC_WORDS: Record<string, string> = {
 /** The API names players by id (a7); fans read "Lisbon 7", or the name the answer carries. Only
  * the names change, never a number. */
 function named(text: string, names?: Record<string, string>): string {
-  return nameIds(text, teams, names);
+  // The team sheet names a player the payload does not (only players the line-up tool is sure of).
+  const sheet: Record<string, string> = {};
+  for (const [id, e] of Object.entries(teamSheet)) if (e.name) sheet[id] = e.name;
+  return nameIds(text, teams, { ...sheet, ...names });
 }
 
 async function ask(text: string) {
