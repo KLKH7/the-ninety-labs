@@ -48,6 +48,7 @@ from ninety.agents.cues import SCHEMA, _pass_text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
+from ninety.speech import voice
 
 PITCH_LENGTH_M = 105.0  # schemas/match_event.schema.json: x 0..105
 PITCH_WIDTH_M = 68.0
@@ -59,7 +60,7 @@ GAP_S = 0.3
 # the measured audio length whenever lines are synthesised; logged per line as `duration_source`.
 WORDS_PER_SECOND = 2.6
 LEAD_IN_S = 0.15  # design: the voice's silence before the first word
-VOICE = "en-GB-RyanNeural"
+VOICE = voice.VOICE  # pinned in ninety/speech/voice.py
 LANG = "en-GB"
 SLOT = "audio"
 # design: the Describer model's own limit (ninety/agents/describer.py, INSTRUCTIONS), held by code.
@@ -274,7 +275,9 @@ def candidates(
                             "reason": "cites unknown events"})
             continue
         last = max(cited, key=lambda e: (e["t"], e["id"]))
-        versions = checked([f"Fact-checked: {cue['text']}"], list(cue["evidence"]))
+        # The line is the checked cue's own words: whether it was checked is told in How we know, not
+        # prefixed to what a fan hears.
+        versions = checked([cue["text"]], list(cue["evidence"]))
         source = "insight"
         if versions and (upgrades or {}).get(cue["id"]):
             text = upgrades[cue["id"]]

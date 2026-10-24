@@ -2586,6 +2586,90 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
 
+### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
+- **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
+  heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called
+  creepy, in the one feature built for fans who listen instead of watch. Meanwhile we had an Azure AI
+  Speech resource, and the Describer pinned a neural voice (Ryan) that nothing on the phone used.
+  Nobody had chosen either voice by listening.
+- **Rule:** the voice is picked by ear from samples made in the voices that could ship (Oct 23:
+  all 17 British neural voices and two HD voices; Kian chose en-GB-OllieMultilingualNeural). It is
+  pinned in one place (`ninety/speech/voice.py`), and every path that speaks reads it: the bundle's
+  pre-generated lines, the Live route and the Describer. The phone plays the bundle's audio first,
+  then the Live route, and uses the device's voice only when neither has the line.
+- **Check:** `tests/test_speech.py::test_every_path_that_speaks_reads_the_one_pinned_voice`,
+  `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
+  `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
+  first and the second and third tests fail.
+
+### 224. Every picture of the pitch goes through one projection, and its words follow the engine
+- **What happened:** the phone's minimap drew pitch metres with its own projection, y = 0 at the
+  top, while the TV picture and the viewer's radar put the y = 0 touchline at the bottom, where the
+  broadcast camera stands. The phone showed the match upside down beside the screen it follows,
+  and its heat map and wind map with it. Its "left" and "right" flank words had been written to
+  match that drawing, so they were wrong too: the engine starts a home left-back at 0.85 of the
+  width, which the phone called the right. Its tests tapped dots with the same y-down formula, so
+  they agreed with the bug.
+- **Rule:** every drawing of the pitch on any screen (radar, heat map, wind map, answer pictures)
+  goes through `web/viewer/src/radar.ts`'s `projection`, and taps are hit-tested through it. Words
+  for a place on the pitch are grounded in the engine's own coordinates, not in a drawing. A test
+  that finds a dot asks the page where it drew it, and checks which way up that is.
+- **Check:** `tests/test_phone_companion.py::test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot`
+  (a player 20 m from the near touchline is below halfway); `tests/test_phone.py`'s tap test asks
+  `ninetyPhone.screenOf` and asserts the same.
+
+### 225. A second screen runs on the first screen's clock, cuts included
+- **What happened:** the viewer sent the phone `t_start` plus the video's time, which is the match
+  time only while the clip has no cut; a condensed match is all cuts. Between messages the phone
+  ran its clock on in match time, so even with the right message it slid into the stretch of the
+  match the broadcast skipped, drawing the radar where the video never was for up to a second.
+- **Rule:** one clock for every screen (lesson 33): the big screen sends match time from the same
+  function the graphics use, and the phone reads the bundle's cuts and runs on in video time
+  between messages, as the video does.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut`
+  fails with `t_start + video time`; `tests/test_phone_companion.py::test_the_phone_clock_jumps_the_cut_with_the_video_and_never_shows_the_gap`
+  fails with the cuts dropped from `LaptopClock.time`.
+
+### 236. A late joiner is sent the state as it stands now, not as it was last stored
+- **What happened:** the companion relay stored the big screen's once-a-second clock and replayed
+  it unchanged to a phone that joined late. A phone could start up to a second behind the screen it
+  follows until the next message; the phone clock test failed two runs in three, and the mock relay
+  did the same.
+- **Rule:** state that runs on by itself (a playing clock) is advanced by how long it was held
+  before it is replayed; state that does not (a paused clock, a focus) is replayed as stored. The
+  mock relay asks the laptop for its clock as it stands now, as the server computes it.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_a_playing_clock_as_it_stands_now`
+  (fails with the stored message replayed); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`.
+
+### 237. Tests and screenshot runs never speak aloud
+- **What happened:** browser tests and screenshot scripts turned read-aloud on and the headless
+  browser spoke with the Mac's system voice; Kian heard it from a test run.
+- **Rule:** every voice the screens use goes through one function (`web/viewer/src/speech.ts`,
+  `speakAloud`), which under automation (`navigator.webdriver`) records the line instead of
+  speaking it; recorded audio and tones stay silent too. Read-aloud is off until a fan turns it on.
+- **Check:** `tests/test_phone_companion.py::test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks`
+  (fails if `speakAloud` calls `speechSynthesis` under webdriver).
+
+### 234. A foul that only the data knows about is not a foul on screen
+- **What happened:** Kian watched a test clip with a foul in it and could not tell a foul had
+  happened. The engine had stopped play: within 0.5 s of each whistle on seed 7, at most one of 22
+  players was still running. But the picture showed players drifting to a stop, no whistle and no
+  one reacting. The fall itself (#223) was not in that clip's render yet.
+- **Rule:** an event a viewer must follow gets a cue they can see or hear, drawn from the engine's
+  own record of it (the foul's frame, its fouler and the fouled player, their positions), never by
+  moving anyone. A cue that would contradict a truth field, such as turning a body away from its
+  `heading`, is drawn where the truth says nothing: here the head turns, and the hand goes up.
+- **Check:**
+  - `tests/test_render_fouls.py`: the reactions start at the foul frame, are gone after REACT_S,
+    reach the three nearest team-mates and not the fouled man, and the head turns toward him;
+    nothing happens without a foul.
+  - `tests/test_render_mesh.py`: the page and Python draw the raised hand and the turned head the
+    same way, within 1.5 cm on every marker.
+  - A clip with no foul renders byte-identical to the renderer before this change, given the same
+    two team codes. The rename to LON and LIS changes the scorebug text in every render with
+    graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
+    codes in their params, so re-rendering one differs in the scorebug only.
+
 ### 238. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
 - **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
   test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's

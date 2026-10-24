@@ -28,7 +28,8 @@ Stages (the brief's names), each writing one file in the bundle:
    confident event or verified claim, with its stereo position, as `audio` cues, audio.json and
    description.vtt. Offline its timing is estimated and the viewer speaks with the browser's voice;
    `--speech azure` synthesises each line through Azure AI Speech instead (off by default: a live
-   Azure call, so run it only when agreed).
+   Azure call, so run it only when agreed). `--voice-audio` adds the phone's read-aloud audio in
+   the pinned voice (ninety/speech/bundle.py: speech.json and speech/), also a live call.
 
 The radar beside the video: `--tracked FILE --observations FILE` (vision's tracked.json and
 observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add radar.json
@@ -36,7 +37,12 @@ observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add r
 
 Match mode, for a condensed match (one clip cut from passage to passage): `--match` adds match.json
 (ninety/condensed.py): a chapter per segment named from the detected events, the scoreline from
-detected goals, and each team's stats from the footage shown.
+detected goals, and each team's stats from the footage shown. With `--tracked` too, it adds
+`territory` (ninety/match/territory.py): where vision's tracked ball was, per five minutes.
+
+Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
+(`python -m ninety.agents.scout`, schemas/insight_card.schema.json) into the bundle as cards.json.
+Every card must be verified and match the schema, or the bundle is not written.
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
 radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
@@ -62,12 +68,12 @@ from pathlib import Path
 
 from ninety import condensed, radar
 from ninety.agents import live, telemetry
-from ninety.agents.contracts import Models, Review
+from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
-from ninety.match import detected
+from ninety.match import detected, territory
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
 from ninety.match.timeline import Timeline
 from ninety.speech import describe
@@ -94,6 +100,92 @@ class Clip:
     def images(self) -> list[Path]:
         return sorted((self.dir / "images").glob("*.jpg"))
 
+
+
+def read_cards(path: Path) -> list[dict]:
+    """The Scout's cards, oldest first, each checked against schemas/insight_card.schema.json. Only
+    verified cards reach a fan (the schema says so too); anything else stops the bundle."""
+    cards = json.loads(path.read_text())
+    if not isinstance(cards, list):
+        raise SystemExit(f"{path}: cards.json is a list of cards")
+    validate = schema_validator("insight_card")
+    for card in cards:
+        validate.validate(card)
+    return sorted(cards, key=lambda c: c["t"])
+
+
+def read_team_stats(path: Path) -> dict:
+    """The MatchInsights bundle's `team_stats` (insight-scout, #269): each team's tracked distance
+    with how much of its players' time was tracked. Only measured rows go on: a team's km must come
+    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed)."""
+    body = json.loads(path.read_text())
+    stats = body.get("team_stats", body)
+    out: dict = {"from_footage": bool(stats.get("from_footage", True)), "bin_min": stats.get("bin_min")}
+    distance = stats.get("distance") or {}
+    for side in ("home", "away"):
+        d = distance.get(side)
+        if d is None:
+            raise SystemExit(f"{path}: team_stats.distance has no {side}")
+        km, coverage = d.get("km"), d.get("coverage")
+        sound_km = isinstance(km, (int, float)) and km >= 0
+        if not sound_km or not isinstance(coverage, (int, float)) or not 0 <= coverage <= 1:
+            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage from 0 to 1")
+    out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
+                       for side in ("home", "away")}
+    if "possession" in stats:
+        out["possession"] = {side: {"share": stats["possession"][side]["share"]} for side in ("home", "away")}
+    return out
+
+
+def read_lineup(path: Path) -> list[dict] | None:
+    """MatchInsights' team sheet (the line-up tool, insight-scout): per player id a name, shirt and
+    position, with whether the tool is confident of it. The phone shows only confident entries. A
+    row without an id, or with a name, shirt or position of the wrong type, stops the bundle."""
+    rows = json.loads(path.read_text()).get("lineup")
+    if rows is None:
+        return None
+    kinds = {"name": str, "number": int, "position": str, "confident": bool}
+    out = []
+    for r in rows:
+        wrong = [k for k, t in kinds.items() if k in r and not isinstance(r[k], t)]
+        if not isinstance(r.get("id"), str) or wrong:
+            raise SystemExit(f"{path}: a lineup row needs a string id; wrong types: {wrong}")
+        out.append({k: r[k] for k in ("id", *kinds) if k in r})
+    return out
+
+
+GROUPS = ("Attack", "Passing", "Pressing", "Shape", "Physical")
+
+
+def read_stats(path: Path) -> dict | None:
+    """MatchInsights' `stats` block (insight-scout, #269): per-team rows by group, each a series of
+    values "so far" to a minute, with whether the value is confident. A row missing its group, key,
+    label or series stops the bundle; the block is optional."""
+    body = json.loads(path.read_text())
+    block = body.get("stats")
+    if block is None:
+        return None
+    rows = []
+    for row in block.get("rows", []):
+        if row.get("group") not in GROUPS or not row.get("key") or not row.get("label"):
+            raise SystemExit(f"{path}: a stats row needs a group in {GROUPS}, a key and a label")
+        series = []
+        for v in row.get("series", []):
+            if not isinstance(v.get("minute_to"), (int, float)) or not isinstance(v.get("confident"), bool):
+                raise SystemExit(f"{path}: stats.{row['key']}: each value needs minute_to and confident")
+            keep = ("minute_to", "home", "away", "confident", "evidence", "coverage")
+            series.append({k: v[k] for k in keep if k in v})
+        rows.append({"group": row["group"], "key": row["key"], "label": row["label"],
+                     "unit": row.get("unit"), "series": sorted(series, key=lambda v: v["minute_to"])})
+    return {"bin_min": block.get("bin_min"), "from_footage": bool(block.get("from_footage", True)),
+            "rows": rows}
+
+
+def teams_of(meta: dict) -> dict | None:
+    """The home and away codes the clip was rendered with, or None for a clip without them."""
+    params = meta.get("params", {})
+    home, away = params.get("home_code"), params.get("away_code")
+    return {"home": home, "away": away} if home and away else None
 
 def load_clip(clip_dir: Path) -> Clip:
     meta = json.loads((clip_dir / "clip.json").read_text())
@@ -557,8 +649,9 @@ async def run(args: argparse.Namespace) -> dict:
     footage = write_footage(clip, out, encode=not args.frames)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
+    radar_body = None
     if args.tracked:
-        body = radar.write(args.tracked, args.observations, width, height, out / "radar.json")
+        body = radar_body = radar.write(args.tracked, args.observations, width, height, out / "radar.json")
         radar_info = {"source": body["source"], "frames": len(body["frames"]),
                       "footprints": sum(v["footprint"] is not None for v in body["views"])}
 
@@ -566,9 +659,25 @@ async def run(args: argparse.Namespace) -> dict:
     match_info = None
     if args.match:
         body = condensed.build(clip.meta, events)
+        if radar_body is not None:
+            # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
+            body["territory"] = territory.build(radar_body, clip.meta["fps"])
+        if args.team_stats:
+            body["team_stats"] = read_team_stats(args.team_stats)  # measured per-team facts (#269)
+            stats = read_stats(args.team_stats)
+            if stats is not None:
+                body["insight_stats"] = stats  # match.json's own `stats` is the detected events' series
+            lineup = read_lineup(args.team_stats)
+            if lineup is not None:
+                body["lineup"] = lineup
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}
+    cards_info = None
+    if args.cards:
+        cards = read_cards(args.cards)
+        (out / "cards.json").write_text(json.dumps(cards, indent=1) + "\n")
+        cards_info = {"count": len(cards)}
     write_jsonl(out / "cues.jsonl", cues)
     (out / "facts.json").write_text(json.dumps(facts, indent=2) + "\n")
     (out / "trace.json").write_text(json.dumps({"claims": claims}, indent=2) + "\n")
@@ -582,6 +691,9 @@ async def run(args: argparse.Namespace) -> dict:
         "t_start": clip.meta["t_start"],
         # Which match frame each image shows, across the broadcast's cuts (ninety/match/timeline.py).
         "segments": [s.as_dict() for s in timeline.segs],
+        # The clubs' fictional codes the scorebug draws (ninety/render/params.py, TEAM_CODES); the
+        # viewer and the phone name the clubs from them (web/viewer/src/teams.ts).
+        "teams": teams_of(clip.meta),
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
@@ -596,12 +708,19 @@ async def run(args: argparse.Namespace) -> dict:
         "audio": audio,
         "radar": radar_info,
         "match": match_info,
+        "cards": cards_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
                   "description.vtt"] + (["radar.json"] if radar_info else [])
                  + (["agents.json"] if agents_mode == "graph live" else [])
-                 + (["match.json"] if match_info else []),
+                 + (["match.json"] if match_info else [])
+                 + (["cards.json"] if cards_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if args.voice_audio:
+        # Last, so it reads every line the bundle holds (audio.json, and cards.json when present).
+        from ninety.speech import bundle as speech_bundle
+
+        manifest = speech_bundle.add_to_manifest(out, speech_bundle.write(out))
     return manifest
 
 
@@ -626,6 +745,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--speech", choices=("none", "azure"), default="none",
                     help="audio description voice: none (estimated timing, the viewer's browser voice) or "
                          "azure (synthesise every line through Azure AI Speech: a live call)")
+    ap.add_argument("--voice-audio", action="store_true",
+                    help="pre-generate the phone's read-aloud audio in the pinned voice (speech.json, "
+                         "speech/; ninety/speech/bundle.py): a live Azure call")
     ap.add_argument("--describer", choices=("code", "foundry"), default="code",
                     help="audio description lines: code only, or foundry (the published Describer "
                          "agent words each verified moment, checked like any line: a live call)")
@@ -635,6 +757,11 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--cards", type=Path, default=None,
+                    help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
+    ap.add_argument("--team-stats", type=Path, default=None,
+                    help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
+                         "with its coverage) go into match.json for the phone's Team Stats")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 
