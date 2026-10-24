@@ -2305,3 +2305,14 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 231. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
