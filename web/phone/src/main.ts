@@ -12,6 +12,8 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
+import londonCrest from "./crests/london-athletic.svg?raw";
+import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
@@ -449,7 +451,7 @@ function showTeams() {
   clubColours();
   for (const side of ["home", "away"] as const) {
     for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
-    for (const el of document.querySelectorAll(`svg.crest.${side}`)) el.innerHTML = crestSvg(teams[side], side);
+    for (const el of document.querySelectorAll(`.crest.${side}`)) el.innerHTML = crestSvg(teams[side], side);
     for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
   }
   $("legend-home").textContent = `${teams.home} →`;
@@ -537,16 +539,12 @@ function averagePositions(): Map<string, [number, number]> {
   return new Map([...sum].map(([id, [x, y, n]]) => [id, [x / n, y / n]]));
 }
 
-/** An original crest for each club (no real club's mark, no city's arms): London Athletic a shield
- * with a river wave, Lisbon Esportes a roundel with a tram's trolley pole; any other club a plain
- * shield with its initial. */
+/** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
+ * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  const fill = `var(--crest-${side})`;
-  if (club === "London")
-    return `<path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" fill="${fill}" stroke="#fff" stroke-width="2.5"/><path d="M12 30q7.5-7 15 0t15 0" fill="none" stroke="#fff" stroke-width="3"/>`;
-  if (club === "Lisbon")
-    return `<circle cx="27" cy="31" r="24" fill="${fill}" stroke="#fff" stroke-width="2.5"/><path d="M27 15v32M15 39h24M19 31l8-12 8 12" fill="none" stroke="#fff" stroke-width="3"/>`;
-  return `<path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" fill="${fill}" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text>`;
+  if (club === "London") return londonCrest;
+  if (club === "Lisbon") return lisbonCrest;
+  return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
 /** Where a player has mostly been, in two words a line-up uses ("Left · defence"). */
@@ -593,7 +591,7 @@ function renderRoster(roster: string[]) {
       card.className = "card roster-card";
       const head = document.createElement("h3");
       head.className = "card-title roster-team";
-      head.innerHTML = `<svg class="crest" viewBox="0 0 54 62" aria-hidden="true">${crestSvg(teams[side], side)}</svg>`;
+      head.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
       head.append(fullName(teams[side]));
       // The small pitch: x 0..105 left to right, y 0..68 bottom to top, as the radar draws it.
       const svgNS = "http://www.w3.org/2000/svg";

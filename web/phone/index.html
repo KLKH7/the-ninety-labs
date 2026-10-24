@@ -40,7 +40,7 @@
           <div class="ion-page">
             <ion-header>
               <ion-toolbar class="band-bar" id="live-bar">
-                <ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title>
+                <ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><span class="crest away" aria-hidden="true"></span></span></ion-title>
                 <ion-buttons slot="end"><button type="button" class="settings-open" aria-label="Listening and text size"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18 9 6l5 12M5.8 14h6.4"/><path d="M15 18l3-7 3 7M15.9 16h4.2"/></svg></button><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers and moments aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
@@ -50,7 +50,7 @@
                 <div class="fixture">
                   <div class="side">
                     <span class="side-score" id="score-home" aria-hidden="true">–</span>
-                    <svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter home-letter"></text></svg>
+                    <span class="crest home" aria-hidden="true"></span>
                     <span class="club-name home-name">London</span>
                   </div>
                   <div class="centre">
@@ -59,7 +59,7 @@
                   </div>
                   <div class="side">
                     <span class="side-score" id="score-away" aria-hidden="true">–</span>
-                    <svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/><text x="27" y="38" text-anchor="middle" class="crest-letter away-letter"></text></svg>
+                    <span class="crest away" aria-hidden="true"></span>
                     <span class="club-name away-name">Lisbon</span>
                   </div>
                 </div>
@@ -173,7 +173,7 @@
         <ion-tab tab="ask" id="panel-ask" role="tabpanel" aria-labelledby="tab-button-ask">
           <div class="ion-page">
             <ion-header>
-              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><span class="crest away" aria-hidden="true"></span></span></ion-title>
                 <ion-buttons slot="end"><button type="button" class="settings-open" aria-label="Listening and text size"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18 9 6l5 12M5.8 14h6.4"/><path d="M15 18l3-7 3 7M15.9 16h4.2"/></svg></button><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
@@ -195,7 +195,7 @@
         <ion-tab tab="insights" id="panel-insights" role="tabpanel" aria-labelledby="tab-button-insights">
           <div class="ion-page">
             <ion-header>
-              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title></ion-toolbar>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><span class="crest away" aria-hidden="true"></span></span></ion-title></ion-toolbar>
             </ion-header>
             <ion-content fullscreen>
               <h1 class="sr-only" id="insights-title">Story</h1><p class="sr-only" id="insights-note"></p>

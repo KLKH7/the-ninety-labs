@@ -45,9 +45,6 @@ ion-toolbar.band-bar { --background: var(--bg); --color: var(--text); --border-c
   letter-spacing: -0.03em; line-height: 0.95; font-variant-numeric: tabular-nums; color: var(--text); }
 .club-name { font-size: 15px; font-weight: 600; color: var(--text); }
 .crest { width: 30px; height: 35px; }
-.crest path { stroke: rgba(255, 255, 255, 0.9); stroke-width: 3; }
-.crest.home path { fill: var(--crest-home); }
-.crest.away path { fill: var(--crest-away); }
 .crest-letter { fill: #fff; font: 700 24px var(--ion-font-family); }
 .centre { display: grid; justify-items: center; gap: 2px; padding-top: 30px; }
 #clock { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
@@ -299,7 +296,6 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .side { gap: 4px; }
 .side-score { font-size: 88px; font-weight: 800; line-height: 0.92; letter-spacing: 0; transform: scaleX(0.74); }
 .crest { width: 32px; height: 37px; margin-top: 2px; }
-.crest path { stroke: none; }
 .crest-letter { display: none; }
 .club-name { font-size: 17px; font-weight: 600; }
 .centre { padding-top: 30px; }
@@ -543,3 +539,30 @@ ion-footer.composer { padding: 8px 0 20px; } /* 8 pt more air above the tab bar 
 .roster .who .num { font-weight: 700; }
 .stat-group h3 { margin: 14px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-2); text-transform: none; }
 .stat-group:first-child h3 { margin-top: 0; }
+.crest { display: inline-grid; place-items: center; }
+.crest svg { width: 100%; height: 100%; display: block; }
+
+/* The Apple Sports band, matched (sampled from mobbin/live-applesports-2 on a grid): two deep team
+   fields, home from the top-left and away from the top-right, each the club's colour at about 40%
+   over black, blending where they meet, falling to near-black by ~40% of the screen, with fine
+   grain. No hard stops. */
+:root {
+  /* Each club's colour darkened in OKLCH, keeping its chroma, so a gold stays gold, not olive. */
+  --field-home: oklch(from var(--home) calc(l * 0.5) calc(c * 0.95) h);
+  --field-away: oklch(from var(--away) calc(l * 0.5) calc(c * 0.95) h);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --wash: var(--grain),
+    radial-gradient(75% 38% at 8% 6%, var(--field-home), transparent 100%),
+    radial-gradient(75% 38% at 92% 6%, var(--field-away), transparent 100%),
+    linear-gradient(90deg, var(--field-home) 0%, color-mix(in srgb, var(--field-home) 50%, var(--field-away)) 50%, var(--field-away) 100%);
+}
+ion-tab > .ion-page {
+  background: var(--grain), linear-gradient(180deg, transparent 0%, transparent 18%, rgba(0, 0, 0, 0.6) 34%, #000 52%),
+    radial-gradient(95% 55% at 0% 0%, var(--field-home), transparent 100%),
+    radial-gradient(95% 55% at 100% 0%, var(--field-away), transparent 100%),
+    linear-gradient(90deg, var(--field-home), color-mix(in srgb, var(--field-home) 50%, var(--field-away)), var(--field-away));
+  background-color: #000;
+}
+@media (prefers-reduced-transparency: reduce) { ion-tab > .ion-page { background: #000; } }
+/* Over the band the toolbar is clear; it gains its glass only once the score collapses into it. */
+#live-bar:not(.collapsed) { --background: transparent; --border-color: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }

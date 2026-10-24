@@ -50,7 +50,7 @@
   --ion-tab-bar-color-selected: var(--text);
 }
 /* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
-:root { --crest-a: #6a3fd1; --crest-b: #f2b31b; }
+:root { --crest-a: #0d2547; --crest-b: #e6a708; }
 
 /* Live and Story are Apple Sports, which is dark only (Coordinator, Oct 24: exact match): the dark
    tokens apply whatever the phone's setting. Ask is Perplexity's light page (below). */
@@ -80,9 +80,10 @@
     --ion-color-primary-tint: #d8d8da;
     --surface: #1c1c1e;
   --raised: #2c2c2e;
-  /* Club colours: palette A (Royal & Tram), provisional until Kian picks from compare/palettes-1. */
-  --team-a: #6a3fd1;
-  --team-b: #f2b31b;
+  /* Club colours from Kian's crests (Oct 24): London's navy, lifted to read on black and grass;
+     Lisbon's tram gold. Alternates on compare/palettes-2. */
+  --team-a: #2f5aa6;
+  --team-b: #e6a708;
   --text-2: rgba(235, 235, 245, 0.6);
   --text-3: rgba(235, 235, 245, 0.3);
   --hairline: rgba(84, 84, 88, 0.65);
