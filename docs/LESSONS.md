@@ -2301,13 +2301,18 @@ short and actionable. This file is public: no research sources, product names or
   "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
   a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
   And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
-  30 m was h4's.
+  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
+  to a player named after it, only the first number after a verb was bound, and Spanish idioms
+  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
 - **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
   units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
   speed the sentence gives to one player against that player's own cited events. Words that are no
-  number stay words ("first time", "the final third", "el once inicial", "uno contra uno", English
-  "once"). The binding covers named forms only and says which; any other wording falls back to the
-  check against all cited events.
+  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
+  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
+  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
+  for its player, holds every distance and speed up to the next player or the end of the clause,
+  and says what it does not cover; any other wording falls back to the check against all cited
+  events.
 - **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
   `::test_an_ordinal_in_words_must_be_in_the_evidence`,
   `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,

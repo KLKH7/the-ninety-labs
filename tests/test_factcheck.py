@@ -368,7 +368,7 @@ def test_number_words_combine_only_into_one_well_formed_number(text, digits):
 # Two cited passes: h7's was 12 m at 40 km/h, h4's 30 m at 70 km/h.
 TWO = {
     "p1": {"id": "p1", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
-           "minute": 2, "distance_m": 12, "ball_speed_kmh": 40},
+           "minute": 2, "second": 14, "distance_m": 12, "ball_speed_kmh": 40},
     "p2": {"id": "p2", "type": "pass", "team": "home", "player": "h4", "receiver": "h7", "outcome": "success",
            "minute": 3, "distance_m": 30, "ball_speed_kmh": 70},
 }
@@ -388,6 +388,7 @@ LONG = {"id": "p31", "type": "pass", "team": "home", "player": "h7", "receiver":
     ("h7 encuentra a h9 en el minuto cincuenta.", "number 50 is not a cited minute"),
     ("h7 encuentra a h9 en el minuto 50.", "number 50 is not a cited minute"),
     ("h7 da once pases a h9.", "number 11 is not in the cited evidence"),
+    ("h7 encuentra a h9 a los 3 segundos.", "number 3 is not a cited second"),
 ])
 def test_a_planted_spanish_number_is_rejected(text, reason):
     verdict = check(Claim(text, ["p31"]), {"p31": LONG})
@@ -401,13 +402,29 @@ def test_a_planted_spanish_number_is_rejected(text, reason):
     "h7 da un pase de cincuenta metros a h9.",
     "h7 da un pase de 50 metros a h9 en el minuto dos.",  # "un" is the article, not a count
     "h7 encuentra a h9 en el minuto 2.",
-    "h7 gana el uno contra uno y encuentra a h9.",
-    "h7 es uno de los mejores y encuentra a h9.",
     "Once again h7 finds h9 over 50 m.",  # the English adverb, not "11"
     "h7, del once inicial, encuentra a h9.",
 ])
 def test_a_true_spanish_number_passes(text):
     assert check(Claim(text, ["p31"]), {"p31": LONG}).ok
+
+
+@pytest.mark.parametrize("text", [
+    "h7 gana el uno contra uno y encuentra a h9.",
+    "h7 es uno de los mejores y encuentra a h9.",
+    "h7 se va de uno y encuentra a h9.",  # beats his man
+    "h7 y h9 hacen un dos contra uno.",
+    "h7 lo da todo, al cien por cien, y encuentra a h9.",
+    "h7 sale a mil por hora y encuentra a h9.",  # at full tilt
+    "h7 controla con los dos pies y encuentra a h9.",
+    "h7 and h9 make a two-on-one.",
+    "h7 and h9 work a three v two.",
+    "h7 encuentra a h9 a los 14 segundos.",
+])
+def test_idioms_and_true_seconds_in_spanish_pass(text):
+    # Review of #257: each was rejected by the first version of the Spanish reader. Two passes are
+    # cited, so a "uno" misread as 1 is no count the evidence holds.
+    assert check(Claim(text, ["p1", "p2"]), TWO).ok
 
 
 @pytest.mark.parametrize("text, reason", [
@@ -469,9 +486,27 @@ def test_a_number_in_a_unit_we_do_not_publish_is_rejected(text):
     "h7 plays a 50-metre pass to h9 at 31kmh.",
     "h7 plays a 50 meter pass to h9 at 31 kilometres per hour.",
     "h7 plays a 50 metre pass to h9 at 31 kilometers an hour.",
+    "h7 plays a 50 m pass to h9 at 31 k.p.h.",
 ])
 def test_a_number_in_our_units_passes(text):
     assert check(Claim(text, ["p31"]), {"p31": LONG}).ok
+
+
+def test_a_speed_in_k_p_h_is_read_as_a_speed():
+    # 50 is the cited distance, so read bare it passed.
+    verdict = check(Claim("h7 plays a pass at 50 k.p.h. to h9.", ["p31"]), {"p31": LONG})
+    assert verdict.reasons == ["number 50 is not a cited ball_speed_kmh"]
+
+
+@pytest.mark.parametrize("text, number", [
+    ("h7 finds h9 in the six-yard box.", "6"),
+    ("h7 finds h9 at the edge of the 18-yard box.", "18"),
+    ("h7 places it on the 12-yard spot for h9.", "12"),
+])
+def test_a_pitch_marking_in_yards_is_checked_as_before(text, number):
+    # A marking's name is no measurement in an unpublished unit: its number is read bare, as on main.
+    verdict = check(Claim(text, ["p31"]), {"p31": LONG})
+    assert verdict.reasons == [f"number {number} is not in the cited evidence"]
 
 
 def test_a_unit_glued_with_a_hyphen_is_read_as_its_field():
@@ -491,6 +526,12 @@ def test_a_unit_glued_with_a_hyphen_is_read_as_its_field():
     ("h4 found h7. Then h7 sent his 30 m pass on.", "number 30 is not a cited distance_m of h7"),
     ("h7 pasa el balón 30 metros a h9.", "number 30 is not a cited distance_m of h7"),
     ("h7's thirty m pass finds h9.", "number 30 is not a cited distance_m of h7"),
+    # Review of #257: "de" broke the gap, and only the first number after the verb was bound
+    ("h7 juega un pase de 30 metros a h9.", "number 30 is not a cited distance_m of h7"),
+    ("h7 plays a 12 m pass at 70 km/h to h9.", "number 70 is not a cited ball_speed_kmh of h7"),
+    ("h7 plays a 12 m, 70 km/h pass to h9.", "number 70 is not a cited ball_speed_kmh of h7"),
+    ("h7 plays a delightful curling 30 m pass to h9.", "number 30 is not a cited distance_m of h7"),
+    ("h7 plays a 12 m pass. His 70 km/h ball finds h9.", "number 70 is not a cited ball_speed_kmh of h7"),
 ])
 def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     # Each number is in the evidence, so the old check passed them all: it is the other pass's.
@@ -509,6 +550,10 @@ def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     "h9 meets h7's 12 m pass.",
     "h4 finds h7, who plays his 12 m pass to h9.",  # three players named: "his" binds nothing
     "h7 da un pase de 12 metros a h9, y h4 juega una pelota de 30 metros a h7.",  # articles, not 1
+    "h7 plays a 12 m pass. His 40 km/h ball finds h9.",  # "his" is h7, named before it
+    "h7 juega un pase de 12 metros a h9.",
+    "h7 plays a 12 m pass at 40 km/h to h9, and h4 plays a 30 m pass at 70 km/h to h7.",
+    "h7 plays a delightful curling 12 m pass to h9.",
 ])
 def test_a_number_bound_to_its_own_player_passes(text):
     assert check(Claim(text, ["p1", "p2"]), TWO).ok

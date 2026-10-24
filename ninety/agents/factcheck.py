@@ -55,7 +55,12 @@ NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
     r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)"
-    r"|\buno\s+(?:contra|a)\s+uno\b|\buno(?=\s+de\b)",  # Spanish: one-on-one, "one of"
+    r"|\b(?:one|two|three|four)[\s-](?:on|v(?:s\.?|\.)?)[\s-](?:one|two|three|four)\b"  # a two-on-one
+    # Spanish: one-on-one ("uno contra uno", "un dos contra uno"), "one of", beating a man ("se va
+    # de uno"), "a hundred per cent", "at full tilt" ("a mil por hora"), "with both feet"
+    r"|\b(?:uno|dos|tres|cuatro)\s+(?:contra|a)\s+(?:uno|dos|tres|cuatro)\b|\buno(?=\s+de\b)"
+    r"|\b(?:va|van|fue|ir|irse|marcha|marchó)\s+de\s+uno\b|\bcien\s+por\s+cien\b"
+    r"|\bmil\s+por\s+hora\b|\b(?:los|las|ambos)\s+dos\s+pies\b",
     re.I,
 )
 # Spanish number words: the Personalizer writes Spanish variants and they are re-checked here, so
@@ -132,14 +137,17 @@ NOT_AN_ORDINAL = re.compile(
     re.I,
 )
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters|metro|metros)"
-SPEED_UNITS = r"(?:km/h|kph|kmh|(?:km|kil[oó]met(?:re|er|ro)s?)\s+(?:per|an|por)\s+(?:hour|hora))"
+SPEED_UNITS = r"(?:km/h|kph|kmh|k\.p\.h|(?:km|kil[oó]met(?:re|er|ro)s?)\s+(?:per|an|por)\s+(?:hour|hora))"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{DISTANCE_UNITS}\b", re.I)
 SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{SPEED_UNITS}\b", re.I)
 # Units no fact of ours is in: every distance we publish is in metres and every speed in km/h, so
 # "12 yards" is not 12 m and "33 mph" is not 33 km/h. A number in one of them is refused, whatever
 # its digits, rather than converted: the writer restates it in our unit.
 UNPUBLISHED_UNITS = (
-    r"(?:yards?|yds?|yardas?|feet|foot|ft|pies?|inch(?:es)?|mph|mps|m/s|knots?|nudos?|miles?|millas?"
+    # A pitch marking ("the six-yard box", "the 12-yard spot") is a name, not a measurement: its
+    # number is checked as a bare number, as before.
+    r"(?:yards?(?![\s-]+(?:box|line|area|spot|mark)\b)|yds?|yardas?|feet|foot|ft|pies?|inch(?:es)?"
+    r"|mph|m\.p\.h|mps|m/s|knots?|nudos?|miles?|millas?"
     r"|(?:km|kil[oó]met(?:re|er|ro)s?)(?!/h)(?!\s+(?:per|an|por)\s+(?:hour|hora)\b)"
     r"|(?:m|met(?:re|er|ro)s?)\s+(?:per|por)\s+(?:second|segundo))"
 )
@@ -187,11 +195,13 @@ FOUND = re.compile(
 )
 # A distance or speed the sentence gives to one player must be a value of that player's own cited
 # events (or a fact scoped to him), not just of some cited event: "h7's 30 m pass" is false when
-# h7's pass was the 12 m one and 30 m was h4's. Bound, and only these forms: a possessive ("h7's
-# [up to two words] 30 m"), "h7, whose ... 30 m", a kicking verb with the player as its subject
-# ("h7 plays a 30 m pass", "h10 pasa el balón 14 metros"), and "his/her ... 30 m" in a sentence
-# naming only one player. Any other wording (passives, "from h7", "de h7") binds nothing and the
-# number is checked against all the cited events as before.
+# h7's pass was the 12 m one and 30 m was h4's. A binding starts only at these forms, with the first
+# distance or speed at most two words on: a possessive ("h7's crisp 30 m"), "h7, whose ... 30 m", a
+# kicking verb with the player as its subject ("h7 plays a curling 30 m pass", "h7 juega un pase de
+# 30 metros"), and "his/her" when exactly one player is named before it in the sentence (or, if
+# none is, in the sentence before). It then holds every distance and speed up to the next player id,
+# ";" or the end of the sentence ("h7 plays a 12 m pass at 40 km/h"). Any other wording (passives,
+# "from h7", "de h7") binds nothing and the number is checked against all the cited events.
 _KICKS = (
     "plays|played|hits|hit|sends|sent|fires|fired|drives|drove|strikes|struck|clips|clipped|lofts"
     "|lofted|threads|threaded|curls|curled|whips|whipped|pings|pinged|rolls|rolled|slides|slid"
@@ -202,10 +212,13 @@ _GAP = r"(?:[^\W\d_]+\s+)"
 _UNIT_NUMBER_NEXT = rf"(?={NUMBER_PATTERN}[\s-]*(?:{DISTANCE_UNITS}|{SPEED_UNITS})\b)"
 BOUND_TO_PLAYER = re.compile(
     rf"\b(?P<player>{PLAYER_ID})(?:['’]s\s+{_GAP}{{0,2}}|,?\s+whose\s+{_GAP}{{0,2}}"
-    rf"|\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}?){_UNIT_NUMBER_NEXT}",
+    rf"|\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}{{0,2}}){_UNIT_NUMBER_NEXT}",
     re.I,
 )
 BOUND_TO_PRONOUN = re.compile(rf"\b(?:his|her)\s+{_GAP}{{0,2}}{_UNIT_NUMBER_NEXT}", re.I)
+# Where a binding's clause ends: the next player id, a semicolon, or the end of the sentence.
+CLAUSE_END = re.compile(rf"\b{PLAYER_ID}\b|;|[.!?](?!\d)|$")
+SENTENCE = re.compile(r"(?:[^.!?;]|\.(?=\d))+")
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
 FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
@@ -259,15 +272,23 @@ def _number_field(text: str, start: int) -> str | None:
 
 
 def _bound_players(text: str) -> dict[int, str]:
-    """Where a distance or speed is given to one player (BOUND_TO_PLAYER, BOUND_TO_PRONOUN): the
-    number's start in `text`, and the player's id."""
-    bound = {m.end(): m.group("player").lower() for m in BOUND_TO_PLAYER.finditer(text)}
-    for sentence in re.finditer(r"(?:[^.!?;]|\.(?=\d))+", text):
-        players = set(PLAYER.findall(sentence.group().lower()))
-        if len(players) == 1:
-            (player,) = players
-            for m in BOUND_TO_PRONOUN.finditer(sentence.group()):
-                bound.setdefault(sentence.start() + m.end(), player)
+    """Where a distance or speed is given to one player (BOUND_TO_PLAYER, BOUND_TO_PRONOUN): each
+    such number's start in `text`, and the player's id."""
+    anchors = [(m.end(), m.group("player").lower()) for m in BOUND_TO_PLAYER.finditer(text)]
+    sentences = list(SENTENCE.finditer(text))
+    for k, sentence in enumerate(sentences):
+        for m in BOUND_TO_PRONOUN.finditer(text, sentence.start(), sentence.end()):
+            before = set(PLAYER.findall(text[sentence.start():m.start()].lower()))
+            if not before and k:
+                before = set(PLAYER.findall(sentences[k - 1].group().lower()))
+            if len(before) == 1:
+                anchors.append((m.end(), before.pop()))
+    bound: dict[int, str] = {}
+    for start, player in sorted(anchors):
+        end = CLAUSE_END.search(text, start).start()
+        for pattern in (DISTANCE_NUMBER, SPEED_NUMBER):
+            for m in pattern.finditer(text, start, end):
+                bound.setdefault(m.start("number"), player)
     return bound
 
 
