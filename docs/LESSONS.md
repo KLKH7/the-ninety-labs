@@ -2270,6 +2270,19 @@ short and actionable. This file is public: no research sources, product names or
   the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
   and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
 
+### 218. A confidence the agents never see protects nothing
+- **What happened:** detected events carried `team_confidence`, how firmly the side was told from
+  the kit, and the evaluation reported it. But `facts.compact`, which shapes every event an agent
+  or the fact-checker reads, dropped it. A claim naming the wrong team passed every check whenever
+  the detector had the side wrong (5 of 16 validation passes), because the evidence agreed with the
+  claim and nothing said how unsure that evidence was. Lesson 146 is the same failure for names.
+- **Rule:** an uncertainty the detector measures travels with the fact to the fact-checker. A claim
+  that rests on it is held below a threshold set from the measured reliability, and the threshold's
+  source and n are written beside it.
+- **Check:** `tests/test_confidence_gate.py::test_the_agents_see_how_firmly_the_side_was_told` and
+  `::test_a_claim_naming_a_team_on_an_unsure_side_is_held_not_rejected` fail if `compact` drops the
+  field or the gate ignores it.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, side_known
 from ninety.agents.ledger import InMemoryLedger, Ledger, load_match
 from ninety.match.facts import match_events
 
@@ -60,8 +60,9 @@ def _pass_text(event: dict, persona: str) -> str:
 
 
 def _who(event: dict) -> str:
-    """The player, or the team when the detector could not say who it was."""
-    return event.get("player") or event["team"]
+    """The player, or the team when the detector could not say who it was and its side is known
+    (factcheck.side_known); else neither: a graphic never names a side the detector is unsure of."""
+    return event.get("player") or (event["team"] if side_known(event) else "a player")
 
 
 def _shot_text(event: dict, persona: str) -> str:
