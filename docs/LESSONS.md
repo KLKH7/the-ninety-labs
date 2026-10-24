@@ -2301,7 +2301,9 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a fact's numbers carry their role: a distinct unit where they measure different things
   (`extra players`), and a context where one unit serves two (the other side's count after
   "against", the window after "within" or "next"). A number written in a context may stand only
-  for a number of that context, and a number of a context only where it is written in it.
+  for a number of that context, and a number of a context only where it is written in it. The same holds for a fact's direction: a sentence that says it went the other way (won back or not,
+  lost or kept, to an open teammate or not, nobody open) is checked against the fact's own field, and the
+  evaluation plants each reversal (the merge queue's review found them passing).
 - **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
   overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
   the regain, the extra players said as the own count, both rejected).
