@@ -31,7 +31,8 @@ observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add r
 
 Match mode, for a condensed match (one clip cut from passage to passage): `--match` adds match.json
 (ninety/condensed.py): a chapter per segment named from the detected events, the scoreline from
-detected goals, and each team's stats from the footage shown.
+detected goals, and each team's stats from the footage shown. With `--tracked` too, it adds
+`territory` (ninety/match/territory.py): where vision's tracked ball was, per five minutes.
 
 Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
 (`python -m ninety.agents.scout`, schemas/insight_card.schema.json) into the bundle as cards.json.
@@ -63,7 +64,7 @@ from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
-from ninety.match import detected
+from ninety.match import detected, territory
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
 from ninety.match.timeline import Timeline
 from ninety.speech import describe
@@ -338,8 +339,9 @@ async def run(args: argparse.Namespace) -> dict:
     footage = write_footage(clip, out, encode=not args.frames)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
+    radar_body = None
     if args.tracked:
-        body = radar.write(args.tracked, args.observations, width, height, out / "radar.json")
+        body = radar_body = radar.write(args.tracked, args.observations, width, height, out / "radar.json")
         radar_info = {"source": body["source"], "frames": len(body["frames"]),
                       "footprints": sum(v["footprint"] is not None for v in body["views"])}
 
@@ -347,6 +349,9 @@ async def run(args: argparse.Namespace) -> dict:
     match_info = None
     if args.match:
         body = condensed.build(clip.meta, events)
+        if radar_body is not None:
+            # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
+            body["territory"] = territory.build(radar_body, clip.meta["fps"])
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}

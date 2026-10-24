@@ -10,6 +10,7 @@
 import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
+import * as momentum from "./momentum";
 import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
@@ -1382,7 +1383,7 @@ async function refreshInsights(force = false) {
   if (!state.code || insightsBusy || (!force && performance.now() - insightsAt < INSIGHTS_EVERY_MS)) return;
   insightsBusy = true;
   insightsAt = performance.now();
-  const t = laptop.time();
+  const t = viewTime();
   try {
     // The bundle's cards.json (the Insight Scout's, precomputed for the replay), else the feed's.
     const cards = bundleCards ?? (await feed.insights(state.clip, t));
@@ -1394,7 +1395,7 @@ async function refreshInsights(force = false) {
     if (fresh.length || rewound) {
       state.insights = shown;
       renderInsights();
-      if (fresh.length && !rewound && insightsShownTo >= 0) {
+      if (fresh.length && !rewound && insightsShownTo >= 0 && scrubT === null) {
         if (state.tab !== "insights") unread += fresh.length;
         showUnread();
         announce(`New insight: ${fresh[0].spoken ?? named(fresh[0].text, fresh[0].names)}`);
@@ -1539,6 +1540,89 @@ function renderStats(st: MatchData["stats"][number]) {
   $("live-stats").hidden = items.length === 0;
 }
 
+// --- territory per 5 minutes, and rewinding the screen along it --------------------------------
+
+/** The time the screen shows: the big screen's, or the minute the viewer rewound to. */
+let scrubT: number | null = null;
+function viewTime(): number {
+  return scrubT === null ? laptop.time() : Math.min(scrubT, laptop.time());
+}
+
+function territory(): momentum.Territory | null {
+  return (state.match as (MatchData & { territory?: momentum.Territory }) | null)?.territory ?? null;
+}
+
+/** The nearest moment at or before `live` that the footage shows: a condensed match has gaps
+ * between its passages, and the screen can only rewind to what was filmed. */
+function footageNear(t: number, live: number): number {
+  const spans = (state.match?.chapters ?? []).map((c) => [c.t, Math.min(c.t_end, live)] as const).filter(([a, b]) => a <= b);
+  if (!spans.length) return Math.max(0, Math.min(t, live));
+  let best = spans[0][0];
+  for (const [a, b] of spans) {
+    const near = Math.max(a, Math.min(t, b));
+    if (Math.abs(near - t) < Math.abs(best - t)) best = near;
+  }
+  return best;
+}
+
+function rewind(to: number | null) {
+  const before = scrubT;
+  scrubT = to === null ? null : footageNear(to, laptop.time());
+  if (scrubT === before) return;
+  $("to-live").hidden = scrubT === null;
+  // What the rewound screen shows is fetched for its own minute; back at live nothing is "new".
+  if (scrubT === null) insightsShownTo = -1;
+  flowAt = 0;
+  summaryAt = -1;
+  void refreshInsights(true);
+}
+
+const strip = $("momentum-strip") as unknown as SVGSVGElement;
+function stripTime(e: PointerEvent): number {
+  const r = strip.getBoundingClientRect();
+  return (Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))) * momentum.span(laptop.time());
+}
+strip.addEventListener("pointerdown", (e) => {
+  strip.setPointerCapture(e.pointerId);
+  rewind(stripTime(e));
+});
+strip.addEventListener("pointermove", (e) => {
+  if (strip.hasPointerCapture(e.pointerId)) rewind(stripTime(e));
+});
+strip.addEventListener("keydown", (e) => {
+  const at = viewTime();
+  const step: Record<string, number> = { ArrowLeft: -60, ArrowDown: -60, ArrowRight: 60, ArrowUp: 60, PageDown: -300, PageUp: 300 };
+  if (e.key in step) rewind(at + step[e.key]);
+  else if (e.key === "Home") rewind(0);
+  else if (e.key === "End") rewind(null);
+  else return;
+  e.preventDefault();
+});
+$("to-live").addEventListener("click", () => {
+  rewind(null);
+  strip.focus();
+});
+
+let stripKey = "";
+function renderMomentum(live: number, t: number) {
+  const tr = territory();
+  $("momentum").hidden = !tr || !tr.bins.length;
+  if (!tr || !tr.bins.length) return;
+  const key = `${Math.floor(live)}|${scrubT === null ? "" : t.toFixed(1)}`;
+  if (key === stripKey) return;
+  stripKey = key;
+  momentum.draw(strip, tr, live, scrubT === null ? null : t, state.match?.goals ?? []);
+  strip.setAttribute("aria-valuemax", String(Math.floor(live)));
+  strip.setAttribute("aria-valuenow", String(Math.floor(t)));
+  strip.setAttribute("aria-valuetext", (scrubT === null ? "Live. " : "") + momentum.sayAt(tr, t, teams));
+  // Progress to the next 5-minute cell, and how much footage the current one rests on.
+  const into = live % tr.bin_s;
+  ($("next-fill") as HTMLElement).style.width = `${(100 * into) / tr.bin_s}%`;
+  const b = momentum.binAt(tr, t);
+  const seen = b ? `from ${Math.round(b.seen_s)} s of footage in this spell` : "no footage of this spell";
+  $("momentum-note").textContent = scrubT === null ? `Next 5 minutes in ${clock(tr.bin_s - into)} · ${seen}` : `${clock(t)} · ${seen}`;
+}
+
 // --- the wind map on the radar (first in the cut order: wind.ts loads only when turned on) -----
 
 type Wind = import("./wind").WindMap;
@@ -1571,7 +1655,7 @@ async function refreshFlow() {
   flowBusy = true;
   flowAt = performance.now();
   const { WINDOW_S } = await import("./wind");
-  const t = laptop.time();
+  const t = viewTime();
   try {
     const flows = await Promise.all((["home", "away"] as const).map((side) => feed.flow(state.clip, side, Math.max(0, t - WINDOW_S), t)));
     for (const f of flows) wind.set(f);
@@ -1596,7 +1680,9 @@ async function refreshFlow() {
 // --- every frame -----------------------------------------------------------------------------
 
 function frame(now: number) {
-  const t = laptop.time();
+  const live = laptop.time();
+  if (scrubT !== null && scrubT > live) scrubT = live; // never ahead of the big screen
+  const t = viewTime();
   $("clock").textContent = link ? clock(t) : "–:––";
   const mini = state.match
     ? `${teams.home}  ${$("score-home").textContent}   ${link ? clock(t) : "–:––"}   ${$("score-away").textContent}  ${teams.away}`
@@ -1606,9 +1692,11 @@ function frame(now: number) {
     if (!laptop.heard) setStatus("waiting", "Waiting");
     else if (laptop.stale()) setStatus("waiting", "Screen lost");
     else if (state.radar === null && state.refused !== null) setStatus("paused", "Clock only");
+    else if (scrubT !== null) setStatus("paused", `Rewound to ${momentum.minuteOf(t)}′`);
     else if (laptop.isPlaying()) setStatus("synced", "Synced");
     else setStatus("paused", "Paused");
     showMatch(t);
+    renderMomentum(live, t);
     void refreshInsights();
   }
   if (state.radar && !$("live").hidden) {

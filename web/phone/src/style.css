@@ -248,3 +248,28 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .compare-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); padding: 12px 0 4px; }
 #compare-rows { margin-top: 8px; }
 #player { height: 100%; overflow-y: auto; padding-bottom: 40px; } /* the sheet scrolls to Compare with… */
+
+/* Territory strip (momentum.ts): mirrored 5-minute cells in the clubs' colours on a hairline axis. */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.to-live { min-height: 44px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; }
+.strip-box { position: relative; padding: 18px 0 20px; }
+.strip { display: block; width: 100%; height: 72px; touch-action: none; cursor: ew-resize; border-radius: 8px; }
+.strip:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.strip .axis { stroke: var(--hairline); stroke-width: 1; }
+.strip .home-area { fill: var(--home); }
+.strip .away-area { fill: var(--away); }
+.strip .even { fill: var(--text-3); }
+.strip .ht { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.strip .goal.home { fill: var(--home); stroke: var(--bg); stroke-width: 1.5; }
+.strip .goal.away { fill: var(--away); stroke: var(--bg); stroke-width: 1.5; }
+.strip .now { stroke: var(--text-2); stroke-width: 1; }
+.strip .head { stroke: var(--text); stroke-width: 2; }
+.strip-key { position: absolute; left: 0; font-size: 13px; color: var(--text-2); }
+.home-key { top: 0; }
+.away-key { bottom: 0; }
+.strip-axis { position: absolute; right: 0; bottom: 0; left: 0; height: 16px; font-size: 13px; color: var(--text-3); pointer-events: none; }
+.strip-axis span { position: absolute; bottom: 0; }
+.strip-axis .ht-label { left: 50%; transform: translateX(-50%); }
+.strip-axis .ft-label { right: 0; }
+.next-bin { height: 3px; margin-top: 8px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
+.next-fill { height: 100%; background: var(--text-2); }

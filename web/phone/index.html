@@ -84,6 +84,23 @@
               </div>
               <p class="sr-only" id="map-sides"></p>
 
+              <!-- Territory per 5 minutes (match.json's territory, from vision's tracked ball). Drag along it
+                   to rewind the screen to that minute; "Back to live" returns. -->
+              <section class="live-section" id="momentum" aria-labelledby="momentum-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="momentum-title">Territory</h2>
+                  <button type="button" class="to-live" id="to-live" hidden>Back to live</button>
+                </div>
+                <div class="strip-box">
+                  <span class="strip-key home-key home-name" aria-hidden="true"></span>
+                  <svg id="momentum-strip" class="strip" role="slider" tabindex="0" aria-label="Rewind the match to a minute" aria-valuemin="0" preserveAspectRatio="none"></svg>
+                  <span class="strip-key away-key away-name" aria-hidden="true"></span>
+                  <div class="strip-axis" aria-hidden="true"><span class="ht-label">HT</span><span class="ft-label">90′</span></div>
+                </div>
+                <div class="next-bin" aria-hidden="true"><div class="next-fill" id="next-fill"></div></div>
+                <p class="fine" id="momentum-note"></p>
+              </section>
+
               <!-- Just now: the latest Story moment, as the lock screen says it. -->
               <section class="live-section" id="just-now" aria-labelledby="just-now-title" hidden>
                 <h2 class="section-title" id="just-now-title">Just now</h2>

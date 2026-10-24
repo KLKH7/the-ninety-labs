@@ -546,3 +546,31 @@ def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, sit
     labels = [page.locator("#compare-rows .stat-row").nth(i).get_attribute("aria-label") for i in range(3)]
     assert labels[0].startswith("Speed now (km/h): Oakfield 7 ") and ", Fenwick 7 " in labels[0]
     assert not errors
+
+
+def test_the_territory_strip_is_match_json_s_and_rewinding_it_moves_the_whole_screen(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.wait_for_selector("#momentum:not([hidden])")
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    (b,) = match["territory"]["bins"]  # the clip's few seconds are one 5-minute spell
+    assert match["territory"]["source"] == "tracked"
+    strip = page.locator("#momentum-strip")
+    said = strip.get_attribute("aria-valuetext")
+    assert said.startswith("Live. Minute 2: ")
+    if b["home"] is not None and b["home"] != 0.5:
+        share = round(max(b["home"], 1 - b["home"]) * 100)
+        assert f"{share}% of territory" in said
+    # Home rewinds to the first moment the footage shows; the clock, pitch and status follow it.
+    first = match["chapters"][0]["t"]
+    strip.focus()
+    page.keyboard.press("Home")
+    page.wait_for_function(f"Math.abs(Number(document.querySelector('#map').dataset.t) - {first}) < 0.05")
+    assert page.text_content("#clock") == f"{int(first) // 60}:{int(first) % 60:02d}"
+    assert page.text_content("#status") == f"Rewound to {int(first) // 60 + 1}′"
+    assert page.locator("#to-live").is_visible()
+    assert not strip.get_attribute("aria-valuetext").startswith("Live.")
+    # End is live again.
+    page.keyboard.press("End")
+    page.wait_for_function("document.querySelector('#to-live').hidden")
+    page.wait_for_function("!document.querySelector('#status').textContent.startsWith('Rewound')")
+    assert not errors
