@@ -320,7 +320,10 @@ def shape_lines(shape: list[dict]) -> list[tuple[float, str, str]]:
                  and abs(r["change"]) >= SHAPE_CHANGE_M and _said(r) in SHAPE_SAID]
         if moved:
             r = max(moved, key=lambda r: (abs(r["change"]), r["metric"] == "line_height", r["id"]))
-            text = SHAPE_SAID[_said(r)].format(team=r["team"], n=abs(r["change"]))
+            # The side, only when it was told surely; else "one side" (a shape fact's side comes from
+            # the same side decision a detection's does, and is gated the same way).
+            who = r["team"] if side_known(r) else "one side"
+            text = SHAPE_SAID[_said(r)].format(team=who, n=abs(r["change"]))
             out.append((60.0 * minute, text, r["id"]))
     return out
 

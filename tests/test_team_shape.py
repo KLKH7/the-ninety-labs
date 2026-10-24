@@ -166,3 +166,34 @@ def test_min_tracked_is_the_committed_measurement():
     assert measured["position_error_m"] == shape.POSITION_ERROR_M
     # Line height alone would pass at 10 tracked, missing at random: a finding, not yet a rule.
     assert measured["p90_error_over_tolerance"]["random"]["10"]["line_height"] <= 1.0
+
+
+# The side a shape fact names (Coordinator, Oct 24): it comes from the same side decision as a
+# detection's, so it is gated the same way. A fact inherits the least sure side of the players it was
+# computed from; tracked frames that carry no side confidence give an unknown side.
+
+
+def test_a_shape_fact_from_ground_truth_frames_has_a_known_side():
+    from ninety.agents.factcheck import side_known
+
+    rows = shape.shape_rows([{**f, "source": "truth"} for f in frames(2, team("home", HOME_442))])
+    assert rows and all(r["team_confidence"] == 1.0 and side_known(r) for r in rows)
+
+
+def test_a_shape_fact_from_tracked_frames_without_side_confidence_has_an_unknown_side():
+    from ninety.agents.factcheck import side_known
+
+    rows = shape.shape_rows(frames(2, team("home", HOME_442)))  # source: tracked, no side confidence
+    assert rows and all(r["team_confidence"] is None and not side_known(r) for r in rows)
+
+
+def test_a_shape_fact_inherits_the_least_sure_side_of_its_players():
+    from ninety.agents.factcheck import side_known
+
+    players = [{**p, "side_confidence": 0.99} for p in team("home", HOME_442)]
+    players[3]["side_confidence"] = 0.7
+    rows = by_id(shape.shape_rows(frames(2, players)))
+    assert rows["shape:width:home:m2"]["team_confidence"] == 0.7
+    assert not side_known(rows["shape:width:home:m2"])
+    sure = [{**p, "side_confidence": 0.99} for p in team("home", HOME_442)]
+    assert side_known(by_id(shape.shape_rows(frames(2, sure)))["shape:width:home:m2"])

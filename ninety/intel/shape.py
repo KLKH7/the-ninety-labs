@@ -169,13 +169,27 @@ def minute_of(t: float) -> int:
     return int(float(t) // WINDOW_S) + 1
 
 
+def side_confidence(frames: list[Mapping], team: str) -> float | None:
+    """How surely this team's players were told to be this team, over the frames a fact reads: 1.0
+    for ground-truth frames (the simulator knows its sides); for tracked frames the least sure of its
+    players' `side_confidence`, or None when any player carries none (today's tracked frames carry
+    none). The fact-checker gates a side named from it as it gates a detection's
+    (factcheck.side_known)."""
+    if frames and all(f.get("source") == "truth" for f in frames):
+        return 1.0
+    sides = [p.get("side_confidence") for f in frames for p in f["players"] if p["team"] == team]
+    return None if not sides or any(s is None for s in sides) else min(sides)
+
+
 def window_shape(frames: Iterable[Mapping], team: str) -> dict:
     """One team's per-frame shapes over some frames, summarised: each metric's median, the median
     number tracked, the most tracked in any frame and the frames read."""
+    frames = list(frames)
     shapes = [frame_shape(team, f["players"], f["ball"]) for f in frames]
     out = {"frames": len(shapes),
            "tracked": _half_up(statistics.median([s["tracked"] for s in shapes])) if shapes else 0,
-           "most": max((s["tracked"] for s in shapes), default=0)}
+           "most": max((s["tracked"] for s in shapes), default=0),
+           "team_confidence": side_confidence(frames, team)}
     for metric in (*METRICS, "perimeter"):
         values = [s[metric] for s in shapes if metric in s]
         if values:
@@ -211,6 +225,7 @@ def shape_rows(frames: Iterable[Mapping]) -> list[dict]:
                     "team": team, "minute": minute, "value": value, "unit": UNITS[metric],
                     "change": change, "tracked": w["tracked"], "of": TEAM_SIZE, "need": need(metric),
                     "frames": w["frames"], "confident": confident,
+                    "team_confidence": w["team_confidence"],
                 }
                 rows.append(row)
                 last[(team, metric)] = row

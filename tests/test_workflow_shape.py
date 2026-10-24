@@ -13,7 +13,8 @@ from tests.test_workflow import EVENTS, MAIN, MINUTE, Judge, insights, picks, re
 def row(metric, team, value, change, unit="m", minute=MINUTE, confident=True, tracked=11):
     return {"id": f"shape:{metric}:{team}:m{minute}", "type": "shape", "metric": metric, "team": team,
             "minute": minute, "value": value, "unit": unit, "change": change, "tracked": tracked,
-            "of": 11, "need": 11, "frames": 1500, "confident": confident}
+            "of": 11, "need": 11, "frames": 1500, "confident": confident,
+            "team_confidence": 1.0}  # a side told surely (the side gate's tests set it otherwise)
 
 
 LINE = row("line_height", "home", 38, 8)
@@ -129,3 +130,19 @@ def test_a_verified_insight_citing_an_unsure_shape_fact_is_not_said():
     lines, refused = describe.candidates(ev, [cue], shape=SHAPE)
     assert not any(line.source == "insight" for line in lines)
     assert any("7 of 11" in r["reason"] for r in refused)
+
+
+def test_a_shape_line_on_an_unsure_side_says_one_side():
+    unsure = [row("line_height", "home", 38, 8) | {"team_confidence": None}]
+    ((_, text, _),) = describe.shape_lines(unsure)
+    assert text == "one side's back line has pushed up 8 m."
+    sure = [row("line_height", "home", 38, 8) | {"team_confidence": 1.0}]
+    assert describe.shape_lines(sure)[0][1] == "home's back line has pushed up 8 m."
+
+
+def test_a_claim_naming_a_side_on_an_unsure_shape_fact_is_held():
+    from ninety.agents.factcheck import Claim, confidence_gate
+
+    unsure = row("line_height", "home", 38, 8) | {"team_confidence": None}
+    gated = confidence_gate(Claim("Home's back line pushed up 8 m.", [unsure["id"]]), {unsure["id"]: unsure})
+    assert not gated.ok and gated.category == "low_confidence"
