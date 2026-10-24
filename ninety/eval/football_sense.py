@@ -86,7 +86,7 @@ CLOSING_M = 1.0  # design: nearest of each team gets at least this much closer i
 CAMP_SHARE = 0.5
 CAMP_MIN_S = 2.0
 
-STOPS = {"out_of_play", "goal", "foul", "offside"}  # the ball is dead from these ...
+STOPS = {"out_of_play", "goal", "foul", "offside", "half_time"}  # the ball is dead from these ...
 KICKS = {"pass", "shot"}  # ... until the restart is played
 TOUCHES = {"pass", "shot", "tackle", "interception", "deflection", "possession_change", "foul", "offside"}
 
