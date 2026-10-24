@@ -3,7 +3,7 @@
 How the clips of [set-piece-set.md](set-piece-set.md) and [possession-set.md](possession-set.md) are
 rendered, validated and frozen. Both sets are chosen already (`docs/eval/set-piece-set.json`,
 `docs/eval/possession-set.json`); rendering changes nothing in them. Every clip is rendered at the
-render commit `ac21ccc76e815d308490eaf6aa73fb199324affa` and nowhere else: each command line checks
+render commit `65247ba36343c640fe7673c772a1cbc0ac19c07e` and nowhere else: each command line checks
 `git rev-parse HEAD` first and stops if it differs.
 
 ## Cost
@@ -36,7 +36,7 @@ set -e
 apt-get update -qq && apt-get install -y -qq git curl python3-pip nodejs npm tmux >/dev/null
 pip install --quiet --break-system-packages uv==0.12.23
 git clone -q https://github.com/KLKH7/the-ninety-labs.git ninety && cd ninety
-git checkout -q ac21ccc76e815d308490eaf6aa73fb199324affa
+git checkout -q 65247ba36343c640fe7673c772a1cbc0ac19c07e
 uv sync --quiet && (cd web && npm ci --silent)
 uv run playwright install --with-deps chromium >/dev/null
 EOF

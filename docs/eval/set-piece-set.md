@@ -72,6 +72,20 @@ So this set is rendered for it, by these rules, written before any of its matche
   (late-match fatigue); and how often each kind occurs in a match, since the subset caps the
   common kinds.
 
+## Amendment, 2026-10-24 (written before any match on the new engine was simulated)
+
+The render commit changes from `ac21ccc76e815d308490eaf6aa73fb199324affa` to
+`65247ba36343c640fe7673c772a1cbc0ac19c07e`, `main` after the engine freeze (#272), half-time, the
+second-half kick-off and a penalty at the whistle (#275), and the `half_time` event (#276); renderer
+0.5.17. The demo and the detectors run that engine, and a set chosen on the old one would test
+football the demo no longer plays. Nothing else changes: the seeds and split, the 35 minutes, the
+windows, the subset and the targets are as written above. The matches simulated at `ac21ccc`
+(28 of 45, stopped part way) and the one sample clip rendered from them (a second was stopped
+part way) are deleted once the new ones replace them. Of those matches, only the window counts of
+validation seeds 920101, 920102 and 920104 were looked at, to see the chooser run; no rule, target
+or seed was changed after, and no test match was read. The second half starts after minute 35, so neither the half-time stoppage nor its
+kick-off falls in these matches.
+
 ## Counts
 
 Filled in from `docs/eval/set-piece-set.json` once the chooser has run: windows per split and

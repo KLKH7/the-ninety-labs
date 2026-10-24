@@ -23,7 +23,7 @@ from ninety.render import edit
 from ninety.sim.engine import FPS, PENALTY_MARK_M, PITCH_X, PITCH_Y
 
 NAME = "set-piece-set"
-RENDER_COMMIT = "ac21ccc76e815d308490eaf6aa73fb199324affa"
+RENDER_COMMIT = "65247ba36343c640fe7673c772a1cbc0ac19c07e"
 VALIDATION = tuple(range(920101, 920116))
 TEST = tuple(range(920201, 920231))
 MINUTES = 35  # each match is simulated this long
