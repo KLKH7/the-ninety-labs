@@ -156,6 +156,10 @@ jobs:
       - run: uv run pytest -q tests/test_phone.py tests/test_phone_companion.py
         env:
           NINETY_REQUIRE_PHONE: "1"
+      # Read-aloud in the pinned voice: the phone's player in a muted browser (tests/test_speech.py).
+      - run: uv run pytest -q tests/test_speech.py
+        env:
+          NINETY_REQUIRE_PHONE: "1"
 
   secret-scan:
     runs-on: ubuntu-latest

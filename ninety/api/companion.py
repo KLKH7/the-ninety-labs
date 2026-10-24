@@ -44,7 +44,7 @@ import logging
 import os
 import secrets
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -59,6 +59,7 @@ from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validat
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
 from ninety.mcp import match_server
+from ninety.speech import voice
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ MODES = ("on", "standin", "off")  # NINETY_COMPANION; unset means `on`
 CLIPS = (*sorted(match_server.MATCHES), *tracking.TRACKED_CLIPS)
 # Requests a client may make in a minute (design: a person tapping, never a script).
 LIMITS = {"pair": 6, "join": 30, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
+MAX_SPOKEN = 2_000  # design: answers remembered for read-aloud; minutes of a busy demo
 SWEEP_KEYS = 10_000  # design: rate-limit keys kept before idle ones are swept
 # design: 20 Live answers a viewer, 400 a day. A Live answer (the Companion's draft and the Judge)
 # is about 1,400 tokens in and 100 out (our instructions and prompts at 4 characters a token, as
@@ -268,6 +270,9 @@ class Companion:
         self.rooms: dict[str, Room] = {}
         self.limits = {name: RateLimit(n) for name, n in LIMITS.items()}
         self.budget = Budget(SESSION_MODEL_CALLS, DAY_MODEL_CALLS, clock)
+        # Keys (ninety/speech/voice.key) of the answers given lately: the only text the Live
+        # read-aloud route (ninety/api/speak.py) will send to Speech.
+        self.spoken: OrderedDict[str, None] = OrderedDict()
 
     def _served(self, clip: str) -> tracking.Track | JSONResponse:
         """The clip's track, or a 503 when its positions are ground truth and this server may not
@@ -596,9 +601,18 @@ class Companion:
             if models is not None:
                 ask, judge = models.ask, models.judge
         result = await companion.answer(question, window, ask, judge)
-        return JSONResponse(_send(
-            {"type": "answer", "answer": answer_json(result.answer), "source": result.source}
-        ))
+        message = _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
+        for said in (message["answer"].get("text"), message["answer"].get("spoken")):
+            if isinstance(said, str) and said.strip():
+                self.spoken[voice.key(said)] = None
+                self.spoken.move_to_end(voice.key(said))
+        while len(self.spoken) > MAX_SPOKEN:
+            self.spoken.popitem(last=False)
+        return JSONResponse(message)
+
+    def answered(self, key: str) -> bool:
+        """Whether an answer with this text (ninety/speech/voice.key) was given lately."""
+        return key in self.spoken
 
     async def _live_models(self) -> LiveModels | None:
         """The Live models, built on the first Live question. A failure to build them (no identity,
