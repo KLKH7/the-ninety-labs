@@ -71,7 +71,7 @@ export interface Question {
 /** A picture as the agents send it (schemas/insight_card.schema.json, $defs/visual): pitch metres,
  * home attacking x = 105, a point as [x, y] or [x, y, player id or null]. Every position and count
  * comes from the cited fact; `visual.ts` turns it into the `Visual` the phone draws, or nothing. */
-export type ScoutKind = "line_break" | "overload" | "pass_options" | "counter_press" | "shape" | "wind_map" | "channels" | "offside" | "counter";
+export type ScoutKind = "line_break" | "overload" | "pass_options" | "counter_press" | "shape" | "wind_map" | "channels" | "offside" | "counter" | "one_two";
 export type ScoutPoint = [number, number] | [number, number, string | null];
 export interface ScoutVisual {
   kind: ScoutKind;
@@ -110,15 +110,17 @@ export interface ScoutVisual {
     second_last?: ScoutPoint;
     attackers?: ScoutPoint[];
     defenders?: ScoutPoint[];
-    verdict?: "onside" | "offside" | "too_close";
+    verdict?: "onside" | "offside" | "too_close" | "unsure" | "restart";
     margin_m?: number;
     // counter: from the regain to the shot
     seconds?: number;
+    // one_two: from, via the wall player, back to (from and to above)
+    via?: ScoutPoint;
   };
 }
 
 /** What the phone draws (visual.ts), made from a ScoutVisual. */
-export type VisualKind = "overload" | "line_break" | "pass_options" | "counter_press" | "shape" | "wind" | "channels" | "offside" | "counter";
+export type VisualKind = "overload" | "line_break" | "pass_options" | "counter_press" | "shape" | "wind" | "channels" | "offside" | "counter" | "one_two";
 export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier" | "presser" | "second_last";
 export interface Point {
   x: number;
@@ -143,9 +145,10 @@ export interface Visual {
   lines?: Point[][] | null;
   bands?: { channel: "left" | "centre" | "right"; y0: number; y1: number; share: number }[] | null;
   line_x?: number | null;
-  verdict?: "onside" | "offside" | "too_close" | null;
+  verdict?: "onside" | "offside" | "too_close" | "unsure" | "restart" | null;
   margin_m?: number | null;
   seconds?: number | null;
+  via?: Point | null;
   t_from?: number | null;
   t_to?: number | null;
 }

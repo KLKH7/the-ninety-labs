@@ -178,6 +178,7 @@ function mockText(v: Visual, names?: Record<string, string>): { title: string; t
     case "channels":
     case "offside":
     case "counter":
+    case "one_two":
       return { title: club, text: `${club} at ${clock(v.t)}.`, value: null, unit: null }; // the mock makes none of these
     case "wind":
       return { title: "How the teams moved", text: `Both teams' movement from ${clock(v.t_from!)} to ${clock(v.t_to!)}.`, value: null, unit: null };

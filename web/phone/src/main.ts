@@ -8,7 +8,7 @@
 // reads the mock feed.
 
 import "./ionic";
-import { RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
+import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
@@ -361,7 +361,40 @@ async function loadBundle() {
   }
 }
 
+/** The two clubs' colours (DESIGN.md: Oakfield navy, Fenwick claret; another club takes the one
+ * left), on the page's variables and on every pitch drawing. Colour follows the club, not the side. */
+function clubColours() {
+  const root = document.documentElement;
+  const own = (club: string) => (club === "Oakfield" ? "a" : club === "Fenwick" ? "b" : null);
+  let h = own(teams.home);
+  let a = own(teams.away);
+  if (!h) h = a === "a" ? "b" : "a";
+  if (!a || a === h) a = h === "a" ? "b" : "a";
+  root.style.setProperty("--home", `var(--team-${h})`);
+  root.style.setProperty("--away", `var(--team-${a})`);
+  root.style.setProperty("--crest-home", `var(--crest-${h})`);
+  root.style.setProperty("--crest-away", `var(--crest-${a})`);
+  const css = getComputedStyle(root);
+  const read = (name: string) => css.getPropertyValue(name).trim();
+  const palette = {
+    home: read(`--team-${h}`),
+    away: read(`--team-${a}`),
+    grass: read("--pitch"),
+    stripe: read("--pitch"),
+    line: read("--pitch-line"),
+    homeInk: "#ffffff",
+    awayInk: "#ffffff",
+  };
+  Object.assign(RADAR_COLORS, palette);
+  Object.assign(COLORS, palette);
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  clubColours();
+  requestAnimationFrame(redrawPictures);
+});
+
 function showTeams() {
+  clubColours();
   for (const side of ["home", "away"] as const) {
     for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
     for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
@@ -427,7 +460,7 @@ function buildRadar() {
     renderRoster(rosterIds());
     const tracked = rosterIds().some(isTrack);
     $("seen-note").hidden = !tracked;
-    $("roster-summary").textContent = tracked ? "Choose a player the cameras have seen" : "Choose a player from a list";
+    $("roster-summary").textContent = "Players";
   }
   renderChips();
 }
@@ -742,7 +775,7 @@ function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
-  $("ask-chips").replaceChildren(...all.map((q) => chip(q, null)));
+  $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
@@ -775,7 +808,6 @@ function named(text: string, names?: Record<string, string>): string {
   return nameIds(text, teams, names);
 }
 
-let answerSeq = 0;
 async function ask(text: string) {
   const q = text.trim().slice(0, MAX_QUESTION);
   if (!q) return;
@@ -789,7 +821,8 @@ async function ask(text: string) {
   pending.className = "answer pending";
   pending.setAttribute("aria-hidden", "true"); // the button's state says it; the answer is read when it comes
   pending.textContent = `Fact-checking: “${q}”`;
-  $("answers").prepend(pending);
+  $("answers").append(pending); // a thread reads down: the newest answer last
+  void ($("ask-content") as HTMLElement & { scrollToBottom(ms?: number): Promise<void> }).scrollToBottom(reduceMotion.matches ? 0 : 300);
   let answer: ViewerAnswer | null = null;
   let failed = "";
   try {
@@ -807,39 +840,48 @@ async function ask(text: string) {
   }
   if (input.value.trim() === q) input.value = "";
   pending.replaceWith(renderAnswer(q, at, answer, failed));
+  requestAnimationFrame(() => void ($("ask-content") as HTMLElement & { scrollToBottom(ms?: number): Promise<void> }).scrollToBottom(reduceMotion.matches ? 0 : 300));
 }
 
 function renderAnswer(question: string, at: number, a: ViewerAnswer | null, failed: string): HTMLLIElement {
+  // Like a message thread: the question on the right, the answer below it in a plain bubble with
+  // its one number, a sentence or two, the diagram when it helps, and a quiet "How we know ›".
   const li = document.createElement("li");
   li.className = `answer ${a?.status ?? "error"}`;
   li.dataset.status = a?.status ?? "error";
+  li.dataset.source = a?.source ?? "code";
   const asked = document.createElement("p");
   asked.className = "asked";
-  asked.textContent = `You asked at ${clock(at)}: “${question}”`; // shown as text, never as markup
-  const badge = document.createElement("span");
-  badge.className = "badge";
-  badge.textContent = a ? badgeFor(a) : "Not sent";
-  li.dataset.source = a?.source ?? "code";
+  const when = document.createElement("span");
+  when.className = "sr-only";
+  when.textContent = `You asked at ${clock(at)}: `;
+  asked.append(when, question); // shown as text, never as markup
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
   const body = document.createElement("p");
   body.className = "said";
   if (!a) body.textContent = failed;
   else if (a.status === "verified") body.textContent = named(a.text, a.names);
-  else if (a.status === "held") body.textContent = "The fact-checking agent has not finished checking this answer, so it is not shown yet.";
-  else if (a.status === "rejected") body.textContent = "The fact-checking agent rejected the drafted answer, so nothing is shown.";
-  else body.textContent = named(a.text, a.names) || "That is not something the phone can answer. Ask about a player's speed, an overload or a team's shape.";
-  li.append(asked, badge, body);
+  else if (a.status === "held") body.textContent = "Still being checked, so not shown yet.";
+  else if (a.status === "rejected") body.textContent = "The fact-checker turned that answer down, so there's nothing to show.";
+  else body.textContent = named(a.text, a.names) || "I can't answer that one. Try a player's speed, an overload or a team's shape.";
   if (a && a.status === "verified" && a.value !== null) {
     const big = document.createElement("p");
     big.className = "figure";
     big.textContent = `${a.value} ${a.unit ?? ""}`.trim();
-    li.insertBefore(big, body);
+    bubble.append(big);
   }
+  bubble.append(body);
+  // Who answered, said quietly: "Fact-checked" only when the Judge read it (badgeFor).
+  const badge = document.createElement("p");
+  badge.className = "badge";
+  badge.textContent = a ? badgeFor(a) : "Not sent";
+  li.append(asked, bubble, badge);
   if (a && a.status === "verified") {
     // Only a checked answer draws its picture: the picture carries the same numbers as the text.
-    if (a.visual) li.append(picture(a.visual, a.t_to, a.names));
+    if (a.visual) bubble.append(picture(a.visual, a.t_to, a.names));
+    bubble.append(howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names, answer: a }));
     if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
-    li.append(...evidence(a));
-    li.append(howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names }));
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
   return li;
@@ -918,15 +960,8 @@ async function windPicture(canvas: HTMLCanvasElement, v: Visual) {
   }
 }
 
-/** The answer's evidence behind one button: what was measured, over which stretch, from which facts. */
+/** What an answer measured, over which stretch, and from which facts: rows for "How we know". */
 function evidence(a: ViewerAnswer): HTMLElement[] {
-  const id = `evidence-${++answerSeq}`;
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "evidence-toggle";
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.setAttribute("aria-controls", id);
-  toggle.textContent = "Show the evidence";
   const panel = document.createElement("dl");
   panel.className = "evidence";
   const who = a.evidence.map((id) => /player_([ha](?:-t\d+|[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
@@ -951,23 +986,12 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   const technical = document.createElement("details");
   technical.className = "technical";
   const summary = document.createElement("summary");
-  summary.textContent = "Technical detail";
+  summary.textContent = "Facts cited";
   const ids = document.createElement("p");
   ids.className = "ids";
-  ids.textContent = `Cited facts: ${a.evidence.join(", ")}`;
+  ids.textContent = a.evidence.join(", ");
   technical.append(summary, ids);
-  const wrap = document.createElement("div");
-  wrap.className = "evidence-wrap";
-  wrap.id = id;
-  wrap.hidden = true;
-  wrap.append(panel, technical);
-  toggle.addEventListener("click", () => {
-    const open = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.textContent = open ? "Hide the evidence" : "Show the evidence";
-    wrap.hidden = !open;
-  });
-  return [toggle, wrap];
+  return [panel, technical];
 }
 
 $("ask-form").addEventListener("submit", (e) => {
@@ -983,6 +1007,23 @@ interface How {
   source: "code" | "model";
   evidence: string[];
   names?: Record<string, string>;
+  answer?: ViewerAnswer;
+  /** A card's precomputed, fact-checked "why it matters". */
+  why?: { question: string; text: string };
+}
+
+/** An offside picture opens as the VAR check; everything else as How we know. */
+const isVar = (h: Pick<How, "visual">) => h.visual?.kind === "offside";
+
+/** The VAR check's verdict in one plain sentence, from the fact's own call: a call only when the
+ * fact makes one, otherwise why it can't be called. */
+function varVerdict(v: ScoutVisual): string {
+  const g = v.geometry;
+  if (g.verdict === "offside" && typeof g.margin_m === "number") return `Offside, by ${g.margin_m.toFixed(1)} metres.`;
+  if (g.verdict === "onside" && typeof g.margin_m === "number") return `Onside, by ${g.margin_m.toFixed(1)} metres.`;
+  if (g.verdict === "unsure") return "We can't call it: a defender was out of the cameras' view.";
+  if (g.verdict === "restart") return "No offside call: the pass came straight from a restart.";
+  return "Too close to call from the cameras: the gap is smaller than what tracking can measure.";
 }
 interface FrameDetections {
   frame: number;
@@ -1015,8 +1056,7 @@ function howButton(h: How): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "how";
-  b.textContent = "How do we know?";
-  b.dataset.open = "the label 'How do we know?'";
+  b.textContent = isVar(h) ? "VAR check ›" : "How we know ›";
   b.addEventListener("click", () => void openHow(h));
   return b;
 }
@@ -1090,6 +1130,9 @@ async function openHow(h: How) {
     return el;
   };
   const parts: HTMLElement[] = [];
+  $("how-title").textContent = isVar(h) ? "VAR check" : "How we know";
+  if (isVar(h) && h.visual) parts.push(section("The call", p(varVerdict(h.visual), "said"), picture(h.visual, h.t, h.names)));
+  if (h.why) parts.push(section("Why it matters", p(h.why.text, "said")));
   if (bundle) {
     const canvas = document.createElement("canvas");
     canvas.className = "seen";
@@ -1106,13 +1149,13 @@ async function openHow(h: How) {
       canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ") || "nothing detected"}.`);
     });
   } else parts.push(section("What the cameras saw", p("This phone has no footage from the big screen to show.")));
-  if (h.visual) parts.push(section("What it measured", picture(h.visual, h.t, h.names), p("Positions tracked from the video, never the answer key.")));
+  if (h.visual && !isVar(h)) parts.push(section("What was measured", picture(h.visual, h.t, h.names), p("From positions tracked in the video.")));
   const checked =
     h.source === "model"
-      ? "The Companion agent wrote the sentence; code checked every number against the cited facts, and the Judge read it before it reached you."
-      : "Code computed every number and put it in a fixed sentence; no AI wrote it, so there was nothing for the Judge to read.";
-  const ids = p(`Facts cited: ${h.evidence.join(", ") || "none"}`, "fine ids");
-  parts.push(section("The check", p(checked, "said"), ids));
+      ? "The Companion agent wrote the sentence. Code checked every number against the cited facts, and the Judge read it before it reached you."
+      : "Code worked out every number and put it in a fixed sentence. No AI wrote it.";
+  const rows = h.answer ? evidence(h.answer) : [p(`Facts cited: ${h.evidence.join(", ") || "none"}`, "fine ids")];
+  parts.push(section("What the fact-checker did", p(checked, "said"), ...rows));
   body.replaceChildren(...parts);
   await howSheet.present();
   requestAnimationFrame(redrawPictures);
@@ -1166,11 +1209,12 @@ async function refreshInsights(force = false) {
 }
 
 function renderInsights() {
+  // A live blog: the minute on the left, one sentence, a small diagram, a quiet "How we know ›".
   const list = $("insights");
   if (!state.insights.length) {
     const li = document.createElement("li");
-    li.className = "fine";
-    li.textContent = "Nothing yet: hidden stats appear here as the match goes on.";
+    li.className = "story-empty";
+    li.textContent = "Nothing yet. The story fills in as the match goes on.";
     list.replaceChildren(li);
     return;
   }
@@ -1179,45 +1223,23 @@ function renderInsights() {
       const li = document.createElement("li");
       li.className = `insight ${c.team}`;
       li.dataset.id = c.id;
-      const head = document.createElement("div");
-      head.className = "insight-head";
-      const title = document.createElement("h3");
-      title.textContent = named(c.headline, c.names);
-      const when = document.createElement("span");
-      when.className = "when";
-      when.textContent = `${teams[c.team]} · ${c.minute}′`;
-      head.append(title, when);
+      const minute = document.createElement("time");
+      minute.className = "minute-col";
+      minute.textContent = `${c.minute}′`;
+      const body = document.createElement("div");
+      body.className = "story-body";
+      const head = document.createElement("h3");
+      head.className = "sr-only";
+      head.textContent = named(c.headline, c.names);
       const text = document.createElement("p");
       text.textContent = named(c.text, c.names);
-      li.append(head, text);
+      body.append(head, text);
       if (c.spoken) li.setAttribute("aria-label", `${c.minute}th minute. ${c.spoken}`);
-      if (c.visual) li.append(picture(c.visual, c.t, c.names));
-      if (!c.why) return li;
-      // "Why?" opens the answer the Scout precomputed and the fact-checker passed: no model call.
-      const why = document.createElement("button");
-      why.type = "button";
-      why.className = "why";
-      why.textContent = "Why?";
-      why.setAttribute("aria-expanded", "false");
-      const panel = document.createElement("div");
-      panel.className = "why-answer";
-      panel.id = `why-${c.id}`;
-      panel.hidden = true;
-      why.setAttribute("aria-controls", panel.id);
-      const q = document.createElement("p");
-      q.className = "asked";
-      q.textContent = c.why.question;
-      const said = document.createElement("p");
-      said.textContent = named(c.why.answer.text, c.names);
-      panel.append(q, said);
-      if (c.why.answer.visual) panel.append(picture(c.why.answer.visual, c.t, c.names));
-      why.addEventListener("click", () => {
-        const open = why.getAttribute("aria-expanded") !== "true";
-        why.setAttribute("aria-expanded", String(open));
-        panel.hidden = !open;
-        if (open) requestAnimationFrame(redrawPictures);
-      });
-      li.append(why, panel, howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names }));
+      if (c.visual) body.append(picture(c.visual, c.t, c.names));
+      body.append(
+        howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
+      );
+      li.append(minute, body);
       return li;
     }),
   );

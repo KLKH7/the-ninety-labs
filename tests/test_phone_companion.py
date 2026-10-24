@@ -87,9 +87,8 @@ def test_the_phone_draws_the_bundles_tracked_radar_named_by_the_clips_codes(brow
     laptop, page, errors = phone(browser, site)
     assert page.get_attribute("#map", "data-from") == "bundle"
     assert page.get_attribute("#map", "data-source") == "tracked"
-    assert page.inner_text("#legend-home") == "Crowmere →"
-    assert page.inner_text("#legend-away") == "← Dunhollow"
-    assert page.is_visible("#legend-view")  # the TV camera's footprint, from vision's own camera fit
+    assert page.inner_text(".band .home-name") == "Crowmere"  # the clubs on the clip's scorebug
+    assert page.inner_text(".band .away-name") == "Dunhollow"
     state = page.evaluate(f"window.ninetyPhone.radarAt({1505 / FPS})")
     assert {p["id"] for p in state["players"]} == {"h-t1", "h-t2", "h-t4", "a-t3"}
     assert not errors
@@ -156,14 +155,14 @@ def ask(page, text: str):
     page.fill("#question", text)
     page.click("#ask-button")
     page.wait_for_function(f"document.querySelectorAll('#answers .answer:not(.pending)').length > {n}")
-    return page.locator("#answers .answer").first
+    return page.locator("#answers .answer").last
 
 
 def pixel(page, x: float, y: float) -> list[int]:
     """The newest answer picture's pixel at pitch metres (x, y), through radar.ts's projection
     (3 m of grass round the lines, y = 0 at the bottom)."""
     return page.evaluate(f"""(() => {{
-        const c = document.querySelector('#answers .answer figure canvas');
+        const c = [...document.querySelectorAll('#answers .answer figure canvas')].at(-1);
         const s = c.width / 111;
         const at = [Math.round((3 + {x}) * s), Math.round((71 - {y}) * s)];
         return [...c.getContext('2d').getImageData(at[0], at[1], 1, 1).data];
@@ -181,7 +180,8 @@ def test_an_answer_draws_the_picture_its_visual_names_with_its_numbers(browser, 
         return
     assert picture.get_attribute("data-kind") == kind  # mutation: draw every visual as an overload -> fails
     canvas = picture.locator("canvas")
-    page.wait_for_function("document.querySelector('#answers .answer figure canvas').dataset.drawn === '1'")
+    last = "[...document.querySelectorAll('#answers .answer figure canvas')].at(-1)"
+    page.wait_for_function(f"{last}.dataset.drawn === '1'")
     answers = [p for p in page.evaluate("window.ninetyPhone.seen") if p.get("type") == "answer"]
     visual = answers[-1]["answer"]["visual"]  # the agents' shape: schemas/insight_card.schema.json
     geo = visual["geometry"]
@@ -189,11 +189,14 @@ def test_an_answer_draws_the_picture_its_visual_names_with_its_numbers(browser, 
     # The headline is the visual's own numbers, never the phone's.
     if kind == "overload":
         n, m = len(geo[visual["team"]]), len(geo["away" if visual["team"] == "home" else "home"])
-        assert head == f"{n}v{m}"  # the fact's own points, counted
-        # The zone is shaded in the team's colour: blue for Oakfield, inside its corner.
+        assert head == f"{n} v {m}"  # the fact's own points, counted
+        # The zone is shaded white over the pitch (DESIGN.md): lighter inside its corner than outside.
         z = geo["zone"]
-        r, g, b, _ = pixel(page, min(z["x0"], z["x1"]) + 0.6, min(z["y0"], z["y1"]) + 0.6)
-        assert b > r + 40, (r, g, b)  # mutation: draw an overload as a shape -> plain grass
+        x0, y0 = min(z["x0"], z["x1"]), min(z["y0"], z["y1"])
+        inside = sum(pixel(page, x0 + 0.6, y0 + 0.6)[:3])
+        beside = (x0 - 0.6, y0 + 0.6) if x0 > 2 else (x0 + 0.6, y0 - 0.6)
+        outside = sum(pixel(page, *beside)[:3])
+        assert inside > outside + 30, (inside, outside)  # mutation: draw an overload as a shape -> no zone
         said = f"{n} players against {m}"
         assert said in canvas.get_attribute("aria-label")
     elif kind == "line_break":
@@ -291,7 +294,7 @@ def test_a_player_is_named_by_the_answers_names_or_his_club_never_his_id(browser
 # --- insights: pushed cards up to the clock, each with "Why?" ---------------------------------------
 
 
-def test_insights_show_only_cards_up_to_the_clock_and_why_opens_the_checked_answer(browser, site):  # noqa: F811
+def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=50)
     requests: list[str] = []
     page.on("request", lambda r: requests.append(r.url))
@@ -303,14 +306,11 @@ def test_insights_show_only_cards_up_to_the_clock_and_why_opens_the_checked_answ
     page.wait_for_selector("#insights-title")
     first = page.locator("#insights .insight").first
     assert first.locator("h3").text_content() == cards[0]["headline"]
-    assert first.locator(":scope > figure canvas").count() == 1
-    why = first.locator(".why")
-    assert why.get_attribute("aria-expanded") == "false"
-    why.click()
-    # The Scout's precomputed, fact-checked answer opens in place: no question is sent.
-    assert why.get_attribute("aria-expanded") == "true"
-    panel = first.locator(".why-answer")
-    assert panel.is_visible() and cards[0]["why"]["answer"]["text"] in panel.inner_text()
+    assert first.locator(".story-body > figure canvas").count() == 1
+    first.locator(".how").click()
+    # The Scout's precomputed, fact-checked "why it matters" is in the sheet: no question is sent.
+    page.locator("#how-body").get_by_text("Why it matters").wait_for()
+    assert cards[0]["why"]["answer"]["text"] in page.inner_text("#how-body")
     assert not [u for u in requests if "/api/ask" in u]
     assert not errors
 
@@ -423,7 +423,8 @@ def test_the_phone_shows_the_bundles_cards_up_to_the_clock_with_their_pictures(b
     page.click("#tab-button-insights")
     card = page.locator("#insights .insight").first
     assert card.locator("h3").inner_text() == "Crowmere overload early"
-    assert card.locator(":scope > figure").get_attribute("data-headline") == "3v1"  # the fact's own points
+    figure = card.locator(".story-body > figure")
+    assert figure.get_attribute("data-headline") == "3 v 1"  # the fact's own points
     assert not errors
 
 

@@ -347,10 +347,17 @@ export function drawRadar(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (st.filled) {
       ctx.fillStyle = fill;
       ctx.fill();
-      // Away players carry a heavier dark outline, so the teams differ by more than colour.
-      ctx.lineWidth = home ? 1 : 2;
-      ctx.strokeStyle = home ? "rgba(0,0,0,0.55)" : ink;
+      // A white ring stands every dot off the pitch; away dots also carry a dark centre, so the
+      // teams differ by more than colour.
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#fff";
       ctx.stroke();
+      if (!home && pl.number === undefined) {
+        ctx.beginPath();
+        ctx.arc(X(pl.x), Y(pl.y), r * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fill();
+      }
       if (pl.number !== undefined) {
         ctx.fillStyle = ink;
         ctx.fillText(String(pl.number), X(pl.x), Y(pl.y) + 0.5);

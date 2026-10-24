@@ -21,7 +21,11 @@ import {
   teams,
 } from "./types";
 
-export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "counter_press", "shape", "wind", "channels", "offside", "counter"];
+export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "counter_press", "shape", "wind", "channels", "offside", "counter", "one_two"];
+
+/** A verdict the cameras can't settle: within the tracking error, a defender out of view, or a pass
+ * straight from a restart. Drawn as uncertain and never said as onside or offside. */
+export const uncalled = (verdict: string | null | undefined) => verdict === "too_close" || verdict === "unsure" || verdict === "restart";
 
 const other = (side: Team): Team => (side === "home" ? "away" : "home");
 
@@ -89,6 +93,14 @@ export function fromScout(v: ScoutVisual | null | undefined, t: number | null = 
       if (!from || !to || typeof g.seconds !== "number") return null;
       return { ...base, kind: "counter", players: [], pass: { from, to }, seconds: g.seconds };
     }
+    case "one_two": {
+      const from = pt(g.from);
+      const via = pt(g.via);
+      const to = pt(g.to);
+      if (!from || !via || !to) return null;
+      const players = [player(g.from!, side, "passer"), player(g.via!, side, "receiver")];
+      return { ...base, kind: "one_two", players, pass: { from, to }, via };
+    }
   }
   return null;
 }
@@ -116,9 +128,11 @@ export function drawable(v: Visual | null | undefined): v is Visual {
     case "channels":
       return Array.isArray(v.bands) && v.bands.length === 3 && v.bands.every((b) => finite(b.y0) && finite(b.y1) && finite(b.share) && b.share >= 0 && b.share <= 100);
     case "offside":
-      return finite(v.line_x) && v.line_x! >= 0 && v.line_x! <= PITCH_X && ["onside", "offside", "too_close"].includes(v.verdict ?? "") && (v.verdict === "too_close" || finite(v.margin_m));
+      return finite(v.line_x) && v.line_x! >= 0 && v.line_x! <= PITCH_X && ["onside", "offside", "too_close", "unsure", "restart"].includes(v.verdict ?? "") && (uncalled(v.verdict) || finite(v.margin_m));
     case "counter":
       return !!v.pass && onPitch(v.pass.from) && onPitch(v.pass.to) && finite(v.seconds) && v.seconds! > 0;
+    case "one_two":
+      return !!v.pass && onPitch(v.pass.from) && onPitch(v.pass.to) && onPitch(v.via);
     case "shape":
       return Array.isArray(v.lines) && v.lines.length > 0 && v.lines.every((l) => l.length >= 2 && l.every(onPitch));
     case "wind":
@@ -128,7 +142,7 @@ export function drawable(v: Visual | null | undefined): v is Visual {
 
 /** The headline a picture carries, from its own numbers: "4v2", "6 bypassed". */
 export function headline(v: Visual): string {
-  if (v.kind === "overload" && v.count) return `${v.count.for}v${v.count.against}`;
+  if (v.kind === "overload" && v.count) return `${v.count.for} v ${v.count.against}`;
   if (v.kind === "line_break" && finite(v.bypassed)) return `${v.bypassed} bypassed`;
   if (v.kind === "pass_options") return `${v.players.filter((p) => p.role === "open").length} open`;
   if (v.kind === "counter_press") return `${v.players.filter((p) => p.role === "presser").length} pressing`;
@@ -137,25 +151,36 @@ export function headline(v: Visual): string {
     return `${Math.round(top.share)}% ${top.channel === "centre" ? "through the middle" : `down the ${top.channel}`}`;
   }
   // "too_close" is within the tracking error: say so, and never call it either way.
-  if (v.kind === "offside") return v.verdict === "too_close" ? "Too close to call" : `${v.verdict === "offside" ? "Offside" : "Onside"} by ${v.margin_m!.toFixed(1)} m`;
+  if (v.kind === "offside") {
+    if (v.verdict === "unsure") return "Can't call it";
+    if (v.verdict === "restart") return "No call: a restart";
+    if (uncalled(v.verdict)) return "Too close to call";
+    return `${v.verdict === "offside" ? "Offside" : "Onside"} by ${v.margin_m!.toFixed(1)} m`;
+  }
+  if (v.kind === "one_two") return "One-two";
   if (v.kind === "counter") return `${v.seconds!.toFixed(0)} s, regain to shot`;
   return "";
 }
 
 const fill = (side: Team) => (side === "home" ? COLORS.home : COLORS.away);
-const ink = (side: Team) => (side === "home" ? COLORS.homeInk : COLORS.awayInk);
 
 function dot(v: View, p: VisualPlayer, o: { r?: number; dim?: boolean; ring?: string; cross?: boolean } = {}) {
   const { ctx, X, Y } = v;
   const r = o.r ?? Math.max(5.5, 1.15 * v.s);
-  ctx.globalAlpha = o.dim ? 0.45 : 1;
+  ctx.globalAlpha = o.dim ? 0.4 : 1;
   ctx.beginPath();
   ctx.arc(X(p.x), Y(p.y), r, 0, Math.PI * 2);
   ctx.fillStyle = fill(p.team);
   ctx.fill();
-  ctx.lineWidth = p.team === "home" ? 1 : 2;
-  ctx.strokeStyle = p.team === "home" ? "rgba(0,0,0,0.55)" : ink(p.team);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#fff";
   ctx.stroke();
+  if (p.team === "away") {
+    ctx.beginPath();
+    ctx.arc(X(p.x), Y(p.y), r * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
   if (o.ring) {
     ctx.lineWidth = 2.5;
@@ -202,20 +227,19 @@ function arrow(v: View, from: { x: number; y: number }, to: { x: number; y: numb
 }
 
 /** A label in a pill, kept inside the canvas. */
+/** A label on the pitch: white type on black, no colour (DESIGN.md). `color` is unused, kept for callers. */
 function pill(v: View, text: string, x: number, y: number, color: string) {
+  void color;
   const { ctx } = v;
-  ctx.font = "800 15px system-ui, -apple-system, sans-serif";
+  ctx.font = "600 15px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
   const w = ctx.measureText(text).width + 16;
   const h = 24;
   const left = Math.max(4, Math.min(v.w - w - 4, x - w / 2));
   const top = Math.max(4, Math.min(v.h - h - 4, y - h / 2));
-  ctx.fillStyle = "rgba(8, 12, 20, 0.86)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
   ctx.beginPath();
   ctx.roundRect(left, top, w, h, 12);
   ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = color;
-  ctx.stroke();
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -249,15 +273,9 @@ export function drawVisual(view: View, v: Visual) {
       const top = Y(Math.max(z.y0, z.y1));
       const w = Math.abs(X(z.x1) - X(z.x0));
       const h = Math.abs(Y(z.y1) - Y(z.y0));
-      ctx.globalAlpha = 0.28;
-      ctx.fillStyle = own;
+      // DESIGN.md: the zone shaded white at 12%, nothing else added.
+      ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
       ctx.fillRect(left, top, w, h);
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = own;
-      ctx.strokeRect(left, top, w, h);
-      ctx.setLineDash([]);
       for (const p of rest("attacker", "defender")) dot(view, p, { dim: true });
       for (const p of [...role("defender"), ...role("attacker")]) dot(view, p);
       ball(v, view);
@@ -265,9 +283,10 @@ export function drawVisual(view: View, v: Visual) {
       break;
     }
     case "line_break": {
-      for (const p of rest("bypassed", "passer", "receiver")) dot(view, p, { dim: true });
-      for (const p of role("bypassed")) dot(view, p, { cross: true });
-      arrow(view, v.pass!.from, v.pass!.to, "#fff", 3.5);
+      // DESIGN.md: the pass as a white arrow; the defenders it took out dimmed to 40%.
+      for (const p of rest("bypassed", "passer", "receiver")) dot(view, p);
+      for (const p of role("bypassed")) dot(view, p, { dim: true });
+      arrow(view, v.pass!.from, v.pass!.to, "#fff", 2);
       for (const p of [...role("passer"), ...role("receiver")]) dot(view, p, { ring: "#fff" });
       ball(v, view);
       const mid = { x: (X(v.pass!.from.x) + X(v.pass!.to.x)) / 2, y: (Y(v.pass!.from.y) + Y(v.pass!.to.y)) / 2 };
@@ -313,7 +332,7 @@ export function drawVisual(view: View, v: Visual) {
     }
     case "offside": {
       // The line across the pitch: solid when called, dashed and labelled when too close to call.
-      const sure = v.verdict !== "too_close";
+      const sure = !uncalled(v.verdict);
       ctx.setLineDash(sure ? [] : [6, 5]);
       ctx.strokeStyle = sure ? "#fff" : "rgba(255,255,255,0.75)";
       ctx.lineWidth = sure ? 2.5 : 2;
@@ -328,8 +347,14 @@ export function drawVisual(view: View, v: Visual) {
       pill(view, headline(v), X(v.line_x!), Y(PITCH_Y) + 14, own);
       break;
     }
+    case "one_two": {
+      arrow(view, v.pass!.from, v.via!, "#fff", 2);
+      arrow(view, v.via!, v.pass!.to, "#fff", 2);
+      for (const p of v.players) dot(view, p);
+      break;
+    }
     case "counter": {
-      arrow(view, v.pass!.from, v.pass!.to, "#fff", 3.5);
+      arrow(view, v.pass!.from, v.pass!.to, "#fff", 2);
       pill(view, headline(v), (X(v.pass!.from.x) + X(v.pass!.to.x)) / 2, (Y(v.pass!.from.y) + Y(v.pass!.to.y)) / 2 - 22, own);
       break;
     }
@@ -389,11 +414,20 @@ export function describeVisual(v: Visual, names?: Record<string, string>): strin
       return `Picture ${at}: ${club}'s passes by lane as they attack: ${v.bands!.map((b) => `${b.channel} ${Math.round(b.share)}%`).join(", ")}.`;
     case "offside": {
       const r = v.players.find((p) => p.role === "receiver")!;
-      const call = v.verdict === "too_close" ? "too close to call: within what the tracking can measure" : `${v.verdict} by ${v.margin_m!.toFixed(1)} metres`;
+      const call =
+        v.verdict === "unsure"
+          ? "impossible to call: a defender is out of view"
+          : v.verdict === "restart"
+            ? "not judged: the pass came straight from a restart"
+            : uncalled(v.verdict)
+              ? "too close to call: within what the tracking can measure"
+              : `${v.verdict} by ${v.margin_m!.toFixed(1)} metres`;
       return `Picture ${at}: a line across the pitch at the second-last defender; ${who(r)} is ${call}.`;
     }
     case "counter":
       return `Picture ${at}: an arrow from where ${club} won the ball to their shot, ${v.seconds!.toFixed(0)} seconds later.`;
+    case "one_two":
+      return `Picture ${at}: a one-two: an arrow to ${who(v.players.find((q) => q.role === "receiver")!)} and an arrow back.`;
     case "counter_press": {
       const n = v.players.filter((p) => p.role === "presser").length;
       return `Picture ${at}: ${n} ${club} player${n === 1 ? "" : "s"} within ${v.radius_m} m of the ball, in a shaded circle.`;
