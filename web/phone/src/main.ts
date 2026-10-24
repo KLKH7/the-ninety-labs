@@ -11,6 +11,7 @@ import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
+import { tickTo } from "./ticker";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { nameIds, teamNames } from "../../viewer/src/teams";
@@ -1436,6 +1437,7 @@ let unread = 0;
 let insightsAt = 0;
 let insightsBusy = false;
 let insightsShownTo = -1;
+let insightsLoaded = false; // the first fetch has answered, with cards or with none
 
 function showUnread() {
   const badge = $("insights-new");
@@ -1472,6 +1474,10 @@ async function refreshInsights(force = false) {
       e instanceof ApiError && e.status === 404 ? "No hidden stats for this match yet." : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
   } finally {
     insightsBusy = false;
+    if (!insightsLoaded) {
+      insightsLoaded = true;
+      renderInsights();
+    }
   }
 }
 
@@ -1583,6 +1589,21 @@ function renderInsights() {
     }
     rows.push({ t: e.t, el: li });
   }
+  if (!rows.length && !insightsLoaded) {
+    // Still loading: grey placeholders the shape of the cards (shadcn's Skeleton, ported).
+    list.replaceChildren(
+      ...[0, 1, 2].map(() => {
+        const li = document.createElement("li");
+        li.className = "insight skeleton-card";
+        li.setAttribute("aria-hidden", "true");
+        li.innerHTML = '<span class="skeleton line"></span><span class="skeleton line short"></span><span class="skeleton stamp"></span>';
+        return li;
+      }),
+    );
+    list.setAttribute("aria-busy", "true");
+    return;
+  }
+  list.removeAttribute("aria-busy");
   if (!rows.length) {
     const li = document.createElement("li");
     li.className = "story-empty";
@@ -1613,8 +1634,8 @@ function showMatch(t: number) {
   const chapter = c ? chapterLabel(c, teams) : "";
   if (line.textContent !== chapter) line.textContent = chapter;
   const score = `${s.home} – ${s.away}`;
-  $("score-home").textContent = String(s.home);
-  $("score-away").textContent = String(s.away);
+  tickTo($("score-home"), s.home);
+  tickTo($("score-away"), s.away);
   if ($("score").textContent !== score) {
     $("score").textContent = score;
     $("score").setAttribute("aria-label", `Score: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
@@ -1644,6 +1665,7 @@ function showMatch(t: number) {
 
 /** Match stats as mirrored bars (Apple Sports): the home value at the left edge, the away value at
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
+const shownStats = new Map<string, [number, number]>();
 function renderStats(st: MatchData["stats"][number]) {
   const rows: [string, number, number][] = [
     ["Shots", st.home.shots, st.away.shots],
@@ -1658,8 +1680,13 @@ function renderStats(st: MatchData["stats"][number]) {
       li.className = "stat-row";
       li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
       li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
-      li.querySelector(".home-v")!.textContent = String(h);
-      li.querySelector(".away-v")!.textContent = String(a);
+      // The numbers tick up from what the row showed before (ticker.ts).
+      const was = shownStats.get(label);
+      li.querySelector<HTMLElement>(".home-v")!.textContent = String(was?.[0] ?? h);
+      li.querySelector<HTMLElement>(".away-v")!.textContent = String(was?.[1] ?? a);
+      tickTo(li.querySelector<HTMLElement>(".home-v")!, h);
+      tickTo(li.querySelector<HTMLElement>(".away-v")!, a);
+      shownStats.set(label, [h, a]);
       li.querySelector(".label")!.textContent = label;
       // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
       const share = h + a === 0 ? 0.5 : h / (h + a);

@@ -421,3 +421,12 @@ ion-footer.composer .footer-background { display: none; }
 .answer-actions .act { width: 44px; height: 44px; border: 0; background: none; display: grid; place-items: center; color: var(--text-2); }
 .answer-actions .act svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .answer-actions .facts { margin-left: 8px; font-size: 16px; color: var(--text-2); }
+
+/* Skeleton (shadcn/ui's Skeleton, MIT, ported): a softly pulsing grey block where content will be. */
+.skeleton { display: block; border-radius: 6px; background: rgba(118, 118, 128, 0.24); animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes skeleton-pulse { 50% { opacity: 0.5; } }
+.skeleton-card { display: grid; gap: 10px; }
+.skeleton-card::before { display: none; }
+.skeleton.line { height: 18px; }
+.skeleton.short { width: 62%; }
+.skeleton.stamp { width: 48px; height: 16px; margin-top: 10px; }
