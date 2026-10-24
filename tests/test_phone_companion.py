@@ -593,6 +593,12 @@ def test_the_territory_strip_is_match_json_s_and_rewinding_it_moves_the_whole_sc
 
 def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    # Rewinding goes through the territory strip, shown once it rests on 30 s of seen ball.
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    match["territory"]["bins"][0]["seen_s"] = 40.0
+    page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
     page.click("#lt-stats")
     page.wait_for_selector("#shot-map:not([hidden])")
     # The clip's one shot: home's, from (80, 34), saved. Home attacks x = 105, so it is 25 m out, central.
