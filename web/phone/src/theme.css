@@ -49,8 +49,12 @@
   --ion-tab-bar-color: var(--text-2);
   --ion-tab-bar-color-selected: var(--text);
 }
-@media (prefers-color-scheme: dark) {
-  :root, :root.ios {
+/* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
+:root { --crest-a: #1b2f5b; --crest-b: #7a1f33; }
+
+/* Live and Story are Apple Sports, which is dark only (Coordinator, Oct 24: exact match): the dark
+   tokens apply whatever the phone's setting. Ask is Perplexity's light page (below). */
+:root, :root.ios {
     --bg: #000000;
     --surface: #111113;
     --raised: #1c1c1e;
@@ -74,10 +78,32 @@
     --ion-color-primary-contrast-rgb: 0, 0, 0;
     --ion-color-primary-shade: #ffffff;
     --ion-color-primary-tint: #d8d8da;
-  }
+    --surface: #1c1c1e;
+  --raised: #2c2c2e;
+  /* Club colours as Apple Sports draws them on black: deep, a step lighter than the crest. */
+  --team-a: #26418a;
+  --team-b: #85253f;
+  --text-2: rgba(235, 235, 245, 0.6);
+  --text-3: rgba(235, 235, 245, 0.3);
+  --hairline: rgba(84, 84, 88, 0.65);
+  /* Grass halfway between the old near-black and the bright green, less saturated (Kian, Oct 24). */
+  --pitch: #2a4a35;
+  --pitch-stripe: #2f513b;
+  --pitch-edge: #1f3828;
+  --ion-background-color: #000;
 }
-/* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
-:root { --crest-a: #1b2f5b; --crest-b: #7a1f33; }
-
+/* Ask: Perplexity's warm off-white page and ink (mobbin/ask-perplexity-1). */
+#panel-ask {
+  --bg: #fbfaf7;
+  --surface: #f1efe9;
+  --raised: #ffffff;
+  --text: #13343b;
+  --text-2: #64645f;
+  --text-3: #9b9b95;
+  --hairline: #e6e3dc;
+  --ion-background-color: #fbfaf7;
+  --ion-text-color: #13343b;
+  color: var(--text);
+}
 ion-content { --background: var(--bg); }
 ion-footer.composer { --background: color-mix(in srgb, var(--bg) 82%, transparent); }

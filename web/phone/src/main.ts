@@ -121,6 +121,14 @@ function screenOf(x: number, y: number): [number, number] {
   },
   // The How we know / VAR check sheet for a visual, as a card's chip opens it.
   how: (visual: ScoutVisual) => openHow({ t: visual.t ?? 0, visual, source: "code", evidence: [visual.fact] }),
+  // An answer as the thread would show it, for previews and screenshots of fields the mock cannot
+  // send yet (follow_ups arrive with the agents' next answer schema).
+  answer: (question: string, a: ViewerAnswer) => {
+    const li = renderAnswer(question, laptop.time(), a, "");
+    $("answers").append(li);
+    requestAnimationFrame(redrawPictures);
+    return li.dataset.status;
+  },
   // A picture built as an answer's would be, for previews and screenshots.
   picture: (sv: ScoutVisual, t: number | null = null) => picture(sv, t),
   // What a drawable visual's headline and words say, from its own data.
@@ -155,7 +163,7 @@ const CLOSED_WORDS: Record<Closed, string> = {
   "not-joined": "Could not join: no screen is showing that code, or the server cannot be reached. Check the code and try again.",
 };
 
-function setStatus(kind: "off" | "synced" | "paused" | "waiting" | "lost", text: string) {
+function setStatus(kind: "off" | "synced" | "paused" | "waiting" | "lost" | "rewound", text: string) {
   const s = $("status");
   if (s.textContent !== text) s.textContent = text;
   s.dataset.state = kind;
@@ -337,6 +345,7 @@ interface DetectedEvent {
   x?: number;
   y?: number;
   confidence?: number | null;
+  interceptor?: string | null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
@@ -508,26 +517,37 @@ function renderRoster(roster: string[]) {
     b.type = "button";
     b.className = `who ${team(id)}`;
     b.dataset.player = id;
-    b.textContent = playerName(id);
+    const num = document.createElement("span");
+    num.className = "num";
+    num.textContent = shirt(id);
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = playerName(id);
+    b.append(num, name);
     b.setAttribute("aria-label", playerName(id));
     b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", () => {
-      select(id);
-      ($("roster-box") as HTMLDetailsElement).open = false;
-    });
+    b.addEventListener("click", () => select(id));
     return b;
   };
+  // One card per club, home first (Apple Sports' line-ups): its crest and name, then # and name.
   $("roster").replaceChildren(
-    ...(["home", "away"] as const).flatMap((side) => {
+    ...(["home", "away"] as const).map((side) => {
       const ids = roster.filter((id) => team(id) === side).sort((a, b) => Number(shirt(a)) - Number(shirt(b)));
-      const label = document.createElement("p");
-      label.className = "roster-team";
-      label.textContent = teams[side];
-      label.setAttribute("aria-hidden", "true"); // each button already says its team
+      const card = document.createElement("section");
+      card.className = "card roster-card";
+      const head = document.createElement("h3");
+      head.className = "card-title roster-team";
+      head.innerHTML = `<svg class="crest ${side}" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg>`;
+      head.append(teams[side]);
+      const cols = document.createElement("p");
+      cols.className = "roster-cols";
+      cols.setAttribute("aria-hidden", "true");
+      cols.innerHTML = "<span>#</span><span>Name</span>";
       const row = document.createElement("div");
       row.className = "roster-row";
       row.append(...ids.map(button));
-      return [label, row];
+      card.append(head, cols, row);
+      return card;
     }),
   );
 }
@@ -737,8 +757,9 @@ function select(id: string | null, fromLaptop = false) {
 }
 
 $("close-player").addEventListener("click", () => {
+  const was = state.selected;
   select(null);
-  document.querySelector<HTMLElement>("#roster-box summary")?.focus(); // the list closes on a pick
+  document.querySelector<HTMLElement>(`#roster [data-player="${was}"]`)?.focus(); // back where the pick was
 });
 
 let cardBusy = false;
@@ -1043,6 +1064,7 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
     // The evidence chip at the end of the sentence it supports (as answer engines cite a source).
     body.append(" ", howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names, answer: a }));
     if (a.visual) bubble.append(picture(a.visual, a.t_to, a.names));
+    li.append(answerActions(a));
     if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
@@ -1059,13 +1081,51 @@ const sized = new ResizeObserver((entries) => {
   for (const e of entries) pictures.get(e.target as HTMLCanvasElement)?.();
 });
 
-/** The suggested next questions an answer carries, as one-tap chips. */
+/** Under an answer (Perplexity's action row): read it aloud on a tap, copy it, and how many facts
+ * the fact-checker held it to. */
+function answerActions(a: ViewerAnswer): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "answer-actions";
+  const icon = (label: string, path: string, run: () => void) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "act";
+    b.setAttribute("aria-label", label);
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+    b.addEventListener("click", run);
+    return b;
+  };
+  const text = named(a.text, a.names);
+  row.append(
+    icon("Read this answer aloud", '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>', () => speakAloud(text)),
+    icon("Copy this answer", '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', () => void navigator.clipboard?.writeText(text)),
+  );
+  const n = a.evidence.length;
+  const facts = document.createElement("span");
+  facts.className = "facts";
+  facts.textContent = `${n} ${n === 1 ? "fact" : "facts"} checked`;
+  row.append(facts);
+  return row;
+}
+
+/** The suggested next questions an answer carries, as Perplexity's "↳" rows: one tap asks it. */
 function followUps(qs: string[]): HTMLElement {
-  const box = document.createElement("div");
-  box.className = "chips follow";
-  box.setAttribute("role", "group");
+  const box = document.createElement("ul");
+  box.className = "follow-ups";
   box.setAttribute("aria-label", "Ask next");
-  box.append(...qs.slice(0, 3).map((q) => chip(q, null)));
+  box.append(
+    ...qs.slice(0, 3).map((q) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "follow-up";
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v8a3 3 0 0 0 3 3h10"/><path d="m15 11 4 4-4 4"/></svg>';
+      b.append(q);
+      b.addEventListener("click", () => void ask(q));
+      li.append(b);
+      return li;
+    }),
+  );
   return box;
 }
 
@@ -1433,46 +1493,111 @@ function renderJustNow() {
   $("just-now-body").replaceChildren(text, when);
 }
 
+/** A detected event as a play-by-play line (Apple Sports: "Kyle Walker takes a throw-in."), from
+ * its own fields only; a player the detection did not name is his club. */
+function playSentence(e: DetectedEvent): string | null {
+  const side = e.team === "home" || e.team === "away" ? e.team : null;
+  const who = (id?: string | null) => (id ? playerName(id) : side ? teams[side] : "A player");
+  switch (e.type) {
+    case "pass":
+      if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${playerName(e.receiver)}.` : `${who(e.player)} completes a pass.`;
+      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${playerName(e.interceptor)}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
+    case "shot":
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
+    case "out_of_play":
+      return "The ball goes out of play.";
+    case "set_piece":
+      return side ? `${teams[side]} take a set piece.` : "A set piece.";
+    case "kickoff":
+      return side ? `${teams[side]} kick off.` : "Kick-off.";
+    default:
+      return null;
+  }
+}
+
+/** The plays up to t the fact-checker would let through, newest first. */
+function playsUpTo(t: number): DetectedEvent[] {
+  const min = state.match?.min_confidence ?? 1;
+  return [...bundleEvents.values()].filter((e) => e.t <= t + 1e-6 && (e.confidence ?? 0) >= min && playSentence(e)).sort((a, b) => b.t - a.t);
+}
+let playsShown = -1;
+
+function storyItem(team: "home" | "away" | null, text: string, t: number): { li: HTMLLIElement; body: HTMLDivElement } {
+  const li = document.createElement("li");
+  li.className = `insight ${team ?? "neutral"}`;
+  const body = document.createElement("div");
+  body.className = "story-body";
+  const p = document.createElement("p");
+  p.textContent = text;
+  const foot = document.createElement("p");
+  foot.className = "when-line";
+  const time = document.createElement("time");
+  time.textContent = clock(t);
+  foot.append(time);
+  body.append(p, foot);
+  li.append(body);
+  return { li, body };
+}
+
 function renderInsights() {
   renderJustNow();
-  // A live blog: the minute on the left, one sentence, a small diagram, a quiet "How we know ›".
+  // Apple Sports' play-by-play: one card per play, newest first, the time under the sentence, the
+  // club's rule on its own side. All plays adds every detected play; Key plays keeps the Scout's
+  // moments (with their diagrams) and goals.
   const list = $("insights");
-  if (!state.insights.length) {
+  const now = viewTime();
+  const plays = playsUpTo(now);
+  playsShown = plays.length;
+  const key = list.dataset.mode === "key";
+  const score = (t: number) => (state.match ? scoreAt(state.match, t) : null);
+  type Row = { t: number; el: HTMLLIElement };
+  const rows: Row[] = state.insights.map((c) => {
+    const { li, body } = storyItem(c.team, named(c.text, c.names), c.t);
+    li.classList.add("moment");
+    li.dataset.id = c.id;
+    const head = document.createElement("h3");
+    head.className = "sr-only";
+    head.textContent = named(c.headline, c.names);
+    body.prepend(head);
+    body.querySelector("p:not(.when-line)")!.append(
+      " ",
+      howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
+    );
+    if (c.spoken) li.setAttribute("aria-label", `${clock(c.t)}. ${c.spoken}`);
+    if (c.visual) body.append(picture(c.visual, c.t, c.names));
+    return { t: c.t, el: li };
+  });
+  for (const e of plays) {
+    const goal = e.type === "shot" && e.outcome === "goal";
+    if (key && !goal) continue;
+    const side = e.team === "home" || e.team === "away" ? e.team : null;
+    const { li } = storyItem(side, playSentence(e)!, e.t);
+    li.classList.add("play");
+    li.dataset.event = e.id;
+    if (goal) {
+      const s = score(e.t);
+      const tally = document.createElement("span");
+      tally.className = "tally";
+      if (s) tally.textContent = `${s.home} · ${s.away}`;
+      li.querySelector(".when-line")!.append(tally);
+    }
+    rows.push({ t: e.t, el: li });
+  }
+  if (!rows.length) {
     const li = document.createElement("li");
     li.className = "story-empty";
-    li.textContent = "Nothing yet. The story fills in as the match goes on.";
+    li.textContent = "Nothing yet. The plays fill in as the match goes on.";
     list.replaceChildren(li);
     return;
   }
-  list.replaceChildren(
-    ...state.insights.map((c) => {
-      const li = document.createElement("li");
-      li.className = `insight ${c.team}`;
-      li.dataset.id = c.id;
-      // One sentence with its evidence chip at the end, the minute in grey under it, then the small
-      // diagram; a 3 pt rule in the club's colour down the left (Apple Sports' play-by-play).
-      const body = document.createElement("div");
-      body.className = "story-body";
-      const head = document.createElement("h3");
-      head.className = "sr-only";
-      head.textContent = named(c.headline, c.names);
-      const text = document.createElement("p");
-      text.textContent = named(c.text, c.names);
-      text.append(
-        " ",
-        howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
-      );
-      const minute = document.createElement("time");
-      minute.className = "when-line";
-      minute.textContent = `${c.minute}′ · ${teams[c.team]}`;
-      body.append(head, text, minute);
-      if (c.spoken) li.setAttribute("aria-label", `${c.minute}th minute. ${c.spoken}`);
-      if (c.visual) body.append(picture(c.visual, c.t, c.names));
-      li.append(body);
-      return li;
-    }),
-  );
+  list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
 }
+
+$("story-mode").addEventListener("ionChange", (e) => {
+  $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
+  renderInsights();
+  requestAnimationFrame(redrawPictures);
+});
 
 // --- team stats and the score, from the bundle's match.json (match mode) -----------------------
 
@@ -1509,6 +1634,7 @@ function showMatch(t: number) {
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
+  if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
   const key = JSON.stringify(st);
   if (key === statsKey) return;
@@ -1531,13 +1657,14 @@ function renderStats(st: MatchData["stats"][number]) {
       const li = document.createElement("li");
       li.className = "stat-row";
       li.setAttribute("aria-label", `${label}: ${teams.home} ${h}, ${teams.away} ${a}`);
-      const total = Math.max(1, h + a);
       li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
       li.querySelector(".home-v")!.textContent = String(h);
       li.querySelector(".away-v")!.textContent = String(a);
       li.querySelector(".label")!.textContent = label;
-      (li.querySelector(".home-bar") as HTMLElement).style.width = `calc(${(50 * h) / total}% - 1px)`;
-      (li.querySelector(".away-bar") as HTMLElement).style.width = `calc(${(50 * a) / total}% - 1px)`;
+      // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+      const share = h + a === 0 ? 0.5 : h / (h + a);
+      (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
+      (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
       for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
       return li;
     });
@@ -1576,6 +1703,34 @@ function renderShots(t: number) {
       return li;
     }),
   );
+}
+
+// --- Live's text tabs (Apple Sports: Stats / Play-By-Play / Rankings): Pitch, Stats, Players ----
+
+const LIVE_PANES = ["pitch", "stats", "players"] as const;
+type LivePane = (typeof LIVE_PANES)[number];
+function showPane(pane: LivePane, focus = false) {
+  for (const p of LIVE_PANES) {
+    const tab = $(`lt-${p}`);
+    const on = p === pane;
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+    $(`pane-${p}`).hidden = !on;
+    if (on && focus) tab.focus();
+  }
+  document.body.dataset.pane = pane;
+  if (pane === "pitch") summaryAt = -1;
+}
+for (const p of LIVE_PANES) {
+  const tab = $(`lt-${p}`);
+  tab.addEventListener("click", () => showPane(p));
+  tab.addEventListener("keydown", (e) => {
+    const i = LIVE_PANES.indexOf(p);
+    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? LIVE_PANES.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    showPane(LIVE_PANES[(to + LIVE_PANES.length) % LIVE_PANES.length], true);
+  });
 }
 
 // --- territory per 5 minutes, and rewinding the screen along it --------------------------------
@@ -1725,12 +1880,20 @@ function frame(now: number) {
   const mini = state.match
     ? `${teams.home}  ${$("score-home").textContent}   ${link ? clock(t) : "–:––"}   ${$("score-away").textContent}  ${teams.away}`
     : `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
-  for (const el of document.querySelectorAll(".score-line")) if (el.textContent !== mini) el.textContent = mini;
+  // The collapsed row (Apple Sports): crest, score, clock, score, crest; one label for a screen reader.
+  const clockText = link ? clock(t) : "–:––";
+  for (const el of document.querySelectorAll<HTMLElement>(".score-line")) {
+    if (el.getAttribute("aria-label") === mini) continue;
+    el.setAttribute("aria-label", mini);
+    el.querySelector(".mh")!.textContent = state.match ? $("score-home").textContent : "";
+    el.querySelector(".ma")!.textContent = state.match ? $("score-away").textContent : "";
+    el.querySelector(".mc")!.textContent = clockText;
+  }
   if (link) {
     if (!laptop.heard) setStatus("waiting", "Waiting");
     else if (laptop.stale()) setStatus("waiting", "Screen lost");
     else if (state.radar === null && state.refused !== null) setStatus("paused", "Clock only");
-    else if (scrubT !== null) setStatus("paused", `Rewound to ${momentum.minuteOf(t)}′`);
+    else if (scrubT !== null) setStatus("rewound", `Rewound to ${momentum.minuteOf(t)}′`);
     else if (laptop.isPlaying()) setStatus("synced", "Synced");
     else setStatus("paused", "Paused");
     showMatch(t);

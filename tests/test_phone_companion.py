@@ -306,7 +306,7 @@ def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browse
     page.click("#tab-button-insights")
     assert page.get_attribute("#tab-button-insights", "aria-selected") == "true"
     page.wait_for_selector("#insights-title")
-    first = page.locator("#insights .insight").first
+    first = page.locator("#insights .moment").first
     assert first.locator("h3").text_content() == cards[0]["headline"]
     assert first.locator(".story-body > figure canvas").count() == 1
     first.locator(".how").click()
@@ -425,7 +425,7 @@ def test_the_phone_shows_the_bundles_cards_up_to_the_clock_with_their_pictures(b
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert [c["id"] for c in page.evaluate("window.ninetyPhone.state.insights")] == ["c1"]  # c2 is at 62.5
     page.click("#tab-button-insights")
-    card = page.locator("#insights .insight").first
+    card = page.locator("#insights .moment").first
     assert card.locator("h3").inner_text() == "Crowmere overload early"
     figure = card.locator(".story-body > figure")
     assert figure.get_attribute("data-headline") == "3 v 1"  # the fact's own points
@@ -468,7 +468,7 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
 
 def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reaches_it(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
-    assert page.is_visible("#roster-box summary")  # Players: a visible way to any player
+    assert page.is_visible("#lt-players")  # Players: a visible way to any player
     box = page.locator("#now-box").bounding_box()
     assert box["width"] <= 1 and box["height"] <= 1  # the describe controls are off screen...
     page.focus("#now-live")  # ...until a keyboard or screen-reader user reaches them
@@ -523,6 +523,7 @@ def test_live_shows_just_now_and_match_stats_from_the_bundle_only(browser, cards
 
 def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#lt-stats")
     page.wait_for_selector("#live-stats:not([hidden])")
     stats = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["stats"]
     last = [s for s in stats if s["t"] <= 62.8][-1]
@@ -537,7 +538,7 @@ def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, sit
 
 def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
-    page.click("#roster-box summary")
+    page.click("#lt-players")
     page.get_by_role("button", name="Oakfield 7", exact=True).click()
     page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert "average position" in page.inner_text("#avg-pos")
@@ -578,6 +579,7 @@ def test_the_territory_strip_is_match_json_s_and_rewinding_it_moves_the_whole_sc
 
 def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#lt-stats")
     page.wait_for_selector("#shot-map:not([hidden])")
     # The clip's one shot: home's, from (80, 34), saved. Home attacks x = 105, so it is 25 m out, central.
     dot = page.locator("#shots circle.shot")
@@ -588,9 +590,10 @@ def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(brows
     page.locator("#shot-filter ion-segment-button[value=away]").click()
     page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
     # Rewound to before the shot (61.2 s), there is none to show.
+    page.click("#lt-pitch")
     page.locator("#momentum-strip").focus()
     page.keyboard.press("Home")
-    page.wait_for_selector("#shot-map", state="hidden")
+    page.wait_for_selector("#shot-map[hidden]", state="attached")
     assert not errors
 
 

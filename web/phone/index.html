@@ -40,12 +40,13 @@
           <div class="ion-page">
             <ion-header>
               <ion-toolbar class="band-bar" id="live-bar">
-                <ion-title><span class="mini-score score-line"></span></ion-title>
+                <ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title>
                 <ion-buttons slot="end"><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers and moments aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen scroll-events="true" id="live-content">
               <section class="band" aria-label="Score">
+                <p class="league">Ninety League</p>
                 <div class="fixture">
                   <div class="side">
                     <span class="side-score" id="score-home" aria-hidden="true">–</span>
@@ -67,6 +68,14 @@
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 
+              <!-- Apple Sports' text tabs under the score: the pitch, the team stats, the players. -->
+              <div class="live-tabs" role="tablist" aria-label="Live">
+                <button type="button" role="tab" id="lt-pitch" aria-controls="pane-pitch" aria-selected="true">Pitch</button>
+                <button type="button" role="tab" id="lt-stats" aria-controls="pane-stats" aria-selected="false" tabindex="-1">Stats</button>
+                <button type="button" role="tab" id="lt-players" aria-controls="pane-players" aria-selected="false" tabindex="-1">Players</button>
+              </div>
+              <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
+                <section class="card pitch-card" aria-label="Pitch">
               <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
                 <ion-segment-button value="players"><ion-label>Players</ion-label></ion-segment-button>
                 <ion-segment-button value="flow" id="flow-button"><ion-label>Flow</ion-label></ion-segment-button>
@@ -83,10 +92,15 @@
                 <p id="refused" class="refused" role="alert" hidden></p>
               </div>
               <p class="sr-only" id="map-sides"></p>
-
+                </section>
+              <!-- Just now: the latest Story moment, as the lock screen says it. -->
+              <section class="card" id="just-now" aria-labelledby="just-now-title" hidden>
+                <h2 class="section-title" id="just-now-title">Just now</h2>
+                <div id="just-now-body"></div>
+              </section>
               <!-- Territory per 5 minutes (match.json's territory, from vision's tracked ball). Drag along it
                    to rewind the screen to that minute; "Back to live" returns. -->
-              <section class="live-section" id="momentum" aria-labelledby="momentum-title" hidden>
+              <section class="card" id="momentum" aria-labelledby="momentum-title" hidden>
                 <div class="section-head">
                   <h2 class="section-title" id="momentum-title">Territory</h2>
                   <button type="button" class="to-live" id="to-live" hidden>Back to live</button>
@@ -100,22 +114,16 @@
                 <div class="next-bin" aria-hidden="true"><div class="next-fill" id="next-fill"></div></div>
                 <p class="fine" id="momentum-note"></p>
               </section>
-
-              <!-- Just now: the latest Story moment, as the lock screen says it. -->
-              <section class="live-section" id="just-now" aria-labelledby="just-now-title" hidden>
-                <h2 class="section-title" id="just-now-title">Just now</h2>
-                <div id="just-now-body"></div>
-              </section>
-
+              </div>
+              <div class="live-pane" id="pane-stats" role="tabpanel" aria-labelledby="lt-stats" hidden>
               <!-- Match stats: mirrored bars in the clubs' colours, from the footage shown. -->
-              <section class="live-section" id="live-stats" aria-labelledby="live-stats-title" hidden>
-                <h2 class="section-title" id="live-stats-title">Match stats</h2>
+              <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
+                <h2 class="section-title" id="live-stats-title">Team Stats</h2>
                 <ul class="stat-rows" id="stat-rows"></ul>
                 <p class="fine">From the footage shown, so far.</p>
               </section>
-
               <!-- Shot map: detected shots so far, both clubs toward one goal; only when there are any. -->
-              <section class="live-section" id="shot-map" aria-labelledby="shot-map-title" hidden>
+              <section class="card" id="shot-map" aria-labelledby="shot-map-title" hidden>
                 <h2 class="section-title" id="shot-map-title">Shots</h2>
                 <ion-segment value="all" id="shot-filter" class="seg" aria-label="Whose shots">
                   <ion-segment-button value="all"><ion-label>Both</ion-label></ion-segment-button>
@@ -126,17 +134,22 @@
                 <ul class="sr-only" id="shot-list"></ul>
                 <p class="fine">Filled: goal · ringed: saved · hollow: off target or blocked. Each club shooting up the page.</p>
               </section>
+              </div>
+              <div class="live-pane" id="pane-players" role="tabpanel" aria-labelledby="lt-players" hidden>
+              <section class="roster" id="roster-box" aria-labelledby="roster-summary">
+                <h2 class="sr-only" id="roster-summary">Players</h2>
+                <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
+              </section>
+              </div>
+
+
+
+
               <p id="now-said" class="now-said" aria-live="polite"></p>
               <p class="fine now-age" id="now-age" aria-hidden="true"></p>
 
               <!-- Quiet rows under the pitch: picking a player without the map, and the play in words. -->
               <p class="fine pad" id="wind-note" hidden></p>
-              <section class="live-section" aria-labelledby="roster-summary">
-                <details class="roster" id="roster-box">
-                  <summary id="roster-summary"><span class="section-title">Players</span></summary>
-                  <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
-                </details>
-              </section>
               <div class="rows" id="now-box">
                 <label class="row check"><span>Describe the play as it happens</span><input type="checkbox" id="now-live" /></label>
                 <button type="button" class="row row-button" id="now">What's happening now?</button>
@@ -159,20 +172,20 @@
         <ion-tab tab="ask" id="panel-ask" role="tabpanel" aria-labelledby="tab-button-ask">
           <div class="ion-page">
             <ion-header>
-              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"></span></ion-title>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title>
                 <ion-buttons slot="end"><button type="button" class="speak" aria-pressed="false" aria-label="Read new answers aloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen id="ask-content">
-              <div class="large-title"><h1 id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span></div>
+              <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
               <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
             </ion-content>
             <ion-footer translucent class="composer" id="ask">
               <div class="chips" id="ask-chips" role="group" aria-label="Suggested questions"></div>
               <form id="ask-form">
                 <label for="question" class="sr-only">Your question</label>
-                <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask about the match" />
-                <button type="submit" class="primary" id="ask-button">Ask</button>
+                <span class="ask-pill"><input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask about the match…" /></span>
+                <button type="submit" class="ask-send" id="ask-button" aria-label="Ask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
               </form>
             </ion-footer>
           </div>
@@ -181,11 +194,16 @@
         <ion-tab tab="insights" id="panel-insights" role="tabpanel" aria-labelledby="tab-button-insights">
           <div class="ion-page">
             <ion-header>
-              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"></span></ion-title></ion-toolbar>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><svg class="crest home" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg><b class="mh" aria-hidden="true">–</b><span class="mc" aria-hidden="true">–:––</span><b class="ma" aria-hidden="true">–</b><svg class="crest away" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg></span></ion-title></ion-toolbar>
             </ion-header>
             <ion-content fullscreen>
-              <div class="large-title"><h1 id="insights-title">Story</h1><p class="sr-only" id="insights-note"></p></div>
-              <ol id="insights" class="insights"></ol>
+              <h1 class="sr-only" id="insights-title">Story</h1><p class="sr-only" id="insights-note"></p>
+              <!-- Apple Sports' play-by-play: every detected play, or only the key ones with their pictures. -->
+              <ion-segment value="all" id="story-mode" class="seg story-seg" aria-label="Which plays">
+                <ion-segment-button value="all"><ion-label>All plays</ion-label></ion-segment-button>
+                <ion-segment-button value="key"><ion-label>Key plays</ion-label></ion-segment-button>
+              </ion-segment>
+              <ol id="insights" class="insights" data-mode="all"></ol>
             </ion-content>
           </div>
         </ion-tab>

@@ -141,11 +141,10 @@ def mock_pair(browser, site, *, play=True, minimap_body=None):
 
 
 def open_roster(page):
-    """Open the player list the way a keyboard or screen-reader user does: it is off screen until
-    focus reaches it (Live is the score band and the pitch)."""
-    page.focus("#roster-box summary")
+    """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
+    page.focus("#lt-players")
     page.keyboard.press("Enter")
-    page.wait_for_function("document.querySelector('#roster-box').open")
+    page.wait_for_selector("#roster .who")
 
 
 def pick(page, name: str):
@@ -225,7 +224,7 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone.wait_for_selector("body[data-state=live]")
     phone.wait_for_function("document.querySelector('#map').dataset.dots === '22'")
     assert phone.get_attribute("#map", "data-source") == "mock"
-    assert phone.inner_text("#status") in ("Paused", "Synced")
+    assert phone.text_content("#status") in ("Paused", "Synced")  # in words, though only trouble shows
     assert not errors
 
 
