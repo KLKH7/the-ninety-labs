@@ -44,7 +44,7 @@ from xml.sax.saxutils import escape
 from jsonschema import validate
 
 from ninety.agents.contracts import Description
-from ninety.agents.cues import SCHEMA, _pass_text
+from ninety.agents.cues import SCHEMA, UNNAMED, _pass_text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate, side_known
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
@@ -155,7 +155,7 @@ def where(x: float, y: float) -> str:
 
 def _who(event: dict) -> str:
     """The player, or the team only when its side is known (factcheck.side_known)."""
-    return event.get("player") or (event["team"] if side_known(event) else "a player")
+    return event.get("player") or (event["team"] if side_known(event) else UNNAMED)
 
 
 def event_versions(event: dict) -> list[str]:
