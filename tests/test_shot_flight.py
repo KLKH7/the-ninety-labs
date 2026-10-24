@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import ninety.eval.shot_flight as shot_flight
 from ninety.eval.shot_flight import (
     agreement,
     clip_rows,
@@ -392,3 +393,46 @@ def test_crossings_name_their_clip_and_each_clip_reads_only_its_own(tmp_path):
     cross.write_text(json.dumps({"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}) + "\n")
     main(["--clip", str(a), "--detected", str(da), "--clip", str(b), "--detected", str(db),
           "--crossings", str(cross), "--out", str(tmp_path / "r")])
+
+
+@pytest.mark.parametrize("name,seed", [("seed910001", 900001), ("seed910001", "900001"),
+                                       ("seed910001", 900001.0), ("seed12", 910012)])
+def test_meta_jsons_seed_beats_the_folders_name(tmp_path, name, seed):
+    root, det = make_clip(tmp_path, name, seed)
+    with pytest.raises(SystemExit, match="test seed"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+
+
+def test_a_folder_named_for_a_test_seed_is_scored_when_meta_jsons_seed_is_a_validation_one(tmp_path):
+    root, det = make_clip(tmp_path, "seed900001", 910001)
+    main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+    assert (tmp_path / "r.json").exists()
+
+
+@pytest.mark.parametrize("seed", [None, "n/a", True, 12.5])
+def test_a_seed_meta_json_cannot_give_is_unknown_not_the_names(tmp_path, seed):
+    root, det = make_clip(tmp_path, "seed910001", seed)
+    (root / "meta.json").write_text(json.dumps({"seed": seed}))
+    with pytest.raises(SystemExit, match="unknown"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+
+
+def test_each_clip_is_given_only_its_own_crossings(tmp_path, monkeypatch):
+    a, da = make_clip(tmp_path, "seed1")
+    b, db = make_clip(tmp_path, "seed2")
+    cross = tmp_path / "crossings.jsonl"
+    cross.write_text(json.dumps({"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}) + "\n"
+                     + json.dumps({"clip": "seed2", "shot": "v1", "y": 36.0, "z": 1.5}) + "\n"
+                     + json.dumps({"clip": "seed2", "shot": "v2", "y": 35.0, "z": 0.5}) + "\n")
+    seen = {}
+
+    def spy(clips):
+        seen.update({c["name"]: c["crossings"] for c in clips})
+        return {"counts": [], "agreement": {"saves": 0, "same_side": 0, "share": None}, "save_filter": None}
+
+    monkeypatch.setattr(shot_flight, "score", spy)
+    main(["--clip", str(a), "--detected", str(da), "--clip", str(b), "--detected", str(db),
+          "--crossings", str(cross), "--out", str(tmp_path / "r")])
+    assert seen == {"seed1": {"v1": {"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}},
+                    "seed2": {"v1": {"clip": "seed2", "shot": "v1", "y": 36.0, "z": 1.5},
+                              "v2": {"clip": "seed2", "shot": "v2", "y": 35.0, "z": 0.5}}}
