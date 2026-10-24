@@ -899,6 +899,9 @@ const MESH_FEET = new Set(['strike', 'foot', 'thigh']);
 const ARMS = ['upperarm_l', 'lowerarm_l', 'upperarm_r', 'lowerarm_r'];
 // Holding the ball (meshpose.HOLD_*): the bend split down the spine, a hand either side of it.
 const HOLD_BEND = [['spine_01', 0.45], ['spine_02', 0.4], ['spine_03', 0.15], ['neck_01', -0.3]];
+// A head turned toward something (meshpose.LOOK_SHARE, LOOK_SIGN).
+const LOOK_SHARE = [['neck_01', 0.4], ['head', 0.6]];
+const LOOK_SIGN = 1.0;
 const HOLD_SIDE = 0.14;
 // Arm search (meshpose.ARM_*): upper arm X and Z, lower arm X and Z, Z for the left arm.
 const ARM_UX = [-2.2, -1.4, -0.7, 0.0];
@@ -1298,7 +1301,25 @@ function upperAngles(player, pose, heading, height) {
   }
   const hold = pose.hold;
   if (hold && hold.w > 0) angles = blendPose(angles, holdPose(player, angles, pose, hold, heading, height), hold.w);
+  const look = pose.look;
+  if (look && look.w > 0) {
+    // A head turned toward something, shared by the neck and the head (meshpose._upper).
+    const yaw = LOOK_SIGN * look.yaw * look.w;
+    for (const [bone, share] of LOOK_SHARE) addAngle(angles, bone, 0, 0, yaw * share);
+  }
+  const signal = pose.signal;
+  if (signal && signal.w > 0) angles = blendPose(angles, signalPose(player, angles, pose, signal, heading, height), signal.w);
   return angles;
+}
+
+// One hand up at signal.at (meshpose._signal), put there as a hold's hands are.
+function signalPose(player, angles, pose, signal, heading, height) {
+  const lift = (pose.lift || 0) + (pose.bob || 0);
+  const target = toObject(pose.x, pose.y, heading, height, signal.at[0], signal.at[1], signal.at[2], lift);
+  const idx = player.boneIndex;
+  const girdle = poseBones(angles, player.bones, Math.max(idx.clavicle_l, idx.clavicle_r));
+  const side = signal.side || 'r';
+  return searchArm(player, Object.assign({}, angles), side, side === 'l' ? 1 : -1, target, girdle);
 }
 
 function anglesFor(player, pose, heading, height) {
@@ -2064,6 +2085,13 @@ class BroadcastRenderer {
     this.bug.position.set(x0 + maxW / 2, -(y0 + maxH / 2), 0);
     this.overlayScene.add(this.bug);
     this.makeStinger();
+    // graphics: false (a fixed tactical view, ninety/render/camera.py tactical_views) has no score bug
+    // and no stinger: nothing is laid over the picture, so nothing occludes the labels.
+    this.graphics = cfg.graphics !== false;
+    if (!this.graphics) {
+      this.bugRect = [0, 0, 0, 0];
+      this.bug.visible = false;
+    }
     return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
@@ -2290,12 +2318,12 @@ class BroadcastRenderer {
       const cheer = age != null && age >= 0 && age < 2.5 ? 1 - (age / 2.5) ** 2 : 0;
       u.uCheer.value.set(spec.goal_side === 0 ? cheer : 0, spec.goal_side === 1 ? cheer : 0);
     }
-    this.layoutBug(spec);
+    if (this.graphics) this.layoutBug(spec);
     const R = this.renderer;
     const W = this.W, H = this.H;
     const [bx0, by0, bx1, by1] = this.bugRect;
     const onBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
-    const onStinger = this.layoutStinger(spec.stinger);
+    const onStinger = this.layoutStinger(this.graphics ? spec.stinger : null);
     const underBug = onStinger ? (i, j) => onBug(i, j) || onStinger(i, j) : onBug;
 
     // 1. solo passes: the full in-image silhouette of each labelled object
@@ -2368,7 +2396,7 @@ class BroadcastRenderer {
     this.post.uniforms.frame.value = spec.index;
     R.setRenderTarget(null);
     R.render(this.postScene, this.postCam);
-    this.drawBug(spec);
+    if (this.graphics) this.drawBug(spec);
     R.autoClear = false;
     R.render(this.overlayScene, this.overlayCam);
     R.autoClear = true;

@@ -66,7 +66,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
 | `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders) and training; tracking, camera-to-pitch mapping, possession and event rules are planned |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow: Analyst and fact-checking agent (Judge) on Foundry, the live path to overlay cues, the Data agent; Producer and Personalizer are in open pull requests |
+| `ninety/agents` | Agent Framework workflow on Foundry: the multi-agent graph (Analyst, Tactician, Challenger, fact-checking agent with the Judge, Producer), the slice (Analyst and Judge), the live path to overlay cues; the Vision Auditor (offline, code-written; its model path not yet recorded) and the Data agent (code). The Personalizer is `ninety/personalizer` |
 | `ninety/speech` | The Describer: audio description from fact-checked lines only, within 2 s of the play, placed in stereo; SSML and WebVTT; Azure AI Speech behind `--speech azure` |
 | `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
@@ -136,7 +136,7 @@ requirement with its status. Working toward **M1, end to end on one clip**.
 | Ball detection, ball at least half visible | recall 0.964, precision 0.994 | [vision-report-v2](docs/eval/vision-report-v2.md) |
 | Ball detection, ball mostly hidden (the known weakness) | recall 0.493, precision 0.841 | [vision-report-v2](docs/eval/vision-report-v2.md) |
 | False detections, all classes, after a retrain on footage from the test set's engine | 121 down to 27; a phantom ball where the ball is fully hidden in 1 of 113 frames, down from 45 | [vision-report-v2](docs/eval/vision-report-v2.md) against [vision-report-v1](docs/eval/vision-report-v1.md) |
-| Planted false claims caught by the fact-checking agent | 136 / 136 (code checks alone: 32 / 136) | [fact-checker.md](docs/eval/fact-checker.md) |
+| Planted false claims caught by the fact-checking agent | 136 / 136 kept off air, of which 9 held by a Judge service error rather than judged: 127 / 127 where a check decided (code checks alone: 32 / 136); on `ninety-judge:1`, re-run pending on the current Judge | [fact-checker.md](docs/eval/fact-checker.md) |
 | True claims wrongly rejected | 7 / 105, leaving out 10 held back when the Judge service failed (17 / 115 with them) | [fact-checker.md](docs/eval/fact-checker.md) |
 
 **Running on `main`:** the seeded match engine and the broadcast renderer with exact ground

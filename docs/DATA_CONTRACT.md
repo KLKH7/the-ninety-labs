@@ -25,12 +25,24 @@ A clip is one directory:
 
 | File | Contents | Checked against |
 |---|---|---|
-| `events.jsonl` | one event per line | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
+| `events.jsonl` | one event per line; a `half_time` event marks the end of the first half (Law 7: the ball is out of play from it to the kick-off that starts the second half; lesson 213) | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
 | `frames.jsonl` | one frame per line, every frame | [`schemas/frame.schema.json`](../schemas/frame.schema.json) |
 | `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` (the goals in this clip's `events.jsonl`); `window`, for a clip cut from a longer match; `cuts`, the dead balls the broadcast cut away from | `fps` positive; goalkeepers from `roster`; `score` against the goal events (C9); `window` against the frames; `cuts` against the frames and the events (C2) |
 
 A rendered clip (`ninety-render`, `ninety-dataset`) is the same directory plus `clip.json` (the
 render parameters) and `images/`, and is checked the same way: `uv run ninety-validate <clip>`.
+
+**Tactical views (renderer 0.5.15 on).** Rendered with `--views tactical`, a clip also holds
+`views/tac-l/` and `views/tac-r/`: the two fixed whole-pitch lenses on the gantry (left and right
+half, GROUNDING V7), each a complete clip directory of its own (`clip.json` with a `view` block
+naming the lens and its fixed camera, `meta.json`, `events.jsonl` copied from the clip,
+`frames.jsonl`, `images/`, 1920x1080, no score bug or stinger). They film the same match frames as
+the broadcast, cuts included: frame `k` of a view is frame `k` of the broadcast, and every world
+field (frame, time, ball and player positions, possessor, `fall`) is equal;
+only the camera, boxes, visibility and keypoints differ. `ninety-render-check` fails a clip whose
+views disagree (`checks.streams_agree`). Each view passes `ninety-validate` on its own. A view's
+`frames.jsonl` and `events.jsonl` are the answer key as much as the clip's: the render job seals
+them in the `truth` container wherever they sit (lesson 192).
 
 **A player down (renderer 0.5.10 on).** While a fouled player is drawn lying over his feet, his
 player row in `frames.jsonl` carries `fall`, the degrees his body is over (0 to 90); a standing

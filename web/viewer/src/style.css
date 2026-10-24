@@ -109,3 +109,77 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 @media (prefers-reduced-motion: no-preference) {
   html[data-motion="full"] .claim { transition: border-color 0.2s, box-shadow 0.2s; }
 }
+
+/* Match mode (src/match.ts): a condensed match. */
+.match { margin-bottom: 10px; }
+.match[hidden], .stats-panel[hidden], .time-skip[hidden] { display: none; }
+.match-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.match-tag { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bg); background: var(--tag); border-radius: 999px; padding: 2px 9px; }
+.score { font: 800 1.35rem system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.chapter-now { color: var(--muted); font-size: 0.9rem; }
+.match-honest { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
+.match-honest.warn { color: var(--tag); }
+.match-honest.warn::before { content: "⚠ "; }
+body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match-keys { display: none; }
+
+.time-skip { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); z-index: 1; background: rgba(13, 27, 62, 0.94); color: #fff; border-left: 5px solid #e8ff3a; padding: 7px 14px; font: 700 clamp(0.8rem, 1.6vw, 1.05rem) system-ui, sans-serif; letter-spacing: 0.02em; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .time-skip:not(.still) { animation: skip-in 0.25s ease-out; }
+}
+@keyframes skip-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.chapter-bar { position: relative; margin-top: 10px; }
+.chapter-bar ol { list-style: none; display: flex; gap: 3px; margin: 0; padding: 0; }
+.chapter-bar li { min-width: 28px; flex-basis: 0; display: flex; }
+.chapter { flex: 1; min-width: 0; height: 42px; border: 0; border-radius: 4px; padding: 3px 7px; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: center; font: inherit; background: #2a3a50; color: var(--ink); }
+.chapter-time { font: 600 0.7rem ui-monospace, monospace; opacity: 0.8; }
+.chapter-label { font-size: 0.8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chapter.goal { background: var(--accent); color: #04130d; }
+.chapter.save { background: #7cc4ff; color: #04172b; }
+.chapter.shot { background: #c9a6ff; color: #1b0d33; }
+.chapter.set_piece { background: var(--tag); color: #231800; }
+.chapter[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+.chapter:not([aria-current="true"]) { opacity: 0.72; }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; pointer-events: none; transform: translateX(-1px); }
+
+.stats-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.stats { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.stats th, .stats td { padding: 5px 4px; text-align: right; border-top: 1px solid var(--line); }
+.stats tr:first-child th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+.stats th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; }
+.stats td { font-weight: 700; }
+
+/* The big screen (main.ts, bigScreen): the broadcast, its graphics, score and clock, the chapters
+   and the QR code; everything else is on the phone. ?dev=1 shows it all. */
+body[data-screen="big"] .dev-only,
+body[data-screen="big"] .skip,
+body[data-screen="big"] #radar-section,
+body[data-screen="big"] .stats-panel,
+body[data-screen="big"] .trace,
+body[data-screen="big"] .layout > .pipeline,
+body[data-screen="big"] .match-honest:not(.warn) { display: none !important; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "player side"; grid-template-rows: auto; }
+body[data-screen="big"] .phone-panel { position: sticky; top: 16px; text-align: center; }
+body[data-screen="big"] .phone-panel .hint { font-size: 0.8rem; }
+body[data-screen="big"] .phone-qr { width: 100%; max-width: 208px; margin: 10px auto 6px; }
+body[data-screen="big"] #phone-pair { display: none; }
+body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
+@media (max-width: 900px) { body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "side"; } }
+
+/* The big screen's pairing card: a lower-third, like a TV app's sign-in card (black, white type), up for PAIR_CARD_S at kick-off and each chapter (match.ts). */
+.pair-card { position: absolute; right: 3%; bottom: 7%; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 10px;
+  background: #000; color: #fff; border-radius: 10px; font: 500 clamp(0.8rem, 1.5vw, 1.05rem)/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 70%; }
+.pair-card[hidden] { display: none; }
+.pair-qr { width: clamp(56px, 7vw, 92px); flex: none; background: #fff; border-radius: 6px; padding: 4px; line-height: 0; }
+.pair-qr svg { width: 100%; height: auto; }
+.pair-text { display: grid; gap: 2px; }
+.pair-kicker { font-size: 0.75em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b8bec8; }
+.pair-line b { font-weight: 700; }
+.pair-code { color: #fff; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .pair-card:not(.still) { animation: pair-in 0.35s ease-out; }
+}
+@keyframes pair-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* On the big screen the card replaces the side panel. */
+body[data-screen="big"] .side { display: none; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player"; }

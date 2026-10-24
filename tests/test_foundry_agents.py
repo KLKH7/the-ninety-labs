@@ -56,7 +56,18 @@ def test_the_analyst_reads_the_match_only_through_our_mcp_server():
 
 def test_the_allowed_tools_are_the_servers_tools():
     served = asyncio.run(match_server.server.list_tools())
-    assert sorted(t.name for t in served) == sorted(match_server.TOOLS)
+    assert sorted(t.name for t in served) == sorted(match_server.SERVED)
+    # The published Analyst may call a subset; team_shape joins it when the Analyst is republished.
+    assert set(match_server.TOOLS) <= set(match_server.SERVED)
+    extra = {"team_shape", "re_perceive", *match_server.INSIGHT_TOOLS}
+    assert set(match_server.SERVED) - set(match_server.TOOLS) == extra
+
+
+def test_the_team_shape_tool_describes_its_typed_facts():
+    (tool,) = [t for t in asyncio.run(match_server.server.list_tools()) if t.name == "team_shape"]
+    assert set(tool.inputSchema["properties"]) == {"match", "minute_from", "minute_to"}
+    for word in ("width", "line_height", "area", "behind_ball", "confident", "change", "tracked"):
+        assert word in tool.description
 
 
 def test_the_judge_has_no_tools():

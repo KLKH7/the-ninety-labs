@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run on its previous head, so queued runs on superseded
+# heads stop taking runners. A run on main is never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -106,7 +112,7 @@ jobs:
   viewer:
     # Type-checks and builds the viewer, then drives it in headless Chromium on a bundle ninety-e2e
     # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py), and the
-    # radar across a cut (tests/test_radar.py).
+    # radar across a cut (tests/test_radar.py), and match mode (tests/test_match_mode.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -120,14 +126,15 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py tests/test_radar.py
+      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py tests/test_radar.py tests/test_match_mode.py
         env:
           NINETY_REQUIRE_VIEWER: "1"
 
   phone:
     # Type-checks and builds the phone companion and the viewer, then drives the phone at phone size
     # on its mock feed and against the companion API with the viewer pairing it: pairing, clock sync,
-    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py).
+    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py); the radar across
+    # a cut, answer pictures, insights and tabs (tests/test_phone_companion.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -146,7 +153,11 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_phone.py
+      - run: uv run pytest -q tests/test_phone.py tests/test_phone_companion.py
+        env:
+          NINETY_REQUIRE_PHONE: "1"
+      # Read-aloud in the pinned voice: the phone's player in a muted browser (tests/test_speech.py).
+      - run: uv run pytest -q tests/test_speech.py
         env:
           NINETY_REQUIRE_PHONE: "1"
 

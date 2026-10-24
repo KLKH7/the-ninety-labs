@@ -107,6 +107,7 @@ async def run(
     timeout_seconds: float = AGENTS_TIMEOUT_SECONDS,
     personalize: Personalize | None = None,
     profiles: list[Profile] | None = None,
+    inline_events: bool = False,
 ) -> LiveResult:
     events = detected.check([dict(e) for e in events], clip)
     ledger = InMemoryLedger()
@@ -130,7 +131,8 @@ async def run(
         try:
             outcome = await asyncio.wait_for(
                 run_workflow(
-                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
+                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats,
+                    inline=inline_events,
                 ),
                 timeout=timeout_seconds,
             )
@@ -170,7 +172,8 @@ async def _personalized(
     """The verified claim for every other profile, each variant checked again before it airs."""
     moment = "-".join(claim.evidence)
     if profiles is None:
-        profiles = personal.profiles_for(next(e for e in events if e["id"] == claim.evidence[0]))
+        by_id = {e["id"]: e for e in events}  # the first cited event (a shape fact is no event)
+        profiles = personal.profiles_for(next(by_id[i] for i in claim.evidence if i in by_id))
     known = {r["id"]: r for r in rows}
     started = time.perf_counter()
     try:

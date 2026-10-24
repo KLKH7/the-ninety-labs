@@ -27,6 +27,17 @@ Every frame writes, next to the image:
 A render without this is not usable for scoring. Store it per clip as `frames.jsonl` with one row
 per frame; keep the format compact (it was 180 MB for a 90-minute match as plain JSON lines).
 
+**Tactical views.** `--views tactical` also films the clip from two fixed lenses side by side on the
+main gantry at halfway (`camera.tactical_views`: one point, nominally 28 m up and 32 m back, each
+1920x1080 covering one half of the pitch plus 2.5 m past halfway, the lens solved so the half fits
+with a 1% margin; GROUNDING V7). They are vision's input for whole-pitch context; the broadcast stays
+the viewer's feed. Each view is written as a complete clip under `views/tac-l/` and `views/tac-r/`
+from the same scene and frame spec as the broadcast, in a browser page of its own, with no
+graphics and no motion blur (the lens never moves). Asking for views never changes the broadcast:
+its images and labels stay byte-identical, and the mount is drawn for every seed after all its
+other draws. `ninety-render-check` fails a clip unless every view films the broadcast's world frame
+for frame (`checks.streams_agree`).
+
 ## 2. Look like television, not a video game
 
 Real broadcast footage has properties detectors depend on. Match them:
@@ -44,6 +55,7 @@ Real broadcast footage has properties detectors depend on. Match them:
 | Grass | Mowing stripes, wear near goals and centre | Striped texture; wear is faint, paler turf that follows the stripes, never brown blotches |
 | Image | Compression blocks, slight noise, sharpening halos | Add mild noise and JPEG/H.264-style compression at export |
 | Other | Scorebug, crowd, advertising boards | A generic scorebug and boards with **made-up brands only** |
+| Fouls | The whistle goes, play stops, the fouler often owns up with a raised hand and team-mates turn to the man down | The engine already stops play (players walk and stand until the restart); the renderer draws the fall (`fall`, `fall_dir`), the fouler's hand up and the fouled side's three nearest turning their heads to him for 2 s from the foul frame (*design*, `ninety/render/fouls.py`; heads only, since a body faces the engine's `heading`), and the mp4 carries a whistle synthesised in `ninety/render/audio.py` at each foul the picture shows |
 | Dead balls | The director cuts away from the wait (replays and close-ups, about 7 s a shot) and back to the restart | Broadcast clips only (`ninety-render`; datasets and test sets show every frame): hold the stoppage at least 4 s, cut, come back closed up on the restart 6 s before it and ease out to the wide shot for the kick (`ninety/render/edit.py`); cut only a dead ball whose stoppage and restart the clip shows, record each cut in `meta.json`, never cut over an event |
 
 ## 3. Randomize what varies between real matches
