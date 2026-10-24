@@ -49,6 +49,17 @@ def _dets(path: Path, rows) -> None:
     write_detections(path, rows)
 
 
+def _observed(observe, rows: list[dict], dets: list, seed: int, fixed: bool = False) -> list[dict]:
+    """observe's lines; on a clip where no camera can be placed at all (observe raises), every
+    frame untrusted with nothing placed, so the clip counts as seen and nothing found."""
+    try:
+        return observe.observe([r["image"] for r in rows], dets, _rgb, fixed=fixed)
+    except ValueError as e:
+        print(json.dumps({"seed": seed, "no_camera": str(e), "fixed": fixed}), flush=True)
+        none = {"ok": False, "median_px": None, "points": 0, "P": None}
+        return [{"frame": d.frame, "t": d.t, "camera": dict(none), "players": [], "ball": []} for d in dets]
+
+
 def _seed(clip: Path) -> int:
     return json.loads((clip / "clip.json").read_text())["seed"]
 
@@ -81,8 +92,7 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
             dets = detect_rows(det, rows, label, field)
             lap("detect broadcast")
             _dets(out / "detections" / "broadcast" / f"seed{seed}.jsonl", dets)
-            _write(out / "broadcast" / f"seed{seed}.jsonl",
-                   observe.observe([r["image"] for r in rows], dets, _rgb))
+            _write(out / "broadcast" / f"seed{seed}.jsonl", _observed(observe, rows, dets, seed))
             lap("observe broadcast")
         for name, (det, label, field) in loaded.items() if tactical else ():
             placed = {}
@@ -91,7 +101,7 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
                 dets = detect_rows(det, rows, label, field, tiles=True)
                 lap(f"detect {name} tiles")
                 _dets(out / "detections" / f"{view}-{name}" / f"seed{seed}.jsonl", dets)
-                placed[view] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=True)
+                placed[view] = _observed(observe, rows, dets, seed, fixed=True)
                 _write(out / f"view-{view}-{name}" / f"seed{seed}.jsonl", placed[view])
                 lap("observe fixed")
             _write(out / f"tactical-{name}" / f"seed{seed}.jsonl", fuse.fuse(placed))
