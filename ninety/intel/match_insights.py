@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape, style
+from ninety.intel import counter_press, line_breaks, offside, overloads, pass_options, roles, shape, style
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
@@ -77,6 +77,7 @@ class MatchInsights:
             ],
         }
         clubs = fixture.clubs
+        facts["offside"] = offside.offsides(events, f)
         # Playing style's atoms: the detected passes, the counter-attacks and the one-twos.
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
@@ -124,7 +125,7 @@ class MatchInsights:
         team = self.team(club)
         return [
             r
-            for r in self.facts[kind]
+            for r in self.facts.get(kind, ())
             if minute_from <= r["minute"] <= minute_to and (team is None or r["team"] == team)
         ]
 
@@ -284,6 +285,14 @@ class MatchInsights:
             if minute_from <= f["minute"] <= minute_to and f["team"] in teams
         ]
         return {"facts": moments[:MAX_FACTS], "summary": summary}
+
+    def referee(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The offside readings of the minutes (the attacking club's, or both), latest first, and the
+        Law summaries the Referee explains calls from (ninety/agents/referee.py)."""
+        from ninety.agents.referee import law_facts
+
+        rows = sorted(self._rows("offside", minute_from, minute_to, club), key=lambda r: -r["t"])
+        return {"facts": rows[:MAX_FACTS], "summary": law_facts()}
 
     def lineup(self, club: str | None = None) -> dict:
         """The team sheets, and who of the tracked players may be named and how."""

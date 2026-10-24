@@ -80,7 +80,7 @@ AnswerStatus = Literal["verified", "held", "rejected", "unanswerable"]
 # The overlays the phone can draw for an answer or a card (schemas/insight_card.schema.json).
 VISUAL_KINDS = (
     "line_break", "overload", "pass_options", "counter_press", "shape", "wind_map",
-    "channels", "counter", "one_two",
+    "channels", "counter", "one_two", "offside",
 )
 Role = Literal[
     "analyst", "tactician", "challenger", "fact_checker", "judge",

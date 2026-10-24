@@ -109,6 +109,16 @@ VISUAL_WORD = re.compile(
     r"|the (?:arrow|circle|dot|dots|box|shading|map)|in (?:red|blue|yellow|green))\b",
     re.I,
 )
+# A call on an offside, in the past tense a reading is told in (the Law's own summaries say "is in
+# an offside position if…", which calls nothing). The cited reading's verdict must be the call.
+VERDICT_WORDS = (
+    (
+        "offside",
+        re.compile(r"\bwas (?:in an offside position|offside)\b|\bbeyond the (?:offside )?line\b", re.I),
+    ),
+    ("onside", re.compile(r"\bwas onside\b|\bonside by\b|\bwas(?:n't| not) offside\b", re.I)),
+    ("too_close", re.compile(r"\btoo close\b", re.I)),
+)
 TEAM_WORD = re.compile(
     r"\b(?:home|away)\s+(?:team|side|club|players?|defen\w+|keeper)\b|\b(?:home|away)'s\b|^\s*(?:home|away)\b",
     re.I,
@@ -259,6 +269,16 @@ def check(
     for team, name in clubs.items():
         shape_text = re.sub(rf"\b{re.escape(name)}\b", team, shape_text)
     reasons += shape_reasons(shape_text, list(cited))
+
+    # Offside calls.
+    verdicts = {f.get("verdict") for f in cited if f.get("kind") == "offside"}
+    for verdict, words in VERDICT_WORDS:
+        m = words.search(claim.text)
+        if m and verdict not in verdicts:
+            reasons.append(
+                f"'{m.group()}' is a call the cited offside readings do not make "
+                f"({sorted(verdicts) or 'none'})"
+            )
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}

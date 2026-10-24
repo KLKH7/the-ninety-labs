@@ -47,7 +47,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "lineup",
+    "referee", "lineup",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape and the insight tools are served but not in the published
@@ -211,6 +211,15 @@ def style(match: str, minute_from: int, minute_to: int, club: str | None = None)
     return _insight(match, "style", minute_from, minute_to, club)
 
 
+def referee(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Offside readings at each completed pass between two match minutes, from the 22 tracked
+    positions (Law 11): verdict onside, offside, too_close (within the tracking error: never call it),
+    unsure (a defender out of view) or restart, with the margin in metres when there is a call; and
+    the Laws summarised in our own words (offside, fouls, handball, cards, VAR). The tracking cannot
+    see contact: never judge a foul, handball or penalty from these facts."""
+    return _insight(match, "referee", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -262,7 +271,9 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    insight = (line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, lineup)
+    insight = (
+        line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
+    )
     for tool in (list_events, match_info, team_shape, *insight):
         server.add_tool(tool)
     return server

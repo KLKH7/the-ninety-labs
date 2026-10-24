@@ -17,6 +17,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from ninety.agents import referee
 from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
@@ -25,6 +26,7 @@ MATCH_TOOLS = (
     "goal_build_up",
     "players",
     "style",
+    "referee",
     "counter_press",
     "overloads",
     "line_breaks",
@@ -36,6 +38,8 @@ TOOL_HELP = {
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
     "before it",
     "players": "players ranked by the opponents their passes took out of the game",
+    "referee": "offside lines at each completed pass (onside, offside, or too close for the tracking to "
+    "call), and the Laws explained: offside, fouls, handball, cards, VAR. The tracking cannot judge contact",
     "style": "how each club plays: passing channels (left, centre, right), how wide it plays against the "
     "other club, crosses, the keeper going long or short, counter-attacks (regain to shot), one-twos",
     "counter_press": (
@@ -51,6 +55,11 @@ TOOL_HELP = {
 # Code's routing, first match wins, at most MAX_TOOLS. The word lists are design: the plain words a
 # fan uses for each question, measured on the labelled question set (ninety/eval/companion_tools.py).
 TOOL_WORDS = (
+    (
+        "referee",
+        r"\b(?:offside|onside|referee|ref|var|foul\w*|hand ?ball|penalty|pen|rules?|law|booked|booking"
+        r"|yellow|red card|sent off|dive|dived)\b",
+    ),
     ("goal_build_up", r"\b(?:goals?|scor\w*|equali[sz]\w*|that finish)\b"),
     (
         "style",
@@ -227,6 +236,7 @@ FOLLOW_UPS = {
     ),
     "players": ("Why did {club} score?", "Where are {club} outnumbering them?"),
     "style": ("Do {club} counter-attack?", "Is their keeper going long?"),
+    "referee": ("What counts as a handball?", "Was anyone offside before the goal?"),
     "counter_press": ("Did {club} have options when they lost it?", "And in the first half?"),
     "overloads": ("How quickly do {club} win the ball back?", "Which passes cut through?"),
     "line_breaks": ("Who has been the best player?", "Where are {club} outnumbering them?"),
@@ -349,6 +359,7 @@ def code_texts(fact: dict) -> list[str]:
         if fact.get("minute_from")
         else f"in minute {fact.get('minute')}"
     )
+    club = club or ""
     who = fact.get("passer_is") or f"{'an' if club[:1] in 'AEIOU' else 'a'} {club} player"
     if metric == "regains_within_5s":
         lost = fact["also"][0][0]
@@ -444,6 +455,12 @@ def code_texts(fact: dict) -> list[str]:
         if not a or not b:
             return []
         return [f"{span.capitalize()}, {a} and {b} played a one-two."]
+    if kind == "offside":
+        return referee.offside_texts(fact, span)
+    if kind == "law":
+        # No Law number in the sentence: a number the fact-checker would find in no fact.
+        text = fact["text"]
+        return [text] if fact["law"] == "our cameras" else [f"The Laws say that {text[0].lower()}{text[1:]}"]
     if kind == "goal":
         return [f"{club} scored in minute {fact['minute']}."]
     if metric == "opponents_bypassed_by_player":
@@ -505,6 +522,18 @@ def code_match_answer(
     if re.search(r"\b(?:which|who|whose)\b", question.text, re.I):
         # "Which pass…?", "Who…?": a moment with a player in it, before a club's total.
         facts = sorted(facts, key=lambda f: f.get("t") is None)
+    asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
+    if asked is not None:
+        # A referee question: an offside reading first when it is about offside, then the Laws the
+        # topic needs, the cameras' limit first for a contact call. Never a ruling on a foul.
+        name, ids = asked
+        reading = next((f for f in facts if f.get("kind") == "offside" and code_texts(f)), None)
+        laws = [f for i in ids for f in facts if f["id"] == i]
+        cited = ([reading] if reading is not None and name == "offside" else []) + laws[:2]
+        if cited:
+            text = " ".join(code_texts(f)[0] for f in cited)
+            if _verify(Claim(text, [f["id"] for f in cited]), known, insights).ok:
+                return _match_answer(text, cited, insights, calls), calls
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
     if goal is not None:
         for f in facts:
@@ -537,6 +566,7 @@ async def answer_match(
     judge: Judge | None = None,
     timeout: float = TIMEOUT_S,
     history=(),
+    referee_ask: Ask | None = None,
 ) -> MatchResult:
     """The phone's answer to a match question. With no `ask`, code routes and answers. With one,
     the model plans the tool calls and writes the answer; anything but a verified draft gives
@@ -559,7 +589,11 @@ async def answer_match(
         if not calls:
             return calls, None, None, []
         facts = run_tools(insights, calls)
-        reply = await ask(answer_prompt(question, facts, history))
+        # A rules question is the Referee's to answer (ninety/agents/referee.py): the Companion
+        # hands the facts over, and the same fact-check gates what comes back.
+        rules = any(c["name"] == "referee" for c in calls)
+        writer = referee_ask if referee_ask is not None and rules else ask
+        reply = await writer(answer_prompt(question, facts, history))
         try:
             claim = parse_claim(reply)
         except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:

@@ -2324,3 +2324,15 @@ short and actionable. This file is public: no research sources, product names or
   and name a new test file after its own module's full purpose (`test_playing_style.py`), never a
   word another package also uses.
 - **Check:** `git status --short tests/` after creating test files: every new file shows `??`.
+
+### 229. Prose a number reader will check is tested through that reader
+- **What happened:** the Referee's summary of Law 11 said "being in an offside position is not an
+  offence by itself; it becomes one when he gets involved". The fact-checker reads number words,
+  so "one" was a number no fact held, and every answer that quoted the summary was refused and fell
+  back to a shorter one. A test that the summaries hold no digits passed: it read the text, not what
+  the checker reads.
+- **Rule:** text that the fact-checker will read (code's sentences, the Law summaries) is tested by
+  running it through the checker's own reader (`factcheck.spelled_as_digits`, then `check`), not by
+  a separate look at the characters.
+- **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
+  `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.

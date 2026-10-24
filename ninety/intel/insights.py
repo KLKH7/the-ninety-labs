@@ -26,7 +26,7 @@ from collections.abc import Mapping
 
 from ninety.intel.scene import Count, minute_of, tracked_counts
 
-KINDS = ("line_break", "overload", "counter_press", "pass_options")
+KINDS = ("line_break", "overload", "counter_press", "pass_options", "offside")
 
 
 def fact(

@@ -217,7 +217,8 @@
             "wind_map",
             "channels",
             "counter",
-            "one_two"
+            "one_two",
+            "offside"
           ]
         },
         "fact": {
@@ -244,7 +245,7 @@
         },
         "geometry": {
           "type": "object",
-          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id]. channels: bands [{channel, y0, y1, share}], minute_from, minute_to. counter: from (regain), to (shot), seconds. one_two: from, via, to.",
+          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id]. channels: bands [{channel, y0, y1, share}], minute_from, minute_to. counter: from (regain), to (shot), seconds. one_two: from, via, to. offside: line_x (the offside line across the pitch), receiver, second_last, ball, attackers, defenders, verdict, margin_m; too_close and unsure are drawn as uncertain and never called.",
           "properties": {
             "from": {
               "$ref": "#/$defs/point"
@@ -380,6 +381,33 @@
               "$ref": "#/$defs/point"
             },
             "seconds": {
+              "type": "number"
+            },
+            "line_x": {
+              "type": "number"
+            },
+            "receiver": {
+              "$ref": "#/$defs/point"
+            },
+            "second_last": {
+              "$ref": "#/$defs/point"
+            },
+            "attackers": {
+              "$ref": "#/$defs/points"
+            },
+            "defenders": {
+              "$ref": "#/$defs/points"
+            },
+            "verdict": {
+              "enum": [
+                "onside",
+                "offside",
+                "too_close",
+                "unsure",
+                "restart"
+              ]
+            },
+            "margin_m": {
               "type": "number"
             }
           }
