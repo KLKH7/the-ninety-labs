@@ -1035,6 +1035,8 @@ class Engine:
         kick is taken once they are lined up."""
         self.half_time_at = self.t
         self.end_kick(*self.ball[:2])
+        kicking = other(self.first_kick_off or "home")
+        self.emit("half_time", kicking, clamp(self.ball[0], 0.0, PITCH_X), clamp(self.ball[1], 0.0, PITCH_Y))
         self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
         self.possessor = self.dribbler = self.dribble_to = self.windup = None
         self.chase = {}
@@ -1043,7 +1045,7 @@ class Engine:
         self.into_play = False
         self.from_restart = None
         self.penalty_shot = None
-        self.kickoff(other(self.first_kick_off or "home"), second_half=True)
+        self.kickoff(kicking, second_half=True)
 
     def lined_up_for_kickoff(self, r: Restart) -> bool:
         """Law 8: everyone but the kicker in his own half, and the opponents outside the centre

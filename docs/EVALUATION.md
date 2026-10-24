@@ -630,8 +630,10 @@ anyone who watched it (lesson 107). The football-sense checker counts the dumb p
 
 Each type's definition, thresholds and sources are in [GROUNDING.md](GROUNDING.md#football-sense-it-looks-like-sensible-football-counts).
 The checker reads only `frames.jsonl`, `events.jsonl` and `meta.json` and imports nothing from
-the engine. The ball is dead from a stoppage (out of play, goal, foul, offside) until the restart
-is kicked; which goal a team attacks comes from where its keeper stands. Each type has a scene
+the engine. The ball is dead from a stoppage (out of play, goal, foul, offside, the end of the first
+half) until the restart is kicked (since lesson 213 a 90-minute match has a half-time whistle and
+second-half kick-off, and that gap is not judged, so 90-minute football-sense counts are not comparable
+with ones from before it; 20-minute runs are unchanged); which goal a team attacks comes from where its keeper stands. Each type has a scene
 that must be flagged and legal scenes that must not be, mutation-checked
 ([`tests/test_football_sense.py`](../tests/test_football_sense.py)).
 
