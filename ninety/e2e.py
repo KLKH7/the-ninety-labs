@@ -28,7 +28,8 @@ Stages (the brief's names), each writing one file in the bundle:
    confident event or verified claim, with its stereo position, as `audio` cues, audio.json and
    description.vtt. Offline its timing is estimated and the viewer speaks with the browser's voice;
    `--speech azure` synthesises each line through Azure AI Speech instead (off by default: a live
-   Azure call, so run it only when agreed).
+   Azure call, so run it only when agreed). `--voice-audio` adds the phone's read-aloud audio in
+   the pinned voice (ninety/speech/bundle.py: speech.json and speech/), also a live call.
 
 The radar beside the video: `--tracked FILE --observations FILE` (vision's tracked.json and
 observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add radar.json
@@ -625,6 +626,11 @@ async def run(args: argparse.Namespace) -> dict:
                  + (["match.json"] if match_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if args.voice_audio:
+        # Last, so it reads every line the bundle holds (audio.json, and cards.json when present).
+        from ninety.speech import bundle as speech_bundle
+
+        manifest = speech_bundle.add_to_manifest(out, speech_bundle.write(out))
     return manifest
 
 
@@ -652,6 +658,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--speech", choices=("none", "azure"), default="none",
                     help="audio description voice: none (estimated timing, the viewer's browser voice) or "
                          "azure (synthesise every line through Azure AI Speech: a live call)")
+    ap.add_argument("--voice-audio", action="store_true",
+                    help="pre-generate the phone's read-aloud audio in the pinned voice (speech.json, "
+                         "speech/; ninety/speech/bundle.py): a live Azure call")
     ap.add_argument("--describer", choices=("code", "foundry"), default="code",
                     help="audio description lines: code only, or foundry (the published Describer "
                          "agent words each verified moment, checked like any line: a live call)")

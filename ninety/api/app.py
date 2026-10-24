@@ -7,6 +7,7 @@
                            made by ninety-e2e ahead of time (infra/replay.py), so a view costs nothing
     GET  /api/health       the commit this image was built from (the deploy smoke test reads it)
     GET  /api/live/status  Live mode's gate: answers only with the demo passcode
+    POST /api/live/speak   an Ask answer in the pinned voice, as MP3 (ninety/api/speak.py)
     POST /mcp              the match MCP server (ninety/mcp/match_server.py), for Foundry's agents
     /api/pair[/{code}], /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
                            (ninety/api/companion.py); NINETY_COMPANION=off leaves it unmounted
@@ -36,6 +37,7 @@ from starlette.websockets import WebSocketClose
 
 from ninety.api import companion as companion_api
 from ninety.api.companion import Companion
+from ninety.api.speak import Speaker
 from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -137,7 +139,8 @@ class SecurityHeaders:
 
 
 def build(key: str | None = None, companion: Companion | None = None, *, passcode: str | None = None,
-          viewer: Path | None = None, replay: Path | None = None, phone: Path | None = None) -> Starlette:
+          viewer: Path | None = None, replay: Path | None = None, phone: Path | None = None,
+          speaker: Speaker | None = None) -> Starlette:
     mcp = match_server.make_server()
     companion = companion or companion_api.from_env()
     mcp_app = mcp.streamable_http_app()
@@ -150,7 +153,11 @@ def build(key: str | None = None, companion: Companion | None = None, *, passcod
         async with mcp.session_manager.run():
             yield
 
-    live = Starlette(routes=[Route("/status", live_status, methods=["GET"])])
+    live_routes = [Route("/status", live_status, methods=["GET"])]
+    if companion:  # read-aloud speaks only the companion's own answers
+        speaker = speaker or Speaker(companion.answered)
+        live_routes.append(Route("/speak", speaker.speak, methods=["POST"]))
+    live = Starlette(routes=live_routes)
     routes = [
         Route("/api/health", health, methods=["GET"]),
         Mount("/api/live", RequireKey(live, passcode, PASSCODE_HEADER, "NINETY_DEMO_PASSCODE", "Live mode")),
