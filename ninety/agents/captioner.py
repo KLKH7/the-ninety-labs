@@ -8,7 +8,8 @@ the shot, the events just before it and the moment's label.
 A caption airs only if the whole fact-checking agent passes it, as the Describer's lines do
 (ninety/agents/describer.py): the code half (factcheck.check: ids, numbers, players), the label
 check (factcheck.label_reasons: no fan's word the code did not give that moment, such as a
-"screamer" from 12 m), and then the Judge. A caption either half refuses, or a model or Judge that
+"screamer" from 12 m), the kind check (`kind_reasons`: a save is never captioned as a goal, nor a
+goal as a save), and then the Judge. A caption either half refuses, or a model or Judge that
 errs or is late, leaves the code-written caption, and the record says why.
 
     uv run ninety-e2e <clip> --out <bundle> --match --captioner foundry   # the published agent
@@ -23,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 
@@ -37,6 +39,23 @@ from ninety.match.facts import compact
 # design: the Describer's budget (ninety/agents/describer.py), for the same reason: the captions are
 # written while the bundle is built, before anything airs, so this bounds how long that can wait.
 MODEL_TIMEOUT_S = 15.0
+# What a caption may not say of a moment's kind: a goal is not saved or missed, a save is not a
+# score. The Judge also sees the caption, but the code half does not leave this to a model.
+SAVE_WORDS = re.compile(
+    r"\b(?:save[sd]?|saving|denied|kept out|keeps? it out|stopped|stops|parr(?:y|ied|ies)|tipped|tips"
+    r"|turned away|miss(?:es|ed)?|wide|over the bar|off target|blocked)\b", re.I)
+GOAL_WORDS = re.compile(
+    r"\b(?:scor(?:es?|ed|ing)|goals?|net(?:s|ted)?|finds? the net|buries|buried|beats? the keeper"
+    r"|beaten the keeper|past the keeper|opens? the scoring)\b", re.I)
+
+
+def kind_reasons(text: str, kind: str) -> list[str]:
+    """Words that say the other kind of moment: a save captioned as a goal, a goal as a save."""
+    pattern, other = (GOAL_WORDS, "save") if kind == "save" else (SAVE_WORDS, "goal")
+    return [f"'{m.group()}' is not said of a {kind}: this moment is a {kind}, not a {other}"
+            for m in [pattern.search(text)] if m and kind in ("goal", "save")]
+
+
 # The events before the shot the model is given: those inside the moment's clip (its build-up),
 # at most this many, latest first kept (design: enough for a move, short enough to read).
 MAX_AROUND = 6
@@ -139,7 +158,7 @@ async def captions(moments: Sequence[dict], events: Sequence[dict], model: Capti
         if not gate.ok:  # the reel holds only confident events; this keeps it so if a caller errs
             return "held: " + "; ".join(gate.reasons)
         verdict = check(claim, known)
-        reasons = verdict.reasons + label_reasons(text, moment["label"])
+        reasons = verdict.reasons + label_reasons(text, moment["label"]) + kind_reasons(text, moment["kind"])
         if reasons:
             return "code checks: " + "; ".join(reasons)
         if judge is None:
