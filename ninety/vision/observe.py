@@ -170,31 +170,36 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
     `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
-    rgbs, points = [], []
+    # One pass over the images keeps only what the second needs (the markings' points, the fixed
+    # lens's running line counts and each player's kit colour), never the frames: a clip's decoded
+    # frames do not fit in memory (2.8 MB each at 1280 x 720, so 4 GB a minute at 25 fps).
+    kits, points, size = [], [], None
     counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
+        size = size or rgb.shape[:2]
         boxes = [d.bbox for d in fd.detections if d.score >= SCORE_MIN]
-        rgbs.append(rgb)
+        kits.append([kit_rgb(rgb, d.bbox) if d.cls == "player" and d.score >= SCORE_MIN else None
+                     for d in fd.detections])
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
             continue
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
-    H, W = rgbs[0].shape[:2]
+    H, W = size
     if not fixed:
         gantry, fits = pitch.fit_clip(points, W, H)
     else:
         view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
         gantry = (view.cx, view.cy, view.cz)
     rows = []
-    for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
+    for kit, fd, fit in zip(kits, dets, fits, strict=True):
         players, balls = [], []
-        for d in fd.detections:
+        for d, colour in zip(fd.detections, kit, strict=True):
             if d.cls == "player":
                 players.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None,
-                                "rgb": kit_rgb(rgb, d.bbox) if d.score >= SCORE_MIN else None})
+                                "rgb": colour})
             else:
                 balls.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None})
         rows.append(place({

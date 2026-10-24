@@ -11,10 +11,19 @@
 #   infra/live-job.sh status                       recent executions and their state
 #   infra/live-job.sh logs <execution>             its log: run.json and the detected events
 #
-# Example, demo clip v1 (seed 8001, 100 to 160 s) on ours-v4:
-#   infra/live-job.sh stage runs/demo/seed8001 100 160 runs/train/ours-v4
-#   infra/live-job.sh build ours-v4 && infra/live-job.sh push
+# The clip, its window and the checkpoint are always arguments: the demo clip is whatever
+# docs/eval/demo-clip.md's rule picked, and the checkpoint the one Kian names (with its record).
+#   infra/live-job.sh stage <demo clip> <from s> <to s> <checkpoint folder>
+#   infra/live-job.sh build <checkpoint name> && infra/live-job.sh push
 #   infra/live-job.sh deploy <the printed image> && infra/live-job.sh start
+#
+# Sizing. A run takes about frames x seconds per frame, and both grow with the clip (25 fps: 1,500
+# frames a minute of footage). Measure before sizing: stage a short window of the demo clip first
+# (60 s), deploy with the default limit, run it, and read `detect_seconds_per_frame` and `seconds`
+# in its run.json (`logs`). Then stage the whole clip and deploy with a limit of about 1.5 x the
+# measured time, and 4 vCPUs if that is too long:
+#   LIVE_TIMEOUT_S=<seconds> LIVE_CPU=4 infra/live-job.sh deploy <image>
+# Memory does not grow with the clip (observe keeps no decoded frames), so 2 GiB per vCPU holds.
 #
 # A new clip or checkpoint: stage, build, push and deploy again. Nothing here reads the answer key
 # except `stage`, on the maintainer's machine, for each frame's time and image; the image and the
@@ -47,7 +56,7 @@ case "${1:-}" in
     az deployment group create -g "$(env_value AZURE_RESOURCE_GROUP)" -f infra/live-job.bicep \
       -p environmentName="$(env_value AZURE_ENV_NAME)" \
          containerAppsEnvironmentId="$(env_value AZURE_CONTAINER_APPS_ENVIRONMENT_ID)" \
-         image="$2" \
+         image="$2" replicaTimeoutSeconds="${LIVE_TIMEOUT_S:-3600}" cpu="${LIVE_CPU:-2}" \
       --query properties.outputs -o json
     ;;
   start|status|logs)
@@ -62,6 +71,6 @@ case "${1:-}" in
     esac
     ;;
   *)
-    sed -n '2,22p' "$0"; exit 2
+    sed -n '2,30p' "$0"; exit 2
     ;;
 esac
