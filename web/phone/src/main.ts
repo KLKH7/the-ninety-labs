@@ -1489,7 +1489,7 @@ function renderJustNow() {
   );
   const when = document.createElement("time");
   when.className = "when-line";
-  when.textContent = `${c.minute}′ · ${teams[c.team]}`;
+  when.textContent = clock(c.t);
   $("just-now-body").replaceChildren(text, when);
 }
 

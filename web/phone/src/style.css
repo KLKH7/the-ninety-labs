@@ -371,7 +371,7 @@ body[data-tab="ask"] ion-tab-bar { --background: rgba(255, 255, 255, 0.86); --co
 .insight.neutral::before { display: none; }
 .when-line { display: flex; justify-content: space-between; }
 .tally { color: var(--text-2); font-variant-numeric: tabular-nums; }
-.insight .how { background: rgba(118, 118, 128, 0.24); color: var(--text-2); }
+.insight .how, .card .how { background: rgba(118, 118, 128, 0.24); color: var(--text-2); }
 
 /* The collapsed score row (mobbin/live-applesports-3): crest, score, clock, score, crest. */
 ion-toolbar.band-bar { --background: #000; --border-color: rgba(84, 84, 88, 0.65); }
