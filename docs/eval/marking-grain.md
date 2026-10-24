@@ -13,7 +13,7 @@ frame's true camera. No test clip was used.
 | 3 x 3 blur first (this change) | 0.819 | 789,950 |
 | blur, then a neighbour count (7 x 7, at least 5; not kept, see `pitch.py`) | 0.842 | 785,762 |
 
-The rule was fixed before the numbers: the most pixels on a marking, keeping at least 80% of the
+These are the clips that showed the failure; the blur was chosen and reported on them, and no held-out split has confirmed it yet (the tests pin that a blur exists, not its margins). The rule was fixed before the numbers: the most pixels on a marking, keeping at least 80% of the
 unfiltered detector's on-marking pixels, a 1 px line surviving.
 
 **The camera fit** (`fit_clip`, the first 100 frames, ours-freeze's player boxes), against the
@@ -59,3 +59,7 @@ What it says:
 
 The frozen test set's published numbers were measured with the detector of their day and are not
 re-scored here.
+
+Not done here: seed 112's wrong camera passes the markings test on 98 of 100 frames now (0 before);
+whether the players' heights reject it is checked when their band is re-derived for current renders
+(lessons 148, 159).
