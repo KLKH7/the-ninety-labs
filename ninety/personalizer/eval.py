@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import datetime
 import json
+import math
 import re
 import subprocess
 import time
@@ -57,13 +58,14 @@ async def run(cases: list[tuple], ask, budget_s: float) -> list[dict]:
 
 
 async def _each(client, cases: list[tuple], rows: list[dict]) -> None:
-    for seed, kind, claim, evidence in cases:  # one at a time, so each time is one request alone
+    for request, (seed, kind, claim, evidence) in enumerate(cases):  # one at a time: each time alone
         started = time.perf_counter()
         variants = await client(claim, evidence, PROFILES)
         ms = (time.perf_counter() - started) * 1000
         for i, (p, v) in enumerate(zip(PROFILES, variants, strict=True)):
             why = client.last_dropped.get(i) if client.last_route == "remote" else client.last_route
-            rows.append({"seed": seed, "kind": kind, "persona": p.persona, "lang": p.lang,
+            rows.append({"request": request, "seed": seed, "kind": kind, "persona": p.persona,
+                         "lang": p.lang,
                          "claim": claim.text, "text": v.text, "dropped": why, "route": client.last_route,
                          "ms": ms})
 
@@ -81,9 +83,35 @@ def answered(row: dict) -> bool:
     return row["route"] == "remote" and not (row["dropped"] or "").startswith("server: model failed")
 
 
+def requests_of(rows: list[dict]) -> dict:
+    """One row per request sent, keyed by its index: two claims with the same words are two requests
+    (audit row 9: keyed by seed and text they were one). Rows written before the index had one row
+    per profile, in order, request after request, so their index is the row's position over that."""
+    return {r.get("request", i // len(PROFILES)): r for i, r in enumerate(rows)}
+
+
+# A 95th percentile is distinct from the maximum only from 20 values (nearest rank: the 19th of 20);
+# below that the "p95" was the slowest request under another name (audit row 9).
+MIN_FOR_P95 = 20
+
+
+def _rank(values: list[float], q: float) -> float:
+    """The q-quantile by nearest rank: the smallest value with at least q of the values at or below."""
+    return values[max(0, math.ceil(q * len(values)) - 1)]
+
+
+def timing(times: list[float]) -> str:
+    if not times:
+        return "Time per answered request: none answered."
+    p95 = (f"p95 {_rank(times, 0.95):.0f} ms" if len(times) >= MIN_FOR_P95
+           else f"p95 not shown ({len(times)} requests; it needs {MIN_FOR_P95})")
+    return (f"Time per answered request (n = {len(times)}): p50 {_rank(times, 0.5):.0f} ms, {p95}, "
+            f"max {times[-1]:.0f} ms.")
+
+
 def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDGET_S) -> str:
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
-    requests = {(r["seed"], r["claim"]): r for r in rows}
+    requests = requests_of(rows)
     answered_requests = [r for r in requests.values() if answered(r)]
     times = sorted(r["ms"] for r in answered_requests)
     lines = [
@@ -110,8 +138,7 @@ def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDG
                       for r in requests.values() if not answered(r))
     lines += [
         "",
-        f"Time per answered request: p50 {times[len(times) // 2]:.0f} ms, "
-        f"p95 {times[int(len(times) * 0.95)]:.0f} ms, max {times[-1]:.0f} ms.",
+        timing(times),
         "",
         "## Why variants were dropped",
         "",
@@ -138,7 +165,7 @@ async def _main(args, published=core.published_ask) -> str:
         rows = await run(cases, ask, args.budget)
     raw = args.out.with_suffix(".json")
     raw.write_text(json.dumps(rows, indent=1, ensure_ascii=False, allow_nan=False))
-    requests = {(r["seed"], r["claim"]): r for r in rows}
+    requests = requests_of(rows)
     unanswered = sum(not answered(r) for r in requests.values())
     if unanswered > MAX_UNANSWERED_SHARE * len(requests):
         raise NothingMeasured(
