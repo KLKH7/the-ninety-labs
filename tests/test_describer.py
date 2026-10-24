@@ -125,10 +125,7 @@ def test_a_model_line_over_its_word_limit_is_refused():
 
 def test_a_model_line_that_would_push_a_goal_late_falls_back_to_the_code_line():
     long = " ".join(["h8"] * (d.MODEL_MAX_WORDS - 3) + ["shoots", "on", "target"])
-    # Room for the short code line, not the long model line. Spoken lines are sentences now ("Home's
-    # number 4 finds number 8"), longer than the old "Home 4 to Home 8": at 15.0 s even the short line
-    # no longer fits; from 15.5 s it does, and the long line fits nowhere up to 19 s. 16.0 s is between.
-    goal = event(3, 16.0, "goal", x=104.0, player="h8")
+    goal = event(3, 15.0, "goal", x=104.0, player="h8")  # room for the short line, not the long one
     track, _ = d.describe([*EVENTS, goal], [CLAIM], upgrades={CLAIM["id"]: long})
     line = said_for(track, CLAIM["id"])
     assert line.short and line.source == "insight" and line.text == CLAIM["text"]

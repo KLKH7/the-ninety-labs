@@ -16,6 +16,7 @@ from jsonschema import validate
 
 from ninety import e2e
 from ninety.agents.factcheck import Claim, check
+from ninety.match import detected
 from ninety.match.facts import compact
 from ninety.speech import describe as d
 from tests.e2e_clip import EVENTS, T_START, write_clip
@@ -73,8 +74,7 @@ def test_a_shot_is_not_pushed_late_by_the_pass_before_it():
     track, _ = d.describe(BUSY_THEN_SHOT, [])
     said = {s.event: s for s in track.said}
     assert "e2" in said and said["e2"].lag_s <= d.MAX_LAG_S
-    # The pass gives up its long form for the shot, or is not said at all: never the shot late.
-    assert "e1" not in said or said["e1"].short
+    assert said["e1"].short, "the pass gives up its long form for the shot"
 
 
 # ---------------------------------------------------------------- stereo position
@@ -179,9 +179,7 @@ def test_webvtt_is_timed_on_the_clip(tmp_path):
     audio = json.loads((out / "audio.json").read_text())
     stamps = re.findall(r"(\d\d):(\d\d):(\d\d)\.(\d{3}) --> ", vtt)
     starts = [int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000 for h, m, s, ms in stamps]
-    # A line that starts after the 3 s clip's last frame is placed at its end (the timeline clamps).
-    clip_s = 75 / 25
-    assert starts == pytest.approx([min(s["t_in"] - T_START, clip_s) for s in audio["said"]], abs=1e-3)
+    assert starts == pytest.approx([s["t_in"] - T_START for s in audio["said"]], abs=1e-3)
 
 
 # ---------------------------------------------------------------- synthesis, offline and behind the flag
@@ -259,3 +257,46 @@ def test_webvtt_follows_the_clips_timeline_across_a_cut():
     secs = [[int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000 for h, m, s, ms in (st[:4], st[4:])]
             for st in stamps]
     assert secs == [pytest.approx([0.5, 2.0], abs=1e-3), pytest.approx([3.0, 4.5], abs=1e-3)]
+
+
+NUMBER = re.compile(r"\d+(?:\.\d+)?")
+TRACK = re.compile(r"\b[ha]-t\d+\b")
+SIDE_WORD = re.compile(r"\b(?:home|away)\b", re.I)
+
+
+def numbers(text: str) -> list[str]:
+    return sorted(NUMBER.findall(TRACK.sub("", text)))
+
+
+SPOKEN_FORMS = [
+    "h4 → h8, 12 m, 48 km/h, 3 m from goal.", "h8 pass, 12 m, 40 km/h.", "h4 → h8 (in flight), 12 m.",
+    "a pass (incomplete), 22 m, 137.2 km/h.", "a-t4 → a-t5, 8 m, 42.2 km/h.",
+    "h4 → h8 (cut out by a3), 12 m.",
+    "h8 shot, on target, 101.4 km/h.", "h4's pass for h8 is cut out by a3.", "a-t4 finds a-t5, on the left.",
+    "Goal! h9 scores, in the middle.", "h7 plays a 12 m pass to a4, at 31 km/h.", "h4 to h8.",
+]
+
+
+@pytest.mark.parametrize("text", SPOKEN_FORMS)
+@pytest.mark.parametrize("side_known", [True, False])
+def test_what_is_said_carries_the_checked_numbers_and_no_side_the_line_does_not(text, side_known):
+    # Review of #267: spoken() must not drop a number, nor add a side the checked text does not state.
+    said = d.spoken(text, side_known)
+    assert numbers(said) == numbers(text), said
+    assert "→" not in said and "Fact-checked" not in said
+    if not side_known and not re.search(r"\b[ha]\d", text):  # track ids only: their letter is unsure
+        assert not SIDE_WORD.search(said), said
+
+
+def test_a_line_about_a_detection_whose_side_is_unsure_names_no_side():
+    # The M1 clip's sides were told at 0.529, except v00005's at 0.964 (above the gate): the voice says
+    # "a player" where the side is unsure, and may say "an away player" only for v00005.
+    from ninety.agents.factcheck import side_known
+
+    events = detected.load(detected.m1_path(detected.M1_CLIP))
+    sure = {e["id"]: side_known(e) for e in events}
+    track, _ = d.describe(events, [])
+    assert track.said
+    for s in track.said:
+        assert bool(SIDE_WORD.search(s.spoken)) <= all(sure[i] for i in s.evidence), s.spoken
+    assert any(not sure[i] for s in track.said for i in s.evidence)  # the case is in the data

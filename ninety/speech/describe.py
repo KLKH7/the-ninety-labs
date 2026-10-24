@@ -102,6 +102,9 @@ class Line:
     evidence: list[str]
     versions: list[str]  # checked text (player ids, units as written), full form first
     source: str  # "event" or "shape" (written here), "insight" (a verified claim) or "model" (its model line)
+    # Whether every detection the line cites had its side told surely (factcheck.side_known): only then
+    # may the voice name a player's side ("a home player"), since a track id's letter is that side.
+    side_known: bool = True
 
 
 @dataclass
@@ -186,75 +189,93 @@ def event_versions(event: dict) -> list[str]:
 
 PLAYER_SPOKEN = re.compile(r"\b([ha])(?:(\d{1,2})|-t(\d+))\b")
 TEAM_SPOKEN = re.compile(r"\b(home|away)\b")
-# The graphics' compact forms ("h11 → h8, 17 m, 53 km/h", "h8 shot, on target, 101 km/h"): read
-# for a screen, not a voice. Said as a commentator would say them, with the same numbers.
+# The graphics' compact forms ("h11 → h8, 17 m, 53 km/h", "h8 shot, on target, 101 km/h", "h4 → h8
+# (cut out by a3), 12 m"): read for a screen, not a voice. Said as a commentator would say them, with
+# the same numbers and the same players.
 _ID = r"(?:[ha](?:\d{1,2}|-t\d+)|a player)"
-ARROW_PASS = re.compile(rf"^(?P<a>{_ID}) → (?P<b>{_ID})(?P<rest>(?:, [^,.]+)*)\.?$")
-PLAIN_PASS = re.compile(rf"^(?P<a>{_ID}|a pass) ?(?:pass)?(?P<rest>(?:, [^,.]+)*)\.?$")
-SHOT = re.compile(rf"^(?P<a>{_ID}|a shot) ?(?:shot)?(?P<rest>(?:, [^,.]+)*)\.?$")
-DIST = re.compile(r"(\d+(?:\.\d+)?) m\b")
-SPEED = re.compile(r"(\d+(?:\.\d+)?) km/h")
+_NUM = r"\d+(?:\.\d+)?"
+HEAD_PASS = re.compile(rf"^(?P<a>{_ID}) → (?P<b>{_ID})(?: \((?P<how>[^)]+)\))?$")
+HEAD_PLAIN = re.compile(rf"^(?P<a>{_ID}) pass(?: \((?P<how>[^)]+)\))?$|^a pass(?: \((?P<how2>[^)]+)\))?$")
+HEAD_SHOT = re.compile(rf"^(?P<a>{_ID}) shot$|^a shot$")
+DIST = re.compile(rf"^({_NUM}) m$")
+SPEED = re.compile(rf"^({_NUM}) km/h$")
+POSSESSIVE = re.compile(rf"\b({_ID})'s pass\b")
 
 
 def _sentence(text: str) -> str:
-    """A graphic's compact form as a sentence; any other text unchanged."""
-    def parts(rest: str) -> tuple[str | None, str | None, list[str]]:
-        bits = [b.strip() for b in rest.split(",") if b.strip()]
-        dist = next((DIST.search(b)[1] for b in bits if DIST.fullmatch(b)), None)
-        speed = next((SPEED.search(b)[1] for b in bits if SPEED.fullmatch(b)), None)
-        other = [b for b in bits if not DIST.fullmatch(b) and not SPEED.fullmatch(b)]
-        return dist, speed, other
-
-    if m := ARROW_PASS.match(text):
-        dist, speed, other = parts(m["rest"])
-        how = f" {dist} m" if dist else ""
-        tail = f", at {speed} km/h" if speed else ""
-        extra = "".join(f", {o}" for o in other)
-        return f"{m['a']} plays it{how} to {m['b']}{tail}{extra}."
-    if (m := PLAIN_PASS.match(text)) and text.split(",")[0].strip().endswith("pass"):
-        dist, speed, other = parts(m["rest"])
-        who = "" if m["a"] == "a pass" else f"{m['a']} plays "
+    """A graphic's compact form as a sentence; any other text unchanged. Nothing is dropped: a part
+    that is neither a distance nor a speed is kept as it was written."""
+    body = text.strip()
+    end = "." if body.endswith(".") else ""
+    head, *rest = [p.strip() for p in body.removesuffix(".").split(", ")]
+    dist = next((DIST.match(p)[1] for p in rest if DIST.match(p)), None)
+    speed = next((SPEED.match(p)[1] for p in rest if SPEED.match(p)), None)
+    other = "".join(f", {p}" for p in rest if not DIST.match(p) and not SPEED.match(p))
+    at = f", at {speed} km/h" if speed else ""
+    if m := HEAD_PASS.match(head):
+        how, a, b = m["how"], m["a"], m["b"]
+        length = f" {dist} m" if dist else ""
+        if how == "in flight":
+            out = f"{a} plays it{length} towards {b}{at}"
+        elif how == "incomplete":
+            out = f"{a} plays it{length} for {b}{at}, but it doesn't arrive"
+        elif how:
+            out = f"{a} plays it{length} for {b}{at}, {how}"
+        else:
+            out = f"{a} plays it{length} to {b}{at}"
+        return out + other + "."
+    if m := HEAD_PLAIN.match(head):
+        how = m["how"] or m["how2"]
         size = f"a {dist} m pass" if dist else "a pass"
-        tail = f" at {speed} km/h" if speed else ""
-        return (f"{who}{size}{tail}" if who else f"{size.capitalize()}{tail}") + "".join(
-            f", {o}" for o in other) + "."
-    if (m := SHOT.match(text)) and text.split(",")[0].strip().endswith("shot"):
-        dist, speed, other = parts(m["rest"])
-        who = "a player" if m["a"] == "a shot" else m["a"]
-        tail = f" at {speed} km/h" if speed else ""
-        return f"{who} shoots{tail}" + "".join(f", {o}" for o in other) + "."
-    return text
+        lead = f"{m['a']} plays {size}" if m["a"] else size.capitalize()
+        tail = "" if not how else ", but it doesn't arrive" if how == "incomplete" else f", {how}"
+        return lead + (f" at {speed} km/h" if speed else "") + tail + other + "."
+    if m := HEAD_SHOT.match(head):
+        who = m["a"] or "a player"
+        return f"{who} shoots" + (f" at {speed} km/h" if speed else "") + other + "."
+    return POSSESSIVE.sub(lambda m: f"the pass from {m[1]}", body.removesuffix(".")) + end
 
 
 as_sentence = _sentence  # the offline stand-in Tactician writes its claim this way (ninety/e2e.py)
 
 
-def _names(text: str) -> str:
-    """Ids as a commentator says them: a squad id is its side's shirt number ("Home's number 11", then
-    "number 8" for a team-mate); a tracked player has no shirt number the tracker read, so he is "a
-    home player", then "a team-mate" (a track id is no shirt number)."""
-    named: set[str] = set()
+def _names(text: str, side_known: bool = True, compact: bool = False) -> str:
+    """Ids as a commentator says them. A squad id is its side's shirt number ("Home's number 11", then
+    "number 8"). A tracked player has no shirt number the tracker read, so a track id is never said as
+    a number: he is "a home player", then "a team-mate", only when the line's side was told surely;
+    otherwise "a player", then "another player" (a track id's letter is the side the gate holds).
+    The same player named again is "the same player". `compact` (a short version) drops the side."""
+    sides: set[str] = set()
+    seen: dict[str, str] = {}
 
     def say(m: re.Match) -> str:
-        side = "home" if m[1] == "h" else "away"
-        first = side not in named
-        named.add(side)
+        whole, side = m[0], ("home" if m[1] == "h" else "away")
+        if whole in seen:
+            return "the same player" if m[3] else f"number {m[2]}"
+        first = side not in sides
+        sides.add(side)
         if m[2]:
-            return f"{side.capitalize()}'s number {m[2]}" if first else f"number {m[2]}"
-        return ("an away player" if side == "away" else "a home player") if first else "a team-mate"
+            phrase = f"number {m[2]}" if compact or not first else f"{side.capitalize()}'s number {m[2]}"
+        elif side_known and not compact:
+            phrase = ("an away player" if side == "away" else "a home player") if first else "a team-mate"
+        else:
+            phrase = "a player" if not seen else "another player"
+        seen[whole] = phrase
+        return phrase
 
     return PLAYER_SPOKEN.sub(say, text)
 
 
-def spoken(text: str) -> str:
+def spoken(text: str, side_known: bool = True, compact: bool = False) -> str:
     """What the voice says for a checked line: a sentence, not a graphic's compact form; ids as a
-    commentator names players; units in full. The substitutions are fixed, so what is said carries
-    exactly the checked line's numbers and players."""
+    commentator names players; units in full. The substitutions are fixed: what is said carries
+    exactly the checked line's numbers, and names no side the checked line does not (a track id's
+    side only where it was told surely)."""
     out = TEAM_SPOKEN.sub(lambda m: m[1].capitalize(), _sentence(text))
-    out = _names(out)
+    out = _names(out, side_known, compact)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
-    out = re.sub(r"(\d+(?:\.\d+)?) m pass\b", r"\1-metre pass", out)
-    out = re.sub(r"(\d+(?:\.\d+)?) m\b", r"\1 metres", out)
+    out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
+    out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
     return out[0].upper() + out[1:] if out else out
 
 
@@ -322,6 +343,10 @@ def candidates(
                 refused.append({"evidence": evidence, "text": text, "reason": "; ".join(verdict.reasons)})
         return ok
 
+    def sides_told(evidence: list[str]) -> bool:
+        """Whether every cited detection's side was told surely: only then may the voice say a side."""
+        return all(side_known(known[i]) for i in evidence if i in known and known[i].get("type") != "shape")
+
     insights: dict[str, Line] = {}
     for cue in cues:
         if cue.get("kind") != "insight":
@@ -351,7 +376,8 @@ def candidates(
                 versions, source = model + versions, "model"
         if versions:
             insights[last["id"]] = Line(cue["id"], cue["t_in"], PRIORITY["insight"], pan_for(last["x"]),
-                                        list(cue["evidence"]), versions, source)
+                                        list(cue["evidence"]), versions, source,
+                                        sides_told(cue["evidence"]))
 
     lines: list[Line] = []
     for event in events:
@@ -369,7 +395,7 @@ def candidates(
         versions = checked(event_versions(event), [event["id"]])
         if versions:
             lines.append(Line(event["id"], event["t"], PRIORITY[event["type"]], pan_for(event["x"]),
-                              [event["id"]], versions, "event"))
+                              [event["id"]], versions, "event", sides_told([event["id"]])))
     lines.extend(insights.values())  # an insight whose last event is not in this list: none today
     for t, text, fact in shape_lines(shape):
         versions = checked([text], [fact])
@@ -401,7 +427,7 @@ def schedule(lines: list[Line], duration: Duration) -> Track:
         upcoming = [n for n in lines[i + 1:] if n.priority < line.priority]
         chosen = None
         for n, text in enumerate(line.versions):
-            words = spoken(text)
+            words = spoken(text, line.side_known, compact=n > 0)
             seconds, how = duration(words, ssml(words, line.priority))
             end = start + seconds
             if all(end + GAP_S - n2.t <= MAX_LAG_S for n2 in upcoming if n2.t < end + GAP_S):
