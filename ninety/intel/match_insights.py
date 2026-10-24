@@ -60,6 +60,12 @@ class MatchInsights:
             assigned = roles.assign(f.frames, team)
             for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
                 people[track] = roles.who(track, team, assigned, fixture, gate)
+        spans: dict[str, tuple[float, float]] = {}
+        for fr in f.frames:
+            for p in fr["players"]:
+                t0, t1 = spans.get(p["id"], (fr["t"], fr["t"]))
+                spans[p["id"]] = (min(t0, fr["t"]), max(t1, fr["t"]))
+        people = roles.one_track_per_name(people, spans)
         shapes = shape_drawings(f.frames)
         facts = {
             "line_break": line_breaks.line_breaks(events, f),
@@ -72,7 +78,7 @@ class MatchInsights:
                     **r,
                     "kind": "shape",
                     "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
-                    "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
+                    "also": shape_also(r),
                     "visual": {
                         "kind": "shape",
                         "minute": r["minute"],
@@ -237,10 +243,14 @@ class MatchInsights:
         by: dict[str, list[dict]] = {}
         for f in self._rows("line_break", minute_from, minute_to, club):
             if f.get("passer") and f["hi"] > 0:
-                by.setdefault(f["passer"], []).append(f)
+                # One named player's pieces of track are one row (roles.one_track_per_name); an
+                # unnamed track is its own.
+                name = self.people.get(f["passer"], {}).get("name")
+                by.setdefault(f"{f['team']}:{name}" if name else f["passer"], []).append(f)
         ranked = sorted(by.items(), key=lambda kv: (-sum(f["value"] for f in kv[1]), kv[0]))
         out = []
-        for k, (track, rows) in enumerate(ranked[:5], 1):
+        for k, (_, rows) in enumerate(ranked[:5], 1):
+            track = rows[0]["passer"]
             who = self.people.get(track, {})
             out.append(
                 {
@@ -252,6 +262,7 @@ class MatchInsights:
                     "minute_from": minute_from,
                     "minute_to": minute_to,
                     "player": track,
+                    "tracks": sorted({f["passer"] for f in rows}),
                     "player_is": who.get("say"),
                     "rank": k,
                     "value": sum(f["value"] for f in rows),
@@ -355,6 +366,16 @@ class MatchInsights:
             dict(body.get("team_stats") or {}),
             dict(body.get("stats") or {}),
         )
+
+
+CHANGE_CONTEXT = r"\b(?:up|back|by|forward|deeper|higher|further)\s+$"
+
+
+def shape_also(r: Mapping) -> list:
+    """A shape fact's other number: its change, said right after the move ("pushed up 6 m"), while
+    its value (the line's height) is the one after "to". Both are metres, so each is bound to its own
+    role (lesson 221)."""
+    return [[abs(r["change"]), r["unit"], CHANGE_CONTEXT]] if r.get("change") else []
 
 
 def shape_drawings(frames: Sequence[Mapping]) -> dict[tuple[str, int], dict]:

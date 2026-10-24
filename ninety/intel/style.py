@@ -292,6 +292,7 @@ def one_twos(rows: list[dict]) -> list[dict]:
             and b["outcome"] == "success"
             and a["player"]
             and a["receiver"]
+            and a["player"] != a["receiver"]  # a pass to himself is a carry, and no one-two
             and b["player"] == a["receiver"]
             and b["receiver"] == a["player"]
             and 0 < b["t"] - a["t"] <= ONE_TWO_S

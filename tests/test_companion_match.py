@@ -515,6 +515,17 @@ def test_who_has_been_the_best_player():
     )
 
 
+def test_one_players_pieces_of_track_are_one_row_of_the_ranking():
+    mi = insights()
+    first = next(f for f in mi.facts["line_break"] if f.get("passer") and f["hi"] > 0)
+    piece = {**first, "id": "lb:v78", "passer": "h-t98"}
+    mi.facts["line_break"].append(piece)
+    mi.people["h-t98"] = {**mi.people[first["passer"]], "track": "h-t98"}  # the same named player
+    rows = mi.players(1, 30)["facts"]
+    named = [r for r in rows if r["player_is"] == mi.people[first["passer"]]["say"]]
+    assert len(named) == 1 and set(named[0]["tracks"]) == {first["passer"], "h-t98"}
+
+
 def test_a_leader_who_might_not_lead_is_not_called_the_best():
     mi = insights()
     rival = {
@@ -806,9 +817,11 @@ def test_a_sheet_row_beside_a_moment_vouches_for_no_name_in_it():
     for f in facts:
         f.setdefault("clubs", mi.fixture.clubs)
     known = {f["id"]: f for f in facts}
-    gk = known["sheet:home:GK"]
-    lb = next(f for f in facts if f.get("kind") == "line_break" and companion.code_texts(f)
-              and f.get("passer_is") and f["passer_is"] != gk["name"] and f["team"] == "home")
+    lb = next(
+        f for f in facts if f.get("kind") == "line_break" and companion.code_texts(f) and f.get("passer_is")
+    )
+    gk = known[f"sheet:{lb['team']}:GK"]  # the passer's own keeper, so only the name is wrong
+    assert lb["passer_is"] != gk["name"]
     true = companion.code_texts(lb)[0]
     assert companion._verify(Claim(true, [lb["id"]]), known, mi).ok
     swapped = true.replace(lb["passer_is"], gk["name"])

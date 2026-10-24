@@ -125,6 +125,16 @@ def test_one_two(gap, between, want):
     assert len(style.one_twos(style.passes(rows))) == want
 
 
+def test_a_pass_to_himself_and_back_is_no_one_two():
+    # The simulator logs a knock-on as a pass whose receiver is the passer (runs/u7: 22 of 265): two
+    # of them in a row looked like a one-two between a player and himself.
+    rows = [
+        p("a", 10, "home", 40, 30, 45, 30, player="h-t1", receiver="h-t1"),
+        p("b", 12, "home", 45, 30, 50, 31, player="h-t1", receiver="h-t1"),
+    ]
+    assert style.one_twos(style.passes(rows)) == []
+
+
 def test_style_questions_route_to_the_style_tool():
     assert companion.route("Why are London Athletic playing like this?")[0] == "style"
     assert companion.route("Is their keeper going long?")[0] == "style"

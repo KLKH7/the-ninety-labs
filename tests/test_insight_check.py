@@ -846,3 +846,117 @@ def test_each_word_out_of_the_glue_holds_a_sentence(word):
     assert word not in GLUE
     v = verify(Claim(f"Lisbon Esportes lost the ball {word}.", ["cp:v8"]), K2, CLUBS, NAMED, NAMES)
     assert status_for(v) != "verified", word
+
+
+# Found on the freeze-SHA stand-in (seed 8076 at 65247ba3), missed on the older u7.
+
+SHAPE = {
+    "id": "shape:line_height:home:m2",
+    "type": "shape",
+    "kind": "shape",
+    "metric": "line_height",
+    "team": "home",
+    "club": "London Athletic",
+    "minute": 2,
+    "t": 119.0,
+    "value": 30,
+    "unit": "m",
+    "change": -5,
+    "tracked": 11,
+    "of": 11,
+    "need": 11,
+    "frames": 1500,
+    "confident": True,
+}
+
+
+def test_a_line_moves_by_its_change_to_its_height_never_the_other_way_round():
+    from ninety.intel.match_insights import shape_also
+
+    fact = {**SHAPE, "also": shape_also(SHAPE)}
+    k = {fact["id"]: fact}
+    ok = "In minute 2, London Athletic's back line dropped back 5 m, to 30 m from their own goal."
+    assert status_for(run(ok, [fact["id"]], k)) == "verified"
+    for bad in (
+        "In minute 2, London Athletic's back line dropped back 30 m, to 30 m from their own goal.",
+        "In minute 2, London Athletic's back line dropped back 5 m, to 5 m from their own goal.",
+        "In minute 2, London Athletic's back line dropped back 30 m, to 5 m from their own goal.",
+        "In minute 2, London Athletic's back line dropped back thirty m, to 30 m from their own goal.",
+    ):
+        assert status_for(run(bad, [fact["id"]], k)) == "rejected", bad
+
+
+ONE_TWO = {
+    "id": "onetwo:e00023",
+    "kind": "one_two",
+    "metric": "one_two",
+    "team": "home",
+    "club": "London Athletic",
+    "minute": 2,
+    "t": 64.76,
+    "value": None,
+    "unit": None,
+    "confident": True,
+    "passer": "h-t5",
+    "receiver": "h-t6",
+}
+
+
+def test_one_name_said_as_both_players_of_a_one_two_is_refused():
+    rb = FX.sheet("home")[1]
+    people = {**NAMED, "h-t6": {**NAMED["h-t5"], "track": "h-t6", "role": "RB", "name": rb.name,
+                                "position": "right-back", "sheet_name": rb.name}}
+    k = {ONE_TWO["id"]: ONE_TWO}
+    ok = f"In minute 2, {LB.name} and {rb.name} played a one-two."
+    assert status_for(run(ok, [ONE_TWO["id"]], k, people)) == "verified"
+    for bad in (f"In minute 2, {LB.name} and {LB.name} played a one-two.",
+                f"In minute 2, {rb.name} and {rb.name} played a one-two."):
+        v = run(bad, [ONE_TWO["id"]], k, people)
+        assert status_for(v) == "rejected" and any("said as two players" in r for r in v.reasons), bad
+
+
+REGAIN_TO_SHOT = {
+    "id": "counter:e00039",
+    "kind": "counter",
+    "metric": "regain_to_shot_s",
+    "team": "home",
+    "club": "London Athletic",
+    "minute": 2,
+    "t": 100.28,
+    "value": 11.4,
+    "unit": "s",
+    "lo": 11.4,
+    "hi": 11.4,
+    "confident": True,
+    "metres": 37,
+    "also": [[37, "m"]],
+}
+
+
+def test_a_regain_that_led_to_a_shot_is_said_in_its_own_words_and_never_reversed():
+    k = {REGAIN_TO_SHOT["id"]: REGAIN_TO_SHOT}
+    ok = "In minute 2, London Athletic won the ball back and had a shot 11.4 seconds later."
+    assert status_for(run(ok, [REGAIN_TO_SHOT["id"]], k)) == "verified"
+    never = "In minute 2, London Athletic never won the ball back and had a shot 11.4 seconds later."
+    assert status_for(run(never, [REGAIN_TO_SHOT["id"]], k)) == "rejected"
+    # A paraphrase of the direction is held, not passed (the closed direction check).
+    loose = "In minute 2, London Athletic barely won the ball back and had a shot 11.4 seconds later."
+    assert status_for(run(loose, [REGAIN_TO_SHOT["id"]], k)) != "verified"
+    # The counter-press's own words still need a counter-press fact.
+    press = "In minute 2, London Athletic counter-pressed and had a shot 11.4 seconds later."
+    assert status_for(run(press, [REGAIN_TO_SHOT["id"]], k)) == "rejected"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "In minute 2, London Athletic hit Lisbon Esportes on the counter-attack, a shot 11.4 seconds later.",
+        "In minute 2, London Athletic broke at speed: on the break, a shot 11.4 seconds later.",
+        "In minute 2, London Athletic counterattacked and had a shot 11.4 seconds later.",
+    ],
+)
+def test_a_regain_that_led_to_a_shot_is_never_called_a_counter_attack(text):
+    # No published definition with a time window was found (GROUNDING I12): the words are never said.
+    k = {REGAIN_TO_SHOT["id"]: REGAIN_TO_SHOT}
+    v = run(text, [REGAIN_TO_SHOT["id"]], k)
+    assert status_for(v) == "rejected" and any("no cited definition" in r for r in v.reasons), v.reasons
