@@ -13,15 +13,13 @@ export const CLUBS: Record<string, string> = {
   CRW: "Crowmere",
   DUN: "Dunhollow",
   ELM: "Elmwick",
-  FEN: "Fenwick",
+  FEN: "Lisbon Esportes", // renamed by Kian, Oct 24
   GRV: "Grovely",
   HLT: "Holtmoor",
   IVY: "Ivydale",
   KST: "Kestwood",
-  LIS: "Lisbon Esportes",
-  LON: "London Athletic",
   MRL: "Merlton",
-  OAK: "Oakfield",
+  OAK: "London Athletic", // renamed by Kian, Oct 24
   QRY: "Quarrydale",
 };
 

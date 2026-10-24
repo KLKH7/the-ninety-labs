@@ -346,13 +346,15 @@ def test_every_scorebug_code_has_one_club_name_starting_with_its_letters():
     from ninety.render.params import TEAM_CODES
 
     source = (Path(__file__).resolve().parent.parent / "web" / "viewer" / "src" / "teams.ts").read_text()
-    clubs = dict(re.findall(r'^\s+([A-Z]{3}): "([^"]+)",$', source, re.M))
-    # Every code the renderer draws has a club, plus the demo's two (Kian, Oct 24: LON, LIS), which
-    # the renderer's TEAM_CODES will carry once its owner adds them.
-    assert set(TEAM_CODES) <= set(clubs) and set(clubs) - set(TEAM_CODES) <= {"LON", "LIS"}
+    clubs = dict(re.findall(r'^\s+([A-Z]{3}): "([^"]+)",(?: //.*)?$', source, re.M))
+    assert set(clubs) == set(TEAM_CODES)
     assert len(set(clubs.values())) == len(clubs)
+    # Each name starts with its code's letter, so the scorebug and the screens name the same club;
+    # Kian renamed the demo's two clubs (Oct 24) and the renderer still draws their old codes, which
+    # its frozen test sets record: the two renamed codes are listed here until it draws LON / LIS.
+    renamed = {"OAK": "London Athletic", "FEN": "Lisbon Esportes"}
     for code, name in clubs.items():
-        assert name.upper().startswith(code[0]), (code, name)
+        assert name == renamed[code] if code in renamed else name.upper().startswith(code[0]), (code, name)
     teams = {"home": "FEN", "away": "OAK"}
     assert e2e.teams_of({"params": {"home_code": "FEN", "away_code": "OAK"}}) == teams
     assert e2e.teams_of({"params": {}}) is None

@@ -427,6 +427,8 @@ function clubColours() {
   root.style.setProperty("--away", `var(--team-${a})`);
   root.style.setProperty("--crest-home", `var(--crest-${h})`);
   root.style.setProperty("--crest-away", `var(--crest-${a})`);
+  root.style.setProperty("--field-home", `var(--field-${h})`);
+  root.style.setProperty("--field-away", `var(--field-${a})`);
   const css = getComputedStyle(root);
   const read = (name: string) => css.getPropertyValue(name).trim();
   const palette = {
@@ -1682,11 +1684,12 @@ function playSentence(e: DetectedEvent): string | null {
   // A tracked player nobody has named is "a London player", never the tracker's number; a pass
   // between two of them reaches "a teammate".
   const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
-  const to = (id: string) => (isTrack(id) && e.player && isTrack(e.player) && team(id) === team(e.player) ? "a teammate" : named(id));
+  const low = (t: string) => t.replace(/^A /, "a "); // named() capitalises a sentence's first word
+  const to = (id: string) => (isTrack(id) && e.player && isTrack(e.player) && team(id) === team(e.player) ? "a teammate" : low(named(id)));
   switch (e.type) {
     case "pass":
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
-      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${named(e.interceptor)}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
+      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(named(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
       return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
     case "out_of_play":

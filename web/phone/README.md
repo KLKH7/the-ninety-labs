@@ -22,7 +22,7 @@ code; everything else is here. The phone pairs with the big screen, then has thr
   turns them into what the phone draws; anything missing draws nothing.
 
 Clubs are named from the codes on the clip's scorebug (`web/viewer/src/teams.ts`); a player by the
-name or role an answer carries, otherwise by club and shirt or track ("Fenwick player 12").
+name or role an answer carries, otherwise by club and shirt or track ("a Lisbon player" in a sentence, "Lisbon player 12" as a title).
 
 The laptop side is the viewer's "Connect your phone" panel (`web/viewer/src/companion.ts`): it asks
 the API for a 6-character code, shows it with a QR code of `phone/?code=…&clip=…`, and sends its

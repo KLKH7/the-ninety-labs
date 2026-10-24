@@ -51,6 +51,9 @@
 }
 /* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
 :root { --crest-a: #0d2547; --crest-b: #e6a708; }
+/* The band's deep fields (Apple Sports): London's navy; Lisbon's gold kept yellow, never orange
+   (Kian): a high-lightness, yellow-hued gold rather than gold mixed with black, which reads brown. */
+:root { --field-a: oklch(0.34 0.1 262); --field-b: oklch(0.6 0.12 92); }
 
 /* Live and Story are Apple Sports, which is dark only (Coordinator, Oct 24: exact match): the dark
    tokens apply whatever the phone's setting. Ask is Perplexity's light page (below). */
