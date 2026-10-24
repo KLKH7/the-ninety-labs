@@ -14,8 +14,11 @@ the counts must agree). For each frame it writes one line:
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
 
 The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). It
-also cuts between cameras: a cut is found where the picture changes at once (pitch.shot_starts), and each
-shot is fitted on its own (pitch.fit_shots), its index written as `camera.shot`. A
+also cuts between cameras. With `--cuts`, a cut is found where the picture changes at once
+(pitch.shot_starts) and each shot is fitted on its own (pitch.fit_shots), its index written as
+`camera.shot`. It is off by default: on validation it trusted a tight lens's frames 1 to 1.3 m
+wrong, and on the test set a reverse angle 44 m wrong, the mirror of the main camera through the
+centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 238). A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
 through that one camera.
@@ -187,9 +190,10 @@ def place(row: dict, markings: bool = True) -> dict:
     return row
 
 
-def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[dict]:
+def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: bool = False) -> list[dict]:
     """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
-    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
+    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera; `cuts`
+    to fit the broadcast shot by shot at the cuts the images show (off by default, above)."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
     rgbs, points, thumbs = [], [], []
@@ -200,14 +204,15 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
         rgbs.append(rgb)
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
-            thumbs.append(pitch.thumbnail(rgb))
+            if cuts:
+                thumbs.append(pitch.thumbnail(rgb))
             continue
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
     if not fixed:
-        starts = pitch.shot_starts(thumbs)
+        starts = pitch.shot_starts(thumbs) if cuts else [0]
         gantries, fits = pitch.fit_shots(points, W, H, starts)
     else:
         view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
@@ -254,6 +259,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--fixed", action="store_true",
                     help="a fixed lens (the tactical camera): one camera for the whole clip")
+    ap.add_argument("--cuts", action="store_true",
+                    help="the broadcast: fit each shot on its own at the cuts the images show "
+                         "(off by default)")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
                          "without the camera fit (its cameras are kept)")
@@ -270,7 +278,8 @@ def main(argv: list[str] | None = None) -> None:
             ap.error("a clip and --detections, or --regate")
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
-        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")), fixed=a.fixed)
+        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")),
+                       fixed=a.fixed, cuts=a.cuts)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")

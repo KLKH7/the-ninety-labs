@@ -270,3 +270,20 @@ def test_a_clip_without_a_cut_is_fitted_exactly_as_before(monkeypatch):
     assert pitch.fit_shots(pts, W, H, [0]) == ([GANTRY], ["fits"])
     assert len(seen) == 1 and seen[0][1] == 25
     assert len(seen[0][0]) == len(pts) and all(a is b for a, b in zip(seen[0][0], pts, strict=True))
+
+
+def test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot():
+    # Why test seed 900003's reverse angle is fitted 44 m wrong (lesson 238): Law 1's markings are
+    # the same after a half turn about the centre spot, so a camera in the far stand and its twin on
+    # the near gantry, turned the same way, see identical lines. Nothing in the markings, and so in
+    # this fit, can tell them apart; that needs a cue the half turn changes (the stands, the boards).
+    near = view()
+    far = pitch.View(pitch.PITCH_X - GANTRY[0], pitch.PITCH_Y - GANTRY[1], GANTRY[2],
+                     near.pan + math.pi, near.tilt, near.focal, W, H)
+    pts = marking_pixels(far)
+    assert len(pts) > pitch.MIN_POINTS
+    assert pitch._median(near, pts) < 0.05
+    # And the twin puts the ground a pitch-length's worth wrong: the centre of the picture lands
+    # tens of metres from where the far camera is looking.
+    centre = np.array([[W / 2, H / 2]])
+    assert math.dist(near.to_ground(centre)[0], far.to_ground(centre)[0]) > 20.0

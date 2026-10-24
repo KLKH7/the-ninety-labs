@@ -218,12 +218,16 @@ def test_observe_fits_each_shot_on_its_own_and_labels_it(monkeypatch):
     grass, stands = np.zeros((72, 128, 3), np.uint8), np.zeros((72, 128, 3), np.uint8)
     grass[...] = (60, 120, 10)
     stands[...] = (120, 120, 140)
-    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets,
-                           lambda path: stands if int(path.stem) >= 6 else grass)
+    load = lambda path: stands if int(path.stem) >= 6 else grass  # noqa: E731
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load, cuts=True)
     assert calls == [6, 5]
     assert [r["camera"]["shot"] for r in rows] == [0] * 6 + [1] * 5
     assert [s["frame"] for s in rows[0]["shots"]] == [0, 6]
     assert all(r["camera"]["ok"] for r in rows)
+    # Off by default (docs/eval/camera-cuts-plan.md, Outcome): the same images are one shot.
+    calls.clear()
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load)
+    assert calls == [11] and {r["camera"]["shot"] for r in rows} == {0} and "shots" not in rows[0]
 
 
 @pytest.mark.xfail(strict=True, reason="no check of one frame against another can see a whole clip offset "
