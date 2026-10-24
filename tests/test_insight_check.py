@@ -116,8 +116,8 @@ def run(text, evidence=("lb:v1",), known=KNOWN, people=NAMED):
     ],
 )
 def test_true_claims_pass(text, evidence):
-    v = run(text, evidence)
-    assert v.ok, v.reasons
+    # A true claim is never rejected; one in words the closed direction check does not know is held.
+    assert status_for(run(text, evidence)) != "rejected"
 
 
 @pytest.mark.parametrize(
@@ -256,7 +256,7 @@ def test_a_sentence_that_reverses_the_fact_is_rejected(text, fid):
 )
 def test_a_sentence_that_keeps_the_facts_direction_passes(text, fid):
     v = verify(Claim(text, [fid]), POLARITY, CLUBS, NAMED, NAMES)
-    assert v.ok, v.reasons
+    assert status_for(v) != "rejected", v.reasons
 
 
 def test_none_of_something_needs_a_zero():
@@ -386,8 +386,8 @@ TRUE_PARAPHRASES = [
     ("Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8", "verified"),
     ("Lisbon Esportes did not win it back.", "cp:v8", "verified"),
     ("Lisbon Esportes could not regain the ball.", "cp:v8", "held"),
-    ("London Athletic had 3 teammates free further up the pitch.", "po:v9", "verified"),
-    ("London Athletic completed the pass with 3 open teammates ahead.", "po:v9", "verified"),
+    ("London Athletic had 3 teammates free further up the pitch.", "po:v9", "held"),
+    ("London Athletic completed the pass with 3 open teammates ahead.", "po:v9", "held"),
     ("London Athletic kept possession with 3 options free.", "po:v9", "held"),
     ("London Athletic lost the ball with no teammate free further up the pitch.", "po:f", "verified"),
 ]
@@ -569,20 +569,48 @@ def test_no_true_sentence_is_rejected(text, fids):
 
 # Each phrase the closed check accepts is pinned by a true sentence that needs it: drop the phrase
 # from `_approved` and the sentence is held, so the test turns red (the review's surviving mutations).
-PINNED = [
-    ("Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
-    ("Lisbon Esportes won the ball back 2.4 seconds after losing it, with 3 players around it.", "cp:v7"),
-    ("Lisbon Esportes lost the ball and could not win it back.", "cp:v8"),
-    ("Lisbon Esportes lost the ball 2 times in open play and never won it back within 5 seconds.", "cps:z"),
-    ("London Athletic had 3 teammates free further up the pitch and kept the ball.", "po:v9"),
-    ("London Athletic completed the pass and found an open teammate.", "po:v9"),
+PINNED = [  # code's own sentences (companion_match.code_texts, scout.WHY_TEXT), one per template
     (
-        "London Athletic had 3 teammates free further up the pitch, but the pass went elsewhere and was "
-        "lost.",
+        "In minute 30, Lisbon Esportes won the ball back 2.4 seconds after losing it, with 3 players "
+        "around it.",
+        "cp:v7",
+    ),
+    ("In minute 30, Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
+    (
+        "Winning the ball back within 5 seconds of losing it stops the other side from breaking, and Lisbon "
+        "Esportes had 1 player near the ball.",
+        "cp:v8",
+    ),
+    (
+        "Lisbon Esportes lost the ball 2 times in open play from minute 1 to minute 15 and never won it back "
+        "within 5 seconds.",
+        "cps:z",
+    ),
+    (
+        "Lisbon Esportes lost the ball 4 times in open play from minute 1 to minute 15 and won it back 2 "
+        "times "
+        "within 5 seconds.",
+        "cps:t",
+    ),
+    ("In minute 31, London Athletic lost the ball with no teammate free further up the pitch.", "po:f"),
+    (
+        "In minute 31, London Athletic had 3 teammates free further up the pitch, but the pass went "
+        "elsewhere "
+        "and was lost.",
         "po:f1",
     ),
-    ("London Athletic lost the ball with no teammate free further up the pitch.", "po:f"),
-    ("London Athletic had 3 extra players around the ball in minute 12.", "ov:v3"),
+    ("At the moment of that pass London Athletic had 3 open teammates further forward.", "po:v9"),
+    (
+        "London Athletic made 4 passes with no open teammate further forward from minute 1 to minute 15.",
+        "po:n4",
+    ),
+    (
+        "In minute 12, London Athletic had 4 players against 1 player around the ball, in their final "
+        "third in "
+        "the centre.",
+        "ov:v3",
+    ),
+    ("With 4 players against 1 player around the ball, London Athletic had a spare player there.", "ov:v3"),
 ]
 
 
@@ -758,3 +786,63 @@ def test_direction_words_are_not_glue(text, fid):
 def test_review_phrases_are_pinned(text, fid):
     v = verify(Claim(text, [fid]), K2, CLUBS, NAMED, NAMES)
     assert v.ok, (text, v.reasons)
+
+
+# The merge queue's last review: 30 reversals made only of the old glue words (its glue30.py). With
+# the glue list cut to words that carry no direction, each is held or rejected; put a direction word
+# back in the glue and some turn green, so these also pin the list.
+REVERSALS5 = [
+    (f"{L} lost the ball but they had the ball.", "cp:v8"),
+    (f"{L} lost the ball and then they had the ball.", "cp:v8"),
+    (f"{L} lost the ball and then had the ball within 3 seconds.", "cp:v8"),
+    (f"{L} lost the ball and the ball was with them.", "cp:v8"),
+    (f"{L} lost the ball and the ball was on their side.", "cp:v8"),
+    (f"{L} lost the ball when they had the ball.", "cp:v8"),
+    (f"{L} lost the ball, and after 2 seconds they had the ball.", "cp:v8"),
+    (f"{L} lost the ball and before 3 seconds the ball was with them.", "cp:v8"),
+    (f"{L} lost the ball and the ball was their play.", "cp:v8"),
+    (f"{L} lost the ball, but 3 players pressed and the ball was with them.", "cp:v8"),
+    (f"{L} lost the ball while they had the ball.", "cp:v8"),
+    (f"{L} lost the ball and the ball was theirs.", "cp:v8"),
+    (f"{L} lost the ball and was in play within 5 seconds.", "cp:v8"),
+    (f"{L} lost the ball and the player had the ball.", "cp:v8"),
+    (f"{L} lost the ball and the ball was near the player, with them.", "cp:v8"),
+    (f"{L} lost the ball and the player was both on the ball and with it.", "cp:v7"),
+    (f"{H} had 3 open teammates ahead and the pass was to a player ahead.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was to a player near the ball.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was by the player to them.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was to the player further forward.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was with the player ahead.", "po:f1"),
+    (f"{H} had 4 passes with a player ahead.", "po:n4"),
+    (f"{H} had 4 passes with players around the ball.", "po:n4"),
+    (f"{H} had 4 passes with players further up the pitch.", "po:n4"),
+    (f"{H} had 4 passes with a player near the ball, the pass to them.", "po:n4"),
+    (f"{L} lost the ball and had the ball within 5 seconds from minute 1 to minute 15.", "cps:z"),
+    (f"{L} lost the ball, then they had the ball when they pressed, from minute 1 to minute 15.", "cps:z"),
+    (f"{H} had 3 extra players, and both sides had the ball.", "ov:v3"),
+    (f"{H} had an overload when the other side had the ball.", "ov:v3"),
+    (f"{H} had 3 extra players, but they were in play, with the ball on their side.", "ov:v3"),
+]
+
+
+@pytest.mark.parametrize("text, fids", REVERSALS5)
+def test_no_reversal_made_of_glue_passes(text, fids):
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "verified", text
+
+
+# Every word taken out of the glue list is pinned on its own: the sentence's only word outside the
+# fact's phrase is that word, so it is held; put the word back in GLUE and it passes, turning red.
+NOT_GLUE = (
+    "open teammate teammates again all each one only away straight same it this that so also just they "
+    "them their had has have was were is are be been being with to on by ball player players side play "
+    "ahead near around further forward up pitch"
+).split()
+
+
+@pytest.mark.parametrize("word", NOT_GLUE)
+def test_each_word_out_of_the_glue_holds_a_sentence(word):
+    from ninety.agents.insight_check import GLUE
+
+    assert word not in GLUE
+    v = verify(Claim(f"Lisbon Esportes lost the ball {word}.", ["cp:v8"]), K2, CLUBS, NAMED, NAMES)
+    assert status_for(v) != "verified", word

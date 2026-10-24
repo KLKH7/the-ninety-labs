@@ -347,6 +347,8 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
     back, a pass was lost or kept, it went (not) to an open teammate, nobody was open, or there were
     none of something, and the cited facts say the other."""
     out = []
+    # The "why?" definition says what winning it back does; it claims no regain of its own.
+    text = re.sub(r"winning the ball back within \d+ seconds of losing it", " ", text, flags=re.I)
     presses = [f for f in cited if f.get("kind") == "counter_press" and f.get("metric") == "pressers"]
     regains = [f for f in cited if f.get("metric") == "regains_within_5s"]
     passes = [f for f in cited if f.get("metric") == "open_teammates_ahead"]
@@ -394,11 +396,11 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
 GLUE = frozenset(
     # No word here may carry direction (the merge queue's fifth review took out open, teammate,
     # again, all, each, one, only, away, straight and same, and its sixth "that was it" took out it,
-    # this, that, so, also and just): a direction must come in the fact's own
+    # this, that, so, also and just, and its seventh the pronouns, verbs, prepositions and pitch words
+    # (they, had, was, with, to, ball, players, ahead, further, up)): a direction must come in the fact's own
     # phrases, or the sentence is held.
-    """a an the and but then while with in of to from for on at by as their his her they them there
-    when after before had has have was were is are be been being both minute minutes time times second
-    seconds s m around near ball player players side play further forward up pitch ahead moment""".split()
+    """a an the and but then while of from for at in when after before both minute minutes time times
+    second seconds s m moment his her there""".split()
 )
 DIRECTED = (
     "pressers",
@@ -411,8 +413,45 @@ DIRECTED = (
 _N = r"\d+(?:\.\d+)?"
 
 
+# Code's own sentences, clause by clause (ninety/agents/companion_match.code_texts, scout.WHY_TEXT and
+# scout.where_spoken): with the glue list this short, a sentence code writes passes only because
+# each of its clauses is a phrase of the fact it states.
+_THIRD = r"in their (?:own|middle|final) third,? (?:in the centre|on the (?:left|right))"
+_WHERE = r"it was (?:close to [\w ']+? goal|in [\w ']+? third|in midfield)(?: on the (?:near|far) side)?"
+TEMPLATES = {
+    "pressers": [
+        rf"won the ball back {_N} seconds after losing it, with {_N} players? around it",
+        rf"lost the ball and had {_N} players? near it in the next {_N} seconds",
+        rf"winning the ball back within {_N} seconds of losing it stops the other side from breaking, and",
+        rf"had {_N} players? near the ball",
+    ],
+    "regains_within_5s": [
+        rf"lost the ball {_N} times? in open play",
+        rf"and (?:never won it back|won it back once|won it back {_N} times) within {_N} seconds",
+    ],
+    "open_teammates_ahead": [
+        r"lost the ball with no teammate free further up the pitch",
+        rf"had {_N} teammates? free further up the pitch, but the pass went elsewhere and was lost",
+        r"at the moment of that pass",
+        rf"had {_N} open teammates? further forward",
+    ],
+    "passes_with_no_open_teammate_ahead": [rf"made {_N} pass(?:es)? with no open teammate further forward"],
+    "extra_players": [
+        rf"had {_N} players? against {_N} players? around the ball, {_THIRD}",
+        rf"with {_N} players? against {_N} players? around the ball",
+        r"had a spare player there",
+    ],
+    "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
+}
+
+
 def _approved(f: Mapping) -> list[str]:
     """The phrases that state this fact's own direction, and the neutral ones its sentences use."""
+    span = r"(?:from minute \d+ to minute \d+|in minute \d+)"  # when, in the words code writes it
+    return [*TEMPLATES.get(f.get("metric"), ()), _WHERE, span, *_phrases(f)]
+
+
+def _phrases(f: Mapping) -> list[str]:
     metric = f.get("metric")
     if metric == "pressers":
         out = [
