@@ -55,12 +55,18 @@ GRAVITY = 9.81  # m/s^2, standard gravity; it varies by under 0.3% over the Eart
 # other or with one number: wind-tunnel drag coefficients of match balls are about 0.12 to 0.15
 # above the drag crisis (about 15 to 22 m/s; Asai & Seo 2013, SpringerPlus 2:171) and about 0.45
 # below it, so K depends on the ball and its speed. One K is fitted on validation clips' flights by
-# pixel error alone (derive_drag). PROVISIONAL until that run: Cd 0.15 (Asai & Seo's Tango 12),
-# air 1.2 kg/m^3, radius 0.11 m and mass 0.43 kg (Law 2), i.e. K = 0.0080.
-DRAG_K = 0.5 * 1.2 * 0.15 * math.pi * 0.11**2 / 0.43
-# The detected ball centre's pixel noise, one coordinate's standard deviation. PROVISIONAL until
-# derived on validation clips (derive_noise): about a tenth of a 10 px ball box (design).
-NOISE_PX = 1.0
+# pixel error alone (derive_drag), before any test number was read.
+# Derived 2026-10-24 by `--derive` on the 13 validation clips' observations (seeds 108 109 114 115
+# 116 120 121 122 2041 2042 2043 3041 3042, branch pr-assets/detector-validation-observations at
+# 4d42fbf, sha256 as in docs/eval/detector-derive-observations.sha256; 2045 and 3045 are not there):
+# 13 flights, 278 frames, K = 0.0124 +- 0.00046 (Cd 0.234 +- 0.009, air 1.2 kg/m^3, radius 0.11 m,
+# mass 0.43 kg by Law 2). The clips' engine uses Cd 0.25 (ninety/sim/ball.py); the published value
+# above, 0.15, would have been a third too low. The +- counts pixel noise only, not camera error.
+DRAG_K = 0.0124
+# The detected ball centre's pixel noise, one coordinate's standard deviation, from the pieces'
+# residuals on the same 13 clips and run (derive_noise). At the derived K the error left over is
+# what that noise predicts (274 px^2 against about 265), so the model misses no large error.
+NOISE_PX = 0.742
 GATE_SIGMA = 3.5  # a frame fits within this many sigma: a 2D normal lands outside 0.2% of the time
 MIN_FRAMES = 5  # a piece's first window: 10 pixel coordinates for 6 unknowns, so a misfit can show
 MAX_GAP_S = 0.5  # frames further apart than this (ball unseen, camera untrusted) start a new piece

@@ -107,7 +107,7 @@ def low_errors(path, rows_out):
 def scene():
     path = kick_and_bounces()
     rows = observations(path, views(path))
-    return path, rows, fl.heights(rows, k=K_TRUE)
+    return path, rows, fl.heights(rows, k=K_TRUE, noise_px=NOISE)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ def test_the_flight_puts_the_ball_back_in_the_air(scene):
 def test_the_pieces_break_at_the_kick_and_the_bounces(scene):
     path, rows, out = scene
     tr = fl.ball_track(rows)
-    pieces = fl.segment(tr, K_TRUE)
+    pieces = fl.segment(tr, K_TRUE, NOISE)
     starts = [p.lo for p in pieces if p.in_flight]
     lands = [i for i in range(1, len(path)) if path[i][3] - R < 0.02 and path[i - 1][3] - R > 0.02]
     for want in [26] + [i + 1 for i in lands[:2]]:  # the first frame after each kick or bounce
@@ -181,7 +181,7 @@ def test_the_pieces_break_at_the_kick_and_the_bounces(scene):
 
 def test_a_low_shot_is_lifted_too():
     path = shot()
-    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE)
+    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE, noise_px=NOISE)
     pos, hgt = air_errors(path, out)
     assert len(pos) >= 10 and np.median(pos) < 0.5 and np.median(hgt) < 0.15, (pos, hgt)
 
@@ -195,7 +195,7 @@ def test_low_hops_are_placed_from_their_bounce(scene):
 
 def test_the_shot_is_never_fitted_under_the_ground():
     path = shot()
-    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE)
+    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE, noise_px=NOISE)
     assert np.median(low_errors(path, out)) < 0.3
     assert all(r["ball"][0]["z"] >= R - fl.Z_TOL_M for r in out)
 
@@ -203,13 +203,13 @@ def test_the_shot_is_never_fitted_under_the_ground():
 def test_an_unsure_place_is_not_used():
     path = kick_and_bounces()
     tr = fl.ball_track(observations(path, views(path)))
-    hop = [p for p in fl.segment(tr, K_TRUE) if p.in_flight][-1]  # 9 frames, under 0.4 m high
+    hop = [p for p in fl.segment(tr, K_TRUE, NOISE) if p.in_flight][-1]  # 9 frames, under 0.4 m high
     assert fl.centre_se(hop.flight, NOISE).max() > fl.MAX_SE_M
 
 
 def test_a_ball_rolling_along_the_grass_stays_on_it():
     path = simulate((20.0, 15.0, R, 9.0, 4.0, 0.0), 3.0)
-    out = fl.heights(observations(path, views(path), seed=4), k=K_TRUE)
+    out = fl.heights(observations(path, views(path), seed=4), k=K_TRUE, noise_px=NOISE)
     assert all(r["ball"][0]["flight"] is None for r in out)
 
 
@@ -219,7 +219,7 @@ def test_a_stray_detection_is_left_out_and_not_moved():
     bad = 45
     for c in (0, 2):
         rows[bad]["ball"][0]["bbox"][c] += 40.0  # 40 px off: a wrong box for one frame
-    out = fl.heights(rows, k=K_TRUE)
+    out = fl.heights(rows, k=K_TRUE, noise_px=NOISE)
     assert out[bad]["ball"][0]["flight"] is None
     assert out[bad]["ball"][0]["x"] == rows[bad]["ball"][0]["x"]
     pos, _ = air_errors(path[:bad] + path[bad + 1:], out[:bad] + out[bad + 1:])
@@ -231,7 +231,7 @@ def test_frames_without_a_trusted_camera_are_untouched():
     rows = observations(path, views(path))
     for i in range(40, 44):
         rows[i]["camera"]["ok"] = False
-    out = fl.heights(rows, k=K_TRUE)
+    out = fl.heights(rows, k=K_TRUE, noise_px=NOISE)
     assert all("flight" not in out[i]["ball"][0] for i in range(40, 44))
     assert all(out[i]["ball"][0]["x"] == rows[i]["ball"][0]["x"] for i in range(40, 44))
 
@@ -263,14 +263,14 @@ def test_drag_is_derived_from_the_pixels():
 
 def test_mutation_without_drag_the_height_check_fails(scene):
     path, rows, _ = scene
-    pos, hgt = air_errors(path, fl.heights(rows, k=0.0))
+    pos, hgt = air_errors(path, fl.heights(rows, k=0.0, noise_px=NOISE))
     assert not (np.median(pos) < 0.3 and pos.max() < 1.0), "a drag-free fit should not pass"
 
 
 def test_mutation_without_segments_the_height_check_fails(scene, monkeypatch):
     path, rows, _ = scene
     monkeypatch.setattr(fl, "_grow", lambda tr, piece, hi, k: None)  # no piece grows past 5 frames
-    pos, _ = air_errors(path, fl.heights(rows, k=K_TRUE))
+    pos, _ = air_errors(path, fl.heights(rows, k=K_TRUE, noise_px=NOISE))
     assert not (np.median(pos) < 0.3 and pos.max() < 1.0), "unsegmented fits should not pass"
 
 
@@ -278,20 +278,20 @@ def test_mutation_one_piece_for_everything_fails(scene, monkeypatch):
     path, rows, _ = scene
     real = fl._fits
     monkeypatch.setattr(fl, "_fits", lambda f, use, gate: real(f, use, 1e9))  # nothing ends a piece
-    pos, _ = air_errors(path, fl.heights(rows, k=K_TRUE))
+    pos, _ = air_errors(path, fl.heights(rows, k=K_TRUE, noise_px=NOISE))
     assert not (np.median(pos) < 0.3 and pos.max() < 1.0), "a piece across bounces should not pass"
 
 
 def test_mutation_without_the_anchor_the_low_hop_check_fails(scene, monkeypatch):
     path, rows, _ = scene
     monkeypatch.setattr(fl, "ANCHOR_SD_M", 1e9)  # a piece's start no longer tied to the last's end
-    assert not np.percentile(low_errors(path, fl.heights(rows, k=K_TRUE)), 90) < 1.0
+    assert not np.percentile(low_errors(path, fl.heights(rows, k=K_TRUE, noise_px=NOISE)), 90) < 1.0
 
 
 def test_mutation_without_the_floor_the_shot_check_fails(monkeypatch):
     monkeypatch.setattr(fl, "GROUND_SD_M", 1e9)  # a centre under the ground costs nothing
     path = shot()
-    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE)
+    out = fl.heights(observations(path, views(path), seed=3), k=K_TRUE, noise_px=NOISE)
     assert not np.median(low_errors(path, out)) < 0.3
 
 
@@ -299,7 +299,7 @@ def test_mutation_without_the_gate_the_low_hop_check_fails(scene, monkeypatch):
     path, rows, out = scene
     assert low_errors(path, out).max() < 3.0  # the real one passes this bound
     monkeypatch.setattr(fl, "MAX_SE_M", 1e9)  # every fitted place used, however unsure
-    assert not low_errors(path, fl.heights(rows, k=K_TRUE)).max() < 3.0
+    assert not low_errors(path, fl.heights(rows, k=K_TRUE, noise_px=NOISE)).max() < 3.0
 
 
 # ---------------------------------------------------------------------------------------------
