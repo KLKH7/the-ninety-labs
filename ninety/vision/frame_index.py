@@ -35,9 +35,11 @@ def views(clip_dir: Path) -> dict[str, Path]:
 
 
 def clip_id(folder: Path) -> str:
-    """The clip id from clip.json: the folder's own, or, for a view, its clip's."""
-    for d in (folder, folder.parent.parent):
-        if (d / "clip.json").is_file() and (d is folder or folder.parent.name == VIEWS):
+    """The clip id from clip.json: for a view, its clip's (the renderer also writes one in each
+    view, named after the view, but the views are one clip shot together); otherwise the folder's."""
+    root = folder.parent.parent
+    for d in ((root, folder) if folder.parent.name == VIEWS else (folder,)):
+        if (d / "clip.json").is_file():
             return json.loads((d / "clip.json").read_text())["clip_id"]
     raise SystemExit(f"{folder}: no clip.json in it or, for a view, in its clip")
 

@@ -2469,3 +2469,32 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 230. A threshold measured on one look is re-measured when the look changes, by the same rule
+- **What happened:** the camera trust test's height band (0.901 to 1.002) was measured on renderer
+  0.3's validation clips. On today's renders (0.5.x) the players' height ratio through a right
+  camera is 1.00 to 1.11, so the band rejected every correctly fitted frame: nothing was placed on
+  the pitch, and with the grain defect (lesson 215) hiding behind it, the cause looked like one
+  thing when it was two.
+- **Rule:** a threshold derived from rendered data carries the look it was measured on; when the
+  renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
+  before any number that passes through it is read, and the new value cites both.
+- **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
+  `ninety/eval/band_derive.py` re-derives it.
+- **And:** re-derived, the heights alone trusted a clip whose camera was 28 m wrong in every frame on
+  dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
+  broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
+  `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
+
+### 233. A variant is compared with its reference at the same commit, not with the reference's old number
+- **What happened:** the sides plan's spatial variant S was to ship if it beat T1a, recorded as 0.681
+  outfield accuracy. Run again on the branch S was built on, the same observations through the same
+  measure gave T1a 0.731: the tracking and kit code differ between that branch and the one T1a was
+  first run on. Compared with the old number, S (0.750) would have looked 0.07 better; at the same
+  commit it is 0.02 better.
+- **Rule:** a decision rule that compares two variants runs both at one commit, on the same inputs,
+  and the comparison is recorded before the new variant's number is read. A number carried over from
+  another branch is context, never the bar.
+- **Check:** `docs/eval/sides-tactical/SPATIAL-PLAN.md`, Deviations (T1a re-run at the commit, before
+  any S number), and `T1a-validation-r4stack.json` next to `S-validation.json`.

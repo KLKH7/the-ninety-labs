@@ -52,13 +52,31 @@ def test_players_a_camera_makes_too_tall_or_too_short_are_not_trusted_and_not_pl
         assert all(d["x"] is None for d in r["players"]) and r["ball"][0]["x"] is None
 
 
-def test_the_band_holds_its_ends_and_the_markings_no_longer_decide():
+def test_the_band_holds_its_ends_and_on_the_broadcast_the_markings_must_agree():
     lo, hi = observe.HEIGHT_BAND
-    assert observe.place(row(lo + 0.002, markings_ok=False))["camera"]["ok"]  # heights decide now
+    assert observe.place(row(lo + 0.002))["camera"]["ok"]
     assert observe.place(row(hi - 0.002))["camera"]["ok"]
     assert not observe.place(row(lo - 0.01))["camera"]["ok"]
     assert not observe.place(row(hi + 0.01))["camera"]["ok"]
-    assert observe.place(row(markings_ok=False))["camera"]["markings_ok"] is False  # kept, for the record
+    # Gate B3 (lesson 230): heights in the band and markings that do not fit is not a camera.
+    assert not observe.place(row(markings_ok=False))["camera"]["ok"]
+    assert observe.place(row(markings_ok=False))["camera"]["heights_ok"] is False
+    # A fixed lens is judged by its heights alone.
+    assert observe.place(row(markings_ok=False), markings=False)["camera"]["ok"]
+
+
+def test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted():
+    # Validation seed 2042's failure: every frame's camera 28 m wrong the same way, players the
+    # right height through it (the same camera, moved), the marking fit failing. The neighbours
+    # agree with each other, so only the markings can stop it.
+    rows = []
+    for f in range(11):
+        r = wrong_place_row(28.0, f)
+        r["camera"]["ok"] = False  # the marking fit's own verdict
+        rows.append(observe.place(r))
+    rows = observe.agree(rows)
+    assert not any(r["camera"]["ok"] for r in rows)
+    assert all(r["players"][0]["x"] is None for r in rows)
 
 
 def test_with_no_player_to_measure_the_markings_verdict_stands():
@@ -67,8 +85,9 @@ def test_with_no_player_to_measure_the_markings_verdict_stands():
 
 
 def test_the_band_is_the_committed_validation_measurement():
-    body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())
-    assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
+    body = json.loads((ROOT / "docs/eval/band-broadcast.json").read_text())
+    assert list(observe.HEIGHT_BAND) == body["broadcast"]["band"] == [0.966, 1.121]
+    assert not any(s >= 900000 for s in body["seeds"])  # validation clips only
 
 
 def view_at(dx: float) -> pitch.View:
@@ -180,3 +199,76 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
     assert dd.KEEP_GOOD == body["keep_good"] == 0.95
     assert body["adopted"] == "C2"
+
+
+def test_a_frame_is_judged_by_the_band_it_is_given():
+    assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
+    assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]
+
+
+def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_own(tmp_path, monkeypatch):
+    monkeypatch.setattr(observe, "FIXED_HEIGHT_BAND", (1.05, 1.15))
+    monkeypatch.setattr(observe, "HEIGHT_BAND", (0.90, 1.00))  # 1.10 is in the one band, not the other
+    rows = [row(1.10) | {"frame": k, "t": k / 25} for k in range(3)]
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    for fixed, expect in ((True, True), (False, False)):
+        first = rows[0] | ({"fixed": True} if fixed else {})
+        src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
+        observe.main(["--regate", str(src), "--out", str(out)])
+        assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
+
+
+def test_the_fixed_band_is_the_committed_validation_measurement():
+    body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
+    assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
+
+
+def hooped(primary, secondary, h=60, w=24, band=6):
+    """A player box of a shirt in horizontal hoops, primary and secondary alternating, on grass."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[:, :] = (40, 140, 50)  # grass behind
+    for y in range(h):
+        img[y, 4:w - 4] = secondary if (y // band) % 2 else primary
+    return img
+
+
+def test_a_hooped_shirt_reads_as_both_its_colours():
+    blue, white = (32, 46, 162), (242, 242, 242)
+    img = hooped(blue, white)
+    bbox = [0, 0, 24, 60]
+    two = observe.read_kit(img, bbox, "R4")
+    dark, light = np.array(two[:3]), np.array(two[3:])
+    assert np.abs(dark - blue).max() < 3 and np.abs(light - white).max() < 3
+    assert observe.KIT_READER == "R4"
+
+
+def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
+    from types import SimpleNamespace
+    box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz),
+                                                                 [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3))
+    shirt = hooped((32, 46, 162), (242, 242, 242))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
+    assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
+
+
+def test_skin_is_found_by_the_published_rule_and_kits_are_not():
+    px = np.array([[200, 140, 110], [170, 120, 90], [23, 60, 25], [242, 242, 242], [20, 20, 20],
+                   [32, 46, 162]], float)
+    assert observe.skin(px).tolist() == [True, True, False, False, False, False]
+
+
+def test_r5_reads_a_dark_kit_without_the_arms_skin():
+    # A dark-green shirt with black stripes and bare arms across the patch: R4's lighter colour is the
+    # skin; R5 drops the skin first, so its lighter colour is the green.
+    img = np.zeros((60, 24, 3), np.uint8)
+    img[:, :] = (40, 140, 50)
+    for y in range(60):
+        img[y, 4:20] = (23, 60, 25) if (y // 4) % 2 else (12, 12, 12)
+    img[12:30, 4:7] = img[12:30, 17:20] = (200, 140, 110)  # arms
+    bbox = [0, 0, 24, 60]
+    turf = (np.array([40.0, 140.0, 50.0]), 0.02)  # the grass as measured on the pitch (the live path)
+    r4, r5 = observe.read_kit(img, bbox, "R4", turf), observe.read_kit(img, bbox, "R5", turf)
+    assert r4[3] > 150 and abs(r5[3] - 23) < 5 and abs(r5[4] - 60) < 5

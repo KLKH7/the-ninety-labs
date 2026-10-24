@@ -44,6 +44,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from ninety.vision import sides
 from ninety.vision.track import (
     FPS,
     MAX_GAP_FRAMES,
@@ -262,6 +263,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
     teams = assign_teams(tracks)
+    if sides.whole_pitch(rows):  # the tactical views: kit and position combined (sides.py)
+        teams["spatial_changed"] = sides.apply(tracks, teams, rows)
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     sp = spells(path, tracks)

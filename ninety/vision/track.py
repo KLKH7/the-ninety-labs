@@ -134,11 +134,14 @@ def _add(t: Track, frame: int, d: dict) -> None:
     t.scores.append(d["score"])
 
 
-def _median_rgb(t: Track) -> tuple[float, float, float] | None:
+def _median_rgb(t: Track) -> tuple[float, ...] | None:
+    """Each channel's median over the track's frames: 3 channels for one colour, 6 for a two-colour
+    reading (the darker colour's, then the lighter's; observe.py)."""
     cols = [c for c in t.rgb if c is not None]
     if not cols:
         return None
-    return tuple(sorted(c[k] for c in cols)[len(cols) // 2] for k in range(3))
+    n = min(len(c) for c in cols)
+    return tuple(sorted(c[k] for c in cols)[len(cols) // 2] for k in range(n))
 
 
 # Two ways to tell kits apart, and each clip uses the one that separates its two kits better
@@ -157,10 +160,17 @@ def kit(t: Track, feature: str) -> tuple[float, ...] | None:
     med = _median_rgb(t)
     if med is None:
         return None
-    total = sum(med) + 1e-9
-    if feature == "chromaticity":
-        return tuple(v / total for v in med)
-    return (math.log2(total / 3 + 1e-9),)
+    return _point(med, feature)
+
+
+def _point(rgb: tuple[float, ...], feature: str) -> tuple[float, ...]:
+    """One reading (one colour, or a two-colour reading's both) as a point in `feature`'s space."""
+    point: list[float] = []
+    for k in range(0, len(rgb) - len(rgb) % 3, 3):
+        c = rgb[k:k + 3]
+        total = sum(c) + 1e-9
+        point += [v / total for v in c] if feature == "chromaticity" else [math.log2(total / 3 + 1e-9)]
+    return tuple(point)
 
 
 def _dist(a, b) -> float:
@@ -227,6 +237,38 @@ def two_colours(tracks: list[Track]) -> tuple[str, tuple, tuple] | None:
     return None if best is None else best[1:]
 
 
+def soundness(assigned: list[tuple[Track, tuple]], ca: tuple, cb: tuple, feature: str) -> float:
+    """How surely the clip's two kit clusters each hold one team (docs/eval/kit-colour-plan.md), 0 to 1:
+    the smaller of the kits' separation, mapped through sep / (1 + sep), and the share of the
+    clip's assigned tracks whose kit lies nearer its own centre than halfway to the other's."""
+    pts = [(c, len(t.frames)) for t, c in assigned if len(t.frames) >= MIN_COLOUR_FRAMES]
+    if not pts or not assigned:
+        return 0.0
+    sep = separation(pts, ca, cb, NOISE[feature])
+    half = _dist(ca, cb) / 2
+    near = sum(1 for _, c in assigned if min(_dist(c, ca), _dist(c, cb)) < half) / len(assigned)
+    return min(sep / (1 + sep), near)
+
+
+def consistency(assigned: list[tuple[Track, tuple]], ca: tuple, cb: tuple, feature: str) -> float:
+    """C (docs/eval/kit-colour-plan.md, amendment for dataset v2): the share of the assigned tracks'
+    per-frame kit readings that lie nearer their own cluster's centre than the other's. Measured;
+    it enters team_confidence only if dataset v2's validation clips show it separates (USE_CONSISTENCY)."""
+    agree = total = 0
+    for t, _ in assigned:
+        own_is_a = _dist(kit(t, feature) or ca, ca) <= _dist(kit(t, feature) or ca, cb)
+        for c in t.rgb:
+            if c is None:
+                continue
+            p = _point(c, feature)
+            total += 1
+            agree += (_dist(p, ca) < _dist(p, cb)) == own_is_a
+    return agree / total if total else 0.0
+
+
+USE_CONSISTENCY = False  # set only by the amendment's rule on dataset v2's validation clips
+
+
 def assign_teams(tracks: list[Track]) -> dict:
     """Give each track a team (or None) and say how: the two kit colours, which one is home and
     why, and how many tracks were left unassigned. The decision is recorded, so a wrong side can
@@ -273,18 +315,22 @@ def assign_teams(tracks: list[Track]) -> dict:
     reason = f"side nearer x = 105 on average: colour {away} in {abs(votes)} more frames"
     names = {away: "away", 1 - away: "home"}
     voting = len([o for o in by_frame.values() if {s for _, s in o} == {0, 1}])
-    # An outfield side rests on two decisions, so its confidence is the weaker: how much nearer the
-    # track's kit is to its own colour than to the other (0 halfway between, 1 on its own centre),
-    # and how one-sided the clip's vote on which colour is home was (0 split, 1 unanimous).
+    # An outfield side rests on two decisions, so its confidence is the weaker: whether the two kit
+    # clusters are told apart at all (`soundness`), and how one-sided the clip's vote on which
+    # colour is home was (0 split, 1 unanimous). The kit term was each track's own colour margin
+    # until #200 found every side error left was a cluster error, which a confident track can sit in
+    # (docs/eval/kit-colour-plan.md).
     clip_margin = abs(votes) / voting if voting else 0.0
-    for t, c in meds:
+    assigned = [(t, c) for t, c in meds if side[t.id] is not None]
+    sound = soundness(assigned, ca, cb, feature)
+    agreeing = consistency(assigned, ca, cb, feature)
+    if USE_CONSISTENCY:
+        sound = min(sound, agreeing)
+    for t, _ in meds:
         s = side[t.id]
         if s is not None:
             t.team = names[s]
-            own, other = (ca, cb) if s == 0 else (cb, ca)
-            d_own, d_other = _dist(c, own), _dist(c, other)
-            colour_margin = (d_other - d_own) / (d_other + d_own) if d_other + d_own else 0.0
-            t.side_confidence = round(min(colour_margin, clip_margin), 3)
+            t.side_confidence = round(min(sound, clip_margin), 3)
     # A keeper's side is the half he stands in: his confidence is how far from halfway, as a share
     # of the half.
     for k in keepers:
@@ -297,6 +343,8 @@ def assign_teams(tracks: list[Track]) -> dict:
         "kits": {"home": kits[1 - away], "away": kits[away]},
         "reason": reason,
         "frames_voting": voting,
+        "soundness": round(sound, 3),
+        "consistency": round(agreeing, 3),
         "vote_margin": votes if away == 0 else -votes,
         "keepers": len(keepers),
         "unassigned": sum(1 for t in tracks if t.team is None),

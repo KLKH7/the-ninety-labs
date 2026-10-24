@@ -116,6 +116,8 @@ def test_too_few_static_markings_is_no_camera():
 def test_a_fixed_clip_places_every_frame_through_one_camera(monkeypatch):
     # The image stage in fixed mode, with the fit stubbed: one camera, every frame (no jitter),
     # the static vote is what the fit reads, and the heights still judge each frame (lesson 148).
+    # Players come out 1.08 times an upright 1.80 m, inside the fixed lens's band (1.002 to 1.151),
+    # and 1.3 times on frame 2, outside it.
     view = truth_view(lens("right"))
     seen = {}
 
@@ -131,7 +133,7 @@ def test_a_fixed_clip_places_every_frame_through_one_camera(monkeypatch):
         boxes = []
         for x, y in [(70.0, 30.0), (80.0, 20.0), (90.0, 50.0)]:
             u, vf = _px(P, x + f, y, 0.0)
-            _, vh = _px(P, x + f, y, observe.PLAYER_HEIGHT_M * (1.3 if f == 2 else 1.0))
+            _, vh = _px(P, x + f, y, observe.PLAYER_HEIGHT_M * (1.3 if f == 2 else 1.08))
             boxes.append(SimpleNamespace(cls="player", bbox=(u - 5, vh, u + 5, vf), score=0.9))
         frames.append(SimpleNamespace(frame=f, t=f / 25, detections=tuple(boxes)))
     img = np.zeros((view.height, view.width, 3), np.uint8)
