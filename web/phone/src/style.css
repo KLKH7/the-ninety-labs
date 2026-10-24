@@ -669,3 +669,34 @@ ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.18
 #live-summary .section-title { text-align: center; }
 /* Line-up rows (Apple Sports): # in white, the name, the position in grey after it. */
 .roster .who .pos { color: var(--text-2); font-size: 15px; }
+
+/* Blind-critic pass on Stats, Players, Story, Settings (within Kian's rules). */
+/* Team Stats: the bars in the clubs' deep tones, thin and rounded, as Apple's maroon and navy. */
+.stat-row .home-bar { background: color-mix(in oklch, var(--home) 70%, #000); }
+.stat-row .away-bar { background: color-mix(in oklch, var(--away) 70%, #000); }
+.stat-row .bar { height: 4px; border-radius: 2px; }
+/* Line-ups: no rule between rows, the # in regular weight, the position in grey after the name. */
+.roster .who { border-top: 0; grid-template-columns: 36px auto 1fr; gap: 8px; min-height: 40px; }
+.roster .who .num { font-weight: 400; }
+.roster .who .pos, .roster .who .where { text-align: left; }
+.roster-cols { grid-template-columns: 36px 1fr; }
+.roster-cols span:last-child { display: none; }
+.roster-card .card-title { font-size: 17px; gap: 8px; }
+/* Story: one text inset on every card, more air above the time, the club's rule thin and deep. */
+.insights { padding: 0 12px 24px; }
+.insight, .insight.away { padding: 16px 24px 16px 24px; }
+.insight::before { width: 2px; left: 12px; top: 16px; bottom: 16px; background: color-mix(in oklch, var(--home) 75%, #000); }
+.insight.away::before { left: auto; right: 12px; background: color-mix(in oklch, var(--away) 75%, #000); }
+.when-line { margin-top: 24px; }
+/* Settings: iOS Settings in dark: a centred 17 pt title with a blue Done, blue ticks, small play buttons. */
+#settings-sheet .sheet-head { position: relative; justify-content: center; padding: 14px 16px 0; }
+#settings-sheet .sheet-head h2 { font-size: 17px; font-weight: 600; }
+#settings-sheet .close { position: absolute; right: 8px; top: 4px; width: auto; padding: 0 10px; color: #0a84ff; font-size: 17px; font-weight: 600; }
+#settings-sheet .close svg { display: none; }
+#settings-sheet .close::after { content: "Done"; }
+.radio-main .tick { stroke: #0a84ff; stroke-width: 2.2; }
+.preview { width: 28px; height: 28px; border-radius: 14px; background: #3a3a3c; color: #fff; }
+.preview svg { width: 14px; height: 14px; }
+#rate { accent-color: #0a84ff; }
+.switch:checked { background: #34c759; }
+.story-body .when-line { margin-top: 20px; }
