@@ -198,7 +198,13 @@ def test_a_clip_of_two_views_runs_detects_each_merges_them_and_opens_no_truth(tm
         from pathlib import Path
         from ninety.vision import live_job, pitch
         from ninety.vision.detections import read_detections
-        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)  # the search is tested elsewhere
+        # The searches are tested elsewhere (the fixed lens's on a real tactical clip, below): each
+        # view of this clip is the camera it was drawn through, and its frames are still judged.
+        V = pitch.View(58.0, -37.0, 16.0, 0.29, 0.14, 3600.0, 640, 360)
+        def fit_fixed(static, points, w, h):
+            judged = [pitch._judge(V, p) for p in points]
+            return V, [pitch.FrameFit(V, j.median_px, j.points, j.ok) for j in judged]
+        pitch.fit_fixed = fit_fixed
         found = read_detections({str(dets)!r})
         calls = []
         report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}),
@@ -267,6 +273,14 @@ def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, 
         return real(images, dets, load, fixed)
 
     monkeypatch.setattr(observe, "observe", spy)
+    # The searches are not what this checks (the real-clip tests below run them): each lens is the
+    # camera the synthetic clip was drawn through.
+    from ninety.vision import pitch
+
+    v = pitch.View(58.0, -37.0, 16.0, 0.29, 0.14, 3600.0, 640, 360)
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    monkeypatch.setattr(pitch, "fit_fixed", lambda static, points, w, h: (
+        v, [pitch.FrameFit(v, j.median_px, j.points, j.ok) for j in (pitch._judge(v, p) for p in points)]))
     clip, dets = views_clip(tmp_path)
     found = read_detections(dets)
     live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found), {})
