@@ -46,3 +46,13 @@ S replaces T1a's sides if its leave-one-clip-out outfield accuracy is at least T
 its calibration error is at most 0.05 (the frame-weighted mean, over the bins, of |accuracy − mean
 confidence|), so that the 0.96 gate reads a confidence that means what it says. Otherwise T1a stays.
 Either way the calibration table goes to the gate's owner. A test number is not part of this plan.
+
+## Deviations
+
+### Oct 24 (the commit time), before any S number was computed
+
+The decision compares S with T1a. T1a run again at this commit (R4 from #202 on today's stack, the
+same `T1-fused` observations, `sides_tactical`) gives **0.731** outfield accuracy
+(`T1a-validation-r4stack.json`), where session D's run on their branch gave 0.681: the tracking and
+kit code differ between the two. S is judged against T1a **at this same commit**, 0.731: the rule's
+intent, the same clips through the same code. The cause of the difference is not chased here.
