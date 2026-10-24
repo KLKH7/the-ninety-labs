@@ -530,9 +530,10 @@ lenses). A whole-clip look that tells the other side keeps a claim held, with th
 tool `re_perceive` is read-only and neither capped nor logged; no published agent may call it yet.
 **Measured** on 22 validation clips through the tactical rig's two lenses
 ([eval/re-perceive.md](eval/re-perceive.md)): 81 held claims (80 on an unsure side, 1 on an unsure
-detection), **0 resolved** (nothing aired, so no wrong side aired), 15 contradicted (4 rightly, 1
-wrongly where the event was real). Safe, and no gain yet: it opens a gate only once a camera's own
-side reading is measured and good.
+detection), **0 resolved** (nothing aired, so no wrong side aired), 0 contradicted. The 80 held on
+their side spend no look (a look cannot re-read a side), so the minute's looks are kept for doubts a
+look can settle; the one held on its detection was not seen surely by either lens. Safe, and no gain
+yet: it opens a gate only once a camera's own side reading is measured and good.
 
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 

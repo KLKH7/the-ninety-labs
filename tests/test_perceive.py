@@ -68,9 +68,57 @@ def recheck(p, text, scope=None):
 
 def test_a_look_never_re_reads_a_side_so_a_team_claim_on_an_unsure_side_stays_held():
     # A tactical lens telling the side at 0.99 is another reading from the one 0.96 was measured on
-    # (lesson 227; wrong sides reach 0.994 on the lenses): it does not open the side gate.
-    scope, looks = recheck(stub(sure()), TEAM_CLAIM)
-    assert scope is None and any("never re-reads" in lk.why for lk in looks)
+    # (lesson 227; wrong sides reach 0.994 on the lenses): it cannot open the side gate, so no look
+    # is spent on such a claim at all.
+    p = stub(sure())
+    scope, looks = recheck(p, TEAM_CLAIM)
+    assert scope is None and looks == [] and p.looks == []
+
+
+def test_a_side_only_doubt_leaves_the_minute_s_looks_for_a_detection_doubt():
+    p = stub(sure())
+    recheck(p, TEAM_CLAIM)  # held on its side: spends nothing
+    scope, looks = recheck(p, PLAIN, UNSURE_DETECTION)
+    assert scope is not None and looks
+
+
+def test_a_claim_on_two_doubtful_detections_airs_only_when_both_are_confirmed():
+    two = UNSURE_DETECTION | {"v00002": compact(detected(id="v00002", t=68.4, x=87.0, y=52.5,
+                                                         confidence=0.2))}
+    located = {**LOCATED, "v00002": detected(id="v00002", t=68.4, x=87.0, y=52.5)}
+    p = stub(None)
+    p.re_perceive = lambda event, camera, mode: perceive.Look(
+        event["id"], camera, mode, sure() if event["id"] == "v00001" else None, "")
+    scope, _ = perceive.recheck(p, PLAIN, ["v00001", "v00002"], two, located, 2, own_camera="broadcast")
+    assert scope is None  # v00002 was not confirmed
+
+
+def test_a_window_look_reads_only_the_3_s_around_the_event():
+    p = perceive.Perceiver({"tactical1": ROWS})
+    seen = []
+    from ninety.vision import events as vision_events
+
+    real = vision_events.detect
+
+    def spy(rows, *a, **k):
+        seen.append([r["t"] for r in rows])
+        return real(rows, *a, **k)
+
+    vision_events.detect = spy
+    try:
+        p.re_perceive(detected(), "tactical1", "window")
+        p.re_perceive(detected(), "tactical1", "track")
+    finally:
+        vision_events.detect = real
+    window, track = seen
+    assert max(window) - min(window) <= perceive.WINDOW_S and len(track) == len(ROWS)
+
+
+def test_a_cached_look_keeps_each_claim_s_own_reason():
+    p = stub(sure())
+    _, first = recheck(p, PLAIN, UNSURE_DETECTION)
+    _, second = recheck(p, "A completed pass, it was.", UNSURE_DETECTION)
+    assert first[0] is not second[0] and p.looks[0].why == ""
 
 
 def test_another_camera_confirms_an_unsure_detection_for_a_claim_naming_no_side():
@@ -171,11 +219,13 @@ def run(text: str, perceiver, event=EVENT, **kw):
 
 def test_a_real_camera_look_runs_inside_the_workflow():
     # Review of #267: the workflow's scope is compact events, with no time or place; a real look must
-    # find the event from the full detected events, not crash the graph.
+    # find the event from the full detected events, not crash the graph. On the M1 rows the second
+    # pass (v00002, really detected there at 0.812) is confirmed when cited at 0.3, so the claim airs.
     p = perceive.Perceiver({"tactical1": ROWS})
-    result = run(TEAM_CLAIM, p)
+    result = asyncio.run(workflow.run_workflow(two_event_models("Two completed passes."), [EVENT, SECOND], 2,
+                                               "seed900001-inline", inline_events=True, perceiver=p))
     assert [s for s in result.trace if s.action == "re_perceive"] and p.looks
-    assert result.reviews[0].status == "held"  # the side is never re-read by a look
+    assert result.reviews[0].aired is not None
 
 
 SECOND = detected(id="v00002", t=68.4, frame=1710, x=87.0, y=52.5, confidence=0.3)
@@ -250,8 +300,13 @@ def test_every_look_is_in_the_ledger_with_its_source():
     asyncio.run(workflow.run_workflow(models(TEAM_CLAIM), [EVENT], 2, "seed900001-inline", ledger=ledger,
                                       inline_events=True, perceiver=stub(sure())))
     looks = [r for r in asyncio.run(ledger.query(kind="fact")) if r.source == "re_perceive"]
-    assert looks and looks[0].payload["camera"] in {"broadcast", "tactical1"}
-    assert looks[0].payload["found"]["team_confidence"] == 0.99
+    assert looks == []  # a team claim on an unsure side: no look is spent on it
+    asyncio.run(workflow.run_workflow(two_event_models("Two completed passes."), [EVENT, SECOND], 2,
+                                      "seed900001-inline", ledger=ledger, inline_events=True,
+                                      perceiver=stub(sure())))
+    looks = [r for r in asyncio.run(ledger.query(kind="fact")) if r.source == "re_perceive"]
+    assert looks and looks[0].payload["event"] == "v00002"
+    assert looks[0].t == SECOND["t"]  # the looked-at event's time, not the moment's
 
 
 def test_an_event_at_the_same_time_elsewhere_on_the_pitch_is_not_the_same_event():

@@ -8,9 +8,10 @@ over the detector's boxes on the pitch, unchanged) on one camera's observations:
 
 - mode `window`: that camera's frames within WINDOW_S / 2 of the event (a 3 s look);
 - mode `track`: that camera's whole clip, so each track's side is voted over every frame it was
-  seen in (the per-track side vote), not only the frames around the moment. Only this reading may
-  re-read a side: the side threshold was measured on whole-clip votes, and a window's vote is more
-  one-sided than the clip's whether it is right or not. A window look may confirm a detection.
+  seen in (the per-track side vote), not only the frames around the moment. No look re-reads a
+  side (lesson 227): the side threshold was measured on the broadcast clip's whole-clip vote, and
+  every camera's and window's vote is another reading until it is measured. A whole-clip look that
+  tells the other side may still keep a claim held.
 
 The re-perceived event counts only if the same event is found there: the same type, within
 MATCH_S of the event and MATCH_M of where it was (the event scorer's own rules,
@@ -33,7 +34,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ninety.agents.factcheck import MIN_CONFIDENCE, TEAM_NAMED, side_known
 
@@ -153,6 +154,8 @@ def recheck(perceiver: Perceiver, claim_text: str, evidence: list[str], scope: d
       (holding is always safe); a window's side, or an unknown one, decides nothing."""
     names_side = TEAM_NAMED.search(claim_text) is not None
     cited = [scope[i] for i in evidence if i in scope]
+    if names_side and any(e.get("confidence") is not None and not side_known(e) for e in cited):
+        return None, []  # held on its side, which no look can re-read: spend no look on it
     targets = doubtful(claim_text, cited)
     looks: list[Look] = []
     updated, confirmed = dict(scope), 0
@@ -168,6 +171,7 @@ def recheck(perceiver: Perceiver, claim_text: str, evidence: list[str], scope: d
                     if not perceiver.spend(minute):
                         continue
                     look = perceiver.remember(perceiver.re_perceive(where, camera, mode))
+                look = replace(look)  # this claim's own copy: its reason is this claim's
                 looks.append(look)
                 found = look.found
                 if found is None:
