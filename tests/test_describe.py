@@ -308,3 +308,22 @@ def test_the_sides_are_named_as_their_clubs_when_the_bundle_knows_them():
     assert d.spoken("a-t4 finds a-t5.", True, clubs=clubs) == "A Lisbon player finds a team-mate."
     assert d.spoken("a-t4 finds a-t5.", False, clubs=clubs) == "A player finds another player."  # unsure
     assert d.spoken("home's back line has pushed up 8 m.", clubs=clubs).startswith("London's back line")
+
+
+def test_a_verified_claim_citing_an_unsure_side_is_said_without_one():
+    # A claim naming players by track id passes the side gate (no side word in its text), so the
+    # Describer must not add the side when it speaks it: v00001's side was told at 0.529.
+    events = detected.load(detected.m1_path(detected.M1_CLIP))
+    first = next(e for e in events if e["id"] == "v00001")
+    cue = {"id": "insight-v00001", "kind": "insight", "verified": True, "t_in": first["t"],
+           "text": f"{first['player'] or 'a-t4'} finds {first.get('receiver') or 'a-t5'}.",
+           "evidence": ["v00001"]}
+    track, _ = d.describe(events, [cue])
+    line = next(s for s in track.said if s.event == "insight-v00001")
+    assert not SIDE_WORD.search(line.spoken), line.spoken
+
+
+def test_a_possessive_and_a_repeated_track_read_as_sentences():
+    assert d.spoken("h4's pass for h8 is cut out by a3.") == \
+        "The pass from Home's number 4 for number 8 is cut out by Away's number 3."
+    assert d.spoken("h-t9 → h-t9, 3 m.", False) == "A player plays it 3 metres to the same player."
