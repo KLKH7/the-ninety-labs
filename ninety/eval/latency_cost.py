@@ -43,8 +43,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "docs" / "eval" / "latency-cost.json"
 REPORT = ROOT / "docs" / "eval" / "latency-cost.md"
 RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
-# The template cues for seed 7's first five minutes (docs/EVALUATION.md: 108 cues for seed 7, five
-# minutes): what the casual persona's graphics say, a floor for what a spoken description says.
+# The template cues for seed 7's first five minutes (docs/EVALUATION.md): what the casual persona's
+# graphics say, a floor for what a spoken description says.
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
@@ -103,7 +103,8 @@ def percentile(values: list[float], q: float) -> float:
 async def _tool_definitions() -> str:
     from ninety.mcp import match_server
 
-    tools = await match_server.server.list_tools()
+    # Only the tools the published Analyst may call reach its context (Foundry's allowed_tools).
+    tools = [t for t in await match_server.server.list_tools() if t.name in match_server.TOOLS]
     return json.dumps([{"name": t.name, "description": t.description, "parameters": t.inputSchema}
                        for t in tools])
 

@@ -1,0 +1,150 @@
+{
+  "seeds": [
+    7,
+    11
+  ],
+  "minutes": 10,
+  "windows": 40,
+  "draws": 20,
+  "quantile": 0.9,
+  "position_error_m": 1.26,
+  "p90_error_over_tolerance": {
+    "random": {
+      "4": {
+        "width": 19.217,
+        "length": 17.869,
+        "line_height": 11.511,
+        "back_to_mid": 10.375,
+        "mid_to_front": 14.015,
+        "area": 6.867
+      },
+      "5": {
+        "width": 14.876,
+        "length": 16.223,
+        "line_height": 9.321,
+        "back_to_mid": 7.388,
+        "mid_to_front": 10.055,
+        "area": 5.808
+      },
+      "6": {
+        "width": 10.324,
+        "length": 10.684,
+        "line_height": 6.871,
+        "back_to_mid": 5.882,
+        "mid_to_front": 5.272,
+        "area": 4.689
+      },
+      "7": {
+        "width": 7.967,
+        "length": 7.773,
+        "line_height": 3.912,
+        "back_to_mid": 3.569,
+        "mid_to_front": 4.239,
+        "area": 3.741
+      },
+      "8": {
+        "width": 6.129,
+        "length": 4.044,
+        "line_height": 1.765,
+        "back_to_mid": 2.295,
+        "mid_to_front": 2.627,
+        "area": 2.894
+      },
+      "9": {
+        "width": 5.135,
+        "length": 2.971,
+        "line_height": 1.032,
+        "back_to_mid": 1.696,
+        "mid_to_front": 1.728,
+        "area": 2.143
+      },
+      "10": {
+        "width": 1.012,
+        "length": 1.112,
+        "line_height": 0.188,
+        "back_to_mid": 0.93,
+        "mid_to_front": 0.873,
+        "area": 1.309
+      },
+      "11": {
+        "width": 0.0,
+        "length": 0.0,
+        "line_height": 0.0,
+        "back_to_mid": 0.0,
+        "mid_to_front": 0.0,
+        "area": 0.0
+      }
+    },
+    "far_from_ball": {
+      "4": {
+        "width": 21.737,
+        "length": 24.389,
+        "line_height": 15.126,
+        "back_to_mid": 10.379,
+        "mid_to_front": 17.549,
+        "area": 7.554
+      },
+      "5": {
+        "width": 17.58,
+        "length": 21.388,
+        "line_height": 11.273,
+        "back_to_mid": 8.719,
+        "mid_to_front": 13.364,
+        "area": 7.035
+      },
+      "6": {
+        "width": 17.432,
+        "length": 19.589,
+        "line_height": 10.959,
+        "back_to_mid": 7.937,
+        "mid_to_front": 12.08,
+        "area": 5.47
+      },
+      "7": {
+        "width": 9.876,
+        "length": 17.229,
+        "line_height": 9.026,
+        "back_to_mid": 5.856,
+        "mid_to_front": 11.817,
+        "area": 4.745
+      },
+      "8": {
+        "width": 9.383,
+        "length": 14.45,
+        "line_height": 1.474,
+        "back_to_mid": 4.514,
+        "mid_to_front": 5.787,
+        "area": 3.553
+      },
+      "9": {
+        "width": 5.608,
+        "length": 3.353,
+        "line_height": 0.148,
+        "back_to_mid": 1.182,
+        "mid_to_front": 1.022,
+        "area": 2.407
+      },
+      "10": {
+        "width": 2.847,
+        "length": 0.336,
+        "line_height": 0.0,
+        "back_to_mid": 0.563,
+        "mid_to_front": 0.348,
+        "area": 1.512
+      },
+      "11": {
+        "width": 0.0,
+        "length": 0.0,
+        "line_height": 0.0,
+        "back_to_mid": 0.0,
+        "mid_to_front": 0.0,
+        "area": 0.0
+      }
+    }
+  },
+  "smallest_k_passing": {
+    "random": 11,
+    "far_from_ball": 11
+  },
+  "min_tracked": 11
+}
