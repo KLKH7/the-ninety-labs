@@ -477,6 +477,17 @@ def test_who_has_been_the_best_player():
     )
 
 
+def test_one_players_pieces_of_track_are_one_row_of_the_ranking():
+    mi = insights()
+    first = next(f for f in mi.facts["line_break"] if f.get("passer") and f["hi"] > 0)
+    piece = {**first, "id": "lb:v78", "passer": "h-t98"}
+    mi.facts["line_break"].append(piece)
+    mi.people["h-t98"] = {**mi.people[first["passer"]], "track": "h-t98"}  # the same named player
+    rows = mi.players(1, 30)["facts"]
+    named = [r for r in rows if r["player_is"] == mi.people[first["passer"]]["say"]]
+    assert len(named) == 1 and set(named[0]["tracks"]) == {first["passer"], "h-t98"}
+
+
 def test_a_leader_who_might_not_lead_is_not_called_the_best():
     mi = insights()
     rival = {
