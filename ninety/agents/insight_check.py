@@ -104,6 +104,46 @@ VISUAL_WORD = re.compile(
     r"|the (?:arrow|circle|dot|dots|box|shading|map)|in (?:red|blue|yellow|green))\b",
     re.I,
 )
+
+
+# Words that say which way a fact went, checked against the fact's own fields (polarity): whether
+# a turnover was won back (`regained`, or a summary's regains), whether a pass was lost (`outcome`),
+# whether it went to an open teammate (`target_open`), and whether anyone was open at all (`value`).
+NEVER_WON = re.compile(
+    r"\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:won|win)\s+"
+    r"(?:it|the ball|possession)\s+back\b"
+    r"|\bwithout (?:winning|getting) (?:it|the ball) back\b|\bnot (?:won|regained)\b",
+    re.I,
+)
+WON_BACK = re.compile(
+    r"\b(?:won|win|wins|winning|got|gets)\s+(?:it|the ball|possession)\s+back\b|\bregain(?:ed|s)?\b", re.I
+)
+NONE_OPEN = re.compile(
+    r"\bno(?:body)?\s+(?:(?:open|free)\s+)?(?:teammates?|options?|one)\b|\bnobody\s+(?:was\s+)?(?:open|free)\b"
+    r"|\bnot (?:a|any) (?:teammates?|options?)\b",
+    re.I,
+)
+ELSEWHERE = re.compile(
+    r"\bwent elsewhere\b|\binstead\b|\bignored\b|\bmissed (?:an?|the) (?:open|free)\b"
+    r"|\bdid(?:n't| not) (?:use|find|pick)\b",
+    re.I,
+)
+TO_OPEN = re.compile(
+    r"\b(?:found|picked out|to|played in|reached)\s+(?:an?|the)\s+(?:open|free|unmarked)\s+"
+    r"(?:teammate|team-mate|man|player)\b",
+    re.I,
+)
+LOST = re.compile(
+    r"\blost (?:the ball|it|the pass|a pass|possession)\b|\bwas lost\b|\bgave (?:it|the ball) away\b"
+    r"|\bmisplaced\b|\bgiven away\b",
+    re.I,
+)
+COMPLETED = re.compile(
+    r"\bcompleted\b|\bfound (?:a|his|their|a) (?:teammate|team-mate|man)\b|\bkept (?:it|the ball)\b", re.I
+)
+NONE_OF = re.compile(
+    r"\b(?:no|zero|not a single)\s+(overloads|crosses|turnovers|regains|line breaks)\b", re.I
+)
 TEAM_WORD = re.compile(
     r"\b(?:home|away)\s+(?:team|side|club|players?|defen\w+|keeper)\b|\b(?:home|away)'s\b|^\s*(?:home|away)\b",
     re.I,
@@ -255,6 +295,9 @@ def check(
         shape_text = re.sub(rf"\b{re.escape(name)}\b", team, shape_text)
     reasons += shape_reasons(shape_text, list(cited))
 
+    # Polarity: the words that say which way it went must agree with the cited facts' own fields.
+    reasons += polarity_reasons(claim.text, cited)
+
     # Kind words.
     kinds = {f.get("kind") for f in cited}
     for kind, words in KIND_WORDS.items():
@@ -266,6 +309,44 @@ def check(
     if held:
         return Verdict(ok=False, reasons=held, category="low_confidence")
     return Verdict(ok=True)
+
+
+def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
+    """Why a sentence's direction disagrees with the cited facts: it says a turnover was (not) won
+    back, a pass was lost or kept, it went (not) to an open teammate, nobody was open, or there were
+    none of something, and the cited facts say the other."""
+    out = []
+    presses = [f for f in cited if f.get("kind") == "counter_press" and f.get("metric") == "pressers"]
+    regains = [f for f in cited if f.get("metric") == "regains_within_5s"]
+    passes = [f for f in cited if f.get("metric") == "open_teammates_ahead"]
+    if presses or regains:
+        won = any(f.get("regained") for f in presses) or any(f.get("value") for f in regains)
+        if NEVER_WON.search(text):
+            if won:
+                out.append("it says the ball was not won back; the cited facts say it was")
+        elif WON_BACK.search(text) and not won:
+            out.append("it says the ball was won back; the cited facts say it was not")
+    if passes:
+        if NONE_OPEN.search(text) and any(f.get("value") for f in passes):
+            out.append("it says nobody was open; the cited pass had open teammates")
+        if ELSEWHERE.search(text) and not any(f.get("target_open") is False for f in passes):
+            out.append("it says the pass missed an open teammate; the cited pass did not")
+        if TO_OPEN.search(text) and not any(f.get("target_open") is True for f in passes):
+            out.append("it says the pass found an open teammate; the cited pass did not")
+        if LOST.search(text) and not any(f.get("outcome") == "fail" for f in passes):
+            out.append("it says the pass was lost; the cited pass was completed")
+        if COMPLETED.search(text) and not any(f.get("outcome") == "success" for f in passes):
+            out.append("it says the pass was completed; the cited pass was lost")
+    for m in NONE_OF.finditer(text):
+        unit = m.group(1).lower()
+        same = [
+            f
+            for f in cited
+            if str(f.get("unit", "")).lower() == unit or unit.rstrip("s") in str(f.get("metric", ""))
+        ]
+        if any(f.get("value") for f in same):
+            out.append(f"it says {m.group()}; the cited facts count some")
+    return out
 
 
 def gate(claim: Claim, known: Mapping[str, Mapping], min_confidence: float = MIN_CONFIDENCE) -> Verdict:

@@ -359,3 +359,18 @@ def test_club_names_are_the_screens():
         pytest.skip("the viewer's club map is not on this branch yet")
     block = ts.read_text().split("export const CLUBS", 1)[1].split("};", 1)[0]
     assert dict(re.findall(r"(\w{3}): \"([^\"]+)\"", block)) == teamsheet.CLUBS
+
+
+def test_insights_are_built_from_tracked_frames_only():
+    from ninety.intel.match_insights import MatchInsights
+
+    f = frame(0, parked("home"), parked("away"))
+    with pytest.raises(ValueError, match="tracked"):
+        MatchInsights.build("x", [{**f, "source": "truth"}], [], teamsheet.Fixture(7, "OAK", "FEN"), {})
+
+
+def test_a_simulated_match_serves_no_insights():
+    from ninety.mcp import match_server
+
+    assert match_server.insights_of("seed7") is None
+    assert match_server.line_breaks("seed7", 1, 5)["tracked"] is False
