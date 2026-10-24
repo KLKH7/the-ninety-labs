@@ -52,7 +52,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from ninety import condensed, radar
+from ninety import condensed, highlights, radar
 from ninety.agents import live, telemetry
 from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
@@ -322,10 +322,14 @@ async def run(args: argparse.Namespace) -> dict:
     write_jsonl(out / "events.jsonl", events)
     match_info = None
     if args.match:
-        body = condensed.build(clip.meta, events)
+        verdict = None
+        if args.highlights_verdict:
+            verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
+        body = condensed.build(clip.meta, events, verdict)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
-                      "min_confidence": body["min_confidence"]}
+                      "min_confidence": body["min_confidence"],
+                      "highlights": len(body["highlights"]["moments"])}
     write_jsonl(out / "cues.jsonl", cues)
     (out / "facts.json").write_text(json.dumps(facts, indent=2) + "\n")
     (out / "trace.json").write_text(json.dumps({"claims": claims}, indent=2) + "\n")
@@ -383,6 +387,9 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--highlights-verdict", type=Path, default=None,
+                    help="the highlights measurement's report (docs/eval/shot-flight.json): turns on the "
+                         "save filter and the labels it passed; without it every save is in, unlabelled")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 
