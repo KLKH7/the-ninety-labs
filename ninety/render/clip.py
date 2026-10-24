@@ -30,7 +30,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION, edit, fouls
+from ninety.render import RENDERER_VERSION, audio, edit, fouls
 from ninety.render.camera import (
     TACTICAL_VIEWS,
     Camera,
@@ -321,6 +321,7 @@ def render_clip(
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
+        reacts = fouls.reactions(frames, match.events)  # hands up, heads turned at a foul (lesson 234)
         held = holds(frames)
         thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
@@ -353,6 +354,9 @@ def render_clip(
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
+                mine = reacts.get(pl["id"], [])
+                fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
+                fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
@@ -472,6 +476,11 @@ def render_clip(
         for e in events:
             f.write(json.dumps(e) + "\n")
     clip["event_counts"] = dict(Counter(e["type"] for e in events))
+    # The referee's whistle on the sound track at each foul the picture shows (lesson 234), by
+    # picture index: a foul inside a stretch the edit cut is not heard.
+    shown = {f: i for i, f in enumerate(show)}
+    fouled = (e["frame"] for e in events if e["type"] == "foul")
+    clip["whistles"] = sorted(shown[f] for f in fouled if f in shown)
     clip["ball_visibility_lt_0_5"] = round(
         sum(1 for r in rows if r["ball"]["visibility"] < 0.5 and r["ball"]["bbox"])
         / max(1, sum(1 for r in rows if r["ball"]["bbox"])),
@@ -482,7 +491,7 @@ def render_clip(
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
     write_meta(out)
     if mp4:
-        _encode_mp4(out, p.fps)
+        _encode_mp4(out, p.fps, [i / p.fps for i in clip["whistles"]], n / p.fps)
         for name in view_cams:
             _encode_mp4(out / "views" / name, p.fps)
     return clip
@@ -645,27 +654,20 @@ def _frame_row(
     }
 
 
-def _encode_mp4(out: Path, fps: int) -> None:
+def _encode_mp4(out: Path, fps: int, whistles: list[float] | None = None,
+                seconds: float | None = None) -> None:
+    """clip.mp4 from the JPEGs, with a sound track carrying a whistle at each time in `whistles`
+    (audio.py) when there is one."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RenderUnavailable("--mp4 needs ffmpeg on PATH; the JPEG frames are already written")
-    subprocess.run(
-        [
-            ffmpeg,
-            "-y",
-            "-loglevel",
-            "error",
-            "-framerate",
-            str(fps),
-            "-i",
-            str(out / "images" / "%05d.jpg"),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            "20",
-            str(out / "clip.mp4"),
-        ],
-        check=True,
-    )
+    cmd = [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(out / "images" / "%05d.jpg")]
+    wav = out / "sound.wav"
+    if whistles and seconds:
+        audio.write_wav(wav, audio.track(seconds, whistles))
+        cmd += ["-i", str(wav), "-c:a", "aac", "-b:a", "96k", "-shortest"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(out / "clip.mp4")]
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        wav.unlink(missing_ok=True)
