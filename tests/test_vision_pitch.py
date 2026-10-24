@@ -214,7 +214,8 @@ def test_after_a_cut_each_shot_gets_its_own_gantry_and_every_frame_fits(small_gr
     truths = two_shots()
     pts = [marking_pixels(v) for v in truths]
     gantries, fits = pitch.fit_shots(pts, W, H, [0, 3], anchor_every=1)
-    assert math.dist(gantries[0], GANTRY) < GANTRY_GROSS_M and math.dist(gantries[1], OTHER_GANTRY) < GANTRY_GROSS_M
+    assert math.dist(gantries[0], GANTRY) < GANTRY_GROSS_M
+    assert math.dist(gantries[1], OTHER_GANTRY) < GANTRY_GROSS_M
     assert all(f.ok for f in fits)
     for f, v in zip(fits, truths, strict=True):
         assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
@@ -244,8 +245,11 @@ def test_a_shot_without_markings_gets_no_camera_and_the_others_are_still_fitted(
 
 def test_a_clip_without_a_cut_is_fitted_exactly_as_before(monkeypatch):
     seen = []
-    monkeypatch.setattr(pitch, "fit_clip",
-                        lambda points, w, h, anchor_every=25: seen.append((points, anchor_every)) or (GANTRY, ["fits"]))
+    def fit_clip(points, w, h, anchor_every=25):
+        seen.append((points, anchor_every))
+        return GANTRY, ["fits"]
+
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
     pts = [np.zeros((100, 2)) for _ in range(4)]
     assert pitch.fit_shots(pts, W, H, [0]) == ([GANTRY], ["fits"])
     assert len(seen) == 1 and seen[0][1] == 25

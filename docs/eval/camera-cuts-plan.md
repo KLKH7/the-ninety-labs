@@ -125,3 +125,12 @@ wrong) are still trusted, and the pass F1 against `event-report-v2.md`. Reported
 - **Why it matters little for the fit, to be checked, not assumed:** a whip pan moves the aim further
   than tracking follows (pitch.STEP_SD), so starting again there is what the fit needs anyway. Each
   false cut's effect on trusted frames is reported.
+
+### Amendment (2026-10-24, after merging origin/main with #270, before any fit with cuts was graded)
+
+#270 changed the trust test on main: the broadcast band is now (0.966, 1.121) and a frame must also
+pass its marking fit (gate B3). It did not touch `pitch.py`, so the camera fits are unchanged. The
+baseline is therefore **today's main**: every "before" observation (one shot, fitted by the
+unchanged fit) is re-judged with `observe --regate` on the merged code, and every "after" is judged
+by the same merged `place` and `agree`. The only difference between the two is the cut handling.
+The bar is unchanged.
