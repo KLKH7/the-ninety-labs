@@ -146,3 +146,10 @@ def test_a_claim_naming_a_side_on_an_unsure_shape_fact_is_held():
     unsure = row("line_height", "home", 38, 8) | {"team_confidence": None}
     gated = confidence_gate(Claim("Home's back line pushed up 8 m.", [unsure["id"]]), {unsure["id"]: unsure})
     assert not gated.ok and gated.category == "low_confidence"
+
+
+def test_the_describers_one_side_line_passes_the_fact_checker_and_is_said():
+    unsure = [row("line_height", "home", 38, 8) | {"team_confidence": None}]
+    track, refused = describe.describe([], [], shape=unsure)
+    (said,) = [s for s in track.said if s.source == "shape"]
+    assert said.spoken == "One side's back line has pushed up 8 metres." and not refused

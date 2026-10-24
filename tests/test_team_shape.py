@@ -197,3 +197,33 @@ def test_a_shape_fact_inherits_the_least_sure_side_of_its_players():
     assert not side_known(rows["shape:width:home:m2"])
     sure = [{**p, "side_confidence": 0.99} for p in team("home", HOME_442)]
     assert side_known(by_id(shape.shape_rows(frames(2, sure)))["shape:width:home:m2"])
+
+
+
+def test_a_shape_fact_whose_least_sure_side_is_exactly_the_gate_is_unknown():
+    from ninety.agents.factcheck import MIN_TEAM_CONFIDENCE, side_known
+
+    at_gate = [{**p, "side_confidence": MIN_TEAM_CONFIDENCE} for p in team("home", HOME_442)]
+    row = by_id(shape.shape_rows(frames(2, at_gate)))["shape:width:home:m2"]
+    assert row["team_confidence"] == MIN_TEAM_CONFIDENCE and not side_known(row)  # above, not at
+
+
+def test_one_player_without_a_side_confidence_makes_the_fact_s_side_unknown():
+    players = [{**p, "side_confidence": 0.99} for p in team("home", HOME_442)]
+    players[5] = {k: v for k, v in players[5].items() if k != "side_confidence"}
+    assert by_id(shape.shape_rows(frames(2, players)))["shape:width:home:m2"]["team_confidence"] is None
+
+
+def test_the_other_team_s_side_confidence_is_not_this_team_s():
+    home = [{**p, "side_confidence": 0.99} for p in team("home", HOME_442)]
+    away = [{**p, "side_confidence": 0.3} for p in team("away", HOME_442)]
+    rows = by_id(shape.shape_rows(frames(2, home + away)))
+    assert rows["shape:width:home:m2"]["team_confidence"] == 0.99
+    assert rows["shape:width:away:m2"]["team_confidence"] == 0.3
+
+
+def test_a_minute_mixing_truth_and_tracked_frames_takes_the_tracked_side():
+    tracked = [{**p, "side_confidence": 0.8} for p in team("home", HOME_442)]
+    truth = [{**f, "source": "truth"} for f in frames(2, team("home", HOME_442), n=15)]
+    mixed = truth + frames(2, tracked, n=15)
+    assert by_id(shape.shape_rows(mixed))["shape:width:home:m2"]["team_confidence"] == 0.8

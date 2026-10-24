@@ -175,9 +175,9 @@ def side_confidence(frames: list[Mapping], team: str) -> float | None:
     players' `side_confidence`, or None when any player carries none (today's tracked frames carry
     none). The fact-checker gates a side named from it as it gates a detection's
     (factcheck.side_known)."""
-    if frames and all(f.get("source") == "truth" for f in frames):
-        return 1.0
-    sides = [p.get("side_confidence") for f in frames for p in f["players"] if p["team"] == team]
+    # A ground-truth frame's players are certain of their side (1.0); a tracked frame's carry their own.
+    sides = [1.0 if f.get("source") == "truth" else p.get("side_confidence")
+             for f in frames for p in f["players"] if p["team"] == team]
     return None if not sides or any(s is None for s in sides) else min(sides)
 
 
