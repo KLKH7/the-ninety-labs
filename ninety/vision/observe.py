@@ -43,7 +43,11 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # ninety/render/scene.py; the band absorbs the spread); a camera at the wrong distance or zoom
 # scales every player the same wrong way. The frame's median ratio must lie in HEIGHT_BAND: the
 # 1st to 99th percentile of that ratio on validation frames whose ground mapping is within 1.0 m
-# (docs/eval/detector-plan.md, step B; docs/eval/detector-derive.json). It replaced the marking test
+# (docs/eval/detector-plan.md, step B). Re-derived by that rule for the current renders (lesson 230):
+# dataset v2's 24 validation clips, renderer 0.5.9, the camera fit with the grain blur (lesson 215),
+# 4,885 good frames of 6,000 (docs/eval/band-broadcast.json, ninety/eval/band_derive.py). The band
+# of renderer 0.3 (0.901 to 1.002, docs/eval/detector-derive.json) rejected every right camera there:
+# the ratio on right cameras sits about 5% higher now (cause not established). It replaced the marking test
 # (half the marking pixels within 1.5 px), which trusted 198 badly wrong frames on validation and
 # kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is still kept as
 # `markings_ok`, and still guides the fit from frame to frame (pitch.fit_clip).
@@ -61,7 +65,7 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
-HEIGHT_BAND = (0.901, 1.002)
+HEIGHT_BAND = (0.987, 1.099)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
