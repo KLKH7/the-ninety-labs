@@ -9,7 +9,6 @@
     115,
     116,
     117,
-    118,
     119,
     120,
     121,
@@ -26,47 +25,87 @@
     3045
   ],
   "broadcast": {
-    "frames": 6000,
-    "good": 4885,
-    "bad": 1115,
+    "frames": 5500,
+    "good": 4563,
+    "bad": 937,
     "band": [
-      0.987,
-      1.099
+      0.966,
+      1.121
     ],
     "candidates": {
       "B1 markings": {
-        "bad_rejected": 780,
-        "bad_trusted": 335,
-        "good_kept": 4821,
-        "good_kept_share": 0.9869,
+        "bad_rejected": 556,
+        "bad_trusted": 381,
+        "good_kept": 4553,
+        "good_kept_share": 0.9978,
         "bad_trusted_by_seed": {
-          "112": 118,
-          "119": 217
+          "117": 118,
+          "121": 4,
+          "2044": 242,
+          "3043": 17
         },
-        "bad_trusted_worst_m": 57.141
+        "bad_trusted_worst_m": 58.667
       },
       "B2 heights": {
-        "bad_rejected": 767,
-        "bad_trusted": 348,
-        "good_kept": 4782,
-        "good_kept_share": 0.9789,
+        "bad_rejected": 283,
+        "bad_trusted": 654,
+        "good_kept": 4474,
+        "good_kept_share": 0.9805,
         "bad_trusted_by_seed": {
-          "115": 2,
-          "119": 249,
-          "122": 15,
-          "2042": 82
+          "115": 11,
+          "117": 247,
+          "2044": 250,
+          "3043": 146
         },
-        "bad_trusted_worst_m": 56.81
+        "bad_trusted_worst_m": 51.68
       },
       "B3 both": {
-        "bad_rejected": 899,
-        "bad_trusted": 216,
-        "good_kept": 4719,
-        "good_kept_share": 0.966,
+        "bad_rejected": 577,
+        "bad_trusted": 360,
+        "good_kept": 4464,
+        "good_kept_share": 0.9783,
         "bad_trusted_by_seed": {
-          "119": 216
+          "117": 118,
+          "2044": 242
         },
-        "bad_trusted_worst_m": 1.292
+        "bad_trusted_worst_m": 14.072
+      }
+    }
+  },
+  "fixed": {
+    "frames": 11500,
+    "good": 11250,
+    "bad": 250,
+    "band": [
+      1.002,
+      1.151
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 978,
+        "good_kept_share": 0.0869,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
+      },
+      "B2 heights": {
+        "bad_rejected": 249,
+        "bad_trusted": 1,
+        "good_kept": 11042,
+        "good_kept_share": 0.9815,
+        "bad_trusted_by_seed": {
+          "2042": 1
+        },
+        "bad_trusted_worst_m": 69.422
+      },
+      "B3 both": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 966,
+        "good_kept_share": 0.0859,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
       }
     }
   }

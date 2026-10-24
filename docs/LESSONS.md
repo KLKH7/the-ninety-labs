@@ -2316,5 +2316,5 @@ short and actionable. This file is public: no research sources, product names or
   renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
   before any number that passes through it is read, and the new value cites both.
 - **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
-  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (validation seeds only), and
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
   `ninety/eval/band_derive.py` re-derives it.
