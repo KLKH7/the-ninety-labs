@@ -7,6 +7,7 @@
                            made by ninety-e2e ahead of time (infra/replay.py), so a view costs nothing
     GET  /api/health       the commit this image was built from (the deploy smoke test reads it)
     GET  /api/live/status  Live mode's gate: answers only with the demo passcode
+    POST /api/live/speak   an Ask answer in the pinned voice, as MP3 (ninety/api/speak.py)
     POST /mcp              the match MCP server (ninety/mcp/match_server.py), for Foundry's agents
     /api/pair[/{code}], /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
                            (ninety/api/companion.py); NINETY_COMPANION=off leaves it unmounted
@@ -36,6 +37,7 @@ from starlette.websockets import WebSocketClose
 
 from ninety.api import companion as companion_api
 from ninety.api.companion import Companion
+from ninety.api.speak import Speaker
 from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -49,10 +51,15 @@ REPLAY_DIR = Path(os.environ.get("NINETY_REPLAY_DIR") or ROOT / "runs" / "replay
 
 # Same origin only: the viewer loads its scripts, styles, bundle and video from this host and
 # nothing else, so `?bundle=` cannot point it at another site, and no page may frame it.
+CSP = (b"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+       b"object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+# The phone's view layer (Ionic web components, web/phone/src/ionic.ts) styles its scoped components
+# with <style> elements it writes at run time, which `default-src 'self'` refuses, leaving lists and
+# headers unstyled. The phone's pages alone may apply inline styles; scripts stay 'self' only, and
+# nothing a viewer types is ever put into the page as markup (main.ts writes text, never HTML).
+PHONE_CSP = CSP + b"; style-src 'self' 'unsafe-inline'"
 SECURITY_HEADERS = [
-    (b"content-security-policy",
-     b"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
-     b"object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+    (b"content-security-policy", CSP),
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"no-referrer"),
     (b"cross-origin-opener-policy", b"same-origin"),
@@ -120,6 +127,7 @@ class SecurityHeaders:
             await self.app(scope, receive, send)
             return
         path = scope["path"]
+        phone = path == "/phone" or path.startswith("/phone/")
         if path.startswith(("/assets/", "/phone/assets/")):
             cache = b"public, max-age=31536000, immutable"  # Vite names them by content hash
         elif path.startswith("/bundle/"):
@@ -130,14 +138,17 @@ class SecurityHeaders:
         async def with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = [h for h in message.get("headers", []) if h[0].lower() != b"cache-control"]
-                message["headers"] = [*headers, *SECURITY_HEADERS, (b"cache-control", cache)]
+                csp = PHONE_CSP if phone else CSP
+                security = [(k, csp if k == b"content-security-policy" else v) for k, v in SECURITY_HEADERS]
+                message["headers"] = [*headers, *security, (b"cache-control", cache)]
             await send(message)
 
         await self.app(scope, receive, with_headers)
 
 
 def build(key: str | None = None, companion: Companion | None = None, *, passcode: str | None = None,
-          viewer: Path | None = None, replay: Path | None = None, phone: Path | None = None) -> Starlette:
+          viewer: Path | None = None, replay: Path | None = None, phone: Path | None = None,
+          speaker: Speaker | None = None) -> Starlette:
     mcp = match_server.make_server()
     companion = companion or companion_api.from_env()
     mcp_app = mcp.streamable_http_app()
@@ -150,7 +161,11 @@ def build(key: str | None = None, companion: Companion | None = None, *, passcod
         async with mcp.session_manager.run():
             yield
 
-    live = Starlette(routes=[Route("/status", live_status, methods=["GET"])])
+    live_routes = [Route("/status", live_status, methods=["GET"])]
+    if companion:  # read-aloud speaks only the companion's own answers
+        speaker = speaker or Speaker(companion.answered)
+        live_routes.append(Route("/speak", speaker.speak, methods=["POST"]))
+    live = Starlette(routes=live_routes)
     routes = [
         Route("/api/health", health, methods=["GET"]),
         Mount("/api/live", RequireKey(live, passcode, PASSCODE_HEADER, "NINETY_DEMO_PASSCODE", "Live mode")),

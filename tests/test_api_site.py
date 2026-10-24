@@ -113,3 +113,17 @@ def test_without_a_viewer_or_bundle_the_api_still_answers(tmp_path):
     assert client.get("/").status_code == 404
     assert client.get("/bundle/manifest.json").status_code == 404
     assert client.get("/phone/").status_code == 404
+
+
+def test_only_the_phones_pages_may_apply_inline_styles_and_scripts_stay_self_everywhere(site):
+    """The phone's Ionic components write <style> elements at run time (web/phone/src/ionic.ts), so
+    its pages allow inline styles; nothing else does, and no page allows an inline script."""
+    for path in ("/phone/", "/phone", "/phone/assets/index-def.js"):
+        csp = site.get(path).headers["content-security-policy"]
+        assert "style-src 'self' 'unsafe-inline'" in csp, path
+        assert "frame-ancestors 'none'" in csp and "connect-src 'self'" in csp, path
+    for path in ("/", "/bundle/manifest.json", "/api/health", "/phoney", "/assets/index-abc.js"):
+        assert "style-src" not in site.get(path).headers["content-security-policy"], path
+    for path in ("/", "/phone/"):
+        # default-src 'self' rules scripts
+        assert "script-src" not in site.get(path).headers["content-security-policy"]

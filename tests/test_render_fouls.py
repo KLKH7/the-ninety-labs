@@ -176,3 +176,10 @@ def test_a_turned_head_faces_the_fouled_player_within_the_necks_reach():
 def test_no_foul_no_reaction():
     frames, _ = _foul_frames()
     assert fouls.reactions(frames, []) == {}
+
+
+def test_a_reaction_eases_in_rather_than_jumping():
+    """Halfway up the ease the reaction is part-way: strictly between none and full."""
+    fps = 100  # REACT_EASE_S / 2 = 0.15 s is a whole number of frames here
+    w = fouls._weight(1000 + round(fouls.REACT_EASE_S / 2 * fps), 1000, fps)
+    assert 0.0 < w < 1.0, w
