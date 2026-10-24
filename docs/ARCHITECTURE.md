@@ -83,7 +83,7 @@ the Game, a sports-science measurement or a published match statistic ([GROUNDIN
 | Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | running |
 | Vision pipeline | sees pixels only: detection, tracking, camera-to-pitch mapping, event rules | `ninety/vision` | planned |
 | Scoring | compares detected events with the answer key: precision and recall per event type | `ninety/eval` | planned |
-| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | Data agent and the queue-driven render job running; Vision Auditor running offline and from a recording (`schemas/failure_clusters.schema.json`), live model call not yet recorded |
+| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | Data agent (code, no model) and the queue-driven render job running; Vision Auditor running offline with a code-written rationale and order (`schemas/failure_clusters.schema.json`). Its model path has never produced a recorded answer: no `replays/vision-auditor-*.json` exists yet |
 
 The engine and the validator are separate on purpose. The engine encodes *how to make* a
 moment happen; the validator encodes *what must be true* of the result. Written independently
