@@ -350,6 +350,13 @@ interface DetectedEvent {
   interceptor?: string | null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
+interface DescribedLine {
+  id: string;
+  t_in: number;
+  t_out: number;
+  text: string;
+}
+let described: DescribedLine[] = []; // the audio description as said (audio.json), oldest first
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -378,11 +385,13 @@ async function loadBundle() {
     laptop.cuts = cuts;
     bundle = { base, manifest: m };
     bundleFps = m.fps;
-    const [radar, match, cards] = await Promise.all([
+    const [radar, match, cards, audio] = await Promise.all([
       m.radar ? get("radar.json") : null,
       m.match ? get("match.json") : null,
       m.cards ? get("cards.json") : null,
+      get("audio.json").catch(() => null), // the audio description's lines, for Story's transcript
     ]);
+    if (audio && Array.isArray(audio.said)) described = (audio.said as DescribedLine[]).slice().sort((a, b) => a.t_in - b.t_in);
     if (Array.isArray(cards)) bundleCards = (cards as InsightCard[]).filter((c) => c.status === "verified");
     {
       // The detected events: who scored each detected goal, and a player's part in the play.
@@ -1655,6 +1664,7 @@ function renderInsights() {
   // moments (with their diagrams) and goals.
   const list = $("insights");
   const now = viewTime();
+  if (list.dataset.mode === "described") return renderDescribed(list, now);
   const plays = playsUpTo(now);
   playsShown = plays.length;
   const key = list.dataset.mode === "key";
@@ -1717,8 +1727,38 @@ function renderInsights() {
   list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
 }
 
+/** Story's transcript of the audio description (Spotify's lyrics view): every line said so far,
+ * the one on air now bright and big, those before it dimmer; never a line still to come. */
+let describedKey = "";
+function renderDescribed(list: HTMLElement, now: number) {
+  const said = described.filter((l) => l.t_in <= now + 1e-6);
+  const key = `${said.length}|${said.length && now <= said[said.length - 1].t_out ? "on" : "off"}`;
+  if (key === describedKey && list.childElementCount) return;
+  describedKey = key;
+  if (!said.length) {
+    const li = document.createElement("li");
+    li.className = "story-empty";
+    li.textContent = described.length ? "The description starts with the first play." : "This match has no audio description.";
+    list.replaceChildren(li);
+    return;
+  }
+  list.replaceChildren(
+    ...said.map((l, i) => {
+      const li = document.createElement("li");
+      li.className = "lyric";
+      const text = named(l.text, undefined);
+      li.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+      const current = i === said.length - 1 && now <= l.t_out;
+      if (current) li.setAttribute("aria-current", "true");
+      return li;
+    }),
+  );
+  list.querySelector<HTMLElement>("[aria-current]")?.scrollIntoView({ block: "center", behavior: reduceMotion.matches ? "auto" : "smooth" });
+}
+
 $("story-mode").addEventListener("ionChange", (e) => {
   $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
+  describedKey = "";
   renderInsights();
   requestAnimationFrame(redrawPictures);
 });
@@ -1758,7 +1798,8 @@ function showMatch(t: number) {
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
-  if (playsUpTo(t).length !== playsShown) renderInsights();
+  if ($("insights").dataset.mode === "described") renderDescribed($("insights"), t);
+  else if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
   const key = JSON.stringify(st);
   if (key === statsKey) return;

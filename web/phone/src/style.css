@@ -462,3 +462,9 @@ ion-footer.composer .footer-background { display: none; }
 /* Text size: the content scales; the tab bar and score band keep their size. */
 html[data-text="large"] :is(.live-pane, .insights, .answers, .how-body, #player) { zoom: 1.15; }
 html[data-text="xlarge"] :is(.live-pane, .insights, .answers, .how-body, #player) { zoom: 1.3; }
+
+/* Story > Described: the audio description as Spotify shows lyrics, big bold lines on a muted
+   slate; the line on air now white, those before it dimmer. */
+.insights[data-mode="described"] { margin: 0 8px; padding: 20px 16px 40px; gap: 18px; border-radius: 22px; background: #3f566c; }
+.lyric { list-style: none; font-size: 26px; font-weight: 700; line-height: 1.22; letter-spacing: -0.01em; color: rgba(255, 255, 255, 0.55); }
+.lyric[aria-current="true"] { color: #fff; }

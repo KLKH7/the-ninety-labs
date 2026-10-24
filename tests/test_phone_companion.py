@@ -635,3 +635,16 @@ def test_listening_settings_set_the_rate_the_transcript_and_the_text_size(browse
     assert page.text_content("#caption") == "Oakfield break forward"
     assert page.evaluate("window.ninetySpokenAloud") == ["Oakfield break forward"]  # recorded, never voiced
     assert not errors
+
+
+def test_story_described_shows_the_audio_description_said_so_far_never_ahead(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=61.5)
+    said = json.loads(page.evaluate("fetch('/bundle/audio.json').then(r => r.text())"))["said"]
+    due = [line for line in said if line["t_in"] <= 61.5]
+    assert due and len(due) < len(said), [line["t_in"] for line in said]  # some said, some still to come
+    page.click("#tab-button-insights")
+    page.click("#story-mode ion-segment-button[value=described]")
+    page.wait_for_selector("#insights .lyric")
+    # mutation: drop the t_in filter in renderDescribed -> lines from later in the clip appear
+    assert page.locator("#insights .lyric").count() == len(due)
+    assert not errors
