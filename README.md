@@ -125,7 +125,7 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Audited against `main` at `c88fbe64` on Oct 24, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
+Audited against `main` at `ea7743a8` on Oct 25, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
 `65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
 seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
@@ -139,7 +139,8 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | Ball mostly hidden, same detector and test set (still the weakness) | recall 0.425 (229 / 539, 95% 0.384 to 0.467) | [finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md) |
 | Tactical-view detector (ours-tactical), adopted by the pre-registered rule, test set of 28 clips | ball recall 0.692 (963 / 1,392, 95% 0.667 to 0.716), player recall 0.998 | [finetune-tactical](docs/eval/finetune-tactical/RESULTS.md) |
 | Broadcast player tracks paired with the same man on the tactical views, 7 validation clips | 144 / 179 paired (80.4%, 95% 74 to 86%); 4 / 144 pairs wrong (2.8%, 95% 1 to 7%) | [association.md](docs/eval/association.md) |
-| Passes detected from pixels, frozen test set's five clips | strict F1 0.67 (7 of 13 found, 1 false), below the 0.70 target; measured before the camera fit's blur and gate B3 | [detector-plan.md](docs/eval/detector-plan.md) |
+| Passes detected from pixels, frozen test set's five clips | on today's `main`, strict F1 0.25 (2 of 13 found, 1 false): the camera-trust band (#270) rejects most right frames on the test set's older renderer. The earlier 0.67 (7 of 13) no longer holds. Both are below the 0.70 target | [camera-cuts-plan.md](docs/eval/camera-cuts-plan.md), [detector-plan.md](docs/eval/detector-plan.md) |
+| Possession changes in open play, same clips | 1 of 5 found, none false | [possession-change.md](docs/eval/possession-change.md) |
 | False claims aired, live ablation on held-out seeds | one agent 7 / 10, the multi-agent graph 1 / 24 | [ablation-agents.md](docs/eval/ablation-agents.md) |
 | Planted false claims kept off air by the fact-checking agent, on `ninety-judge:1` | 136 / 136, of which 9 held by a Judge service error (127 / 127 where a check decided); 7 / 105 true claims wrongly rejected. Re-run on the current Judge pending | [fact-checker.md](docs/eval/fact-checker.md) |
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
@@ -168,8 +169,11 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   answers, 24 were code's verified sentence and 8 code's "unanswerable" reply ([companion-tools.md](docs/eval/companion-tools.md)). The v3
   run is not committed; v4, where the model chooses among code's checked sentences, is not on
   `main` and its evaluation is pending.
-- Event detection at the 0.70 target, and re-measured since the camera fit changed; shot outcomes,
-  possession changes and camera cuts are in open pull requests.
+- Event detection at the 0.70 target; the camera-trust band re-derived for the test set's renderer.
+  Shot outcomes are in an open pull request; following camera cuts is built but off (it fits a
+  reverse angle as the main camera's mirror).
+- The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
+  off until the shot-flight measurement runs.
 - Team sides good enough to air most team claims (a spatial side model is in open #283).
 - The demo match rendered, with its render checks and its detected events.
 - Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
