@@ -278,17 +278,21 @@ def test_a_bundle_without_match_json_has_no_match_mode(browser, site):  # noqa: 
 PANELS = ("#radar-section", "#match-stats", "#trace", "#pipeline", "#show-boxes", "#show-radar")
 
 
-def test_the_pairing_card_is_up_at_kick_off_then_behind_the_qr_button_or_docked(browser, site):  # noqa: F811
+def test_the_pairing_card_is_up_at_kick_off_then_only_behind_the_qr_button(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=match/")
     def at(v, **s):
-        st = json.dumps({"open": False, "closed": False, "dock": False, **s})
+        st = json.dumps({"open": False, "closed": False, **s})
         return page.evaluate(f"window.ninetyMatch.pairCardAt({v}, {st})")
 
     assert at(0.0) == "up" and at(19.9) == "up"  # PAIR_CARD_S: 20 s from kick-off
     assert at(20.1) == "hidden" and at(600.0) == "hidden"  # never again on its own, not at a chapter
     assert at(5.0, closed=True) == "hidden"  # a fan closed it
     assert at(600.0, open=True) == "up"  # the QR button
-    assert at(600.0, dock=True) == "docked" and at(5.0, dock=True) == "up"  # Kian's open choice
+    # Kian, Oct 25 (option A): never docked, whatever the page's address says.
+    page.goto(site + "?bundle=match/&qr=dock")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert at(600.0) == "hidden"
+    assert page.locator(".pair-card[data-at=docked]").count() == 0
     assert not errors
     page.context.close()
 
