@@ -82,6 +82,8 @@ UNIT_WORDS = {
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
     "shots": ("shots", "shot"),
+    "km": ("km", "kilometres", "kilometers"),
+    "km/h": ("km/h", "kilometres an hour", "kph"),
     "progressive passes": ("progressive passes", "progressive pass"),
     "long passes": ("long passes", "long pass"),
     "degrees": ("degrees", "degree"),
@@ -464,6 +466,10 @@ DIRECTED = (
     "final_third_share",
     *(f"{k}{a}" for k in ("progressive", "final_third_entry", "long", "intercepted") for a in ("", "_all")),
     "pair_passes",
+    "player_km",
+    "player_top_kmh",
+    "player_sprints",
+    "player_zone",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -508,6 +514,10 @@ TEMPLATES = {
         )
         for a in ("", "_all")
     },
+    "player_km": [rf"has covered {_N} km", r"from the footage shown", rf"give or take {_N}%"],
+    "player_top_kmh": [rf"reached a top speed of {_N} km/h"],
+    "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
+    "player_zone": [rf"was most often {_THIRD}"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
     "possession_share": [rf"had {_N}% of possession", r"counted by passes as TV counts it"],
     "final_third_share": [

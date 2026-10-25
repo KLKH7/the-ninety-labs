@@ -55,8 +55,11 @@ MATCH_TOOLS = (
     "territory",
     "shots",
     "passing",
+    "physical",
 )
 TOOL_HELP = {
+    "physical": "each named player's running: distance in km (from the footage shown, give or take its "
+    "measured error), top speed in km/h, sprints above 25.2 km/h, and the zone he was in most",
     "passing": "what the passes did: progressive passes, passes into the final third, long balls and "
     "passes intercepted, each club's count (unsure while the video could not tell whose some were) and "
     "the total; and the pairs of named players who passed to each other most",
@@ -128,6 +131,11 @@ TOOL_WORDS = (
         "team_shape",
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
+    ),
+    (
+        "physical",
+        r"\b(?:distance|covered|how far|sprint\w*|fastest|top speed|how fast|heat ?map|work rate|tired"
+        r"|ran the most|running)\b",
     ),
     (
         "passing",
@@ -355,6 +363,11 @@ FOLLOW_UPS = {
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
         "How are {club} playing?",
+    ),
+    "physical": (
+        "Who has been the best player?",
+        "How quickly do {club} win the ball back?",
+        "Where has the ball been?",
     ),
     "passing": (
         "Which passes cut through?",
@@ -757,6 +770,18 @@ def code_texts(fact: dict) -> list[str]:
             f"{club} had {_plural(n, 'shot')} {span}, and took {_plural(k, 'shot')} from inside the "
             "penalty area."
         ]
+    if metric == "player_km":
+        label = f", give or take {fact['within_pct']}%" if fact.get("within_pct") is not None else ""
+        return [f"{fact['player_is']} has covered {fact['value']} km {span}, from the footage shown{label}."]
+    if metric == "player_top_kmh":
+        return [f"{fact['player_is']} reached a top speed of {fact['value']} km/h {span}."]
+    if metric == "player_sprints":
+        if not fact["value"]:
+            return [f"{fact['player_is']} did not sprint above 25.2 km/h {span}."]
+        return [f"{fact['player_is']} sprinted {_plural(fact['value'], 'time')} above 25.2 km/h {span}."]
+    if metric == "player_zone":
+        where = "in the centre" if fact["channel"] == "centre" else f"on the {fact['channel']}"
+        return [f"{fact['player_is']} was most often in their {fact['third']} third {where} {span}."]
     if metric in PASS_WORDS:
         n = fact["value"]
         what, verb = PASS_WORDS[metric]

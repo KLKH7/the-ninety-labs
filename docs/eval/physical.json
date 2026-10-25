@@ -1,0 +1,514 @@
+{
+ "run": "f21-65247ba3",
+ "minutes": 30.0,
+ "sprint_kmh": 25.2,
+ "by_fragment": {
+  "30.0": {
+   "players": 22,
+   "top_speed_error_kmh": {
+    "median": 0.6,
+    "min": -4.8,
+    "max": 2.0
+   },
+   "sprints": {
+    "true": 31,
+    "tracked": 34,
+    "ratio": 1.1
+   },
+   "rows": [
+    {
+     "player": "a1",
+     "top_true": 27.2,
+     "top_tracked": 22.4,
+     "sprints_true": 1,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a10",
+     "top_true": 24.3,
+     "top_tracked": 24.7,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a11",
+     "top_true": 24.7,
+     "top_tracked": 26.3,
+     "sprints_true": 0,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a2",
+     "top_true": 28.5,
+     "top_tracked": 27.9,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a3",
+     "top_true": 24.4,
+     "top_tracked": 24.9,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a4",
+     "top_true": 26.6,
+     "top_tracked": 26.5,
+     "sprints_true": 2,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a5",
+     "top_true": 28.6,
+     "top_tracked": 29.7,
+     "sprints_true": 4,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "a6",
+     "top_true": 28.8,
+     "top_tracked": 26.4,
+     "sprints_true": 3,
+     "sprints_tracked": 4
+    },
+    {
+     "player": "a7",
+     "top_true": 30.1,
+     "top_tracked": 30.9,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "a8",
+     "top_true": 27.0,
+     "top_tracked": 29.0,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a9",
+     "top_true": 25.5,
+     "top_tracked": 26.3,
+     "sprints_true": 2,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h1",
+     "top_true": 28.6,
+     "top_tracked": 29.4,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h10",
+     "top_true": 26.3,
+     "top_tracked": 27.1,
+     "sprints_true": 2,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h11",
+     "top_true": 25.2,
+     "top_tracked": 26.5,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h2",
+     "top_true": 27.3,
+     "top_tracked": 28.4,
+     "sprints_true": 3,
+     "sprints_tracked": 4
+    },
+    {
+     "player": "h3",
+     "top_true": 25.7,
+     "top_tracked": 25.7,
+     "sprints_true": 2,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h4",
+     "top_true": 25.5,
+     "top_tracked": 26.0,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h5",
+     "top_true": 27.6,
+     "top_tracked": 28.1,
+     "sprints_true": 3,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "h6",
+     "top_true": 26.5,
+     "top_tracked": 26.6,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h7",
+     "top_true": 27.6,
+     "top_tracked": 28.7,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h8",
+     "top_true": 25.0,
+     "top_tracked": 25.8,
+     "sprints_true": 0,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h9",
+     "top_true": 25.9,
+     "top_tracked": 25.7,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    }
+   ]
+  },
+  "10.0": {
+   "players": 22,
+   "top_speed_error_kmh": {
+    "median": 0.3,
+    "min": -2.6,
+    "max": 2.1
+   },
+   "sprints": {
+    "true": 31,
+    "tracked": 38,
+    "ratio": 1.23
+   },
+   "rows": [
+    {
+     "player": "a1",
+     "top_true": 27.2,
+     "top_tracked": 26.0,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a10",
+     "top_true": 24.3,
+     "top_tracked": 26.2,
+     "sprints_true": 0,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a11",
+     "top_true": 24.7,
+     "top_tracked": 25.2,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a2",
+     "top_true": 28.5,
+     "top_tracked": 29.7,
+     "sprints_true": 1,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "a3",
+     "top_true": 24.4,
+     "top_tracked": 24.9,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a4",
+     "top_true": 26.6,
+     "top_tracked": 28.7,
+     "sprints_true": 2,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "a5",
+     "top_true": 28.6,
+     "top_tracked": 27.0,
+     "sprints_true": 4,
+     "sprints_tracked": 4
+    },
+    {
+     "player": "a6",
+     "top_true": 28.8,
+     "top_tracked": 26.2,
+     "sprints_true": 3,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "a7",
+     "top_true": 30.1,
+     "top_tracked": 29.3,
+     "sprints_true": 1,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "a8",
+     "top_true": 27.0,
+     "top_tracked": 25.9,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a9",
+     "top_true": 25.5,
+     "top_tracked": 25.9,
+     "sprints_true": 2,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "h1",
+     "top_true": 28.6,
+     "top_tracked": 28.4,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h10",
+     "top_true": 26.3,
+     "top_tracked": 27.9,
+     "sprints_true": 2,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h11",
+     "top_true": 25.2,
+     "top_tracked": 26.2,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h2",
+     "top_true": 27.3,
+     "top_tracked": 26.6,
+     "sprints_true": 3,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h3",
+     "top_true": 25.7,
+     "top_tracked": 26.2,
+     "sprints_true": 2,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h4",
+     "top_true": 25.5,
+     "top_tracked": 27.3,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h5",
+     "top_true": 27.6,
+     "top_tracked": 26.6,
+     "sprints_true": 3,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "h6",
+     "top_true": 26.5,
+     "top_tracked": 25.9,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h7",
+     "top_true": 27.6,
+     "top_tracked": 27.9,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h8",
+     "top_true": 25.0,
+     "top_tracked": 25.2,
+     "sprints_true": 0,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h9",
+     "top_true": 25.9,
+     "top_tracked": 26.2,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    }
+   ]
+  },
+  "120.0": {
+   "players": 22,
+   "top_speed_error_kmh": {
+    "median": 0.2,
+    "min": -1.3,
+    "max": 1.4
+   },
+   "sprints": {
+    "true": 31,
+    "tracked": 32,
+    "ratio": 1.03
+   },
+   "rows": [
+    {
+     "player": "a1",
+     "top_true": 27.2,
+     "top_tracked": 28.3,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a10",
+     "top_true": 24.3,
+     "top_tracked": 24.2,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a11",
+     "top_true": 24.7,
+     "top_tracked": 25.0,
+     "sprints_true": 0,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "a2",
+     "top_true": 28.5,
+     "top_tracked": 29.7,
+     "sprints_true": 1,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "a3",
+     "top_true": 24.4,
+     "top_tracked": 25.8,
+     "sprints_true": 0,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "a4",
+     "top_true": 26.6,
+     "top_tracked": 26.8,
+     "sprints_true": 2,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "a5",
+     "top_true": 28.6,
+     "top_tracked": 29.0,
+     "sprints_true": 4,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "a6",
+     "top_true": 28.8,
+     "top_tracked": 28.4,
+     "sprints_true": 3,
+     "sprints_tracked": 5
+    },
+    {
+     "player": "a7",
+     "top_true": 30.1,
+     "top_tracked": 28.8,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a8",
+     "top_true": 27.0,
+     "top_tracked": 26.4,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "a9",
+     "top_true": 25.5,
+     "top_tracked": 25.5,
+     "sprints_true": 2,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h1",
+     "top_true": 28.6,
+     "top_tracked": 29.0,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h10",
+     "top_true": 26.3,
+     "top_tracked": 25.9,
+     "sprints_true": 2,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h11",
+     "top_true": 25.2,
+     "top_tracked": 25.3,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h2",
+     "top_true": 27.3,
+     "top_tracked": 26.9,
+     "sprints_true": 3,
+     "sprints_tracked": 2
+    },
+    {
+     "player": "h3",
+     "top_true": 25.7,
+     "top_tracked": 26.4,
+     "sprints_true": 2,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h4",
+     "top_true": 25.5,
+     "top_tracked": 25.2,
+     "sprints_true": 1,
+     "sprints_tracked": 0
+    },
+    {
+     "player": "h5",
+     "top_true": 27.6,
+     "top_tracked": 28.5,
+     "sprints_true": 3,
+     "sprints_tracked": 3
+    },
+    {
+     "player": "h6",
+     "top_true": 26.5,
+     "top_tracked": 26.1,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h7",
+     "top_true": 27.6,
+     "top_tracked": 28.6,
+     "sprints_true": 1,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h8",
+     "top_true": 25.0,
+     "top_tracked": 25.3,
+     "sprints_true": 0,
+     "sprints_tracked": 1
+    },
+    {
+     "player": "h9",
+     "top_true": 25.9,
+     "top_tracked": 24.9,
+     "sprints_true": 1,
+     "sprints_tracked": 0
+    }
+   ]
+  }
+ }
+}

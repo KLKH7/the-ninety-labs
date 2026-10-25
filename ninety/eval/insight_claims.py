@@ -81,6 +81,7 @@ def facts_and_summaries(mi) -> list[dict]:
         for tool in SUMMARY_TOOLS:
             rows += getattr(mi, tool)(lo, hi)["summary"]
         rows += mi.players(lo, hi)["facts"]
+        rows += mi.physical(lo, hi)["facts"] + mi.passing(lo, hi)["facts"]
         rows += mi.style(lo, hi)["summary"]
     rows += [f for kind in ("counter", "one_two") for f in mi.facts.get(kind, ())]
     return rows
