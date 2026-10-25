@@ -63,6 +63,20 @@ def _also(get, metric: str, unit: str, context: str | None = None) -> Callable[[
     return at
 
 
+def _inside(mi) -> Callable[[int], dict]:
+    """Shots from inside the penalty area: sure only when no shot was within the error of its line
+    (the merge queue's review of #318), as well as every shot's side known."""
+    base = _summary(mi.shots, "shots", "inside_box")
+
+    def at(m: int) -> dict:
+        out = base(m)
+        rows = [r for r in mi.shots(1, m)["summary"] if r.get("metric") == "shots"]
+        out["confident"] = out["confident"] and all(r.get("inside_exact", True) for r in rows)
+        return out
+
+    return at
+
+
 def _territory(mi) -> Callable[[int], dict]:
     return _summary(mi.territory, "final_third_share", "lo")
 
@@ -155,7 +169,7 @@ def _rows(mi) -> list:
             "shots_inside",
             "Shots from inside the penalty area",
             "shots",
-            _summary(mi.shots, "shots", "inside_box"),
+            _inside(mi),
         ),
         ("Attack", "counters", "Regains that led to a shot", "regains", _count(mi, "counter")),
         ("Attack", "one_twos", "One-twos", "one-twos", _count(mi, "one_two")),

@@ -141,3 +141,20 @@ def test_a_shot_of_unknown_side_names_no_club():
     said = "In minute 11, Lisbon Esportes shot from 11 m out, where the posts were 37 degrees apart."
     assert not verify(Claim(said, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok
     assert shot_map.near_box_line(105 - 16.5 - 0.8, 34.0, None)
+
+
+def test_the_stats_row_of_shots_inside_is_unsure_when_a_shot_is_near_the_line():
+    import json
+
+    from ninety.eval.companion_tools import STANDIN
+    from ninety.intel.match_insights import MatchInsights
+    from ninety.intel.stats_table import stats_table
+
+    body = json.loads(STANDIN.read_text())
+    near = shot(9, "home", 105 - 16.5 - 0.8, 34, side=0.99)
+    sure = shot(1, "home", 94, 34, side=0.99)
+    body["facts"]["shot"] = shot_map.shots([sure, near])
+    for r in body["facts"]["shot"]:
+        r["club"] = "London Athletic"
+    row = next(r for r in stats_table(MatchInsights.from_dict(body))["rows"] if r["key"] == "shots_inside")
+    assert not row["series"][-1]["confident"]
