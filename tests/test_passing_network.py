@@ -126,6 +126,8 @@ def test_the_network_pairs_only_team_mates_and_only_completed_passes():
         ("Femi Railby passed to Kai Terrow 2 times from minute 1 to minute 90, of the passes the video could "
          "name both players of.", False),
         ("Kai Terrow passed to Femi Railby 2 times from minute 1 to minute 90.", False),
+        ("Kai Terrow passed to Femi Railby 2 times from minute 1 to minute 90, of the passes the video could "
+         "name both players of; Femi Railby passed to Kai Terrow 2 times.", False),
     ],
 )
 def test_a_pair_is_said_in_its_order_and_with_its_caveat(said, ok):
