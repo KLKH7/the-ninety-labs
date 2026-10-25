@@ -4,7 +4,7 @@ import { drawCues, drawDetections } from "./draw";
 import { pairCardUp, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
-import { type TeamNames, nameIds, teamNames } from "./teams";
+import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -234,6 +234,7 @@ async function start() {
   const teams = teamNames(m.teams);
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
+  setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
   b.cues = b.cues.map((c) => ({ ...c, text: nameIds(c.text, teams) }));
   const big = bigScreen(!!b.match, location.search);
   if (big) {
