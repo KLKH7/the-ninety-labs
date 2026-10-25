@@ -11,8 +11,9 @@ Each is arithmetic on a detected pass's start and end (ninety/vision/events.py):
 - **intercepted**: a pass the other side's player took (the detector names him when unambiguous).
 
 Which goal a team attacks follows from its side, so a pass counts for its club only when its side
-passed the fact-checker's side gate (factcheck.side_known); the others could be either club's, so a
-club's count has bounds, and the totals of both clubs do not need the side.
+passed the fact-checker's side gate (factcheck.side_known); the others could be either club's, and
+which way they went depends on whose they were, so a club's count and the totals of a progressive pass
+or an entry into the final third have bounds (only long passes and interceptions have exact totals).
 
 The pass network counts completed passes between two named players (the role gate names them, I6;
 one player's pieces of track are one name, lesson 241); passes whose passer or receiver is not named
@@ -77,8 +78,9 @@ def rows(events: Iterable[Mapping]) -> list[dict]:
                 "team": team,
                 "minute": minute_of(float(e["t"])),
                 "side_known": side_known(e),
-                "progressive": done and progressive(x, y, ex, ey, team),
-                "final_third_entry": done and into_final_third(x, ex, team),
+                # Which way a pass went depends on whose it was: for each club, as if it were its.
+                "progressive": {t: done and progressive(x, y, ex, ey, t) for t in TEAMS},
+                "final_third_entry": {t: done and into_final_third(x, ex, t) for t in TEAMS},
                 "long": math.hypot(ex - x, ey - y) >= LONG_BALL_M,
                 "intercepted": e.get("outcome") == "fail" and e.get("interceptor") is not None,
                 "passer": e.get("player"),
@@ -88,44 +90,40 @@ def rows(events: Iterable[Mapping]) -> list[dict]:
     return out
 
 
+DIRECTED_KINDS = ("progressive", "final_third_entry")  # which way it went depends on the club
+
+
+def _hit(r: Mapping, kind: str, team: str) -> bool:
+    v = r[kind]
+    return bool(v[team]) if isinstance(v, dict) else bool(v)
+
+
 def summary(passes: Iterable[Mapping], minute_from: int, minute_to: int) -> list[dict]:
-    """For each kind: each club's count with bounds from the passes of unknown side, and the total."""
+    """For each kind: the total and each club's count, with bounds from the passes whose side is
+    unknown. A long pass or an interception is one whoever played it, so its total is exact; a
+    progressive pass or an entry into the final third depends on which way the club attacks, so an
+    unknown-side pass counts toward a club's upper bound wherever it would count for that club."""
     window = [r for r in passes if minute_from <= r["minute"] <= minute_to]
+    known = [r for r in window if r["side_known"]]
+    unknown = [r for r in window if not r["side_known"]]
     out = []
     for kind in KINDS:
-        hit = [r for r in window if r[kind]]
-        unknown = sum(not r["side_known"] for r in hit)
-        out.append(
-            {
-                "id": f"pt:{kind}:all:m{minute_from}-{minute_to}",
-                "kind": "pass_types",
-                "metric": f"{kind}_all",
-                "team": None,
-                "minute_from": minute_from,
-                "minute_to": minute_to,
-                "value": len(hit),
-                "unit": UNIT[kind],
-                "confident": True,
-            }
-        )
+        sure = sum(_hit(r, kind, r["team"]) for r in known)
+        both = sum(_hit(r, kind, "home") and _hit(r, kind, "away") for r in unknown)
+        either = sum(_hit(r, kind, "home") or _hit(r, kind, "away") for r in unknown)
+        lo, hi = sure + both, sure + either
+        out.append({"id": f"pt:{kind}:all:m{minute_from}-{minute_to}", "kind": "pass_types",
+                    "metric": f"{kind}_all", "team": None, "minute_from": minute_from,
+                    "minute_to": minute_to, "value": lo, "unit": UNIT[kind], "lo": lo, "hi": hi,
+                    "confident": lo == hi})
         for team in TEAMS:
-            # An interception is the other club's: the passer lost it.
-            mine = [r for r in hit if r["side_known"] and r["team"] == team]
-            out.append(
-                {
-                    "id": f"pt:{kind}:{team}:m{minute_from}-{minute_to}",
-                    "kind": "pass_types",
-                    "metric": kind,
-                    "team": team,
-                    "minute_from": minute_from,
-                    "minute_to": minute_to,
-                    "value": len(mine),
-                    "unit": UNIT[kind],
-                    "lo": len(mine),
-                    "hi": len(mine) + unknown,
-                    "confident": unknown == 0,
-                }
-            )
+            # Counted for the passer's club: its progressive passes, or its passes intercepted.
+            mine = sum(r["team"] == team and _hit(r, kind, team) for r in known)
+            maybe = sum(_hit(r, kind, team) for r in unknown)
+            out.append({"id": f"pt:{kind}:{team}:m{minute_from}-{minute_to}", "kind": "pass_types",
+                        "metric": kind, "team": team, "minute_from": minute_from,
+                        "minute_to": minute_to, "value": mine, "unit": UNIT[kind], "lo": mine,
+                        "hi": mine + maybe, "confident": maybe == 0})
     return out
 
 

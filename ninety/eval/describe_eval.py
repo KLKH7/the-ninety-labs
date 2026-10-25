@@ -45,9 +45,11 @@ CLIPS = {
     "seed900001 (hand-written stand-in, whole file)": detected.FIXTURES / "detected-standin-seed900001.jsonl",
 }
 # Which detected events on the M1 clip are real: those the committed event report matched to the
-# answer key (grading is its allowed use). The others are false detections (v00003, the shot read as
-# a pass; v00004, an out of play), and a line about one describes something that did not happen.
-EVENT_REPORT = ROOT / "docs" / "eval" / "event-report-v2.json"
+# answer key (grading is its allowed use). The others are false detections (v00004, the shot read as
+# a pass; v00005, an out of play), and a line about one describes something that did not happen.
+# The report grades the detector that made the fixture: v3 (with possession changes), not v2, whose
+# ids are another order's (lesson 243).
+EVENT_REPORT = ROOT / "docs" / "eval" / "event-report-v3.json"
 MIN_FOR_P95 = 20  # nearest rank: below 20 values a p95 is the maximum
 
 
