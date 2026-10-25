@@ -193,3 +193,20 @@ answer key (`NO_SCORE=1`), and only each clip's observations and detected events
 score is computed once, on the Mac, at the frozen commit, from those observations, over **every** test
 clip whose observations came back and no other; the clips that did not are listed by name with the
 count, and the result is reported as a score on that subset, never as the whole split's.
+
+## Amendment 6 (Oct 25, after the validation re-score at ee4c7423; a bug, before the test split is scored)
+
+Validation at ee4c7423 (`runs/onepod-1025b/out/score-val2/report.json`, 80 clips): goals 12 of 16,
+6 false, now above the gate; **saves still 0 of 50**. Read from the validation observations only:
+
+- 13 saves end with the ball in a player's spell on a line between the posts, but that player is
+  not `Track.keeper` in 12 of them (most of these clips have no keeper track at all). Amendment 3
+  asked for `Track.keeper`, narrower than rule 5's own keeper (`Track.keeper`, or the defending
+  side's player nearest its goal line inside its penalty area), and rule 5's "defending side" is the
+  kit's side, which amendment 3 found wrong about half the time. **The bug fixed:** a keeper, for
+  rule 5 and amendment 3 alike, is `Track.keeper` or the player nearest that goal line among those
+  inside that goal's penalty area at that frame, whatever his kit's side (the goal decides, as in
+  amendment 3).
+- About 25 saves end in an out of play 0.1 to 0.9 m behind the goal line, its line far wide (y 45 to
+  116): the ball held up in the keeper's hands, placed on the ground behind and away from the
+  camera. **Not changed** (a new rule, not a bug): reported as the known limit.
