@@ -49,7 +49,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from ninety.vision import sides
+from ninety.vision import outcomes, sides
 from ninety.vision.track import (
     FPS,
     MAX_GAP_FRAMES,
@@ -211,6 +211,8 @@ def heads_for_goal(path: list[BallPoint], i: int, team: str) -> bool:
     crosses the goal line `team` attacks between the widened posts, from within SHOT_MAX_M. A
     lofted ball's ground track bends away from the camera as it rises (planned: its flight in 3D)."""
     p = path[i]
+    if not 0.0 <= p.x <= PITCH_X:
+        return False  # struck from behind a goal line (out of the net, say): toward the pitch, not a goal
     later = [q for q in path[i + 1:] if q.frame - p.frame <= SHOT_LOOK_S * FPS]
     if len(later) < 2:
         return False
@@ -221,6 +223,44 @@ def heads_for_goal(path: list[BallPoint], i: int, team: str) -> bool:
         return False
     y = p.y + dy * (gx - p.x) / dx
     return POST_Y[0] - SHOT_MARGIN_M <= y <= POST_Y[1] + SHOT_MARGIN_M
+
+
+def _other(team: str) -> str:
+    return "away" if team == "home" else "home"
+
+
+def ends_at_goal(p: BallPoint, end: BallPoint, holder: Track | None, side: str) -> bool:
+    """Amendment 3 (docs/eval/shot-outcomes-plan.md): the move from the strike at p ends at the goal
+    `side` attacks: the line from p to its end crosses that goal line between the widened posts,
+    from within SHOT_MAX_M, and the move ends with a keeper's spell inside that goal's penalty area
+    (Law 1) or with the ball over that goal line."""
+    if not 0.0 <= p.x <= PITCH_X:
+        return False
+    gx = PITCH_X if _attacks_right(side) else 0.0
+    if abs(gx - p.x) > SHOT_MAX_M:
+        return False
+    y = outcomes.line_y(p, end, side)
+    if y is None or not POST_Y[0] - SHOT_MARGIN_M <= y <= POST_Y[1] + SHOT_MARGIN_M:
+        return False
+    if holder is None:
+        return outcomes.behind(end, side) > 0
+    return holder.keeper and abs(end.x - gx) <= outcomes.PENALTY_AREA_X
+
+
+def shot_side(path: list[BallPoint], i: int, team: str, end: BallPoint | None,
+              holder: Track | None) -> str | None:
+    """The side a strike at path[i] is a shot for, or None (amendment 3): the side attacking the goal
+    it heads for (the engine's convention, the one `assign_teams` names sides by), tested toward
+    both goals so a side read wrong does not make a shot a pass; by its first SHOT_LOOK_S
+    (`heads_for_goal`), else by where its move ends (`ends_at_goal`)."""
+    for side in (team, _other(team)):
+        if heads_for_goal(path, i, side):
+            return side
+    if end is not None:
+        for side in (team, _other(team)):
+            if ends_at_goal(path[i], end, holder, side):
+                return side
+    return None
 
 
 def out_of_play(path: list[BallPoint]) -> list[int]:
@@ -260,6 +300,19 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     return round(steps[len(steps) // 2] * 3.6, 1)
 
 
+def _credit_shot(events: list[dict], spell: Spell, team: str, who, p: BallPoint, event) -> None:
+    """The strike a goal came from: the event already at that spell's end becomes a shot with outcome
+    goal (a pass whose ground track bent wide), or a shot is added there."""
+    for e in events:
+        if e["frame"] == spell.last and e["team"] == team and e["type"] in ("pass", "shot"):
+            for k in ("intended", "interceptor", "deflected_by", "receiver"):
+                e.pop(k, None)
+            e.update(type="shot", outcome="goal", receiver=None, end_x=None, end_y=None)
+            return
+    event("shot", spell.last, team, p.x, p.y, p.score, spell.track.side_confidence, player=who,
+          outcome="goal")
+
+
 def plausible(start: BallPoint, end: BallPoint, speed_kmh: float | None) -> bool:
     """Whether a pass from `start` to `end` is one the ball could have made. It must go further than
     the ball at a player's feet (CONTROL_M, GROUNDING P6), and a struck ball only slows (rolling and
@@ -296,10 +349,14 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
-def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict]:
+def detect(rows: list[dict], join_breaks: bool = True,
+           context_rows: list[dict] | None = None) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
     `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
-    what it does (ninety/eval/attribution_derive.py); the live path always runs with it."""
+    what it does (ninety/eval/attribution_derive.py); the live path always runs with it.
+    `context_rows` are other views' observations of the same frames (the tactical camera's, fused):
+    their players say where everyone stands at a kick-off (ninety/vision/outcomes.py); the ball is
+    always the one in `rows`."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
     teams = sides.assign(tracks, rows)  # on the tactical views, kit and position combined (sides.py)
@@ -322,27 +379,58 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
     out_frames = [path[i].frame for i in outs]
     # The last frame before each cut: where the frame numbers jump.
     cut_at = [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
+    heights = outcomes.heights_by_frame(rows, path)
+    others = outcomes.context_tracks(context_rows)
+    strikes = [s.last for s in sp if s.track.team
+               and any(heads_for_goal(path, index[s.last], side) for side in ("home", "away"))]
+    goals: list[tuple[int, int, str]] = []  # (strike frame, last frame searched, team): no out of play there
     for a, b in zip(sp, sp[1:] + [None] if sp else [], strict=True):
         team = a.track.team
         if team is None:
             continue
         i = index[a.last]
         gone = next((f for f in out_frames if a.last < f and (b is None or f < b.first)), None)
-        if b is None and gone is None:
-            continue  # the clip ends with the ball still in play after him: nothing to judge yet
         cut = next((c for c in cut_at if a.last <= c and (b is None or c < b.first)), None)
-        if cut is not None and (gone is None or gone > cut):
-            continue  # the picture cut away before anything showed where his ball went
         if b is not None and b.track is a.track:
             continue  # he got it back himself: a touch, not a pass
         if join_breaks and b is not None and may_continue(a.track, b.track):
             continue  # perhaps him again in a new track: no pass can be told
+        # Where his move ended: over a line first, else at the next spell.
+        end = path[index[gone]] if gone is not None else path[index[b.first]] if b is not None else None
+        holder = b.track if gone is None and b is not None else None
+        shooter = shot_side(path, i, team, end, holder)
+        shot = shooter is not None
+        # The kit's side stands where the goal agrees with it; where it does not, the side is unsure.
+        side_conf = a.track.side_confidence if shooter == team else None
+        result = None
+        if shot:
+            # The net is searched up to the next cut or the next shot, past any spell (outcomes.judge).
+            next_cut = next((c for c in cut_at if c >= a.last), None)
+            bounds = [f for f in strikes if f > a.last] + ([next_cut + 1] if next_cut is not None else [])
+            goal_stop = min(bounds, default=None)
+            stop = b.first if b is not None else (cut + 1 if cut is not None else None)
+            result = outcomes.judge(path, i, stop, goal_stop, shooter, tracks, heights,
+                                    int(SHOT_LOOK_S * FPS), b.track if b is not None else None, gone, others,
+                                    restart_stop=min((f for f in strikes if f > a.last), default=None),
+                                    end_point=end)
+        is_goal = result is not None and result.outcome == "goal"
+        # A restart seen later (a kick-off, goal kick or corner) says where his ball went, even when
+        # the picture lost it or cut away first (outcomes.first_restart).
+        decided = is_goal or (result is not None and result.how.startswith("restart"))
+        if b is None and gone is None and not decided:
+            continue  # the clip ends with the ball still in play after him: nothing to judge yet
+        if cut is not None and (gone is None or gone > cut) and not decided:
+            continue  # the picture cut away before anything showed where his ball went
         conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)
-        if heads_for_goal(path, i, team):
-            event("shot", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence,
-                  ball_speed_kmh=speed, player=who)
+        if shot:
+            event("shot", a.last, shooter, path[i].x, path[i].y, conf, side_conf,
+                  ball_speed_kmh=speed, player=who, outcome=result.outcome)
+            if is_goal:
+                g = result.goal
+                event("goal", g["frame"], shooter, g["x"], g["y"], g["confidence"], side_conf, player=who)
+                goals.append((a.last, goal_stop if goal_stop is not None else rows[-1]["frame"] + 1, shooter))
             continue
         if gone is not None:
             g = path[index[gone]]
@@ -368,6 +456,43 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
               player=attribute(b.track, path[j], tracks))
     for i in outs:
         f = path[i].frame
+        if any(s < f < e and outcomes.behind(path[i], t) > 0 for s, e, t in goals):
+            continue  # the ball in the net: a goal, not out of play (Law 9 against Law 10)
+        # A goal no detected shot led to (a lofted strike's ground track bends wide of the posts): the
+        # ball over a goal line and at rest in the net is a goal on its own evidence, for the side
+        # attacking that goal (an own goal counts for it too, Law 10), up to the next cut or strike.
+        scorer = "home" if path[i].x > PITCH_X else "away" if path[i].x < 0 else None
+        if scorer is not None:
+            nxt = [c + 1 for c in cut_at if c >= f] + [k for k in strikes if k > f]
+            end = outcomes._index(path, min(nxt, default=None))
+            line = outcomes.line_evidence(path[i:end], heights, scorer)
+            restart = None
+            if line is None:
+                # Amendment 4: unseen in the net (a high ball lands beyond it), a kick-off first after it
+                # is a goal (Law 8), as amendment 2 has it after a detected shot.
+                restart = outcomes.first_restart(path, i, min((k for k in strikes if k > f), default=None),
+                                                 scorer, others if others is not None else tracks)
+                if restart is not None and restart[0] != "kickoff":
+                    restart = None
+            if line is not None or restart is not None:
+                if line is not None:
+                    score, k, y = line
+                    g = path[i + k]
+                    kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks,
+                                                     scorer)
+                    conf = round(1 - (1 - score) * (1 - kick), 3)
+                else:
+                    g, y = path[i], _clip(path[i].y, PITCH_Y)
+                    conf = round(restart[2], 3)
+                last = [s for s in sp if s.last < f and s.track.team == scorer]
+                who = attribute(last[-1].track, path[index[last[-1].last]], tracks) if last else None
+                if last:
+                    _credit_shot(events, last[-1], scorer, who, path[index[last[-1].last]], event)
+                event("goal", g.frame, scorer, outcomes.goal_line(scorer), y, conf,
+                      last[-1].track.side_confidence if last else None, player=who)
+                until = path[end].frame if end < len(path) else rows[-1]["frame"] + 1
+                goals.append((f - 1, until, scorer))
+                continue
         last = [s for s in sp if s.last < f and s.track.team]
         if not last:
             continue
@@ -384,7 +509,9 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         "teams": teams,
         "spells": len(sp),
         "events": {k: sum(1 for e in events if e["type"] == k)
-                   for k in ("pass", "shot", "out_of_play", "possession_change")},
+                   for k in ("pass", "shot", "goal", "out_of_play", "possession_change")},
+        "shot_outcomes": {str(k): sum(1 for e in events if e["type"] == "shot" and e["outcome"] == k)
+                          for k in (None, "goal", "on_target", "blocked", "off_target")},
         "named": {k: sum(1 for e in events if e.get(k)) for k in ("player", "receiver", "interceptor")},
     }
     return events, summary

@@ -1,0 +1,88 @@
+{
+ "format": 1,
+ "labelled_at": "2026-10-25T21:06:56.209Z",
+ "labels": {
+  "L01": {
+   "answer": "unsure",
+   "note": "why is it the most important"
+  },
+  "L02": {
+   "answer": "yes"
+  },
+  "L03": {
+   "answer": "yes",
+   "note": "bit too much"
+  },
+  "L04": {
+   "answer": "no"
+  },
+  "L05": {
+   "note": "it says 00:03"
+  },
+  "L06": {
+   "answer": "yes"
+  },
+  "L07": {
+   "answer": "yes"
+  },
+  "L08": {
+   "answer": "yes"
+  },
+  "L09": {
+   "answer": "no",
+   "note": "to h2 not h3"
+  },
+  "L10": {
+   "note": "cautious depends on position on field",
+   "answer": "unsure"
+  },
+  "L11": {
+   "answer": "no",
+   "note": "how can be best player after 9 seconds"
+  },
+  "L12": {
+   "answer": "unsure",
+   "note": "we cant tell here for sure its forward"
+  },
+  "L13": {
+   "answer": "yes"
+  },
+  "L14": {
+   "answer": "no",
+   "note": "it doesnt make sense to 'find' an opposition"
+  },
+  "L15": {
+   "answer": "yes"
+  },
+  "L16": {
+   "answer": "yes",
+   "note": "but idk for sure about there being pressure"
+  },
+  "L17": {
+   "answer": "no"
+  },
+  "L18": {
+   "answer": "yes"
+  },
+  "L19": {
+   "answer": "no",
+   "note": "he can it out it wasnt after a failed long pass"
+  },
+  "L20": {
+   "answer": "yes",
+   "note": "dont knkow for sure if its forward"
+  },
+  "L21": {
+   "answer": "unsure",
+   "note": "dont know for sure if it's risky"
+  },
+  "L22": {
+   "answer": "no",
+   "note": "you dont 'find' the opposition "
+  },
+  "L23": {
+   "answer": "no",
+   "note": "not 'deliberately'"
+  }
+ }
+}
