@@ -14,6 +14,7 @@ import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
 import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
+import * as setup from "./setup";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
@@ -44,6 +45,9 @@ import { describeVisual, drawVisual, drawable, fromScout, headline, title } from
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** This fan's "Make it yours" answers (src/setup.ts), read before anything draws. */
+const mine: setup.Setup = setup.load();
+let setupStep = 0; // the card's question: 0 club, 1 depth, 2 want; this visit only
 
 const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/window.py)
 // design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
@@ -254,6 +258,9 @@ function showLive() {
   $("live").hidden = false;
   $("mockbar").hidden = !feed.mock;
   setStatus("waiting", "Waiting");
+  // A fan who has set up before opens where they asked to; a new one sees the card under the pitch.
+  if (mine.done && mine.want) goTo(mine.want);
+  renderSetup();
 }
 
 $("pair-form").addEventListener("submit", (e) => {
@@ -480,6 +487,8 @@ function showTeams() {
   $("legend-home").textContent = `${teams.home} →`;
   $("legend-away").textContent = `← ${teams.away}`;
   $("map-sides").textContent = `${teams.home} attack to the right of the radar, ${teams.away} to the left.`;
+  showFavourite(); // the club names may have just arrived with the bundle
+  renderSetup();
 }
 showTeams();
 
@@ -885,6 +894,142 @@ settingsSheet.addEventListener("ionModalWillPresent", () => (settingsUp = true))
 settingsSheet.addEventListener("ionModalWillDismiss", () => (settingsUp = false));
 settingsSheet.addEventListener("ionModalDidPresent", () => $("settings-title").focus());
 $("close-settings").addEventListener("click", () => void settingsSheet.dismiss());
+
+// --- make it yours (src/setup.ts): who you support, casual or die-hard, what you want most -------
+
+/** The clubs a fan can pick: only when the bundle names both (otherwise the sides are neutral). */
+function clubChoices(): string[] {
+  return teams.home === "Home" && teams.away === "Away" ? [] : [teams.home, teams.away];
+}
+
+/** The fan's club as a side of this match, or null when they support neither club playing. */
+function favouriteSide(): "home" | "away" | null {
+  if (!mine.club) return null;
+  return mine.club === teams.home ? "home" : mine.club === teams.away ? "away" : null;
+}
+
+function showFavourite() {
+  const side = favouriteSide();
+  if (side) document.body.dataset.fav = side;
+  else delete document.body.dataset.fav;
+  for (const b of document.querySelectorAll<HTMLElement>(".depth-option")) {
+    b.setAttribute("aria-checked", String(b.dataset.depth === mine.depth));
+    b.tabIndex = b.dataset.depth === mine.depth ? 0 : -1;
+  }
+  const parts = [mine.club ?? (mine.done ? "No club" : null), mine.done ? (mine.depth === "diehard" ? "Die-hard" : "Casual") : null];
+  $("setup-summary").textContent = parts.filter(Boolean).join(" · ");
+}
+
+/** Opens the part of the phone a fan asked for. */
+function goTo(want: setup.Want | null) {
+  const d = setup.destination(want);
+  showTab(d.tab);
+  if (d.pane) showPane(d.pane);
+}
+
+function setDepth(depth: setup.Depth) {
+  mine.depth = depth;
+  setup.save(mine);
+  showFavourite();
+  statsKey = ""; // redraw the rows now
+}
+
+function option(label: string, desc: string, pick: () => void): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "setup-option";
+  const l = document.createElement("span");
+  l.className = "setup-label";
+  l.textContent = label;
+  b.append(l);
+  if (desc) {
+    const d = document.createElement("span");
+    d.className = "setup-desc";
+    d.textContent = desc;
+    b.append(d);
+  }
+  b.addEventListener("click", pick);
+  return b;
+}
+
+function finishSetup() {
+  mine.done = true;
+  setup.save(mine);
+  showFavourite();
+  statsKey = "";
+  renderSetup();
+  goTo(mine.want);
+  const where = { action: "Live", stats: "Stats", story: "Story", ask: "Ask" }[mine.want ?? "action"];
+  announce(`Set up. Showing ${where}. Change it any time under More, Redo setup.`);
+}
+
+/** Draws the card's current question, or hides it once answered or skipped. */
+function renderSetup() {
+  const card = $("setup");
+  card.hidden = mine.done || document.body.dataset.state !== "live";
+  if (card.hidden) return;
+  const clubs = clubChoices();
+  if (setupStep === 0 && clubs.length === 0) setupStep = 1; // neutral sides: nothing to support yet
+  const steps = clubs.length ? 3 : 2;
+  const n = clubs.length ? setupStep + 1 : setupStep;
+  let question = "";
+  let options: HTMLButtonElement[] = [];
+  const next = () => {
+    setupStep += 1;
+    renderSetup();
+    requestAnimationFrame(() => card.querySelector<HTMLElement>(".setup-option")?.focus());
+  };
+  if (setupStep === 0) {
+    question = "Who do you support?";
+    options = [
+      ...clubs.map((c) => option(c, "", () => ((mine.club = c), next()))),
+      option("Neither", "Just here for the football", () => ((mine.club = null), next())),
+    ];
+  } else if (setupStep === 1) {
+    question = "How into the stats are you?";
+    options = setup.DEPTHS.map((d) => option(d.label, d.desc, () => ((mine.depth = d.value), next())));
+  } else {
+    question = "What do you want most?";
+    options = setup.WANTS.map((w) => option(w.label, w.desc, () => ((mine.want = w.value), finishSetup())));
+  }
+  $("setup-step").textContent = `${n} of ${steps} · ${question}`;
+  $("setup-question").textContent = question;
+  $("setup-options").replaceChildren(...options);
+}
+
+$("setup-skip").addEventListener("click", () => {
+  mine.done = true;
+  setup.save(mine);
+  showFavourite();
+  renderSetup();
+  announce("Setup skipped. You can do it any time under More, Redo setup.");
+});
+$("setup-redo").addEventListener("click", () => {
+  Object.assign(mine, { ...setup.DEFAULTS, depth: mine.depth });
+  setup.save(mine);
+  setupStep = 0;
+  showFavourite();
+  showTab("radar");
+  showPane("pitch");
+  renderSetup();
+  // The sheet hands focus back to its opener as it closes, so the card takes it once it has closed.
+  void settingsSheet.dismiss().then(() => {
+    $("setup").scrollIntoView({ block: "center" });
+    $("setup-title").focus({ preventScroll: true });
+  });
+});
+for (const b of document.querySelectorAll<HTMLButtonElement>(".depth-option")) {
+  b.addEventListener("click", () => setDepth(b.dataset.depth as setup.Depth));
+  // A radio group: the arrow keys move the choice (WAI-ARIA radio pattern).
+  b.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const to: setup.Depth = mine.depth === "casual" ? "diehard" : "casual";
+    setDepth(to);
+    document.querySelector<HTMLElement>(`.depth-option[data-depth=${to}]`)?.focus();
+  });
+}
+showFavourite();
 if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => settingsUp && renderSettings());
 applyText();
 
@@ -2082,7 +2227,14 @@ function renderStats(st: MatchData["stats"][number]) {
   }
   return items;
   };
-  const items = listOf(groups);
+  // Casual or die-hard (src/setup.ts): a casual fan sees the key groups, a die-hard every one. Only
+  // which groups are listed changes; every row shown is the same number either way.
+  const depthOf = (gs: [string, Row[]][]) => (mine.depth === "diehard" ? gs : gs.filter(([g]) => setup.CASUAL_GROUPS.includes(g)));
+  const showable = (gs: [string, Row[]][]) => gs.reduce((n, [, rows]) => n + rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a)).length, 0);
+  const items = listOf(depthOf(groups));
+  const more = showable(groups) - showable(depthOf(groups));
+  $("depth-note").hidden = more <= 0;
+  $("depth-note").textContent = more > 0 ? `Die-hard shows ${more} more ${more === 1 ? "stat" : "stats"}.` : "";
   // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
   const halves = block?.insight_stats?.halves;
   $("stats-period").hidden = !halves?.first;
@@ -2096,9 +2248,9 @@ function renderStats(st: MatchData["stats"][number]) {
       if (!r.confident) unsure.add(label);
       byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
     }
-    $("stat-rows").replaceChildren(...listOf(byGroup));
+    $("stat-rows").replaceChildren(...listOf(depthOf(byGroup)));
   } else $("stat-rows").replaceChildren(...items);
-  $("live-stats").hidden = items.length === 0;
+  $("live-stats").hidden = showable(groups) === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
   const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
   $("summary-rows").replaceChildren(...summary);

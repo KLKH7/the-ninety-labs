@@ -909,8 +909,9 @@ def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_secti
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
     js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
     order = page.evaluate(js)
-    assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
-                     "lineups-teaser"]
+    # "setup" is the Make it yours card (src/setup.ts): offered under the pitch until answered or skipped.
+    assert order == ["card pitch-card", "setup", "just-now", "momentum", "live-summary", "live-shots",
+                     "key-moments", "lineups-teaser"]
     page.wait_for_selector("#live-summary:not([hidden])")
     page.click("#live-summary .see-all")
     assert page.get_attribute("#lt-stats", "aria-selected") == "true" and page.is_visible("#live-stats")
@@ -1054,3 +1055,119 @@ def test_a_key_moment_goal_on_an_unsure_side_carries_no_club_s_colour(browser, s
     assert "neutral" in row.get_attribute("class").split()  # not the tracker's side vote
     assert not errors
     ctx.close()
+
+
+# --- make it yours: who you support, casual or die-hard, what you want most (src/setup.ts) ------
+
+
+def with_scout_rows(page):
+    """The bundle's match.json with Pressing and Shape rows at minute 2, so die-hard has more to show."""
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    match["insight_stats"] = {"bin_min": 5, "rows": [
+        {"group": "Pressing", "key": "turnovers", "label": "Turnovers", "unit": "turnovers", "series": [
+            {"minute_to": 2, "home": 3, "away": 1, "confident": True}]},
+        {"group": "Shape", "key": "width", "label": "Width", "unit": "m", "series": [
+            {"minute_to": 2, "home": 41, "away": 38, "confident": True}]}]}
+    page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+
+
+PRESSING_SHOWN = ("[...document.querySelectorAll('#stat-rows .stat-group h3')]"
+                  ".some(h => h.textContent === 'Pressing')")
+
+
+def stat_labels(page) -> list[str]:
+    rows = page.locator("#stat-rows .stat-row")
+    return [rows.nth(i).get_attribute("aria-label") for i in range(rows.count())]
+
+
+def test_make_it_yours_asks_three_things_and_opens_what_the_fan_wants(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    # Offered under the pitch, never over it: the radar stays on screen while the card asks.
+    page.wait_for_selector("#setup:not([hidden])")
+    assert page.is_visible("#map")
+    assert page.text_content("#setup-step") == "1 of 3 · Who do you support?"
+    clubs = [b.text_content() for b in page.locator("#setup-options .setup-label").all()]
+    assert clubs == ["Crowmere", "Dunhollow", "Neither"]  # the bundle's two clubs, named as it names them
+    page.locator(".setup-option", has_text="Crowmere").click()
+    assert page.text_content("#setup-step") == "2 of 3 · How into the stats are you?"
+    page.locator(".setup-option", has_text="Casual").click()
+    assert page.text_content("#setup-step") == "3 of 3 · What do you want most?"
+    page.locator(".setup-option", has_text="Stats").click()
+    # Answered: the card goes, the phone opens Stats in casual, and the fan's club is marked.
+    assert page.is_hidden("#setup")
+    assert page.evaluate("document.body.dataset.pane") == "stats"
+    assert page.get_attribute(".depth-option[data-depth=casual]", "aria-checked") == "true"
+    assert page.evaluate("document.body.dataset.fav") == "home"
+    # Kept in this browser: a reload opens where the fan asked, without asking again.
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("document.body.dataset.pane === 'stats'")
+    assert page.is_hidden("#setup")
+    assert page.evaluate("document.body.dataset.fav") == "home"
+    assert not errors
+
+
+def test_casual_lists_fewer_stats_but_never_changes_a_number(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    with_scout_rows(page)
+    page.click("#lt-stats")
+    page.wait_for_selector("#stat-rows .stat-row")
+    # Before a fan picks, every stat shows (die-hard), as the phone did before the card existed.
+    assert page.get_attribute(".depth-option[data-depth=diehard]", "aria-checked") == "true"
+    page.wait_for_function(f"{PRESSING_SHOWN}")
+    full = stat_labels(page)
+    page.click(".depth-option[data-depth=casual]")
+    page.wait_for_function(f"!{PRESSING_SHOWN}")
+    simple = stat_labels(page)
+    groups = [h.text_content() for h in page.locator("#stat-rows .stat-group h3").all()]
+    assert set(groups) <= {"Attack", "Passing"}
+    # Fewer rows, each one word for word as die-hard showed it: only what is listed changes.
+    assert simple and set(simple) < set(full)
+    hidden = len(full) - len(simple)
+    noun = "stat" if hidden == 1 else "stats"
+    assert page.text_content("#depth-note") == f"Die-hard shows {hidden} more {noun}."
+    # The arrow keys move the choice back (a radio group).
+    page.focus(".depth-option[data-depth=casual]")
+    page.keyboard.press("ArrowRight")
+    page.wait_for_function(PRESSING_SHOWN)
+    assert page.is_hidden("#depth-note")
+    assert stat_labels(page) == full
+    assert not errors
+
+
+def test_just_show_me_skips_and_redo_setup_brings_the_card_back(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site)
+    page.wait_for_selector("#setup:not([hidden])")
+    page.click("#setup-skip")
+    assert page.is_hidden("#setup")
+    assert page.text_content("#announce").startswith("Setup skipped.")
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    assert page.is_hidden("#setup")  # skipped stays skipped in this browser
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#settings-sheet #setup-redo")
+    page.click("#setup-redo")
+    page.wait_for_selector("#setup:not([hidden])")
+    page.wait_for_function("document.activeElement && document.activeElement.id === 'setup-title'")
+    assert page.text_content("#setup-step") == "1 of 3 · Who do you support?"
+    assert not errors
+
+
+def test_with_neutral_sides_the_card_asks_no_club(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site)
+    manifest = json.loads(page.evaluate("fetch('/bundle/manifest.json').then(r => r.text())"))
+    manifest.pop("teams")  # a bundle that does not name its clubs: neutral sides, nobody to support
+    page.context.route("**/bundle/manifest.json", lambda route: route.fulfill(json=manifest))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("!document.getElementById('teams-note').hidden")  # "Teams not confirmed"
+    page.wait_for_selector("#setup:not([hidden])")
+    assert page.text_content("#setup-step") == "1 of 2 · How into the stats are you?"
+    page.locator(".setup-option", has_text="Die-hard").click()
+    page.locator(".setup-option", has_text="The story").click()
+    assert page.is_hidden("#setup")
+    page.wait_for_function("document.body.dataset.tab === 'insights'")
+    assert page.evaluate("document.body.dataset.fav") is None
+    assert not errors
