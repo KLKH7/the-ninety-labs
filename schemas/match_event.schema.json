@@ -11,7 +11,7 @@
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul", "half_time"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul", "half_time", "score_change"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "team_confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Detected events only, optional: how firmly the side was told from the video, 0 to 1 (a score, not a probability; ninety/vision/track.py, assign_teams). Ground truth leaves it out." },
@@ -28,6 +28,7 @@
     "restart": { "type": ["string", "null"], "enum": ["corner", "goal_kick", "throw_in", "free_kick", "penalty_kick", null], "description": "Detected set pieces only, optional: which restart the video shows (ninety/vision/restarts.py). Ground truth leaves it out: its set_piece carries no kind, which is read from the stoppage before it." },
     "cause": { "type": ["string", "null"], "enum": ["offside", "foul_likely", "foul", "unknown", null], "description": "Detected free kicks and penalties only, optional: why it was given, as far as tracking can tell (ninety/intel/restart_cause.py): offside from the offside reading of the last completed pass, foul for a penalty, foul_likely otherwise, unknown when the reading was too close to call. Never names a fouler." },
     "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
+    "score": { "type": "object", "required": ["home", "away"], "additionalProperties": false, "properties": { "home": { "type": "integer", "minimum": 0 }, "away": { "type": "integer", "minimum": 0 } }, "description": "score_change only: the score the broadcast's scorebug shows from this frame (ninety/vision/scorebug.py). The only source a scoreline may be shown from." },
     "source": { "type": "string", "enum": ["truth", "vision"] },
     "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
   },
