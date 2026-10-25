@@ -900,3 +900,84 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
     page.wait_for_function("document.querySelector('#scorers') && !document.querySelector('#scorers').hidden")
     assert page.inner_text("#scorers") == "Goal 2′"
     assert not errors
+
+
+# --- density (Kian, Oct 24): one scroll packed with cards, each hidden while it has nothing --------
+
+
+def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_section(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
+    order = page.evaluate(js)
+    assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
+                     "lineups-teaser"]
+    page.wait_for_selector("#live-summary:not([hidden])")
+    page.click("#live-summary .see-all")
+    assert page.get_attribute("#lt-stats", "aria-selected") == "true" and page.is_visible("#live-stats")
+    assert not errors
+
+
+def test_key_moments_on_live_are_the_newest_moments_and_see_all_opens_story(browser, cards_site):  # noqa: F811
+    url, _ = cards_site
+    laptop, page, errors = phone(browser, url, laptop_t=63)
+    page.wait_for_selector("#key-moments:not([hidden])")
+    rows = page.locator("#key-rows .moment-row")
+    assert rows.first.locator(".text").inner_text() == "Crowmere overload late"  # newest first
+    assert rows.first.locator(".min").inner_text() == "2′"
+    page.click("#key-moments .see-all")
+    page.wait_for_selector("#panel-insights:not(.tab-hidden) #insights .moment")
+    assert not errors
+
+
+def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s_numbers(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def squads(route):
+        body = route.fetch().json()
+        body["lineup"] = [{"id": "h-t1", "number": 4, "confident": True},
+                          {"id": "a-t3", "number": 9, "confident": True}]
+        body["player_stats"] = [{"id": "h-t1", "distance_km": 6.2, "top_speed_kmh": 30.1, "involvements": 12},
+                                {"id": "a-t3", "distance_km": 7.4, "top_speed_kmh": None, "involvements": 20}]
+        body["pass_network"] = {side: {"nodes": [{"id": f"{p}-t1", "x": 30, "y": 30, "passes": 10},
+                                                 {"id": f"{p}-t2", "x": 50, "y": 40, "passes": 8}],
+                                       "links": [{"a": f"{p}-t1", "b": f"{p}-t2", "n": 6}]}
+                                for side, p in (("home", "h"), ("away", "a"))}
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", squads)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#lineups-teaser:not([hidden])")  # Live's teaser: the shirts the sheet is sure of
+    assert page.inner_text("#teaser-rows .teaser.home .teaser-shirts") == "4"
+    page.click("#lt-players")
+    page.wait_for_selector("#top-players:not([hidden])")
+    lists = page.locator("#top-lists .top-list")
+    titles = [lists.nth(i).locator("h3").text_content() for i in range(lists.count())]
+    assert titles == ["Distance", "Top speed", "Most involved"]
+    assert lists.nth(1).locator("li").count() == 1  # a top speed not measured is not listed
+    assert page.locator("#network .node").count() == 2 and page.locator("#network .link").count() == 1
+    assert "6 passes" in page.inner_text("#network-rows")
+    assert not errors
+    ctx.close()
+
+
+def test_a_match_without_squad_numbers_shows_no_empty_squad_cards(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#lt-players")
+    assert page.is_hidden("#pass-network") and page.is_hidden("#top-players")
+    assert not errors
+
+
+def test_ask_opens_on_a_grid_of_questions_then_recent_answers(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#ask-start:visible")
+    assert page.locator("#ask-grid .chip").count() >= 4
+    assert page.is_hidden("#ask-chips") and page.is_hidden("#recent-title")  # one set of suggestions
+    page.locator("#ask-grid .chip").first.click()
+    page.wait_for_selector("#answers .answer:not(.pending)")
+    assert page.is_hidden("#ask-start") and page.is_visible("#recent-title")
+    assert not errors
