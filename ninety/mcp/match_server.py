@@ -47,7 +47,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "referee", "lineup", "possession", "territory",
+    "referee", "lineup", "possession", "territory", "shots",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -237,6 +237,14 @@ def territory(match: str, minute_from: int, minute_to: int, club: str | None = N
     return _insight(match, "territory", minute_from, minute_to, club)
 
 
+def shots(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The shot map between two match minutes: each detected shot's spot, its distance from the
+    goal its club attacks (m) and the angle the posts make there (degrees), nearest first; and each
+    club's shots and those from inside the penalty area. How a shot ended (goal, saved, blocked, off target)
+    is not known until the line-crossing events exist. Cite by id."""
+    return _insight(match, "shots", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -322,7 +330,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
-        possession, territory,
+        possession, territory, shots,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

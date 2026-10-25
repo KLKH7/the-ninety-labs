@@ -81,6 +81,8 @@ UNIT_WORDS = {
     "regains": ("regains", "regain", "times"),
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
+    "shots": ("shots", "shot"),
+    "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
@@ -366,6 +368,14 @@ def check(
     if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
         reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
 
+    # A fact whose side the video could not tell names no club (a shot measured to the nearer goal):
+    # a club may be named only when another cited fact is that club's (merge-queue review of #318).
+    if any(f.get("side_known") is False and f.get("team") is None for f in cited):
+        sided = {f.get("club") for f in cited if f.get("club")}
+        for name in clubs.values():
+            if re.search(rf"\b{re.escape(name)}\b", claim.text) and name not in sided:
+                reasons.append(f"{name} is named, but the side of the cited fact is not known")
+
     # Kind words.
     kinds = {f.get("kind") for f in cited}
     for kind, words in KIND_WORDS.items():
@@ -458,6 +468,9 @@ DIRECTED = (
     "regain_to_shot_s",
     "possession_share",
     "final_third_share",
+    "shots_all",
+    "shots",
+    "shot_distance_m",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -493,6 +506,11 @@ TEMPLATES = {
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
     "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
     "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
+    "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
+    "shot_distance_m": [
+        rf"(?:shot|a shot came) from {_N} m out", rf"where the posts were {_N} degrees apart",
+    ],
     "final_third_share": [
         r"the ball was in",
         rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",

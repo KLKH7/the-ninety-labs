@@ -53,8 +53,12 @@ MATCH_TOOLS = (
     "lineup",
     "possession",
     "territory",
+    "shots",
 )
 TOOL_HELP = {
+    "shots": "the shot map: each shot's spot, metres from goal and the angle the posts make there, "
+    "nearest first; each club's shots and those from inside the penalty area. How a shot ended is not "
+    "known yet",
     "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
     "on the ball); "
     "unsure when the video could not tell whose some passes were",
@@ -122,6 +126,7 @@ TOOL_WORDS = (
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
     ),
+    ("shots", r"\b(?:shots?|shooting|shoot|efforts? on goal|chances?|attempts?)\b"),
     (
         "possession",
         r"\b(?:possession|more of the ball|keep(?:ing|s)? the ball|have the ball more|dominat\w*)\b",
@@ -357,6 +362,11 @@ FOLLOW_UPS = {
     "team_shape": (
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
+        "How are {club} playing?",
+    ),
+    "shots": (
+        "Where has the ball been?",
+        "Which passes cut through?",
         "How are {club} playing?",
     ),
     "possession": (
@@ -722,6 +732,21 @@ def code_texts(fact: dict) -> list[str]:
             f"{span.capitalize()}, {club} won the ball back and had a shot "
             f"{_num(fact['value'])} seconds later."
         ]
+    if metric == "shot_distance_m":
+        shooter = f"{who} shot" if fact.get("side_known") else "a shot came"
+        return [
+            f"{span.capitalize()}, {shooter} from {fact['value']} m out, where the posts were "
+            f"{fact['angle_deg']} degrees apart."
+        ]
+    if metric in ("shots_all", "shots"):
+        n, k = fact["value"], fact["inside_box"]
+        lead = f"There were {_plural(n, 'shot')} {span}" if metric == "shots_all" else (
+            f"{club} had {_plural(n, 'shot')} {span}"
+        )
+        if not fact.get("inside_exact", True):  # a shot near the area's line: the inside count is unsure
+            return [f"{lead}."]
+        who = "players took" if metric == "shots_all" else "took"
+        return [f"{lead}, and {who} {_plural(k, 'shot')} from inside the penalty area."]
     if metric == "possession_share":
         if fact.get("value") is None:
             return []

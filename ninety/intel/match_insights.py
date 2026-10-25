@@ -29,6 +29,7 @@ from ninety.intel import (
     pass_options,
     roles,
     shape,
+    shot_map,
     style,
 )
 from ninety.intel import team_stats as team_stats_mod
@@ -107,6 +108,7 @@ class MatchInsights:
         # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
         facts["possession"] = ball_share.possession_rows(events)
         facts["territory"] = ball_share.territory_rows(f.frames)
+        facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = [
             {
@@ -126,7 +128,7 @@ class MatchInsights:
         ]
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
                 for k in ("passer", "receiver"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
@@ -302,6 +304,19 @@ class MatchInsights:
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Where the ball was over the minutes: each club's share with it in its attacking third."""
         return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
+
+    def shots(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The shot map over the minutes: each shot's spot, its distance from the goal and the angle
+        the posts make there, nearest first; and each club's shots and those from inside the penalty area."""
+        team = self.team(club)
+        rows = self._rows("shot", minute_from, minute_to, club)
+        top = sorted(rows, key=lambda r: (r["value"], r["t"]))[:MAX_FACTS]
+        clubs = self.fixture.clubs
+        got = shot_map.summary(self.facts.get("shot", ()), minute_from, minute_to)
+        summary = [
+            {**r, "club": clubs.get(t)} for t, r in got.items() if t == "all" or team in (None, t)
+        ]
+        return {"facts": top, "summary": summary}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)
