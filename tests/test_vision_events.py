@@ -213,8 +213,10 @@ def test_a_detected_event_carries_its_holders_side_confidence():
 
 
 def test_out_of_play_names_nobody():
+    # The ball comes to rest over the goal line wide of the post (a ball at rest between the posts
+    # is a goal: ninety/vision/outcomes.py).
     events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
-        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
+        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 50.0)) for f in range(21, 30)])
     outs = [e for e in events if e["type"] == "out_of_play"]
     assert outs and all(e["player"] is None for e in outs)
 
@@ -233,7 +235,7 @@ def test_a_ball_rolling_past_a_player_is_not_his():
     assert ev.CARRY_MPS < 12.0
 
 
-def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_away_is_not():
+def test_a_strike_toward_the_goal_home_attacks_is_home_s_shot_whatever_the_kit_says():
     def scene(colour):
         rows, bx = [], 90.3
         for f in range(40):
@@ -241,10 +243,14 @@ def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_
                 bx += 25.0 / FPS
             rows.append(row(f, crowd(f) + [(90.0, 34.0, colour)], (bx, 34.0)))
         return rows
-    home = [e["type"] for e in ev.detect(scene(BLUE))[0]]
-    away = [e["type"] for e in ev.detect(scene(RED))[0]]
-    assert home == ["shot", "out_of_play"]  # it goes on over the goal line
-    assert "shot" not in away and away[0] == "pass"
+    # Amendment 3: a shot is the side's that attacks the goal it heads for (home attacks x = 105), so
+    # a side read wrong does not make it a pass; where the kit says otherwise its side is unsure.
+    home = ev.detect(scene(BLUE))[0]
+    away = ev.detect(scene(RED))[0]
+    assert [e["type"] for e in home] == ["shot", "out_of_play"]  # it goes on over the goal line
+    assert [e["type"] for e in away] == ["shot", "out_of_play"]
+    assert home[0]["team"] == away[0]["team"] == "home"
+    assert home[0]["team_confidence"] is not None and away[0]["team_confidence"] is None
 
 
 def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not():

@@ -105,6 +105,8 @@ def test_the_phone_draws_the_bundles_tracked_radar_named_by_the_clips_codes(brow
     assert page.get_attribute("#map", "data-from") == "bundle"
     assert page.get_attribute("#map", "data-source") == "tracked"
     assert page.inner_text(".band .home-name") == "Crowmere"  # the clubs on the clip's scorebug
+    assert page.get_attribute("#goals-home", "aria-label") == "Crowmere goals"
+    assert page.get_attribute("#goals-away", "aria-label") == "Dunhollow goals"
     assert page.inner_text(".band .away-name") == "Dunhollow"
     state = page.evaluate(f"window.ninetyPhone.radarAt({1505 / FPS})")
     assert {p["id"] for p in state["players"]} == {"h-t1", "h-t2", "h-t4", "a-t3"}
@@ -558,7 +560,7 @@ def test_live_shows_just_now_and_match_stats_from_the_bundle_only(browser, cards
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert "Crowmere had three players" in page.inner_text("#just-now")  # the newest card up to the clock
     # No match.json in this bundle: no stats are shown rather than any invented.
-    assert page.locator("#live-stats").is_hidden() and page.locator("#scorers").is_hidden()
+    assert page.locator("#live-stats").is_hidden() and page.locator(".side-goal").count() == 0
     assert not errors
 
 
@@ -805,12 +807,12 @@ def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip
     assert not errors
 
 
-def test_the_score_band_says_no_goals_yet_on_one_line_until_a_goal(browser, site):  # noqa: F811
+def test_the_band_is_crests_and_names_with_no_score_and_no_scorer_lines_before_a_goal(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
-    page.wait_for_selector("#scorers:not([hidden])")
+    page.wait_for_selector(".band .home-name")
     goals = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["goals"]
-    if not [g for g in goals if g["t"] <= 1505 / FPS and g.get("team")]:
-        assert page.inner_text("#scorers") == "No goals yet"
+    assert not [g for g in goals if g["t"] <= 1505 / FPS]
+    assert page.locator(".side-goal").count() == 0 and "%" not in page.inner_text(".band")
     assert page.locator("#teams-note").is_hidden()  # the clip names both clubs
     assert not errors
 
@@ -831,6 +833,7 @@ def test_a_bundle_that_names_no_clubs_shows_neutral_sides_and_says_teams_are_not
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("#teams-note:not([hidden])")
     assert page.inner_text(".band .home-name") == "Home" and page.inner_text(".band .away-name") == "Away"
+    assert page.get_attribute("#goals-home", "aria-label") == "Home goals"  # the clubs on screen
     assert "London" not in page.inner_text(".band") and "Lisbon" not in page.inner_text(".band")
     assert not errors
 
@@ -897,8 +900,9 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
     page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
     page.reload()
     page.wait_for_selector("body[data-state=live]")
-    page.wait_for_function("document.querySelector('#scorers') && !document.querySelector('#scorers').hidden")
-    assert page.inner_text("#scorers") == "Goal 2′"
+    page.wait_for_selector("#goals-unsure .side-goal")
+    assert page.inner_text("#goals-unsure .side-goal") == "Goal 2′"  # under the clock, under no club
+    assert page.locator("#goals-home .side-goal, #goals-away .side-goal").count() == 0
     assert not errors
 
 
@@ -1225,3 +1229,79 @@ def test_make_it_yours_works_when_the_browser_refuses_storage(browser, site):  #
     page.wait_for_function("document.body.dataset.tab === 'insights'")
     assert not errors
     ctx.close()
+
+
+# How a scoreline or a goal count is written: "2 – 1", "2-1", "2 · 1", "2:1" (a clock is m:ss, so a
+# colon needs one digit after it), "3 goals", or the words of a score.
+SCORELINE = re.compile(r"\b\d{1,2}\s*[-–·]\s*\d{1,2}\b|\b\d{1,2}:\d\b|\b\d+ goals?\b"
+                       r"|\b(ahead|level|leads|leading)\b", re.I)
+
+
+def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, site):  # noqa: F811
+    """Kian, Oct 25: vision finds 2 of the demo's 3 goals, so a score counted from them would
+    contradict the broadcast's scorebug. Three detected goals here (two home, one away): no text and
+    no accessible name on any screen counts them."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def goals(route):  # e2 (home, told surely) went in, and two goals more
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"},
+                             {"t": 61.9, "team": "home", "event": "e2"},
+                             {"t": 62.4, "team": "away", "event": "e4"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal"} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", goals)
+    ctx.route("**/bundle/events.jsonl", goals)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#goals-home .side-goal")
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-home .side-goal").endswith(" 2′")  # under the club's crest
+    assert "%" not in page.inner_text(".band")  # the confidence lives behind a tap
+    page.click("#goals-home .side-goal")
+    page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('% sure')")
+    assert "The score is the broadcast's" in page.inner_text("#how-body")
+    page.click("#close-how")
+    assert page.locator("#score-home, #score-away, .mh, .ma, .tally").count() == 0
+    # Every screen's text and every accessible name, the shot map's and Live's shot card's among them.
+    js = """() => [document.body.innerText,
+        ...[...document.querySelectorAll('[aria-label]')].map((el) => el.getAttribute('aria-label')),
+        ...[...document.querySelectorAll('.sr-only')].map((el) => el.textContent)]"""
+    screens = (("radar", "pitch"), ("radar", "stats"), ("radar", "players"),
+               ("insights", None), ("ask", None))
+    for tab, pane in screens:
+        page.click(f"#tab-button-{tab}")
+        if pane:
+            page.click(f"#lt-{pane}")
+        page.wait_for_timeout(300)
+        for text in page.evaluate(js):
+            hit = SCORELINE.search(text or "")
+            assert not hit, (tab, pane, hit.group(0), (text or "")[max(0, hit.start() - 60):hit.end() + 60])
+    page.click("#tab-button-insights")
+    assert page.locator("#insights .play.goal").count() >= 1  # goals are in Story, with no running score
+    assert not errors
+    ctx.close()
+
+
+def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: F811
+    """#350 sends no score metric; should one come, the phone still prints no count from it."""
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#tab-button-ask")
+    page.evaluate("""() => window.ninetyPhone.answer("What's the score?", {status: "verified",
+      text: "The broadcast's scorebug shows the score; vision does not keep one.", metric: "score", value: 2,
+      unit: "goals", evidence: ["score:all"], t_from: 0, t_to: 60})""")
+    page.wait_for_selector("#answers .answer:not(.pending) .how")
+    page.locator("#answers .how").first.click()  # How we know: What and Over
+    page.wait_for_selector("#how-body .evidence dd")
+    what = page.locator("#how-body .evidence dd").first.text_content()
+    assert not re.search(r"\d", what), what
+    assert not errors
+
