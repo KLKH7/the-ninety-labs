@@ -393,3 +393,15 @@ def test_the_engine_gives_possession_changes_at_restarts_and_in_play(seed7):
     # and every restart one shares its moment with a restart of its own side.
     phase = score(seed7.events, [])["time_only"]["per_type"]["possession_change"]["by_phase"]
     assert phase["open_play"]["true"] > 0 and phase["at_restart"]["true"] > 0
+
+
+def test_a_tackles_outcome_is_graded_on_the_matched_pairs_whose_true_outcome_is_known():
+    truth = [ev("t1", 1.0, "tackle") | {"outcome": "success"}, ev("t2", 3.0, "tackle") | {"outcome": "fail"},
+             ev("t3", 5.0, "tackle") | {"outcome": None}, ev("t4", 7.0, "tackle") | {"outcome": "success"}]
+    detected = [det("d1", 1.1, "tackle") | {"outcome": "success"},
+                det("d2", 3.1, "tackle") | {"outcome": "success"},
+                det("d3", 5.1, "tackle") | {"outcome": "fail"}]
+    graded = score(truth, detected)["time_only"]["per_type"]["tackle"]
+    # t3's outcome is unknown and t4 is not matched: two pairs graded, one right.
+    assert graded["outcome"] == {"right": 1, "of": 2, "accuracy": 0.5}
+    assert "outcome" not in score([ev("p", 1.0)], [det("q", 1.0)])["time_only"]["per_type"]["pass"]

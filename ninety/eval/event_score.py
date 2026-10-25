@@ -44,6 +44,9 @@ LENIENT_M = 2.0
 PLAYER_PLACED = {"pressure", "kickoff"}
 FOULED_PLACED = {"foul"}  # placed where the fouled player was (engine.foul): the other side
 NOT_PLACED = {"substitution"}
+# Kinds whose outcome the detector also claims: graded on matched pairs whose true outcome is known
+# (a tackle's stays null when nobody controlled the ball before it was dead; docs/eval/tackle-plan.md).
+OUTCOME_GRADED = {"tackle"}
 
 
 def in_a_cut(k: int, cuts: list[dict] | None) -> bool:
@@ -208,6 +211,13 @@ def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
         }
         if kind == "possession_change":
             per_type[kind]["by_phase"] = by_phase(truth, pairs)
+        if kind in OUTCOME_GRADED:
+            t_by, d_by = {e["id"]: e for e in truth}, {e["id"]: e for e in detected}
+            known = [(t_by[p["truth_id"]], d_by[p["detected_id"]]) for p in matched
+                     if t_by[p["truth_id"]].get("outcome") is not None]
+            right = sum(1 for t, d in known if t["outcome"] == d.get("outcome"))
+            per_type[kind]["outcome"] = {"right": right, "of": len(known),
+                                         "accuracy": ratio(right, len(known))}
     return {"per_type": per_type, "pairs": pairs}
 
 

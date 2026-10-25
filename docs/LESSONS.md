@@ -2997,3 +2997,16 @@ short and actionable. This file is public: no research sources, product names or
   `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
   shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
   messages (mutant runs, #341 and its follow-up).
+
+### 254. A rule copied from the engine is read from the engine's line, not from a plan's paraphrase
+- **What happened:** the detection-gaps plan described the engine's pressure event as "at most once
+  per 8 s for each presser". The engine's line keys its memory by the pressing side
+  (`self.pressed[opp]`, `opp` a team), so a second presser of the same side within 8 s is never
+  written. A detector built from the plan would have told pressures the answer key cannot hold, and
+  every one would have scored as false.
+- **Rule:** when a detector copies an engine definition, its plan quotes the engine's code (the
+  condition, what its memory is keyed by, strict or not), and a test reads the engine's own line or
+  constant, so a change on either side fails.
+- **Check:** `tests/test_vision_events.py::test_every_copied_engine_value_is_the_engines` finds the
+  engine's pressure condition with the detector's two values in it, and
+  `::test_the_eight_seconds_are_the_sides_not_the_pressers` fails when the memory is keyed by presser.

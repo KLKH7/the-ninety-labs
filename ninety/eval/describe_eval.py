@@ -50,6 +50,8 @@ CLIPS = {
 # The report grades the detector that made the fixture: v3 (with possession changes), not v2, whose
 # ids are another order's (lesson 243).
 EVENT_REPORT = ROOT / "docs" / "eval" / "event-report-v3.json"
+# The kinds the detector wrote when EVENT_REPORT was graded (ninety/eval/possession_report.py, #289).
+REPORT_KINDS = ("pass", "shot", "out_of_play", "possession_change")
 MIN_FOR_P95 = 20  # nearest rank: below 20 values a p95 is the maximum
 
 
@@ -73,16 +75,19 @@ def real_detections(seed: int = 900001) -> set[str] | None:
     clip = next((c for c in report["clips"] if c["seed"] == seed), None)
     if clip is None:
         return None
-    # The report names detected events by id: trust an id only while it is still the same event in
-    # the committed fixture (same type), or a regenerated fixture
-    # would be graded by another event's match.
-    fixture = {e["id"]: e for e in detected.load(detected.FIXTURES / f"detected-seed{seed}.jsonl")}
+    # The report names detected events by id, an id being an event's place in the detector's list
+    # (lesson 243). It graded a detector that wrote only REPORT_KINDS, so its ids are those events'
+    # places among themselves; kinds added since (pressure) are left out to number them the same.
+    # An id is trusted only while it is still the same event (same type), or a regenerated fixture
+    # would be graded by another event's match. The ids returned are the fixture's own.
+    rows = detected.load(detected.FIXTURES / f"detected-seed{seed}.jsonl")
+    fixture = {f"v{n:05d}": e for n, e in enumerate((e for e in rows if e["type"] in REPORT_KINDS), start=1)}
     out = set()
     for p in clip["events"]["time_only"]["pairs"]:
         e = fixture.get(p["detected_id"])
         if e is None or e["type"] != p["type"]:
             raise ValueError(f"{EVENT_REPORT.name}: {p['detected_id']} is not the event it matched")
-        out.add(p["detected_id"])
+        out.add(e["id"])
     return out
 
 

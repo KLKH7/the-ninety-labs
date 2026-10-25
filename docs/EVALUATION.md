@@ -452,8 +452,28 @@ turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses th
 over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
 drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
 does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
-the true camera. Pressure is not detected, nor possession changes at restarts; who acted is, as a track
+the true camera. Possession changes at restarts are not detected (pressure is, below, measured on validation stand-ins only); who acted is, as a track
 (below), never as a shirt number.
+
+### Interceptions, pressure and tackles (development only)
+
+Each is built in `ninety/vision/events.py` from the spells, as its plan fixed before any run
+([interception-plan.md](eval/interception-plan.md), [pressure-plan.md](eval/pressure-plan.md),
+[tackle-plan.md](eval/tackle-plan.md)). No detector checkpoint was on the machine, so they were
+measured on validation only, on **stand-in observations** built from the answer key (true places
+plus 0.188 m of noise per frame, a kit colour per side): the possession set's 30 validation
+windows, and its 4 rendered validation clips with only what the broadcast shows
+([turnovers-dev.json](eval/turnovers-dev.json)). These are not vision numbers and not test numbers.
+
+- **Pressure** met its bar, read (amendment 1) with the noise split equally between a clip offset, a
+  shift per frame and each object's own: strict recall 37 of 55, precision 37 of 52. Written by default.
+  With all noise independent it was 28 of 55, with all of it one offset 40 of 55.
+- **Interceptions** missed it (precision 12 of 60): built, not written. The pass's aim is not in the
+  picture; its stand-in (where the ball, struck at the speed seen, slows to 6 m/s) disagrees with the
+  engine on 133 of 477 validation passes an opponent controlled, even with a perfect ball.
+- **Tackles** missed it (recall 19 of 44, precision 19 of 31): built, not written. Their strike test
+  reads the ball's speed relative to the holder (tackle plan, amendment 2); on the pitch, a running
+  carrier's ball already nears a pass's speed, and recall was 5 of 44.
 
 ### Who: team and track
 
