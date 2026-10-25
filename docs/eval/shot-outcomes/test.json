@@ -42,15 +42,52 @@
   "seed910012-t126191",
   "seed910012-t133387",
   "seed910013-t000406",
-  "seed910013-t005077"
+  "seed910013-t005077",
+  "seed910013-t018517",
+  "seed910013-t025352",
+  "seed910013-t028688",
+  "seed910013-t038825",
+  "seed910013-t039453",
+  "seed910013-t040844",
+  "seed910013-t053581",
+  "seed910013-t074894",
+  "seed910013-t119511",
+  "seed910014-t002087",
+  "seed910014-t005291",
+  "seed910014-t010992",
+  "seed910014-t011273",
+  "seed910014-t026062",
+  "seed910014-t029828",
+  "seed910014-t032745",
+  "seed910014-t033124",
+  "seed910014-t065869",
+  "seed910015-t004346",
+  "seed910015-t005590",
+  "seed910015-t013793",
+  "seed910015-t037152",
+  "seed910015-t052305",
+  "seed910015-t056188",
+  "seed910015-t061204",
+  "seed910015-t062729",
+  "seed910015-t103242",
+  "seed910015-t132176",
+  "seed910016-t002192",
+  "seed910016-t006564",
+  "seed910016-t022720",
+  "seed910016-t030646",
+  "seed910016-t036247",
+  "seed910016-t047226",
+  "seed910016-t064592",
+  "seed910016-t082365",
+  "seed910016-t095458"
  ],
  "gate": 0.5,
  "by": {
   "gated": {
    "goal": {
-    "tp": 6,
-    "fp": 2,
-    "fn": 2,
+    "tp": 10,
+    "fp": 3,
+    "fn": 5,
     "failures": [
      {
       "clip": "seed910009-t034186",
@@ -81,23 +118,52 @@
        "t": 461.24,
        "team": "away"
       }
+     },
+     {
+      "clip": "seed910014-t065869",
+      "missed": {
+       "t": 2638.92,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t056188",
+      "missed": {
+       "t": 2252.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "false": {
+       "t": 4133.16,
+       "team": "home",
+       "confidence": 0.86
+      }
+     },
+     {
+      "clip": "seed910015-t132176",
+      "missed": {
+       "t": 5290.48,
+       "team": "away"
+      }
      }
     ],
-    "precision": 0.75,
-    "recall": 0.75,
+    "precision": 0.769,
+    "recall": 0.667,
     "precision_95": [
-     0.41,
-     0.93
+     0.5,
+     0.92
     ],
     "recall_95": [
-     0.41,
-     0.93
+     0.42,
+     0.85
     ]
    },
    "save": {
-    "tp": 1,
+    "tp": 2,
     "fp": 0,
-    "fn": 23,
+    "fn": 47,
     "failures": [
      {
       "clip": "seed910009-t000288",
@@ -259,25 +325,193 @@
        "t": 5338.48,
        "team": "away"
       }
+     },
+     {
+      "clip": "seed910013-t025352",
+      "missed": {
+       "t": 1017.08,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "missed": {
+       "t": 1556.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t039453",
+      "missed": {
+       "t": 1581.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t040844",
+      "missed": {
+       "t": 1636.76,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t053581",
+      "missed": {
+       "t": 2146.24,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t074894",
+      "missed": {
+       "t": 2998.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t002087",
+      "missed": {
+       "t": 86.48,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t005291",
+      "missed": {
+       "t": 214.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t010992",
+      "missed": {
+       "t": 442.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t011273",
+      "missed": {
+       "t": 453.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t029828",
+      "missed": {
+       "t": 1196.12,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t032745",
+      "missed": {
+       "t": 1312.8,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t013793",
+      "missed": {
+       "t": 554.72,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t037152",
+      "missed": {
+       "t": 1489.08,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t052305",
+      "missed": {
+       "t": 2095.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t061204",
+      "missed": {
+       "t": 2451.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910015-t062729",
+      "missed": {
+       "t": 2512.16,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "missed": {
+       "t": 4132.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t002192",
+      "missed": {
+       "t": 90.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t030646",
+      "missed": {
+       "t": 1228.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t036247",
+      "missed": {
+       "t": 1452.88,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t047226",
+      "missed": {
+       "t": 1892.04,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t082365",
+      "missed": {
+       "t": 3297.6,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t095458",
+      "missed": {
+       "t": 3821.32,
+       "team": "home"
+      }
      }
     ],
     "precision": 1.0,
-    "recall": 0.042,
+    "recall": 0.041,
     "precision_95": [
-     0.21,
+     0.34,
      1.0
     ],
     "recall_95": [
      0.01,
-     0.2
+     0.14
     ]
    }
   },
   "all": {
    "goal": {
-    "tp": 6,
-    "fp": 2,
-    "fn": 2,
+    "tp": 10,
+    "fp": 3,
+    "fn": 5,
     "failures": [
      {
       "clip": "seed910009-t034186",
@@ -308,23 +542,52 @@
        "t": 461.24,
        "team": "away"
       }
+     },
+     {
+      "clip": "seed910014-t065869",
+      "missed": {
+       "t": 2638.92,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t056188",
+      "missed": {
+       "t": 2252.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "false": {
+       "t": 4133.16,
+       "team": "home",
+       "confidence": 0.86
+      }
+     },
+     {
+      "clip": "seed910015-t132176",
+      "missed": {
+       "t": 5290.48,
+       "team": "away"
+      }
      }
     ],
-    "precision": 0.75,
-    "recall": 0.75,
+    "precision": 0.769,
+    "recall": 0.667,
     "precision_95": [
-     0.41,
-     0.93
+     0.5,
+     0.92
     ],
     "recall_95": [
-     0.41,
-     0.93
+     0.42,
+     0.85
     ]
    },
    "save": {
-    "tp": 1,
-    "fp": 0,
-    "fn": 23,
+    "tp": 2,
+    "fp": 1,
+    "fn": 47,
     "failures": [
      {
       "clip": "seed910009-t000288",
@@ -486,17 +749,193 @@
        "t": 5338.48,
        "team": "away"
       }
+     },
+     {
+      "clip": "seed910013-t025352",
+      "missed": {
+       "t": 1017.08,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "missed": {
+       "t": 1556.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "false": {
+       "t": 1562.24,
+       "team": "home",
+       "confidence": 0.368
+      }
+     },
+     {
+      "clip": "seed910013-t039453",
+      "missed": {
+       "t": 1581.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t040844",
+      "missed": {
+       "t": 1636.76,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t053581",
+      "missed": {
+       "t": 2146.24,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t074894",
+      "missed": {
+       "t": 2998.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t002087",
+      "missed": {
+       "t": 86.48,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t005291",
+      "missed": {
+       "t": 214.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t010992",
+      "missed": {
+       "t": 442.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t011273",
+      "missed": {
+       "t": 453.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t029828",
+      "missed": {
+       "t": 1196.12,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t032745",
+      "missed": {
+       "t": 1312.8,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t013793",
+      "missed": {
+       "t": 554.72,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t037152",
+      "missed": {
+       "t": 1489.08,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t052305",
+      "missed": {
+       "t": 2095.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t061204",
+      "missed": {
+       "t": 2451.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910015-t062729",
+      "missed": {
+       "t": 2512.16,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "missed": {
+       "t": 4132.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t002192",
+      "missed": {
+       "t": 90.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t030646",
+      "missed": {
+       "t": 1228.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t036247",
+      "missed": {
+       "t": 1452.88,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t047226",
+      "missed": {
+       "t": 1892.04,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t082365",
+      "missed": {
+       "t": 3297.6,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t095458",
+      "missed": {
+       "t": 3821.32,
+       "team": "home"
+      }
      }
     ],
-    "precision": 1.0,
-    "recall": 0.042,
+    "precision": 0.667,
+    "recall": 0.041,
     "precision_95": [
      0.21,
-     1.0
+     0.94
     ],
     "recall_95": [
      0.01,
-     0.2
+     0.14
     ]
    }
   }

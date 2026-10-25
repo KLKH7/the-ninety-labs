@@ -9,22 +9,30 @@ fact-checker's `MIN_CONFIDENCE` (gated and ungated agree on both splits).
 
 **Order, stated:** #271 merged into main (22:28Z, Oct 25) before this measurement; the rules were
 pre-registered in the plan before each score, and nothing was changed between the validation read
-and the test score. Amendment 6 (a keeper read by the goal, not the kit) was tried on validation
+and the test score (the one early look at 42 test clips, below, changed nothing either). Amendment 6 (a keeper read by the goal, not the kit) was tried on validation
 after the re-score, showed no gain and one false save, and was not adopted (#363, closed).
 
-## Test: scored once, 42 of 79 clips
+## Test: all 79 clips
 
-The pod stopped at its fixed time with 42 of the 79 test clips run (seeds 910009 to 910012 and part
-of 910013). By the rule written before any test clip was rendered, the score covers every clip that
-came back and no other; the 37 missing are listed in [test-missing.txt](test-missing.txt).
+The pod ran all 79 test clips (none failed) and only their observations and detected events came back
+(`NO_SCORE=1`: no answer key left it). Scored once over all 79, at 8ac10a91, after the copy-back was
+confirmed complete.
 
 | | Found | False | Precision (95%) | Recall (95%) |
 |---|---|---|---|---|
-| Goals | 6 of 8 | 2 | 0.75 (0.41 to 0.93) | 0.75 (0.41 to 0.93) |
-| Saves | 1 of 24 | 0 | 1.0 (0.21 to 1.0) | 0.04 (0.01 to 0.20) |
+| Goals | 10 of 15 | 3 | 0.77 (0.50 to 0.92) | 0.67 (0.42 to 0.85) |
+| Saves | 2 of 49 | 0 | 1.0 (0.34 to 1.0) | 0.04 (0.01 to 0.14) |
 
-Of the 2 false goals, one is a true goal timed 1.2 s from the truth (outside the 1 s window: it
-counts as one miss and one false), and one is false. [test.json](test.json).
+Of the 3 false goals, one is a true goal timed 1.2 s from the truth (outside the 1 s window: one miss
+and one false), and two are false. Goal confidence: the 10 right ones 0.815 to 0.89, the 3 false 0.806,
+0.86 and 0.862: it does not separate them. Ungated, one false save is added. [test.json](test.json).
+
+**An early look, disclosed.** At 23:47Z, before the copy-back was complete, the test was scored on the
+42 clips then on the Mac (the code already frozen at 8ac10a91, nothing changed after it): goals 6 of 8,
+2 false (precision and recall 0.75, 95% 0.41 to 0.93); saves 1 of 24, 0 false (recall 0.04, 95% 0.01 to
+0.20). It was premature (the pod was still copying back, lesson 257), so it is not the result.
+[test-early-42.json](test-early-42.json), the 37 then missing in
+[test-early-42-missing.txt](test-early-42-missing.txt).
 
 ## Validation (80 clips, 16 goals, 50 saves)
 

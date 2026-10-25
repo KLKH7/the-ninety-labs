@@ -3096,3 +3096,14 @@ short and actionable. This file is public: no research sources, product names or
   checked against the rule's own wording, and a fix that a re-score shows does nothing is not merged.
 - **Check:** [docs/eval/shot-outcomes/RESULT.md](eval/shot-outcomes/RESULT.md) states the order
   (merged 22:28Z before the score); #363 (amendment 6) closed with its validation numbers.
+
+### 257. A test split is scored only after its copy-back is confirmed complete
+- **What happened:** the shot-outcome test clips were copied back from the pod as each finished. The
+  test was scored at 23:47Z on the 42 then on the Mac, read as a pod that had stopped at its cap; it was
+  still running, and all 79 arrived minutes later. The rule for a partly run split covers clips that
+  never come back, not clips still on their way, so the 42-clip score was an early look, not the
+  result. The code was already frozen, so it changed nothing, but it is disclosed
+  (docs/eval/shot-outcomes/RESULT.md).
+- **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
+  complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
+- **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
