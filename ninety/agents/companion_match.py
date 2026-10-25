@@ -21,7 +21,7 @@ from ninety.agents import referee
 from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
-from ninety.intel.teamsheet import POSITIONS
+from ninety.intel.teamsheet import POSITIONS, short_name
 
 
 def companion_match_agent(client):
@@ -53,8 +53,31 @@ MATCH_TOOLS = (
     "lineup",
     "possession",
     "territory",
+    "shots",
+    "passing",
+    "physical",
+    "halves",
+    "key_moments",
+    "score",
+    "set_pieces",
 )
 TOOL_HELP = {
+    "set_pieces": "corners, goal kicks, penalties, throw-ins and free kicks: the total of each, and each "
+    "club's (unsure for throw-ins and free kicks while the video could not tell whose)",
+    "score": "the score after minute_to (unsure while a goal's side is in doubt), each goal with its scorer "
+    "and the pass that made it (an assist), and each club's goalkeeper's saves",
+    "halves": "the first half against the second (Law 7's 45 minutes): where the ball was, the shots and "
+    "what the passes did in each",
+    "key_moments": "the key moments, latest first: goals, shots, regains that led to a shot, one-twos and "
+    "the biggest line breaks",
+    "physical": "the zone each named player was in most, of the footage the video named him in; a "
+    "player's distance, top speed and sprints are not available yet",
+    "passing": "what the passes did: progressive passes, passes into the final third, long balls and "
+    "passes intercepted, each club's count (unsure while the video could not tell whose some were) and "
+    "the total; and the pairs of named players who passed to each other most",
+    "shots": "the shot map: each shot's spot, metres from goal and the angle the posts make there, "
+    "nearest first; each club's shots and those from inside the penalty area. How a shot ended is not "
+    "known yet",
     "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
     "on the ball); "
     "unsure when the video could not tell whose some passes were",
@@ -85,6 +108,16 @@ TOOL_WORDS = (
         "referee",
         r"\b(?:offside|onside|referee|ref|var|foul\w*|hand ?ball|penalty|pen|rules?|law|booked|booking"
         r"|yellow|red card|sent off|dive|dived)\b",
+    ),
+    (
+        "set_pieces",
+        r"\b(?:corners?|free[- ]kicks?|throw[- ]ins?|goal[- ]kicks?|penalties|how many penalt\w*"
+        r"|set[- ]pieces?)\b",
+    ),
+    (
+        "score",
+        r"\b(?:what(?:'s| is) the score|the score|scoreline|who scored|scorers?|assists?|assisted|saves?"
+        r"|how many goals|who(?:'s| is) (?:winning|ahead)|are .{1,30} (?:winning|level))\b",
     ),
     ("goal_build_up", r"\b(?:goals?|scor\w*|equali[sz]\w*|that finish)\b"),
     (
@@ -122,6 +155,28 @@ TOOL_WORDS = (
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
     ),
+    (
+        "halves",
+        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|since the break|after the break|half[- ]time"
+        r"|first half (?:and|v|vs|against) (?:the )?second)\b",
+    ),
+    (
+        "key_moments",
+        r"\b(?:key moments?|highlights?|what (?:have|did) i miss\w*|what happened|catch me up|recap"
+        r"|timeline)\b",
+    ),
+    (
+        "physical",
+        r"\b(?:distance|covered|how far|sprint\w*|fastest|top speed|how fast|heat ?map|work rate|tired"
+        r"|ran the most|run the most|running|furthest|farthest|kilomet\w*|km|quickest|stamina|fitness"
+        r"|where (?:has|does|did|is) [\w' -]+ (?:been )?play\w*)\b",
+    ),
+    (
+        "passing",
+        r"\b(?:progressive|into the final third|final[- ]third entr\w*|intercept\w*|pass network"
+        r"|who passes to whom|link(?:ing)? up|combin\w*|partnership|passed to each other)\b",
+    ),
+    ("shots", r"\b(?:shots?|shooting|shoot|efforts? on goal|chances?|attempts?)\b"),
     (
         "possession",
         r"\b(?:possession|more of the ball|keep(?:ing|s)? the ball|have the ball more|dominat\w*)\b",
@@ -277,16 +332,32 @@ def plan_prompt(question: Question, insights, history=()) -> str:
     )
 
 
-def answer_prompt(question: Question, facts: list[dict], history=()) -> str:
+def answer_prompt(question: Question, facts: list[dict], history=(), insights=None) -> str:
+    """The answer step's message. Each fact carries `say_as`, code's own sentences for it that the
+    fact-checker passes, for the model to word its answer from rather than paraphrase."""
+    known = {f["id"]: f for f in facts}
     return json.dumps(
         {
             "step": "answer",
             "question": question.text,
             "history": _history(history),
-            "facts": [_for_prompt(f) for f in facts],
+            "facts": [{**_for_prompt(f), "say_as": _say_as(f, known, insights)} for f in facts],
         },
         separators=(",", ":"),
     )
+
+
+NOT_CHOSEN = "not one of the checked sentences of the facts it cites"
+
+
+def _say_as(fact: dict, known: dict, insights) -> list[str]:
+    if insights is None:
+        return []
+    try:
+        texts = code_texts({**fact, "clubs": fact.get("clubs") or insights.fixture.clubs})
+    except (KeyError, TypeError, ValueError, StopIteration):  # a fact code has no sentence for
+        return []
+    return [t for t in texts if _verify(Claim(t, [fact["id"]]), known, insights).ok]
 
 
 # When a question names a stretch of the match ("in the first half", "the last ten minutes"), the
@@ -341,6 +412,41 @@ FOLLOW_UPS = {
     "team_shape": (
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
+        "How are {club} playing?",
+    ),
+    "set_pieces": (
+        "How many shots have there been?",
+        "Where has the ball been?",
+        "What's the score?",
+    ),
+    "score": (
+        "Why did {club} score?",
+        "How many shots have there been?",
+        "What have I missed?",
+    ),
+    "halves": (
+        "Where has the ball been?",
+        "How many shots have there been?",
+        "Which passes cut through?",
+    ),
+    "key_moments": (
+        "Which passes cut through?",
+        "How many shots have there been?",
+        "Where has the ball been?",
+    ),
+    "physical": (
+        "Who has been the best player?",
+        "How quickly do {club} win the ball back?",
+        "Where has the ball been?",
+    ),
+    "passing": (
+        "Which passes cut through?",
+        "How many shots have there been?",
+        "How are {club} playing?",
+    ),
+    "shots": (
+        "Where has the ball been?",
+        "Which passes cut through?",
         "How are {club} playing?",
     ),
     "possession": (
@@ -558,7 +664,7 @@ def _who(f: dict, insights) -> str | None:
         return f.get("name")
     # passer_is / player_is hold a name only past the role gate, else the role ("London Athletic's
     # left-back"): the headline says what the sentence may say, with the club's short name.
-    who = f.get("player_is") or f.get("passer_is")
+    who = f.get("scorer_is") or f.get("player_is") or f.get("passer_is")
     if not who:
         return None
     for club in insights.fixture.clubs.values():
@@ -573,6 +679,14 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     unit for how many or how fast, the place for where; the supporting number stays in the sentence.
     A question of another kind is headed by the lead number, or by nothing."""
     kind = question_kind(question)
+    sc = next((f for f in cited if f.get("metric") == "score" and f.get("confident")), None)
+    if sc is not None and kind != "who":  # "what's the score?": the score itself
+        fx = insights.fixture
+        return f"{short_name(fx.home_code)} {sc['home']}, {short_name(fx.away_code)} {sc['away']}"
+    goal = next((f for f in cited if f.get("kind") == "goal" and f.get("club") and f.get("minute")), None)
+    recap = {"key_moments", "goal_build_up"} & set(route(question))
+    if goal is not None and kind != "who" and recap:  # a recap or a goal question leads with the goal
+        return f"Goal: {_short(insights, goal['club'])}, minute {goal['minute']}"
     if kind == "who":
         got = next((h for f in cited if (h := _who(f, insights))), None)
         got = got or next((_short(insights, f["club"]) for f in cited if f.get("club")), None)
@@ -602,6 +716,16 @@ def _num(v: float) -> str:
 
 def _plural(n, word: str) -> str:
     return f"{_num(n)} {word}" + ("" if n == 1 else "es" if word.endswith("s") else "s")
+
+
+# What a pass kind is called, and the verb for a club's count (ninety/intel/passing.py).
+PASS_WORDS = {
+    "progressive": ("progressive passes", "completed"),
+    "final_third_entry": ("passes into the final third", "completed"),
+    "long": ("long passes", "played"),
+    "intercepted": ("passes intercepted", "had"),
+}
+PASS_WORDS.update({f"{k}_all": v for k, v in list(PASS_WORDS.items())})
 
 
 def code_texts(fact: dict) -> list[str]:
@@ -706,6 +830,48 @@ def code_texts(fact: dict) -> list[str]:
             f"{span.capitalize()}, {club} won the ball back and had a shot "
             f"{_num(fact['value'])} seconds later."
         ]
+    if metric == "shot_distance_m":
+        shooter = f"{who} shot" if fact.get("side_known") else "a shot came"
+        return [
+            f"{span.capitalize()}, {shooter} from {fact['value']} m out, where the posts were "
+            f"{fact['angle_deg']} degrees apart."
+        ]
+    if metric in ("shots_all", "shots"):
+        n, k = fact["value"], fact["inside_box"]
+        lead = f"There were {_plural(n, 'shot')} {span}" if metric == "shots_all" else (
+            f"{club} had {_plural(n, 'shot')} {span}"
+        )
+        if not fact.get("inside_exact", True):  # a shot near the area's line: the inside count is unsure
+            return [f"{lead}."]
+        who = "players took" if metric == "shots_all" else "took"
+        return [f"{lead}, and {who} {_plural(k, 'shot')} from inside the penalty area."]
+    if metric == "player_km":
+        label = f", give or take {fact['within_pct']}%" if fact.get("within_pct") is not None else ""
+        return [f"{fact['player_is']} has covered {fact['value']} km {span}, from the footage shown{label}."]
+    if metric == "player_top_kmh":
+        return [f"{fact['player_is']} reached a top speed of {fact['value']} km/h {span}."]
+    if metric == "player_sprints":
+        if not fact["value"]:
+            return [f"{fact['player_is']} did not sprint above 25.2 km/h {span}."]
+        return [f"{fact['player_is']} sprinted {_plural(fact['value'], 'time')} above 25.2 km/h {span}."]
+    if metric == "player_zone":
+        where = "in the centre" if fact["channel"] == "centre" else f"on the {fact['channel']}"
+        return [
+            f"{fact['player_is']} was most often in their {fact['third']} third {where} {span}, in the "
+            "footage the video named him in."
+        ]
+    if metric in PASS_WORDS:
+        n = fact["value"]
+        what, verb = PASS_WORDS[metric]
+        noun = what.replace("passes", "pass") if n == 1 else what
+        if fact.get("team") is None:
+            return [f"There {'was' if n == 1 else 'were'} {n} {noun} {span}."]
+        return [f"{club} {verb} {n} {noun} {span}."]
+    if metric == "pair_passes":
+        return [
+            f"{fact['passer_is']} passed to {fact['receiver_is']} {_plural(fact['value'], 'time')} {span}, "
+            "of the passes the video could name both players of."
+        ]
     if metric == "possession_share":
         if fact.get("value") is None:
             return []
@@ -726,7 +892,34 @@ def code_texts(fact: dict) -> list[str]:
         text = fact["text"]
         return [text] if fact["law"] == "our cameras" else [f"The Laws say that {text[0].lower()}{text[1:]}"]
     if kind == "goal":
-        return [f"{club} scored in minute {fact['minute']}."]
+        m = fact["minute"]
+        out = []
+        if fact.get("scorer_is") and fact.get("assister_is"):
+            out.append(
+                f"{fact['scorer_is']} scored for {club} in minute {m}, from {fact['assister_is']}'s pass."
+            )
+        if fact.get("scorer_is"):
+            out.append(f"{fact['scorer_is']} scored for {club} in minute {m}.")
+        return [*out, f"{club} scored in minute {m}."]
+    if fact.get("kind") == "set_pieces":
+        from ninety.intel.set_pieces import WORDS
+
+        n = fact["value"]
+        noun = WORDS[fact["restart"]][0 if n == 1 else 1]
+        if fact.get("team") is None:
+            return [f"There {'was' if n == 1 else 'were'} {n} {noun} {span}."]
+        return [f"{club} had {n} {noun} {span}."]
+    if metric == "score":
+        cl = fact["clubs"]
+        h, a, m = fact["home"], fact["away"], fact["minute"]
+        if not h and not a:
+            return [f"By minute {m}, neither {cl['home']} nor {cl['away']} had scored."]
+        return [
+            f"By minute {m}, {cl['home']} had scored {_plural(h, 'goal')} and {cl['away']} "
+            f"{_plural(a, 'goal')}."
+        ]
+    if metric == "saves":
+        return [f"{club} made {_plural(fact['value'], 'save')} {span}."]
     if metric == "opponents_bypassed_by_player":
         if fact.get("rank") != 1 or not fact.get("leads") or not fact.get("player_is"):
             return []
@@ -772,6 +965,89 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     return [{"name": n, "club": None, "minute_from": lo, "minute_to": hi} for n in names]
 
 
+# What a fan calls each running figure the physical tool may hold, the most specific first: a
+# sprint before a speed, a speed before a distance (merge-queue reviews of #323).
+ASKS_RUNNING = {
+    "player_sprints": (r"\b(?:sprint\w*|bursts?)\b", "sprint count"),
+    "player_top_kmh": (
+        r"\b(?:fastest|quickest|top speed|how fast|speed\w*|pace|km/h|quick(?:er)?)\b", "top speed"
+    ),
+    "player_km": (
+        r"\b(?:distance|covered|how far|km|kms|kilomet\w*|miles?|ground|ran|run|runs|running|furthest"
+        r"|farthest|tired\w*|work rate|stamina|legs|energy|fitness|engine)\b",
+        "distance",
+    ),
+}
+# What the physical tool says when its figures are held: the zone a player was in most. A question
+# asks for that only by asking where: a side or a third alone ("who is on the left?", "who is out
+# of position?") is not a question of where a player was (merge-queue review of #323).
+ASKS_ZONE = r"\b(?:where|whereabouts|zones?|heat ?maps?|positioned)\b"
+
+
+def asked_running(text: str) -> str | None:
+    """The running figure a question asks for, the most specific one, or None."""
+    return next((m for m, (words, _) in ASKS_RUNNING.items() if re.search(words, text, re.I)), None)
+
+
+def asked_players(text: str, insights) -> set[str] | None:
+    """The players a question names, by a sheet name or a part of one ("Kai") or by a position
+    ("the left-back"), as names; None when it names none."""
+    said = lambda w: re.search(rf"\b{re.escape(w)}\b", text, re.I)  # noqa: E731
+    sheet = insights.sheet_names()
+    # A full name the fan gave is that player, whoever shares his first name; a part ("Kai") is
+    # matched only when no full name is (merge-queue review of #323).
+    names = {n for n in sheet if said(n)} or {
+        n for n in sheet if any(said(w) for w in n.split() if len(w) > 2)
+    }
+    lowered = text.lower()
+    roles = {role for role, words in ROLE_WORDS if re.search(rf"\b(?:{words})", lowered)}
+    if roles:
+        names |= {p["name"] for p in insights.people.values() if p.get("role") in roles and p.get("name")}
+        return names
+    return names or None
+
+
+def physical_gate(text: str, calls, facts: list[dict], insights) -> tuple[str | None, list[dict]]:
+    """Why a physical question cannot be answered (or None), and the facts in the order to answer
+    from. A running figure asked for is held when every fact of it is unsure: the video does not
+    yet follow enough of each named player. The zone answers only a question of where, about a
+    player it names. A question naming a player hears only about him; one naming none hears the
+    highest figure ("who is the fastest?" is the maximum). The fact-check never sees the question,
+    so code gates on it here."""
+    if not any(c["name"] == "physical" for c in calls):
+        return None, facts
+    sure = {f.get("metric") for f in facts if f.get("confident")}
+    metric = asked_running(text)
+    zone = metric is None and re.search(ASKS_ZONE, text, re.I)
+    if metric is not None and metric not in sure or metric is None and not zone:
+        said = ASKS_RUNNING[metric][1] if metric else "running"
+        return (
+            f"A player's {said} isn't available yet: the video can't follow enough of each named "
+            "player to measure it reliably."
+        ), facts
+    want = metric or "player_zone"
+    wanted = asked_players(text, insights)
+    if wanted is None and zone:
+        return (
+            "Name a player and I can say where he was most often, in the footage the video named him in."
+        ), facts
+    running = [f for f in facts if f.get("kind") == "running"]
+    if wanted is not None:
+        running = [f for f in running if f.get("player_is") in wanted]
+        named = clubs_named(text, insights)
+        if named:
+            running = [f for f in running if f.get("club") in named]
+        who = {f.get("player_is") for f in running if f.get("metric") == want}
+        if not who:
+            return "The video hasn't named that player over these minutes, so it can't say.", facts
+        if len(who) > 1:  # "Alex", or a position both clubs have: never pick one for the fan
+            return (
+                f"More than one player fits ({', '.join(sorted(who))}): say which one by his full name."
+            ), facts
+    rest = [f for f in facts if f.get("kind") != "running"]
+    return None, sorted(running, key=lambda f: (f.get("metric") != want, -(f.get("value") or 0))) + rest
+
+
 def code_match_answer(
     question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
@@ -802,6 +1078,9 @@ def code_match_answer(
             facts,
             key=lambda f: (f.get("kind") != "sheet" or f.get("role") != role, f.get("club") not in named),
         )
+    why, facts = physical_gate(question.text, calls, facts, insights)
+    if why is not None:  # a figure asked for that is held: say so, never answer something else
+        return Answer("unanswerable", why, None, None, None, (), 0.0, float(question.t)), calls
     asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
     if asked is not None:
         # A referee question: an offside reading first when it is about offside, then the Laws the
@@ -822,13 +1101,15 @@ def code_match_answer(
                     t=question.t,
                     suggest=suggest,
                 ), calls
+    # A goal's story ("why did they score?"): the goal with the strongest thing before it, when the
+    # goal build-up is what was asked (a "what's the score?" is the score's to answer).
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
-    if goal is not None:
+    if goal is not None and calls and calls[0]["name"] == "goal_build_up":
         for f in facts:
-            if f is goal or f.get("team") != goal["team"]:
+            if f is goal or f.get("team") != goal["team"] or f.get("kind") == "goal":
                 continue
             for text in code_texts(f):
-                lead = text[0].lower() + text[1:]
+                lead = text[0].lower() + text[1:] if text.split()[0] in ("In", "From") else text
                 combined = f"{goal['club']} scored in minute {goal['minute']}. Just before it, {lead}"
                 if _verify(Claim(combined, [goal["id"], f["id"]]), known, insights).ok:
                     return _match_answer(
@@ -892,11 +1173,14 @@ async def answer_match(
         if not calls:
             return calls, None, None, []
         facts = run_tools(insights, calls)
+        why, order = physical_gate(question.text, calls, facts, insights)
+        if why is not None:
+            return calls, None, None, facts  # code says why it is not available
         # A rules question is the Referee's to answer (ninety/agents/referee.py): the Companion
         # hands the facts over, and the same fact-check gates what comes back.
         rules = any(c["name"] == "referee" for c in calls)
         writer = referee_ask if referee_ask is not None and rules else ask
-        reply = await writer(answer_prompt(question, facts, history))
+        reply = await writer(answer_prompt(question, facts, history, insights))
         try:
             claim = parse_claim(reply)
         except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:
@@ -904,7 +1188,25 @@ async def answer_match(
         known = {f["id"]: f for f in facts}
         if not claim.text.strip():
             return calls, claim, None, facts
+        # The model chooses; it does not write (v4): its text must be exactly one of the checked
+        # sentences of a fact it cites, or code's answer is shown.
+        chosen = {t for i in claim.evidence if i in known for t in _say_as(known[i], known, insights)}
+        if claim.text.strip() not in chosen:
+            return calls, claim, Verdict(ok=False, reasons=[NOT_CHOSEN]), facts
+        claim = Claim(claim.text.strip(), claim.evidence)  # the checked sentence exactly, nothing around it
         verdict = _verify(claim, known, insights)
+        if verdict.ok and any(c["name"] == "physical" for c in calls):
+            # The answer code would give first is the one the question asks for: the figure (or the
+            # zone) of the player it names, else the highest.
+            first = next((f for f in order if f.get("kind") == "running"), None)
+            cited = [known[i] for i in claim.evidence if known.get(i, {}).get("kind") == "running"]
+            if first is not None and not any(
+                f.get("metric") == first["metric"] and f.get("value") == first.get("value")
+                and (f.get("metric") != "player_zone" or f.get("player_is") == first.get("player_is"))
+                for f in cited
+            ):
+                asked = f"{first.get('player_is')}'s {first['metric']}"
+                verdict = Verdict(ok=False, reasons=[f"the question asks for {asked}; it cites another"])
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
         return calls, claim, verdict, facts

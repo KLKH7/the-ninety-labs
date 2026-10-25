@@ -65,6 +65,7 @@
                 </div>
                 <output class="sr-only" id="score" aria-live="off">– : –</output>
                 <p class="scorers" id="scorers" hidden></p>
+                <p class="scorers" id="teams-note" hidden>Teams not confirmed</p>
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 
@@ -98,10 +99,6 @@
                 <h2 class="section-title" id="just-now-title">Just now</h2>
                 <div id="just-now-body"></div>
               </section>
-              <section class="card" id="live-summary" aria-labelledby="live-summary-title" hidden>
-                <h2 class="section-title" id="live-summary-title">Team Stats</h2>
-                <ul class="stat-rows" id="summary-rows"></ul>
-              </section>
               <!-- Territory per 5 minutes (match.json's territory, from vision's tracked ball). Drag along it
                    to rewind the screen to that minute; "Back to live" returns. -->
               <section class="card" id="momentum" aria-labelledby="momentum-title" hidden>
@@ -118,8 +115,43 @@
                 <div class="next-bin" aria-hidden="true"><div class="next-fill" id="next-fill"></div></div>
                 <p class="sr-only" id="momentum-note"></p>
               </section>
+              <section class="card" id="live-summary" aria-labelledby="live-summary-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="live-summary-title">Team Stats</h2>
+                  <button type="button" class="see-all" data-pane="stats" aria-label="See all team stats">See all</button>
+                </div>
+                <ul class="stat-rows" id="summary-rows"></ul>
+              </section>
+              <!-- A dense Live feed (Kian, Oct 24): each card a glance, "See all" to its full section. -->
+              <section class="card" id="live-shots" aria-labelledby="live-shots-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="live-shots-title">Shots</h2>
+                  <button type="button" class="see-all" data-pane="stats" aria-label="See all shots">See all</button>
+                </div>
+                <svg id="live-shots-svg" class="half-pitch" aria-hidden="true"></svg>
+                <p class="sr-only" id="live-shots-said"></p>
+              </section>
+              <section class="card" id="key-moments" aria-labelledby="key-moments-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="key-moments-title">Key moments</h2>
+                  <button type="button" class="see-all" data-tab="insights" aria-label="See all key moments in Story">See all</button>
+                </div>
+                <ol class="moment-rows" id="key-rows"></ol>
+              </section>
+              <section class="card" id="lineups-teaser" aria-labelledby="lineups-teaser-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="lineups-teaser-title">Line-ups</h2>
+                  <button type="button" class="see-all" data-pane="players" aria-label="See all line-ups">See all</button>
+                </div>
+                <div class="teaser-rows" id="teaser-rows"></div>
+              </section>
               </div>
               <div class="live-pane" id="pane-stats" role="tabpanel" aria-labelledby="lt-stats" hidden>
+              <ion-segment value="match" id="stats-period" class="seg" aria-label="Which part of the match" hidden>
+                <ion-segment-button value="match"><ion-label>Match</ion-label></ion-segment-button>
+                <ion-segment-button value="first"><ion-label>1st half</ion-label></ion-segment-button>
+                <ion-segment-button value="second"><ion-label>2nd half</ion-label></ion-segment-button>
+              </ion-segment>
               <!-- Match stats: mirrored bars in the clubs' colours, from the footage shown. -->
               <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
                 <h2 class="section-title" id="live-stats-title">Team Stats</h2>
@@ -138,11 +170,31 @@
                 <ul class="sr-only" id="shot-list"></ul>
                 <p class="sr-only">Filled: goal. Ringed: saved. Hollow: off target or blocked. Each club shooting up the page.</p>
               </section>
+              <section class="card" id="stats-territory" aria-labelledby="stats-territory-title" hidden>
+                <h2 class="section-title" id="stats-territory-title">Territory</h2>
+                <svg id="stats-territory-svg" class="strip" aria-hidden="true" preserveAspectRatio="none"></svg>
+                <div class="strip-axis" aria-hidden="true"><span class="ht-label">HT</span><span class="ft-label">90′</span></div>
+                <p class="sr-only" id="stats-territory-said"></p>
+              </section>
               </div>
               <div class="live-pane" id="pane-players" role="tabpanel" aria-labelledby="lt-players" hidden>
               <section class="roster" id="roster-box" aria-labelledby="roster-summary">
                 <h2 class="sr-only" id="roster-summary">Players</h2>
                 <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
+              </section>
+              <section class="card" id="pass-network" aria-labelledby="pass-network-title" hidden>
+                <h2 class="section-title" id="pass-network-title">Pass network</h2>
+                <ion-segment value="home" id="network-side" class="seg" aria-label="Whose passes">
+                  <ion-segment-button value="home"><ion-label class="home-name"></ion-label></ion-segment-button>
+                  <ion-segment-button value="away"><ion-label class="away-name"></ion-label></ion-segment-button>
+                </ion-segment>
+                <svg id="network" class="full-pitch" role="img"></svg>
+                <ul class="stat-list" id="network-rows"></ul>
+                <p class="fine-note" id="network-named" hidden>Passes between players the video could name.</p>
+              </section>
+              <section class="card" id="top-players" aria-labelledby="top-players-title" hidden>
+                <h2 class="section-title" id="top-players-title">Top performers</h2>
+                <div id="top-lists"></div>
               </section>
               </div>
 
@@ -182,6 +234,13 @@
             </ion-header>
             <ion-content fullscreen id="ask-content">
               <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
+              <section class="ask-start" id="ask-start" aria-labelledby="ask-start-title">
+                <h2 class="section-title" id="ask-start-title">Ask about the match</h2>
+                <div class="chip-grid" id="ask-grid" role="group" aria-labelledby="ask-start-title"></div>
+                <h2 class="section-title" id="ask-players-title" hidden>About a player</h2>
+                <div class="chip-grid" id="ask-players" role="group" aria-labelledby="ask-players-title" hidden></div>
+              </section>
+              <h2 class="section-title recent-title" id="recent-title" hidden>Recent</h2>
               <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
             </ion-content>
             <ion-footer translucent class="composer" id="ask">
@@ -235,7 +294,7 @@
             <h2 id="player-title" tabindex="-1">Player</h2>
             <button type="button" class="close" id="close-player" aria-label="Close the player card"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
-          <ion-list inset>
+          <ion-list inset id="so-far-box" hidden>
             <ion-list-header><ion-label class="caps">So far</ion-label></ion-list-header>
             <div class="stats">
               <p class="stat"><span class="value" id="speed">–</span><span class="label">km/h now</span></p>
@@ -255,7 +314,7 @@
             <div class="chips wrap" id="compare-chips" role="group" aria-label="Compare with another player"></div>
             <ul class="stat-rows" id="compare-rows" hidden></ul>
           </section>
-          <ion-list inset>
+          <ion-list inset id="heat-box" hidden>
             <ion-list-header><ion-label class="caps" id="heat-title">Heat map</ion-label></ion-list-header>
             <div class="pad-in">
               <canvas id="heat" role="img" aria-label="Heat map"></canvas>

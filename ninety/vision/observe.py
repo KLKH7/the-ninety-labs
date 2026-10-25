@@ -83,6 +83,14 @@ NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
 HEIGHT_BAND = (0.966, 1.121)
+# The same test for a fixed lens (the tactical camera): its own band, from its own frames, because
+# the ratio depends on the camera's height and distance and on how players are drawn. Measured by
+# the same rule (step B: the 1st to 99th percentile on frames whose ground mapping is within 1.0 m)
+# on tactical1's 23 validation clips, both lenses, renderer 0.5.15, ours-freeze tiled: 11,250 good
+# frames of 11,500 (docs/eval/ball-three-cams/band-fixed.json, session D; reproduced exactly in
+# docs/eval/band-broadcast.json). It keeps 98% of them; of the 250 bad frames (one lens of seed
+# 2042 fitted 69 m wrong) it trusts one, which `agree` then has no trusted neighbour for.
+FIXED_HEIGHT_BAND = (1.002, 1.151)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
@@ -162,10 +170,10 @@ def agree(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def place(row: dict, markings: bool = True) -> dict:
-    """Judge the frame's camera by its players' heights and, with `markings` (the broadcast), its
-    marking fit's own verdict too; when it is trusted, place every detection on the pitch through
-    it (players at the foot point, the ball one radius up)."""
+def place(row: dict, band: tuple[float, float] = HEIGHT_BAND, markings: bool = True) -> dict:
+    """Judge the frame's camera by its players' heights (their median ratio inside `band`) and,
+    with `markings` (the broadcast), its marking fit's own verdict too; when it is trusted, place
+    every detection on the pitch through it (players at the foot point, the ball one radius up)."""
     cam = row["camera"]
     P = np.array(cam["P"]) if cam.get("P") is not None else None
     ratio = height_ratio(row["players"], P) if P is not None else None
@@ -173,7 +181,7 @@ def place(row: dict, markings: bool = True) -> dict:
     # With no player to measure, the heights cannot judge the camera, and the markings' verdict
     # stands (one frame of 3,250 on validation, untrusted either way).
     if ratio is not None:
-        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1] and (cam["markings_ok"] or not markings)
+        ok = band[0] <= ratio <= band[1] and (cam["markings_ok"] or not markings)
     else:
         ok = bool(P is not None and cam["markings_ok"])
     cam["height_ratio"] = None if ratio is None else round(ratio, 4)
@@ -234,7 +242,7 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
                        "P": ([[round(float(v), 6) for v in row] for row in fit.view.P()]
                              if fit.view else None)},
             "players": players, "ball": balls,
-        }, markings=not fixed))
+        }, FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND, markings=not fixed))
     rows = agree(rows)
     rows[0]["gantry"] = None if gantries[0] is None else [round(v, 3) for v in gantries[0]]
     if len(starts) > 1:
@@ -270,8 +278,9 @@ def main(argv: list[str] | None = None) -> None:
         rows = []
         lines = [json.loads(x) for x in a.regate.read_text().splitlines() if x.strip()]
         fixed = bool(lines and lines[0].get("fixed"))
+        band = FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND
         for x in lines:
-            rows.append(place(x, markings=not fixed))
+            rows.append(place(x, band, markings=not fixed))
         rows = agree(rows)
     else:
         if a.clip is None or a.detections is None:

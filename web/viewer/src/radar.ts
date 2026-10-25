@@ -64,10 +64,10 @@ const RUNOFF = 3; // metres of grass drawn round the lines, so a player on the l
 export const MAX_GAP_FRAMES = 25;
 
 export const COLORS = {
-  home: "#4ea1ff", // the phone minimap's (web/phone/src/pitch.ts), so the two read the same
-  away: "#ffb02e",
-  homeInk: "#04172b",
-  awayInk: "#2a1800",
+  home: "#3a68c0", // the clubs' colours (London navy, Lisbon crimson), as the phone draws them
+  away: "#d23a44",
+  homeInk: "#ffffff",
+  awayInk: "#ffffff",
   ball: "#ffffff",
   grass: "#123d2b",
   stripe: "#15442f",

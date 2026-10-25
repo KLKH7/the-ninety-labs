@@ -737,6 +737,8 @@ async def run(args: argparse.Namespace) -> dict:
                 body["lineup"] = lineup
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
                                                              args.captioner)
+        # Each moment recorded from the footage: a still and, unless --frames, its clip.
+        highlights.record(body["highlights"], Timeline.of_clip(clip.meta), clip.images, out, not args.frames)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"],
