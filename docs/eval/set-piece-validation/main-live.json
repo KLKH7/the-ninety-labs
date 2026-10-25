@@ -1,0 +1,511 @@
+{
+  "kind": "kick_off",
+  "window_s": 1.0,
+  "recall": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "precision": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "recall_any_side": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "precision_any_side": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "timing_error_s": [
+    0.12
+  ],
+  "by_kind": {
+    "kick_off": {
+      "recall": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "precision": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "recall_any_side": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "precision_any_side": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "timing_error_s": [
+        0.12
+      ]
+    },
+    "corner": {
+      "recall": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "recall_any_side": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision_any_side": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "timing_error_s": []
+    },
+    "goal_kick": {
+      "recall": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "recall_any_side": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision_any_side": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "timing_error_s": []
+    },
+    "throw_in": {
+      "recall": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "recall_any_side": {
+        "k": 0,
+        "n": 1,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.79
+        ]
+      },
+      "precision_any_side": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "timing_error_s": []
+    },
+    "free_kick": {
+      "recall": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "precision": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "recall_any_side": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "precision_any_side": {
+        "k": 1,
+        "n": 1,
+        "rate": 1.0,
+        "wilson95": [
+          0.21,
+          1.0
+        ]
+      },
+      "timing_error_s": [
+        0.12
+      ]
+    },
+    "penalty_kick": {
+      "recall": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "precision": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "recall_any_side": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "precision_any_side": {
+        "k": 0,
+        "n": 0,
+        "rate": null,
+        "wilson95": null
+      },
+      "timing_error_s": []
+    }
+  },
+  "cause": {
+    "table": {
+      "foul->None": 1
+    },
+    "right": {
+      "k": 0,
+      "n": 1,
+      "rate": 0.0,
+      "wilson95": [
+        0.0,
+        0.79
+      ]
+    },
+    "unknown": 0
+  },
+  "clips": [
+    {
+      "clip": "seed920101-421",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920108-1061",
+      "true": 1,
+      "detected": 1,
+      "matched": 1,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920106-4570",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920109-3109",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    }
+  ],
+  "all_clips": [
+    {
+      "clip": "seed920101-421",
+      "kick_off": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "corner": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "goal_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "throw_in": {
+        "true": 1,
+        "detected": 0,
+        "matched": 0,
+        "missed": [
+          {
+            "id": "e00011",
+            "kind": "throw_in",
+            "team": "home",
+            "frame": 933,
+            "t": 37.32,
+            "cause": null
+          }
+        ],
+        "false": []
+      },
+      "free_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "penalty_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      }
+    },
+    {
+      "clip": "seed920108-1061",
+      "kick_off": {
+        "true": 1,
+        "detected": 1,
+        "matched": 1,
+        "missed": [],
+        "false": []
+      },
+      "corner": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "goal_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "throw_in": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "free_kick": {
+        "true": 1,
+        "detected": 1,
+        "matched": 1,
+        "missed": [],
+        "false": []
+      },
+      "penalty_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      }
+    },
+    {
+      "clip": "seed920106-4570",
+      "kick_off": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "corner": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "goal_kick": {
+        "true": 1,
+        "detected": 0,
+        "matched": 0,
+        "missed": [
+          {
+            "id": "e00078",
+            "kind": "goal_kick",
+            "team": "home",
+            "frame": 5321,
+            "t": 212.84,
+            "cause": null
+          }
+        ],
+        "false": []
+      },
+      "throw_in": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "free_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "penalty_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      }
+    },
+    {
+      "clip": "seed920109-3109",
+      "kick_off": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "corner": {
+        "true": 1,
+        "detected": 0,
+        "matched": 0,
+        "missed": [
+          {
+            "id": "e00035",
+            "kind": "corner",
+            "team": "home",
+            "frame": 3942,
+            "t": 157.68,
+            "cause": null
+          }
+        ],
+        "false": []
+      },
+      "goal_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "throw_in": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "free_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      },
+      "penalty_kick": {
+        "true": 0,
+        "detected": 0,
+        "matched": 0,
+        "missed": [],
+        "false": []
+      }
+    }
+  ]
+}
