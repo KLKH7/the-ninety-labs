@@ -102,6 +102,10 @@ texts, calls = asyncio.run(describer.upgrades(events, result.cues, model, judge)
 track, refused = describe.describe(events, result.cues, upgrades=texts)
 assert calls and track.said
 
+# The commentary track (ninety/speech/commentary.py): calls from the same detected events and cues.
+from ninety.speech import commentary
+assert commentary.commentary(events, result.cues, {"home": "London", "away": "Lisbon"})["lines"]
+
 # Match mode and the highlights reel (docs/eval/highlights-plan.md, rule 5): from the confident
 # detected events only, with no scorer, simulator or answer key loaded.
 from ninety import condensed, highlights
