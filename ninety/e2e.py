@@ -192,6 +192,18 @@ def teams_of(meta: dict) -> dict | None:
     home, away = params.get("home_code"), params.get("away_code")
     return {"home": home, "away": away} if home and away else None
 
+def clubs_of(meta: dict) -> dict[str, str] | None:
+    """The sides as the Describer says them ({"home": "London", ...}): the short names of the clubs
+    the clip was rendered with (ninety/intel/teamsheet.py), or None for a clip without known codes."""
+    from ninety.intel import teamsheet
+
+    teams = teams_of(meta)
+    try:
+        return {side: teamsheet.short_name(code) for side, code in teams.items()} if teams else None
+    except ValueError:  # a code no team sheet knows: the sides are said as "home" and "away"
+        return None
+
+
 def load_clip(clip_dir: Path) -> Clip:
     meta = json.loads((clip_dir / "clip.json").read_text())
     return Clip(clip_dir, meta)
@@ -663,7 +675,8 @@ async def run(args: argparse.Namespace) -> dict:
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades)
+    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades,
+                                       clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
