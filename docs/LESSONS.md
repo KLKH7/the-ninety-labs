@@ -2870,3 +2870,9 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
   plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
   the old fixed ids put back, the file fails to collect.
+- **Again, the next day:** `ninety/eval/describe_eval.py` (#268, merged after the fixture changed)
+  read which detections are real from event-report-v2's pairs, whose ids are the older detector's.
+  Its own guard refused them (`v00005 is not the event it matched`), as it should. The fix grades
+  the current detector (`docs/eval/event-report-v3.json`, written by `possession_report` beside its
+  report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
+  where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
