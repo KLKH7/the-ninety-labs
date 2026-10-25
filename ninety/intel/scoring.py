@@ -39,7 +39,6 @@ def goals(events: Sequence[Mapping]) -> list[dict]:
     for k, g in enumerate(rows):
         if g.get("type") != "goal" or g.get("team") not in TEAMS:
             continue
-        # The goal's shot: the latest shot by the scoring side at or before the goal, with outcome goal.
         # The goal's shot is the event just before it, a shot by the scoring side that went in: each
         # shot is one goal's, and a goal with anything else before it has none (merge-queue review).
         prev = rows[k - 1] if k > 0 else None
