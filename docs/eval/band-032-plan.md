@@ -162,3 +162,15 @@ and `uv run python -m ninety.eval.band_derive --clips <clips> --obs <obs> --seed
 --out docs/eval/band-broadcast-032.json`, then BANDS["0.3.2"] set from it and the test set scored
 again (section 5). The clips are track B's local renders at `cca498c` (about 1 GB), or
 `uv run ninety-dataset` at `cca498c` for those seeds.
+
+### Amendment (2026-10-24, 22:00, before any derivation)
+
+The laptop's load (230 on 8 cores) gives each fit about 13% of a core: after an hour no clip had
+finished. So the one-shot fits track B already made from the same stand-in boxes are used for seeds
+111, 112, 113, 117, 118 and 119 (its `before` observations: `pitch.fit_shots` with one shot, which
+its branch tests to be exactly main's `fit_clip`), and its one-shot test fits for 900001 to 900005
+(ours-v2's committed detections). Both are copied, never moved, and their sha256 recorded. Seeds 108,
+109, 114, 115 and 116 are fitted here with main's code. **Identity check, before use:** seed 110 and
+test clip 900001 are also fitted here with main's code, and every frame's camera matrix must equal
+track B's; only the matrices are compared, nothing on the test clip is judged or read. If any
+differs, track B's fits are not used and the derivation waits for this machine's.
