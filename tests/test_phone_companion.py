@@ -1057,25 +1057,31 @@ def test_a_key_moment_goal_on_an_unsure_side_carries_no_club_s_colour(browser, s
     ctx.close()
 
 
-SCORELINE = re.compile(r"\b\d{1,2}\s*[–·]\s*\d{1,2}\b")  # "2 – 1", "2 · 1": how a scoreline is written
+# How a scoreline or a goal count is written: "2 – 1", "2-1", "2 · 1", "2:1" (a clock is m:ss, so a
+# colon needs one digit after it), "3 goals", or the words of a score.
+SCORELINE = re.compile(r"\b\d{1,2}\s*[-–·]\s*\d{1,2}\b|\b\d{1,2}:\d\b|\b\d+ goals?\b"
+                       r"|\b(ahead|level|leads|leading)\b", re.I)
 
 
 def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, site):  # noqa: F811
     """Kian, Oct 25: vision finds 2 of the demo's 3 goals, so a score counted from them would
-    contradict the broadcast's scorebug. A goal is listed as spotted; no screen counts them."""
+    contradict the broadcast's scorebug. Three detected goals here (two home, one away): no text and
+    no accessible name on any screen counts them."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
 
-    def a_goal(route):  # e2, the clip's shot on a side told surely, went in
+    def goals(route):  # e2 (home, told surely) went in, and two goals more
         if route.request.url.endswith("match.json"):
             body = route.fetch().json()
-            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"}]
+            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"},
+                             {"t": 61.9, "team": "home", "event": "e2"},
+                             {"t": 62.4, "team": "away", "event": "e4"}]
             return route.fulfill(json=body)
         rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
         rows = [{**r, "outcome": "goal"} if r["id"] == "e2" else r for r in rows]
         route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
 
-    ctx.route("**/bundle/match.json", a_goal)
-    ctx.route("**/bundle/events.jsonl", a_goal)
+    ctx.route("**/bundle/match.json", goals)
+    ctx.route("**/bundle/events.jsonl", goals)
     laptop = ctx.new_page()
     laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
     laptop.fill("#seek", "63")
@@ -1083,6 +1089,7 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("#goals-home .side-goal")
+    page.wait_for_selector("#goals-away .side-goal")
     assert page.inner_text("#goals-home .side-goal").endswith(" 2′")  # under the club's crest
     assert "%" not in page.inner_text(".band")  # the confidence lives behind a tap
     page.click("#goals-home .side-goal")
@@ -1090,15 +1097,22 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
     assert "The score is the broadcast's" in page.inner_text("#how-body")
     page.click("#close-how")
     assert page.locator("#score-home, #score-away, .mh, .ma, .tally").count() == 0
-    js = """() => [...document.querySelectorAll('.band, .score-line, #insights, #panel-ask ion-header')]
-        .flatMap((el) => [el.innerText, el.getAttribute('aria-label') || ''])"""
-    for tab in ("radar", "insights", "ask"):
+    # Every screen's text and every accessible name, the shot map's and Live's shot card's among them.
+    js = """() => [document.body.innerText,
+        ...[...document.querySelectorAll('[aria-label]')].map((el) => el.getAttribute('aria-label')),
+        ...[...document.querySelectorAll('.sr-only')].map((el) => el.textContent)]"""
+    screens = (("radar", "pitch"), ("radar", "stats"), ("radar", "players"),
+               ("insights", None), ("ask", None))
+    for tab, pane in screens:
         page.click(f"#tab-button-{tab}")
+        if pane:
+            page.click(f"#lt-{pane}")
         page.wait_for_timeout(300)
         for text in page.evaluate(js):
-            assert not SCORELINE.search(text), (tab, text)
+            hit = SCORELINE.search(text or "")
+            assert not hit, (tab, pane, hit.group(0), (text or "")[max(0, hit.start() - 60):hit.end() + 60])
     page.click("#tab-button-insights")
-    assert page.locator("#insights .play.goal").count() == 1  # the goal is in Story, with no running score
+    assert page.locator("#insights .play.goal").count() >= 1  # goals are in Story, with no running score
     assert not errors
     ctx.close()
 
@@ -1116,3 +1130,4 @@ def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: 
     what = page.locator("#how-body .evidence dd").first.text_content()
     assert not re.search(r"\d", what), what
     assert not errors
+

@@ -2146,8 +2146,8 @@ function renderShots(t: number) {
   if (allKey !== liveShotsKey) {
     liveShotsKey = allKey;
     shotMap.draw($("live-shots-svg") as unknown as SVGSVGElement, drawn);
-    const goals = all.filter((s) => s.outcome === "goal").length;
-    $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}.`;
+    // Shots counted, never goals: a goal count is a score (Kian, Oct 25), and the broadcast carries it.
+    $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}.`;
   }
   const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
   if (key === shotsKey) return;
@@ -2156,8 +2156,7 @@ function renderShots(t: number) {
   // Placed and coloured only on a sure side: where a shot sits on the half pitch is read from the
   // direction its side attacks. An unsure one is listed, not drawn.
   shotMap.draw(svg, shown.filter((s) => s.sure));
-  const goals = shown.filter((s) => s.outcome === "goal").length;
-  svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
+  svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}. The list follows.`);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
