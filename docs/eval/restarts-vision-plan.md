@@ -53,3 +53,14 @@ the shot-outcome set's are windows without one. The test split is scored once, a
 eight broadcast segments its vision run had finished on 2026-10-24 (frames 0 to 35636, one
 kick-off): the kick-off found, side right, 0.08 s after the true kick, and no false kick-off in the
 other seven. Its four kick-offs after goals are checked the same way when their segments are run.
+
+## Beside the goal rule of PR #271
+
+PR #271 judges a goal with its own kick-off test, pre-registered in its plan and scored on
+validation before this module existed, so it does not use this one until after its test score. The
+differences, to reconcile then, with validation numbers from both: its spot radius is the ball's
+own measured 95% position error near the centre (0.688 m, `docs/eval/shot-outcomes.json` on that
+branch) where this uses the players' 1.26 m; its "still" is 3 frames under `events.CARRY_MPS`
+where this asks 1.0 s; it requires a dead ball first (the ball over the goal line, or a cut of 4 s
+or more) and allows the ball fetched from the net to read as a spell; it does not check which side
+kicks off. Neither is changed here to match the other before both are measured.
