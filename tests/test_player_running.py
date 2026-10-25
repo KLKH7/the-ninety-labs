@@ -164,9 +164,16 @@ def test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it(fact, said):
     assert not verify(Claim(f"{lb.name} {said}", ["x"]), {"x": f}, fx.clubs, people, names).ok
 
 
-@pytest.mark.parametrize(
-    "q", ["How far has Kai Terrow run?", "Who is the fastest player?", "How many sprints?"]
-)
+# The merge queue's fourth review of #323: the guard was a word list, so other phrasings still got the
+# zone with a name in the headline. Code now gates on what is asked.
+UNASKED_FIGURES = [
+    "How far has Kai Terrow run?", "Who is the fastest player?", "How many sprints?",
+    "Who looks most tired?", "Who has the best work rate?", "Who has run the most?",
+    "Who ran the furthest?", "Who has run the furthest?", "How many km has Kai done?",
+]
+
+
+@pytest.mark.parametrize("q", UNASKED_FIGURES)
 def test_a_held_figure_asked_for_is_not_available_never_another_answer(q):
     # The merge queue's third review of #323: a distance question was answered with the zone.
     from ninety.agents.contracts import Question
@@ -194,3 +201,105 @@ def test_the_zone_says_it_is_of_the_footage_the_video_named_him_in():
         "Kai Terrow was most often in their own third on the right from minute 1 to minute 20, in the "
         "footage the video named him in."
     ]
+
+
+def _zone_reply(mi, q):
+    """A model that plans the physical tool and answers with the first zone sentence."""
+    import asyncio
+    import json
+
+    from ninety.agents.contracts import Question
+
+    zone = next(f for f in mi.physical(1, 20)["facts"] if f["metric"] == "player_zone")
+    replies = [
+        json.dumps({"tools": [{"name": "physical", "minute_from": 1, "minute_to": 20}]}),
+        json.dumps({"text": cm.code_texts(zone)[0], "evidence": [zone["id"]]}),
+    ]
+
+    async def ask(prompt):
+        return replies.pop(0)
+
+    return asyncio.run(cm.answer_match(Question("s", None, q, 60.0 * 20 - 1), mi, ask))
+
+
+@pytest.mark.parametrize("q", UNASKED_FIGURES)
+def test_the_model_answering_a_held_figure_with_the_zone_falls_back_to_not_available(q):
+    r = _zone_reply(_standin(), q)
+    assert r.source == "code"
+    assert r.answer.status == "unanswerable" and "isn't available yet" in r.answer.text
+    assert r.answer.headline is None
+
+
+@pytest.mark.parametrize(
+    "q", ["Where has Kai Terrow been playing?", "Where did Theo Cindell play?",
+          "Show me the heat map"],
+)
+def test_a_question_of_place_still_gets_the_zone(q):
+    from ninety.agents.contracts import Question
+
+    mi = _standin()
+    a, calls = cm.code_match_answer(Question("s", None, q, 60.0 * 20 - 1), mi)
+    assert "physical" in [c["name"] for c in calls]
+    assert a.status == "verified" and "most often in their" in a.text
+    assert _zone_reply(mi, q).source == "model"
+
+
+def test_the_top_speed_bar_is_the_worst_measured_track_on_the_clip():
+    import json
+    from pathlib import Path
+
+    d = json.loads(Path("docs/eval/companion-tracked.json").read_text())
+    assert physical.TOP_SPEED_BAR_KMH == d["by_smoothing"]["25"]["peak_kmh"]["max"]
+
+
+@pytest.mark.parametrize(
+    "q, metric, pick",
+    [
+        ("Who is the fastest player?", "player_top_kmh", max),
+        ("Who has made the most sprints?", "player_sprints", max),
+        ("Who has covered the most distance?", "player_km", max),
+    ],
+)
+def test_once_a_figure_is_said_its_question_gets_that_figure_at_its_highest(monkeypatch, q, metric, pick):
+    # The latent gap of the fourth review: with good labels, "fastest" got the distance sentence and
+    # the first player by distance, not the fastest.
+    from ninety.agents.contracts import Question
+
+    mi = _standin()
+    monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10})
+    a, calls = cm.code_match_answer(Question("s", None, q, 60.0 * 20 - 1), mi)
+    [c] = [c for c in calls if c["name"] == "physical"]
+    rows = [f for f in mi.physical(c["minute_from"], c["minute_to"])["facts"] if f["metric"] == metric]
+    assert a.status == "verified"
+    [cited] = [f for f in rows if f["id"] in a.evidence]
+    assert cited["value"] == pick(f["value"] for f in rows)
+
+
+def test_with_only_top_speed_said_the_fastest_is_the_maximum_and_not_the_distance_sentence(monkeypatch):
+    from ninety.agents.contracts import Question
+
+    mi = _standin()
+    monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 90, "top_kmh": 1, "sprints_pct": 90})
+    a, calls = cm.code_match_answer(Question("s", None, "Who is the fastest player?", 60.0 * 20 - 1), mi)
+    [c] = [c for c in calls if c["name"] == "physical"]
+    facts = mi.physical(c["minute_from"], c["minute_to"])["facts"]
+    rows = [f for f in facts if f["metric"] == "player_top_kmh"]
+    assert a.status == "verified" and "km/h" in a.text
+    [cited] = [f for f in rows if f["id"] in a.evidence]
+    assert cited["value"] == max(f["value"] for f in rows)
+    # a model answering "fastest" with a zone sentence is refused, even though the zone is true
+    r = _zone_reply(mi, "Who is the fastest player?")
+    assert r.source == "code" and "the question asks for a top speed; the answer cites none" in r.reasons
+
+
+@pytest.mark.parametrize("q", ["Who has been the best player?", "Who is working hardest?"])
+def test_a_question_asking_no_place_is_never_answered_with_the_zone(q):
+    # A model may plan the physical tool for a question that names no figure and no place: while
+    # every running figure is held, the zone is not its answer.
+    r = _zone_reply(_standin(), q)
+    assert r.source == "code" and r.answer.status == "unanswerable" and r.answer.headline is None
+
+
+def test_once_a_figure_is_said_a_question_asking_no_place_is_answered(monkeypatch):
+    monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10})
+    assert _zone_reply(_standin(), "Who has been the best player?").source == "model"
