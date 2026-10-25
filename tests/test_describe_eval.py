@@ -34,10 +34,15 @@ def test_an_unsure_event_is_not_counted_as_one_to_cover(tmp_path):
 def test_on_the_pixel_clip_a_verified_insight_covers_its_event_and_false_detections_are_told_apart():
     m = describe_eval.measure(describe_eval.CLIPS["seed900001 (detected from the pixels)"])
     real = describe_eval.real_detections()
-    # The event report's matches on 900001: three passes and the possession change (v00003).
-    assert real == {"v00001", "v00002", "v00003", "v00006"}
-    assert "v00004" in m["covered_ids"]  # the insight's event, said inside the verified claim
-    assert "v00004" not in real  # and it is the shot read as a pass: a false detection
+    # Events by what they are, not by id (lesson 243): the event report's matches on 900001 are
+    # three passes and the possession change; the insight's event is the shot read as a pass, at
+    # 71.52 s (frame 1788), a false detection.
+    rows = describe_eval.detected.load(describe_eval.CLIPS["seed900001 (detected from the pixels)"])
+    kinds = sorted(e["type"] for e in rows if e["id"] in real)
+    assert kinds == ["pass", "pass", "pass", "possession_change"]
+    shot_read_as_pass = next(e["id"] for e in rows if e["type"] == "pass" and e["frame"] == 1788)
+    assert shot_read_as_pass in m["covered_ids"]  # said inside the verified claim
+    assert shot_read_as_pass not in real
 
 
 def _report_with(tmp_path, pair: dict):
@@ -65,4 +70,9 @@ def test_a_report_pair_that_no_longer_names_its_event_is_refused(tmp_path, monke
 def test_a_report_pair_that_still_names_its_event_is_graded(tmp_path, monkeypatch):
     pair = {"truth_id": "e1", "detected_id": "v00006", "type": "pass"}
     monkeypatch.setattr(describe_eval, "EVENT_REPORT", _report_with(tmp_path, pair))
-    assert describe_eval.real_detections() == {"v00006"}
+    # v00006 is the report's sixth event of the kinds it knew; kinds added since (pressure) do not
+    # move it, and the fixture's own id for that event is returned.
+    rows = describe_eval.detected.load(describe_eval.detected.FIXTURES / "detected-seed900001.jsonl")
+    sixth = [e for e in rows if e["type"] in describe_eval.REPORT_KINDS][5]
+    assert any(e["type"] not in describe_eval.REPORT_KINDS for e in rows)  # the premise: one was added
+    assert describe_eval.real_detections() == {sixth["id"]} and sixth["type"] == "pass"
