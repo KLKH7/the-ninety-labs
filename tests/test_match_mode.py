@@ -453,3 +453,23 @@ def test_audio_description_stays_reachable_from_the_big_screen_through_the_audio
     page.wait_for_function("document.body.dataset.persona === 'casual'")
     assert not errors
     page.context.close()
+
+
+def test_commentary_with_video_times_plays_by_the_video_clock(browser, site):  # noqa: F811
+    """A line with v/v_end (#328) is on air by video time: here v says images 0-10 (0-0.44 s), while
+    its match time t would put it elsewhere entirely."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.route("**/commentary/commentary.json", lambda r: r.fulfill(json={"format": 1, "lines": [
+        {"id": "cm-v1", "t": 99.0, "t_end": 100.0, "v": 0.0, "v_end": 0.44, "text": "By the video",
+         "audio": None}]}))
+    page = ctx.new_page()
+    page.goto(site + "?bundle=commentary/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.click("#hud-audio")
+    page.check("input[name=track][value=commentary]")
+    page.check("input[name=subs][value=on]")
+    seek(page, 5)  # 0.22 s of video
+    page.wait_for_function("document.querySelector('#captions').textContent === 'By the video'")
+    seek(page, 30)
+    page.wait_for_selector("#captions[hidden]", state="attached")
+    ctx.close()

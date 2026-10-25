@@ -8,6 +8,10 @@ export interface CommentaryLine {
   id: string;
   t: number; // match seconds
   t_end: number;
+  /** Video seconds (shape agents, #328): the calls are spaced on the video's clock, so a line
+   * never spans a cut. Played by these when present; `t` stays the match time. */
+  v?: number;
+  v_end?: number;
   text: string;
   audio: string | null; // relative to the bundle; null when the line was not voiced: caption only
 }
@@ -22,11 +26,15 @@ export type Track = "stadium" | "commentary" | "described";
 const DUCK = 0.3; // design: the crowd under a line, as a broadcast mix sits it
 const DRIFT_S = 0.3; // re-align an audio element further than this from the picture
 
-/** The line on air at match time `t`, if any. */
-export function lineAt(lines: CommentaryLine[], t: number): CommentaryLine | null {
-  for (const l of lines) if (l.t <= t && t < l.t_end) return l;
+/** The line on air at video time `v` (match time `t` for a line without video times), if any. */
+export function lineAt(lines: CommentaryLine[], t: number, v: number): CommentaryLine | null {
+  for (const l of lines) {
+    if (typeof l.v === "number" && typeof l.v_end === "number" ? l.v <= v && v < l.v_end : l.t <= t && t < l.t_end) return l;
+  }
   return null;
 }
+/** Seconds into line `l` at video time `v`, match time `t`. */
+const into = (l: CommentaryLine, t: number, v: number) => (typeof l.v === "number" ? v - l.v : t - l.t);
 
 export function readCommentary(body: unknown): Commentary | null {
   const c = body as Partial<Commentary> | null;
@@ -69,7 +77,7 @@ export class AudioTracks {
 
   /** Each frame: `v` video seconds, `t` match seconds, whether the picture plays. */
   update(v: number, t: number, playing: boolean) {
-    const on = this.track === "commentary" && this.commentary ? lineAt(this.commentary.lines, t) : null;
+    const on = this.track === "commentary" && this.commentary ? lineAt(this.commentary.lines, t, v) : null;
     if (on?.id !== this.line?.id) {
       this.line = on;
       this.voice.pause();
@@ -79,7 +87,7 @@ export class AudioTracks {
     if (this.captionEl.textContent !== shown) this.captionEl.textContent = shown;
     this.captionEl.hidden = !shown;
     document.body.dataset.commentary = on ? on.id : "";
-    for (const [el, at] of [[this.bed, v], [on?.audio ? this.voice : null, on ? t - on.t : 0]] as const) {
+    for (const [el, at] of [[this.bed, v], [on?.audio ? this.voice : null, on ? into(on, t, v) : 0]] as const) {
       if (!el) continue;
       el.muted = this.muted;
       if (!playing) {
