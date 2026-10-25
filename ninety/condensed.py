@@ -13,6 +13,9 @@ The viewer's match mode (web/viewer/src/match.ts) shows what this computes:
   from the answer key.
 - `goals`: the scoreline over time, one entry per confident detected goal (a shot whose outcome is
   a goal, as ninety/intel/stats.py counts goals).
+- `highlights`: the reel (ninety/highlights.py): every confident detected goal, the saves that
+  beat a keeper's dive once that filter is measured, and a fan's label for each once vision's
+  errors are measured.
 - `stats`: each team's passes, shots and goals so far, from the footage shown: after every confident
   event, the same team facts the agents read (ninety/intel/stats.py), over the events up to it.
 
@@ -23,6 +26,7 @@ Reads the detected events and the clip's segments only; nothing here opens the a
 
 from __future__ import annotations
 
+from ninety import highlights
 from ninety.agents.factcheck import MIN_CONFIDENCE
 from ninety.intel.stats import pass_facts, shot_facts
 from ninety.match.timeline import Timeline
@@ -99,8 +103,9 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
     return out
 
 
-def build(clip_meta: dict, events: list[dict]) -> dict:
-    """match.json for a clip (its clip.json) and its detected events."""
+def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None) -> dict:
+    """match.json for a clip (its clip.json) and its detected events; `verdict` is what the
+    highlights measurement decided (ninety/highlights.py), none until it has run."""
     timeline = Timeline.of_clip(clip_meta)
     sure = confident(events)
     goals = [{"t": e["t"], "team": e.get("team"), "event": e["id"]} for e in sure if is_goal(e)]
@@ -115,4 +120,5 @@ def build(clip_meta: dict, events: list[dict]) -> dict:
         "chapters": chapters(timeline, sure),
         "goals": goals,
         "stats": stats,
+        "highlights": highlights.reel(sure, verdict),
     }

@@ -270,6 +270,23 @@ analytics definitions, implemented in our own words.
 | I15 | **The Referee's Laws**: short summaries in our own words of Law 11 (position, offence, exceptions), Law 12 (direct free kick offences and the penalty kick inside the area, handball, cautions and sending-offs) and the VAR protocol (clear and obvious errors in goals, penalties, direct red cards, mistaken identity); no Law text is reproduced. The tracking cannot see contact, so fouls, handballs and penalty shouts are explained, never ruled on | Laws 11 and 12 and the VAR protocol (IFAB, theifab.com) | rule summary | ✅ |
 | I16 | **Team distance** (the phone's match stats): each track's steps a second (the tracked frames' one-second smoothing; frame to frame would read jitter as running, lesson 133), a step faster than 12 m/s skipped as a track jumping (*design*: past the 8 to 9 m/s match peaks of R6), summed over the team, with its coverage, the share of the team's player-seconds tracked, in 5-minute bins (*design*); graded against the truth on spoiled simulated tracks ([team-distance.md](eval/team-distance.md)); the one-second step stays because a step rule fixed before measuring (the smallest step whose error share is at most 5% on dev seeds 7 and 11) chose none, and the phone labels the distance with the worst five-minute bin of every freeze-engine match graded (seeds 7, 11, 21 and the demo's 8076 at 65247ba3: ±21%, the demo's own). **Possession share** is left out: no confidence for it has passed a measured gate (S6) | R6; lesson 133; *design* | stat | ✅ `tests/test_team_stats.py` |
 
+### Highlights: the reel and its labels
+
+`ninety/highlights.py`, from detected events only, never ground truth. The rule and every threshold
+were fixed before any measurement in [highlights-plan.md](eval/highlights-plan.md), which has the
+full citations; kind **design** below means a choice, not a published figure. A label is given only
+when its number clears the threshold by more than vision's measured 95th percentile error of it.
+
+| ID | Rule | Source | Kind | Test |
+|---|---|---|---|---|
+| H1 | **A save is in the reel** only when the ball beat even the quickest dive: its flight time `T = d / v` is at most `T_DIVE_S` = 0.97 s. The filter is used only once the measurement passed its gates (95th percentile of the flight-time error at most 0.10 s, at least 90% of saves on the same side of 0.97 s, at least 20 saves); until then every save is in and listed fastest first | Ibrahim, Kingma, de Boode, Faber and van Dieën 2019, *Frontiers in Sports and Active Living* 1:15 (10 elite keepers diving to low balls: 0.972 s); the gates are the plan's | stat (*verify*: whether the paper's time includes the reaction; see the plan) | `tests/test_highlights.py` |
+| H2 | **`d`** is the straight-line distance from where the shot was struck to the centre of the goal it attacks | D3 (a shot is an option within 40 m of the goal's centre), lesson 138 | stat | `tests/test_highlights.py::test_each_moment_carries_its_numbers_and_its_clip` |
+| H3 | **`SCREAMER` / `LONG-RANGE`**: a goal struck surely outside the penalty area (more than 16.5 m from the goal line, or more than 20.16 m from the goal's centre line, past the position error), `d` at least 25 m or under it | Law 1 (the area); outside the area is Opta's long range (31.7% of 2024/25 Premier League shots); the 25 m is *design* | design | `tests/test_highlights.py::test_a_screamer_is_a_goal_outside_the_area_from_25_m` |
+| H4 | **`ROCKET`**: vision's shot speed over 100 km/h (a goal or a save); **`THUNDERBOLT`**: a goal that is both a screamer and a rocket | the Bundesliga's "fast" shot graphic (Haschemi et al. 2023); the word is *design* | design | `tests/test_highlights.py::test_a_thunderbolt_is_a_screamer_that_is_also_a_rocket` |
+| H5 | **`REFLEX SAVE`**: a save whose `T` is under 0.41 s, a footballer's slowest choice reaction | P12 (0.32 to 0.41 s, Lesiakowski 2017) | stat | `tests/test_highlights.py::test_a_reflex_save_beats_a_footballers_reaction` |
+| H6 | **`TAP-IN`**: a goal struck within 5.5 m of the goal line and 9.16 m of the goal's centre line, past the position error | Law 1 (the goal area) | rule | `tests/test_highlights.py::test_a_tap_in_is_a_goal_from_inside_the_six_yard_box` |
+| H7 | A moment's clip runs 8 s before the strike to 3 s after, so the build-up is on screen | *design* | design | `tests/test_highlights.py::test_each_moment_carries_its_numbers_and_its_clip` |
+
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.
