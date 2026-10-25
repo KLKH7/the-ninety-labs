@@ -182,6 +182,7 @@ def phone_t(phone) -> float:
 # The big screen sends its clock every second (web/viewer/src/companion.ts, EVERY_MS) and the
 # phone re-anchors on each.
 SETTLE_S = 1.0
+STEPS, STEP_MS = 2, 200  # once settled, two more samples in step, 0.2 s apart
 
 
 def assert_in_step(sample_laptop, phone):
@@ -191,16 +192,23 @@ def assert_in_step(sample_laptop, phone):
     stays TOLERANCE_S; a phone that never comes within it fails, with every sample."""
     samples = []
     deadline = time.monotonic() + SETTLE_S
-    while True:
+
+    def sample() -> bool:
         before = sample_laptop()
         shown = phone_t(phone)
         after = sample_laptop()
         samples.append((before, shown, after))
-        if before - TOLERANCE_S <= shown <= after + TOLERANCE_S:
-            return
+        return before - TOLERANCE_S <= shown <= after + TOLERANCE_S
+
+    while not sample():
         if time.monotonic() > deadline:
             raise AssertionError(f"not within {TOLERANCE_S} s after {SETTLE_S} s: {samples}")
         phone.wait_for_timeout(100)
+    # Once in step, it stays in step: STEPS more samples STEP_MS apart, each within the bar, so a
+    # phone whose own clock stopped (but was right once) fails too.
+    for _ in range(STEPS):
+        phone.wait_for_timeout(STEP_MS)
+        assert sample(), f"fell out of step after settling: {samples}"
 
 
 def seen(phone) -> list[dict]:
