@@ -2853,3 +2853,16 @@ short and actionable. This file is public: no research sources, product names or
   output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
 - **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
   folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. A scorer that defaults a missing truth field to zero grades nothing and says it graded
+- **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
+  a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
+  place. On the 30 test clips every true speed became 0, so every "error" was vision's own speed,
+  the 3D and flat rows came out identical, and no frame passed the 18 km/h floor for a relative
+  error. Its tests passed because their hand-built truth frames carried a velocity.
+- **Rule:** a scorer reads truth fields strictly (`b["x"]`, never `b.get("x", 0.0)`): a missing
+  field is an error, not a value. A quantity the clip does not store is derived from what it does
+  (here, the velocity from the true places one frame either side), and the tests build truth
+  frames in the shape the real files have.
+- **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
+  reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.

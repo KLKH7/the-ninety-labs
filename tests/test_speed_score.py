@@ -22,9 +22,9 @@ from tests.test_vision_events import BLUE, pass_scene, row
 FPS = tr.FPS
 
 
-def truth_frame(frame, x, y, z=0.0, vx=0.0, vy=0.0, vz=0.0):
-    return {"frame": frame, "t": round(frame / FPS, 2),
-            "ball": {"x": x, "y": y, "z": z, "vx": vx, "vy": vy, "vz": vz}}
+def truth_frame(frame, x, y, z=0.0):
+    """A truth frame as a rendered clip writes it: the ball's place, and no velocity."""
+    return {"frame": frame, "t": round(frame / FPS, 2), "ball": {"x": x, "y": y, "z": z}}
 
 
 def rolling(speed=20.0, frames=30, scale=1.0):
@@ -33,7 +33,7 @@ def rolling(speed=20.0, frames=30, scale=1.0):
     for f in range(frames):
         x = 30.0 + speed * f / FPS
         obs.append(row(f, [], (30.0 + scale * (x - 30.0), 34.0)))
-        truth[f] = truth_frame(f, x, 34.0, vx=speed)
+        truth[f] = truth_frame(f, x, 34.0)
     return obs, truth
 
 
@@ -41,10 +41,9 @@ def pass_truth(frames=60, kick=20, speed=12.0):
     """The truth beside tests.test_vision_events.pass_scene: the same ball, and the pass."""
     out, bx = [], 50.3
     for f in range(frames):
-        moving = kick < f and bx < 61.7
         if f > kick:
             bx = min(bx + speed / FPS, 61.7)
-        out.append(truth_frame(f, bx, 34.0, vx=speed if moving else 0.0))
+        out.append(truth_frame(f, bx, 34.0))
     event = {"id": "e00001", "type": "pass", "team": "home", "t": round(kick / FPS, 2), "x": 50.3, "y": 34.0,
              "ball_speed_kmh": round(speed * 3.6, 1), "source": "truth"}
     return out, [event]
@@ -55,7 +54,8 @@ def pass_truth(frames=60, kick=20, speed=12.0):
 def test_a_ball_seen_where_it_is_has_no_frame_speed_error():
     obs, truth = rolling()
     rows = ss.frame_speeds(obs, truth)
-    assert len(rows) == 30
+    assert [r["frame"] for r in rows] == list(range(1, 29))  # the true velocity needs both neighbours
+    assert all(r["true_kmh"] == pytest.approx(72.0) for r in rows)
     assert all(abs(r["error_kmh"]) < 1e-6 and r["height"] == "on the ground" for r in rows)
     s = ss.summarise(rows)
     assert s["median_abs_kmh"] == 0.0 and s["mean_signed_kmh"] == 0.0 and s["median_abs_relative"] == 0.0
@@ -74,7 +74,7 @@ def test_a_lofted_ball_seen_flat_is_exact_against_the_flat_truth_and_low_by_cos_
     for f in range(20):
         x = 30.0 + speed * math.cos(theta) * f / FPS
         obs.append(row(f, [], (x, 34.0)))
-        truth[f] = truth_frame(f, x, 34.0, z=1.0, vx=speed * math.cos(theta), vz=speed * math.sin(theta))
+        truth[f] = truth_frame(f, x, 34.0, z=1.0 + speed * math.sin(theta) * f / FPS)
     rows = ss.frame_speeds(obs, truth)
     assert all(r["height"] == "in the air" for r in rows)
     assert all(abs(r["error_flat_kmh"]) < 1e-6 for r in rows)
@@ -84,7 +84,7 @@ def test_a_lofted_ball_seen_flat_is_exact_against_the_flat_truth_and_low_by_cos_
 
 def test_a_ball_exactly_at_the_cut_off_is_on_the_ground_and_a_pass_through_it_is_not_lofted():
     obs, truth = rolling(frames=10)
-    truth = {f: truth_frame(f, t["ball"]["x"], 34.0, z=IN_AIR_Z, vx=20.0) for f, t in truth.items()}
+    truth = {f: truth_frame(f, t["ball"]["x"], 34.0, z=IN_AIR_Z) for f, t in truth.items()}
     assert {r["height"] for r in ss.frame_speeds(obs, truth)} == {"on the ground"}
     assert not ss.lofted(0.0, truth)
     truth[ss.LOOK_FRAMES] = truth_frame(ss.LOOK_FRAMES, 0.0, 34.0, z=IN_AIR_Z + 0.01)
@@ -92,10 +92,20 @@ def test_a_ball_exactly_at_the_cut_off_is_on_the_ground_and_a_pass_through_it_is
     assert not ss.lofted((ss.LOOK_FRAMES + 1) / FPS, truth)  # the window ends at LOOK_FRAMES
 
 
-def test_a_frame_the_truth_does_not_hold_is_left_out():
+def test_a_frame_whose_true_velocity_cannot_be_had_is_left_out():
     obs, truth = rolling(frames=10)
-    del truth[5]
-    assert [r["frame"] for r in ss.frame_speeds(obs, truth)] == [0, 1, 2, 3, 4, 6, 7, 8, 9]
+    del truth[5]  # a cut: frames 4 and 6 lose a neighbour
+    assert [r["frame"] for r in ss.frame_speeds(obs, truth)] == [1, 2, 3, 7, 8]
+
+
+def test_the_true_speed_comes_from_the_true_places_and_a_missing_place_is_an_error_not_zero():
+    """Rendered truth frames hold no velocity: a scorer that read a missing vx as 0 graded vision's
+    own speed as its error (docs/LESSONS.md). The true speed here is 20 m/s from the places alone."""
+    obs, truth = rolling(frames=5)
+    assert ss.true_ball(truth, 2)[0] == pytest.approx(72.0)
+    del truth[3]["ball"]["x"]
+    with pytest.raises(KeyError):
+        ss.frame_speeds(obs, truth)
 
 
 def test_relative_error_counts_a_true_speed_exactly_at_its_floor_and_not_below():

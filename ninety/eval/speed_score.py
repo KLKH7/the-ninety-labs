@@ -67,24 +67,32 @@ def summarise(rows: list[dict], key: str = "error_kmh", true_key: str = "true_km
             "n_relative": len(rel), "median_abs_relative": round(_quantile(rel, 0.5), 3) if rel else None}
 
 
-def true_ball(frame: dict) -> tuple[float, float, float]:
-    """(3D speed km/h, flat speed km/h, height m) of the true ball in a truth frame."""
-    b = frame["ball"]
-    vx, vy, vz = b.get("vx", 0.0), b.get("vy", 0.0), b.get("vz", 0.0)
-    return math.sqrt(vx * vx + vy * vy + vz * vz) * KMH, math.hypot(vx, vy) * KMH, b.get("z", 0.0)
+def true_ball(truth: dict[int, dict], k: int) -> tuple[float, float, float] | None:
+    """(3D speed km/h, flat speed km/h, height m) of the true ball at frame k, or None when the
+    frame or one of its two neighbours is not in the truth (a cut, the clip's edge). A rendered
+    clip's frames hold the ball's place, not its velocity (docs/DATA_CONTRACT.md), so the velocity
+    is the central difference of the true places one frame either side; places are stored to the
+    millimetre, about 0.1 km/h of error. A missing place is an error, never read as zero."""
+    if not all(f in truth for f in (k - 1, k, k + 1)):
+        return None
+    a, b, here = truth[k - 1]["ball"], truth[k + 1]["ball"], truth[k]["ball"]
+    dt = 2 / tr.FPS
+    vx, vy, vz = ((b[c] - a[c]) / dt for c in ("x", "y", "z"))
+    return math.sqrt(vx * vx + vy * vy + vz * vz) * KMH, math.hypot(vx, vy) * KMH, here["z"]
 
 
 def frame_speeds(rows: list[dict], truth: dict[int, dict]) -> list[dict]:
     """Vision's ball speed in each frame it has one, beside the true ball's in that frame. A frame
-    the truth does not hold (a broadcast cut) is left out."""
+    whose true velocity cannot be had (it or a neighbour in a broadcast cut) is left out."""
     path = tr.ball_path(rows)
     out = []
     for i, p in enumerate(path):
         v = ev._velocity(path, i)  # the detector's own velocity, unchanged
-        if v is None or p.frame not in truth:
+        true = true_ball(truth, p.frame)
+        if v is None or true is None:
             continue
         speed = math.hypot(*v) * KMH
-        true3, flat, z = true_ball(truth[p.frame])
+        true3, flat, z = true
         out.append({"frame": p.frame, "vision_kmh": round(speed, 2), "true_kmh": round(true3, 2),
                     "true_flat_kmh": round(flat, 2), "z_m": z, "height": height_group(z),
                     "on_player": p.on_player, "error_kmh": speed - true3, "error_flat_kmh": speed - flat})
@@ -94,7 +102,7 @@ def frame_speeds(rows: list[dict], truth: dict[int, dict]) -> list[dict]:
 def lofted(t: float, truth: dict[int, dict]) -> bool:
     """The true ball is in the air in any frame of vision's window after the true strike."""
     k = round(t * tr.FPS)
-    return any(height_group(truth[f]["ball"].get("z", 0.0)) == "in the air"
+    return any(height_group(truth[f]["ball"]["z"]) == "in the air"
                for f in range(k, k + LOOK_FRAMES + 1) if f in truth)
 
 
