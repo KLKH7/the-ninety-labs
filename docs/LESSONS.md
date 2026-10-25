@@ -2934,7 +2934,71 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
   (x = -3, -0.5, 106, 108) fails when the check is removed.
 
-### 249. A scorer that defaults a missing truth field to zero grades nothing and says it graded
+### 249. A phrase that states a direction is bound to the fact's own role, not only approved
+- **What happened:** the closed direction check (lesson 221) approved a sentence when every word
+  was one of the cited fact's own phrases. The phrases were approved as words, though, not as this
+  fact's values. The merge queue's reviews of #321, #323 and #326 got these through:
+  - "Hugo passed to Sami" against Sami-to-Hugo (both names, the same words);
+  - "did not sprint" against a count of 4 (the zero phrase is one of the fact's phrases);
+  - "their final third on the left" against own-third-right (any third matched);
+  - a recap's twelve-moment cap dropping a goal.
+  Numbers already had roles (lesson 221); orders, zeros and places did not.
+- **Rule:** wherever a phrase carries a fact's value, the check binds it to that value:
+  - a pair is said passer-to-receiver;
+  - a zero phrase only of a zero;
+  - a zone only as the fact's own third and channel.
+  A cap on a list never drops the kind the list exists for (goals in a recap). A review probe that
+  differs from the fact only in who, where or whether is a test.
+- **Check:** `tests/test_passing_network.py::test_a_pair_is_said_in_its_order_and_with_its_caveat`,
+  `tests/test_player_running.py::test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it` and
+  `tests/test_halves_and_moments.py::test_a_recap_never_drops_a_goal_however_many_moments_follow`
+  fail when their binding is removed.
+
+
+### 250. A guard on what a fan asked is a list of words, so every phrasing it misses gets an answer
+
+- **What happened:** while a named player's running figures were held, the physical tool still
+  said the zone each player was in most (#323). A guard (`held_ask`) matched "distance", "fastest",
+  "sprint" and a few more, and refused those questions. Every other phrasing got the first zone
+  fact, verified, with a player's name as the headline: "Who looks most tired?", "Who ran the
+  furthest?", "How many km has Kai done?". Then "who is on the left?" got the zone of someone who
+  played on the right, and "Where does Alex play?" got one of three Alexes. Three reviews found
+  more phrasings each time. The fact-check never sees the question, so a true sentence that does
+  not answer the question passes it.
+- **Rule:** gate on the kind of answer the question asks for, and refuse anything else:
+  - a figure, at its highest, or of the one player the question names;
+  - the zone, only for a question of where, about one named player.
+  
+  Several players fitting are named back to the fan, never picked for him. A side or a third alone is not
+  a question of where. The model path is held to the same target: an answer about another player,
+  or not the figure asked, falls back to code.
+- **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
+  and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
+  phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 252. A test waits on the state it checks; one read of a screen is a race
+- **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
+  `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
+  top-level `await import('./mock')`. The other read each screen's clock once, from a DOM attribute
+  written each time a frame is drawn: on a loaded runner the phone read 0.5 s behind the big
+  screen (61.77 / 61.27 / 61.93). The clock check also had a gap: it passed a phone whose clock
+  did not advance between the big screen's once-a-second messages, so it read right once a
+  second.
+- **Rule:**
+  - A browser test waits for the state it checks (an element visible, a ready flag, a status's
+    state), never a single read after an action, and never a longer timeout in its place.
+  - A value a screen writes per frame is read after a fresh frame.
+  - A sync check settles for at most one sync period (the sender's own interval, cited), keeps the
+    product's bar, then requires the next samples to stay in step. A phone constantly off, or one
+    whose clock stops between messages, still fails.
+- **Check:** `tests/test_phone.py::test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap`
+  waits for `#mockbar`. `assert_in_step` (fresh frames, `SETTLE_S`, then `STEPS` more samples)
+  fails `test_the_phone_clock_stays_within_tolerance_of_the_laptop` and
+  `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
+  shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
+  messages (mutant runs, #341 and its follow-up).
+
+### 253. A scorer that defaults a missing truth field to zero grades nothing and says it graded
 - **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
   a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
   place. On the 30 test clips every true speed became 0, so every "error" was vision's own speed,

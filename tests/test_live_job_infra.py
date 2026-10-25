@@ -165,3 +165,17 @@ def test_each_view_gets_its_labels_free_index_with_the_clip_s_id(tmp_path):
     rows = [json.loads(line) for line in written[0].read_text().splitlines()]
     assert [r["frame"] for r in rows] == [0, 5]
     assert all(set(r) == {"clip", "frame", "t", "image"} and r["clip"] == "seed8001" for r in rows)
+
+
+def test_a_view_s_own_clip_json_does_not_split_the_clip(tmp_path):
+    # The renderer writes a clip.json in each view too, named after the view (seed8001-tac-l).
+    from ninety.vision import frame_index
+
+    clip = rendered_views_clip(tmp_path)
+    for name in ("tac-l", "tac-r"):
+        (clip / "views" / name / "clip.json").write_text(json.dumps({"clip_id": f"seed8001-{name}"}))
+    out = tmp_path / "live-input" / "clip"
+    stage_live.stage_clip(clip, 1.0, 2.5, out)
+    assert set(live_job.check_views(out)) == {"tac-l", "tac-r"}
+    for index in frame_index.write_indexes(clip):
+        assert {json.loads(x)["clip"] for x in index.read_text().splitlines()} == {"seed8001"}
