@@ -354,6 +354,8 @@ interface DetectedEvent {
   confidence?: number | null;
   team_confidence?: number | null;
   interceptor?: string | null;
+  /** score_change only (#356): the score the broadcast's scorebug shows from this event on. */
+  score?: { home: number; away: number } | null;
 }
 /** The side threshold the fact-checker uses (the bundle's `min_team_confidence`, from
  * ninety/agents/factcheck.py); null for a bundle that does not say, where every detected side is unsure. */
@@ -1975,6 +1977,43 @@ function renderSpotted(m: MatchData, t: number) {
   }
 }
 
+/** The score, only as vision read it off the broadcast's own scorebug: the latest `score_change`
+ * (#356) at or before t; nothing before the first reading. Never counted from detected goals
+ * (Kian, Oct 25): vision can miss a goal, the scorebug cannot. */
+export function scorebugAt(events: Iterable<{ type: string; t: number; score?: { home: number; away: number } | null }>, t: number) {
+  let best: { t: number; score: { home: number; away: number } } | null = null;
+  for (const e of events) {
+    if (e.type !== "score_change" || !e.score || e.t > t + 1e-6) continue;
+    if (!best || e.t >= best.t) best = { t: e.t, score: e.score };
+  }
+  return best;
+}
+let scorebugKey = "";
+function renderScorebug(t: number) {
+  const read = scorebugAt(bundleEvents.values(), t);
+  const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
+  if (key === scorebugKey) return;
+  scorebugKey = key;
+  document.body.dataset.scorebug = read ? "read" : "";
+  for (const side of ["home", "away"] as const) {
+    const el = $(`score-${side}`);
+    el.hidden = !read;
+    if (read) tickTo(el, read.score[side]);
+  }
+  const btn = $("score-read");
+  btn.hidden = !read;
+  btn.textContent = read ? `Score, read from the broadcast's score graphic: ${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}` : "";
+  for (const el of document.querySelectorAll<HTMLElement>(".score-line")) el.dataset.score = read ? `${read.score.home} ${read.score.away}` : "";
+}
+for (const id of ["score-home", "score-away", "score-read"]) {
+  $(id).addEventListener("click", () => {
+    const read = scorebugAt(bundleEvents.values(), viewTime());
+    if (!read) return;
+    void openHow({ t: read.t, visual: null, source: "code", evidence: [],
+      why: { question: "", text: `${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}: read from the broadcast's score graphic at ${clock(read.t)}, never counted from the goals vision spotted.` } });
+  });
+}
+
 let statsKey = "";
 function showMatch(t: number) {
   const m = state.match;
@@ -1988,6 +2027,7 @@ function showMatch(t: number) {
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
   renderSpotted(m, t);
+  renderScorebug(t);
   renderShots(t);
   renderSquad();
   if (playsUpTo(t).length !== playsShown) renderInsights();

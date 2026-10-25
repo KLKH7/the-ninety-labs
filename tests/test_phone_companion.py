@@ -1099,7 +1099,8 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
     page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('% sure')")
     assert "The score is the broadcast's" in page.inner_text("#how-body")
     page.click("#close-how")
-    assert page.locator("#score-home, #score-away, .mh, .ma, .tally").count() == 0
+    # No scorebug reading in this bundle: no numerals, whatever the goals (#356 is the only source).
+    assert page.locator("#score-home:visible, #score-away:visible, .mh, .ma, .tally").count() == 0
     # Every screen's text and every accessible name, the shot map's and Live's shot card's among them.
     js = """() => [document.body.innerText,
         ...[...document.querySelectorAll('[aria-label]')].map((el) => el.getAttribute('aria-label')),
@@ -1134,3 +1135,45 @@ def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: 
     assert not re.search(r"\d", what), what
     assert not errors
 
+
+
+def test_the_score_shows_only_as_read_off_the_broadcast_scorebug_never_from_goal_counts(browser, site):  # noqa: F811
+    """#356: a scoreline only from `score_change` events (the scorebug read from the pixels). Three
+    detected goals here, but the scorebug says 1-1 from 61.5 s (0-0 from kick-off): the band shows
+    0 and 0, then 1 and 1, never 3 or 2."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def bundle(route):
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"},
+                             {"t": 61.3, "team": "home", "event": "e2"},
+                             {"t": 61.4, "team": "away", "event": "e4"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        base = {"type": "score_change", "team": None, "x": 52.5, "y": 34.0, "source": "vision",
+                "confidence": 0.99}
+        rows += [{**base, "id": "s00001", "t": 60.0, "frame": 1500, "score": {"home": 0, "away": 0}},
+                 {**base, "id": "s00002", "t": 61.5, "frame": 1537, "team": "away",
+                  "score": {"home": 1, "away": 1}}]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", bundle)
+    ctx.route("**/bundle/events.jsonl", bundle)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "61")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#score-home:visible")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '0'")
+    assert page.text_content("#score-away") == "0"  # two goals detected by 61 s; the scorebug says 0-0
+    laptop.fill("#seek", "63")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '1'")
+    assert page.text_content("#score-away") == "1"
+    assert "read from the broadcast's score graphic" in page.text_content("#score-read")
+    page.click("#score-home")
+    page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('graphic')")
+    assert not errors
+    ctx.close()
