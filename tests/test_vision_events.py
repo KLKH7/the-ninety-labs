@@ -397,6 +397,101 @@ def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
     assert any(e["type"] == "out_of_play" for e in events)
 
 
+def side_scene(per_side_home, frames=12):
+    """Blue (home, deeper) and red players standing still, `per_side_home` blue ones in every frame."""
+    out = []
+    for f in range(frames):
+        blue = [(20.0 + 2 * k, 5.0 + 5 * (k % 12), BLUE) for k in range(per_side_home)]
+        red = [(80.0 + 2 * k, 5.0 + 5 * k, RED) for k in range(5)]
+        out.append(row(f, blue + red))
+    return out
+
+
+def test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure():
+    # Law 3: at most 11 a side on the pitch, keeper included. Eleven is a team; twelve is two kits
+    # read as one, and then no side in the clip is sure.
+    for n, sure in ((11, True), (12, False)):
+        tracks = tr.track_players(side_scene(n))
+        info = tr.assign_teams(tracks)
+        sided = [t for t in tracks if t.team is not None]
+        assert sided
+        assert (info["law3"] is None) is sure
+        assert all((t.side_confidence > 0) is sure for t in sided)
+
+
+def test_after_law_3_the_events_carry_side_confidence_0():
+    # The pass scene to a team-mate has 6 blue players; standing 5 more far off makes 11, 6 more
+    # makes 12. With 12 every event's team_confidence is 0, so nothing team-named airs; with 11 not.
+    for extra, held in ((5, False), (6, True)):
+        rows = pass_scene(BLUE)
+        for r in rows:
+            r["players"] += row(r["frame"], [(10.0 + 3 * k, 5.0, BLUE) for k in range(extra)])["players"]
+        events, summary = ev.detect(rows)
+        assert events and (summary["teams"]["law3"] is not None) is held
+        assert all((e["team_confidence"] == 0.0) is held for e in events)
+
+
+def bp(frame, x, y):
+    return tr.BallPoint(frame, x, y, 0.9)
+
+
+def test_a_pass_the_ball_could_not_have_made_is_held():
+    # 0.3 m is a ball still at his feet (CONTROL_M); and a ball struck at 3 km/h cannot cover 16 m
+    # in 1 s, it only slows. A 16 m pass struck at 60 km/h and taken a second later stands.
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 50.3, 34.0), 13.7)
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 3.1)
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 60.0)
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), None)
+
+
+def test_the_speed_check_allows_both_ends_position_error_and_no_more():
+    # Over 1 s, 16 m less twice the 1.26 m position error is 13.48 m: a strike of 48.53 km/h
+    # (13.48 m/s) reaches it, 48.4 km/h does not.
+    assert ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 48.53)
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 48.4)
+    edge = ev.CONTROL_M  # a pass exactly at the feet's reach is still no pass
+    assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 50.0 + edge, 34.0), 30.0)
+
+
+def jump_scene(end, receiver_colour=None, jump=True):
+    """A blue player at (50, 34) holds the ball and plays it from frame 20 toward `end`. With
+    `jump` it rolls at 2 m/s, then on frame 40 is seen at `end` (a ball the detector found
+    elsewhere); without, it travels there at 12 m/s. A player of `receiver_colour`, if any,
+    stands at `end` and takes it; else it stays there."""
+    (ex, ey), rows = end, []
+    for f in range(110):  # long enough for the 12 m/s ball to reach the touchline
+        k = max(0, f - 20)
+        if jump:
+            s = 2.0 * k / FPS
+            bx, by = (ex, ey) if f >= 40 else (50.3 + s * (ex - 50.3) / math.dist((50.3, 34.0), end),
+                                               34.0 + s * (ey - 34.0) / math.dist((50.3, 34.0), end))
+        else:
+            s = min(1.0, 12.0 * k / FPS / math.dist((50.3, 34.0), end))
+            bx, by = 50.3 + s * (ex - 50.3), 34.0 + s * (ey - 34.0)
+        people = [(50.0, 34.0, BLUE)] + ([(ex + 0.3, ey, receiver_colour)] if receiver_colour else [])
+        rows.append(row(f, crowd(f) + people, (bx, by)))
+    return rows
+
+
+def test_detect_holds_a_received_pass_the_ball_could_not_have_made():
+    # The wiring in detect(): a pass to a red player, the ball seen 10 m on 0.2 s after it rolled
+    # off at 7 km/h, airs with confidence 0; the same pass struck at 12 m/s does not.
+    for jump, held in ((True, True), (False, False)):
+        (p,) = [e for e in ev.detect(jump_scene((61.7, 34.0), RED, jump))[0] if e["type"] == "pass"]
+        assert p["outcome"] == "fail" and p["end_x"] == 61.7  # the premise: the pass is told
+        assert (p["confidence"] == 0.0) is held
+
+
+def test_detect_holds_a_pass_out_of_play_the_ball_could_not_have_made():
+    # The same for a ball that goes out over the touchline (y 70): the pass ends where it went out.
+    for jump, held in ((True, True), (False, False)):
+        events = ev.detect(jump_scene((50.3, 70.0), None, jump))[0]
+        assert any(e["type"] == "out_of_play" for e in events)  # the premise
+        (p,) = [e for e in events if e["type"] == "pass"]
+        assert p["outcome"] == "fail" and p["end_y"] == ev.PITCH_Y
+        assert (p["confidence"] == 0.0) is held
+
+
 # Possession changes (docs/eval/possession-change-plan.md): a spell of the other side, the ball in
 # play between the two as far as the picture shows.
 

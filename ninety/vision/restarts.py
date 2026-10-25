@@ -4,7 +4,8 @@
 
 Reads only the observations file (`ninety.vision.observe`), as `ninety.vision.events` does, and
 writes match_event lines with `source: "vision"`. Nothing here reads ground truth, so it may run on
-the live path (tests/test_vision_live_path.py watches it run); the live job does not call it yet.
+the live path (tests/test_vision_live_path.py watches it run); the live job runs it after
+`events.detect` and writes the merged events (ninety/vision/live_job.py).
 The rules are the Laws' (docs/GROUNDING.md); every tolerance is the measured position error, stated
 before any validation clip was scored (docs/eval/restarts-vision-plan.md). `merge` joins its events
 to `events.detect`'s, leaving out a possession change while the ball lies set for a restart.
