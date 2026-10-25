@@ -289,6 +289,9 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+- **Again (Oct 23):** `uv run ruff check . | tail -1 && git commit ... && git push` committed and
+  pushed a branch with 2 lint errors: `tail` succeeded, so `&&` went on. Gate on the command itself
+  (`uv run ruff check . && ...`), never on a pipe that trims its output.
 
 ### 30. Run the commands you document
 - **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
@@ -2843,7 +2846,38 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
   when the overlap test or the merge is mutated.
 
-### 242. A stage that keeps every frame it reads only works on short clips
+### 242. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. An id that is a place in an order moves when anything is added before it
+- **What happened:** adding possession changes to the detected events regenerated the M1 clip's
+  fixture, and every event after the first change moved up one id. The failure table pinned its
+  evidence pass as `SIDE = "v00005"`, "a second completed pass in the minute": that id became the
+  out of play, which the agents' view drops, and every CI shard failed with `KeyError: 'v00005'`.
+  The PR's local run covered the vision tests, not the workflow tests that read the same fixture.
+- **Rule:** an event is chosen by what it is (its type, outcome, minute, order among its kind),
+  never by a detected id, which is only its place in the clip. When a fixture is regenerated,
+  every reader of it is found (`grep -rn <fixture name>` and the modules those tests call) and
+  their tests are run in the same change (lesson 91).
+- **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
+  plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
+  the old fixed ids put back, the file fails to collect.
+- **Again, the next day:** `ninety/eval/describe_eval.py` (#268, merged after the fixture changed)
+  read which detections are real from event-report-v2's pairs, whose ids are the older detector's.
+  Its own guard refused them (`v00005 is not the event it matched`), as it should. The fix grades
+  the current detector (`docs/eval/event-report-v3.json`, written by `possession_report` beside its
+  report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
+  where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
+
+### 245. A stage that keeps every frame it reads only works on short clips
 - **What happened:** `ninety.vision.observe` decoded every image of a clip and kept them all until
   its second pass, which only needed each frame's shirt colours. At 1280 x 720 that is 2.8 MB a
   frame, about 4 GB a minute of footage: the live detection job, sized at 4 GiB, would have run out
