@@ -122,6 +122,7 @@ class MatchInsights:
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
         facts["save"] = scoring.saves(events)
+        facts["scorebug"] = scoring.scorebug(events)  # the score as the broadcast shows it
         facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
         for rows in facts.values():
             for r in rows:
@@ -376,7 +377,11 @@ class MatchInsights:
         team = self.team(club)
         clubs = self.fixture.clubs
         goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]
-        summary = [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
+        shown = [r for r in self.facts.get("scorebug", ()) if r["minute"] <= minute_to]
+        # The latest reading, its two numbers each bound to its club (lesson 221), as the score's are.
+        summary = [{**shown[-1], "value": shown[-1]["home"], "unit": "goals", "clubs": clubs, "club": None,
+                    "also": [[shown[-1]["away"], "goals", rf"\b{clubs['away']}\b[^.\d]*$"]]}] if shown else []
+        summary += [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
         summary += [
             {**r, "club": clubs[t]}
             for t, r in scoring.save_counts(self.facts.get("save", ()), minute_from, minute_to).items()

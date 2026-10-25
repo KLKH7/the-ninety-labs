@@ -125,6 +125,28 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
     }
 
 
+# The score as the broadcast's scorebug shows it (ninety/vision/scorebug.py, `score_change`: read from
+# the graphic's pixels, never counted from goals). Said only once the reader's accuracy is measured on
+# validation clips (docs/eval/scorebug-plan.md); until then a score question points at the scorebug.
+SCOREBUG_MEASURED = False
+
+
+def scorebug(events: Iterable[Mapping]) -> list[dict]:
+    """Each score the scorebug was read to show, from the frame it changed, oldest first."""
+    out = []
+    for e in sorted((e for e in events if e.get("type") == "score_change" and e.get("score")),
+                    key=lambda e: (e["t"], e["id"])):
+        conf = e.get("confidence")
+        out.append({
+            "id": f"scorebug:{e['id']}", "kind": "scorebug", "metric": "scorebug", "team": None,
+            "minute": minute_of(float(e["t"])), "t": round(float(e["t"]), 2), "event": e["id"],
+            "home": int(e["score"]["home"]), "away": int(e["score"]["away"]), "source": "scorebug",
+            "event_confidence": conf,
+            "confident": SCOREBUG_MEASURED and (conf is None or float(conf) >= MIN_CONFIDENCE),
+        })
+    return out
+
+
 def save_counts(save_rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
     window = [s for s in save_rows if minute_from <= s["minute"] <= minute_to]
     unknown = sum(not s["confident"] for s in window)
@@ -147,4 +169,4 @@ def save_counts(save_rows: Sequence[Mapping], minute_from: int, minute_to: int) 
     return out
 
 
-__all__ = ["goals", "save_counts", "saves", "score"]
+__all__ = ["SCOREBUG_MEASURED", "goals", "save_counts", "saves", "score", "scorebug"]

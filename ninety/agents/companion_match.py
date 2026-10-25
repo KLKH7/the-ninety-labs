@@ -560,7 +560,7 @@ def _match_answer(
     t_from, t_to = _span(cited)
     # Never the score's counts (option B): an answer's number is from any other fact.
     lead = next((f for f in cited if f.get("value") is not None and f.get("unit")
-                 and f.get("metric") != "score"), None)
+                 and f.get("metric") not in ("score", "scorebug")), None)
     metric, value, unit = (lead["metric"], float(lead["value"]), lead["unit"]) if lead else (None, None, None)
     visual = visual_of(cited)
     extra = {}
@@ -681,6 +681,10 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     kind = question_kind(question)
     # "Who's winning?" asks the score; "who is winning the battle in midfield?" does not.
     winning = re.search(r"\b(?:winning|ahead|in front|leading)\s*\??\s*$", question, re.I)
+    bug = next((f for f in cited if f.get("metric") == "scorebug" and f.get("confident")), None)
+    if bug is not None and (kind != "who" or winning):  # the scorebug's reading: the only scoreline
+        fx = insights.fixture
+        return f"{short_name(fx.home_code)} {bug['home']}, {short_name(fx.away_code)} {bug['away']}"
     if any(f.get("metric") == "score" for f in cited) and (kind != "who" or winning):  # never a scoreline
         spotted = any(f.get("kind") == "goal" for f in cited)
         return "Goals spotted by vision" if spotted else "See the scorebug"
@@ -739,6 +743,12 @@ def code_texts(fact: dict) -> list[str]:
     may say (an unsure fact, or a summary with nothing in it)."""
     if fact.get("metric") == "score":  # no scoreline from vision, ever: the scorebug shows it
         return [SCORE_POINTER]
+    if fact.get("metric") == "scorebug":  # the scorebug's reading, once measured (SCOREBUG_MEASURED)
+        if not fact.get("confident"):
+            return []
+        cl = fact["clubs"]
+        return [f"The broadcast's scorebug shows {cl['home']} {_plural(fact['home'], 'goal')}, "
+                f"{cl['away']} {_plural(fact['away'], 'goal')}."]
     if not fact.get("confident", False):
         return []
     club, kind, metric = fact.get("club"), fact.get("kind"), fact.get("metric")
@@ -1111,14 +1121,17 @@ def code_match_answer(
                 said.append((text, g))
             elif (g.get("event_confidence") is None or g["event_confidence"] >= MIN_CONFIDENCE):
                 unplaced.append(g)  # a confident goal whose side is in doubt: its minute, no club
-        lines = [SCORE_POINTER, *(t for t, _ in said)]
+        bug = next((f for f in facts if f.get("metric") == "scorebug"), None)
+        shown = next((t for t in (code_texts(bug) if bug else [])
+                      if _verify(Claim(t, [bug["id"]]), known, insights).ok), None)
+        lines = [shown or SCORE_POINTER, *(t for t, _ in said)]
         lines += [f"It spotted a goal in minute {g['minute']} too, without telling whose it was."
                   for g in unplaced]
         if not said and not unplaced:  # a goal below the detection gate is no goal to vouch for
             lines.append("It has spotted no goal it can vouch for so far.")
         return _match_answer(
             " ".join(lines),
-            [score, *(g for _, g in said), *unplaced],
+            [*([bug] if shown else []), score, *(g for _, g in said), *unplaced],
             insights,
             calls,
             asked=[*(h["question"] for h in history), question.text],

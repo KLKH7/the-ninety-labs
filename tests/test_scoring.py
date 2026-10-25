@@ -141,3 +141,14 @@ def test_a_save_under_the_event_gate_is_unsure():
     shots = [e(5, "shot", "home", 300.0, outcome="on_target", x=92.0, y=30.0, confidence=0.3)]
     got = scoring.save_counts(scoring.saves(shots), 1, 90)
     assert not got["away"]["confident"] and (got["away"]["lo"], got["away"]["hi"]) == (0, 1)
+
+
+def test_a_scorebug_reading_is_never_confident_until_the_reader_is_measured(monkeypatch):
+    change = {"id": "s1", "t": 1300.0, "type": "score_change", "team": "home",
+              "score": {"home": 1, "away": 0}, "confidence": 0.95, "source": "vision"}
+    assert scoring.SCOREBUG_MEASURED is False  # flipped only by the measurement (docs/eval/scorebug-plan.md)
+    (row,) = scoring.scorebug([change])
+    assert (row["home"], row["away"], row["confident"]) == (1, 0, False)
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", True)
+    assert scoring.scorebug([change])[0]["confident"] is True
+    assert scoring.scorebug([{**change, "confidence": 0.3}])[0]["confident"] is False  # under the gate

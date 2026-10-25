@@ -967,3 +967,49 @@ def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, sa
 def test_who_is_winning_is_headed_by_the_scorebug_not_a_scorer():
     a = _score_answer([_goal("v90", 23)], "Who's winning?")
     assert a.headline in ("Goals spotted by vision", "See the scorebug") and a.metric is None
+
+
+def _bug(sid, minute, home, away, confidence=0.95):
+    return {"id": f"scorebug:{sid}", "kind": "scorebug", "metric": "scorebug", "team": None, "minute": minute,
+            "t": 60.0 * minute - 30.0, "event": sid, "home": home, "away": away, "source": "scorebug",
+            "event_confidence": confidence, "confident": confidence >= 0.5}
+
+
+@pytest.mark.parametrize("bugs, measured, said", [
+    ([_bug("s1", 23, 1, 0), _bug("s2", 61, 2, 0)], True,
+     "The broadcast's scorebug shows London Athletic 2 goals, Lisbon Esportes 0 goals."),  # the latest
+    ([_bug("s1", 23, 1, 0), _bug("s2", 85, 2, 0)], True,
+     "The broadcast's scorebug shows London Athletic 1 goal, Lisbon Esportes 0 goals."),  # none from later
+    ([_bug("s1", 23, 1, 0, confidence=0.3)], True, companion.SCORE_POINTER),  # under the gate
+    ([_bug("s1", 23, 1, 0)], False, companion.SCORE_POINTER),  # not measured yet: never said
+    ([], True, companion.SCORE_POINTER),
+])
+def test_the_score_is_said_only_as_the_scorebug_shows_it_once_measured(monkeypatch, bugs, measured, said):
+    from ninety.intel import scoring
+
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", measured)
+    bugs = [{**b, "confident": b["confident"] and measured} for b in bugs]
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], bugs
+    a = asyncio.run(companion.answer_match(Question("s1", None, "What's the score?", 80 * 60.0), mi)).answer
+    assert a.text.startswith(said), a.text
+    assert a.metric is None and a.value is None
+    if said == companion.SCORE_POINTER:
+        assert a.headline in ("Goals spotted by vision", "See the scorebug")
+    else:
+        assert re.fullmatch(r"London \d, Lisbon \d", a.headline), a.headline
+
+
+def test_a_scorebug_sentence_cannot_swap_its_numbers():
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+
+    mi = insights()
+    mi.facts["scorebug"] = [_bug("s1", 23, 2, 1)]
+    (bug,) = [f for f in mi.score(1, 30)["summary"] if f["metric"] == "scorebug"]
+    clubs = mi.fixture.clubs
+    names = [s.name for t in ("home", "away") for s in mi.fixture.sheet(t)]
+    ok = f"The broadcast's scorebug shows {clubs['home']} 2 goals, {clubs['away']} 1 goal."
+    swapped = f"The broadcast's scorebug shows {clubs['home']} 1 goal, {clubs['away']} 2 goals."
+    assert verify(Claim(ok, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
+    assert not verify(Claim(swapped, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
