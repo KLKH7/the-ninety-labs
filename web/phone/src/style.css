@@ -822,3 +822,5 @@ ion-modal { --backdrop-opacity: 0.45; }
 .insight.play .when-line { grid-column: 1; grid-row: 1; margin: 0; font-size: 15px; display: block; }
 .insight.play .tally { display: block; font-weight: 600; color: var(--text); }
 .ask-start #ask-players-title { margin-top: 22px; }
+.fine-note { margin: 8px 0 0; font-size: 13px; color: var(--text-2); }
+#stats-period[hidden] { display: none; }

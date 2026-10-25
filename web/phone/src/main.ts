@@ -1210,7 +1210,8 @@ function renderChips() {
   // An empty conversation opens on a grid of questions (never a blank page), then the answers.
   $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
   // And about the players most in the game (the Scout's per-player numbers), when there are any.
-  const ps = ((state.match as (MatchData & Squads) | null)?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
+  const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
   const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
   $("ask-players").replaceChildren(...most.map((p, i) => chip(playerQuestions(p.id)[i % 3], null)));
   $("ask-players").hidden = $("ask-players-title").hidden = most.length === 0;
@@ -1974,7 +1975,13 @@ function showMatch(t: number) {
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
 interface StatsBlock {
   rows: { group: string; key: string; label: string; unit: string | null; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }[];
+  /** Each half on its own (#338): the same rows with one value per team; `second` from minute 46. */
+  halves?: Partial<Record<"first" | "second", { minute_from: number; minute_to: number; rows: HalfRow[] }>>;
+  player_stats?: PlayerStats[];
+  pass_network?: Record<"home" | "away", PassNetwork>;
 }
+type HalfRow = { group: string; key: string; label: string; unit: string | null; home: number | null; away: number | null; confident: boolean };
+let statsPeriod: "match" | "first" | "second" = "match";
 const round1 = (n: number) => Math.round(n * 10) / 10;
 interface TeamStatsFacts {
   from_footage: boolean;
@@ -2050,6 +2057,7 @@ function renderStats(st: MatchData["stats"][number]) {
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
     return li;
   };
+  const listOf = (groups: [string, Row[]][]) => {
   const items: HTMLLIElement[] = [];
   for (const [name, rows] of groups) {
     const shown = rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a));
@@ -2062,7 +2070,24 @@ function renderStats(st: MatchData["stats"][number]) {
     head.append(h3);
     items.push(head, ...shown.map(row));
   }
-  $("stat-rows").replaceChildren(...items);
+  return items;
+  };
+  const items = listOf(groups);
+  // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
+  const halves = block?.insight_stats?.halves;
+  $("stats-period").hidden = !halves?.first;
+  for (const btn of $("stats-period").querySelectorAll<HTMLElement>("ion-segment-button[value=second]")) btn.hidden = !halves?.second;
+  const half = statsPeriod === "match" ? null : halves?.[statsPeriod];
+  if (half) {
+    const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
+    for (const r of half.rows) {
+      if (r.home === null || r.away === null) continue;
+      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      if (!r.confident) unsure.add(label);
+      byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
+    }
+    $("stat-rows").replaceChildren(...listOf(byGroup));
+  } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
   const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
@@ -2162,7 +2187,9 @@ type Squads = { player_stats?: PlayerStats[]; pass_network?: Record<"home" | "aw
 let squadKey = "";
 let networkSide: "home" | "away" = "home";
 function renderSquad() {
-  const m = state.match as (MatchData & Squads) | null;
+  const m0 = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  // The Scout's numbers ride in insight_stats (#338); top-level kept for a bundle that has them there.
+  const m = m0 ? { ...m0, player_stats: m0.insight_stats?.player_stats ?? m0.player_stats, pass_network: m0.insight_stats?.pass_network ?? m0.pass_network } : null;
   const sheet = Object.entries(teamSheet);
   const key = `${sheet.length}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}`;
   if (key === squadKey) return;
@@ -2255,7 +2282,7 @@ function renderSquad() {
   for (const n of net.nodes) {
     const [x, y] = px(n);
     kids.push(el("circle", { cx: x, cy: y, r: 2.6 + Math.min(1.6, n.passes / 25), class: `node ${networkSide}` }));
-    const shirt = teamSheet[n.id]?.number;
+    const shirt = (teamSheet[n.id] ?? Object.values(teamSheet).find((e) => e.name === n.id))?.number;
     if (shirt !== undefined) {
       const t = el("text", { x, y: y + 1.1, class: "node-n" });
       t.textContent = String(shirt);
@@ -2266,6 +2293,7 @@ function renderSquad() {
   const pair = [...net.links].sort((a, b) => b.n - a.n)[0];
   const busiest = [...net.nodes].sort((a, b) => b.passes - a.passes)[0];
   svg.setAttribute("aria-label", `${teams[networkSide]} pass network: ${net.nodes.length} players.`);
+  const who = (id: string) => (teamSheet[id] || isTrack(id) || /^[ha]\d+$/.test(id) ? playerName(id) : id); // a name is itself
   const line = (label: string, value: string) => {
     const li = document.createElement("li");
     li.innerHTML = '<span class="who-name"></span><span class="v"></span>';
@@ -2274,10 +2302,15 @@ function renderSquad() {
     return li;
   };
   $("network-rows").replaceChildren(
-    ...(pair ? [line(`${playerName(pair.a)} and ${playerName(pair.b)}`, `${pair.n} passes`)] : []),
-    ...(busiest ? [line(`Most passes: ${playerName(busiest.id)}`, String(busiest.passes))] : []),
+    ...(pair ? [line(`${who(pair.a)} and ${who(pair.b)}`, `${pair.n} passes`)] : []),
+    ...(busiest ? [line(`Most passes: ${who(busiest.id)}`, String(busiest.passes))] : []),
   );
 }
+$("stats-period").addEventListener("ionChange", (e) => {
+  statsPeriod = (e as CustomEvent<{ value: typeof statsPeriod }>).detail.value;
+  statsKey = ""; // redraw the rows now
+  if (state.match) showMatch(viewTime());
+});
 $("network-side").addEventListener("ionChange", (e) => {
   networkSide = (e as CustomEvent<{ value: "home" | "away" }>).detail.value;
   renderSquad();

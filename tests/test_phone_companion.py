@@ -938,10 +938,12 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
                           {"id": "a-t3", "number": 9, "confident": True}]
         body["player_stats"] = [{"id": "h-t1", "distance_km": 6.2, "top_speed_kmh": 30.1, "involvements": 12},
                                 {"id": "a-t3", "distance_km": 7.4, "top_speed_kmh": None, "involvements": 20}]
-        body["pass_network"] = {side: {"nodes": [{"id": f"{p}-t1", "x": 30, "y": 30, "passes": 10},
-                                                 {"id": f"{p}-t2", "x": 50, "y": 40, "passes": 8}],
-                                       "links": [{"a": f"{p}-t1", "b": f"{p}-t2", "n": 6}]}
-                                for side, p in (("home", "h"), ("away", "a"))}
+        # The Scout's block (#338): the network's nodes are the players' names, as the video named them.
+        body["insight_stats"] = {"bin_min": 5, "rows": [], "pass_network": {
+            side: {"nodes": [{"id": f"{p} Keeper", "x": 30, "y": 30, "passes": 10},
+                             {"id": f"{p} Nine", "x": 50, "y": 40, "passes": 8}],
+                   "links": [{"a": f"{p} Keeper", "b": f"{p} Nine", "n": 6}]}
+            for side, p in (("home", "Abel"), ("away", "Bruno"))}}
         route.fulfill(json=body)
 
     ctx.route("**/bundle/match.json", squads)
@@ -959,6 +961,7 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     assert titles == ["Distance", "Top speed", "Most involved"]
     assert lists.nth(1).locator("li").count() == 1  # a top speed not measured is not listed
     assert page.locator("#network .node").count() == 2 and page.locator("#network .link").count() == 1
+    assert page.inner_text("#network-rows .who-name >> nth=0") == "Abel Keeper and Abel Nine"
     assert "6 passes" in page.inner_text("#network-rows")
     assert not errors
     ctx.close()
@@ -981,3 +984,38 @@ def test_ask_opens_on_a_grid_of_questions_then_recent_answers(browser, site):  #
     page.wait_for_selector("#answers .answer:not(.pending)")
     assert page.is_hidden("#ask-start") and page.is_visible("#recent-title")
     assert not errors
+
+
+def test_the_stats_period_toggle_shows_a_half_on_its_own_only_when_the_scout_wrote_halves(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#lt-stats")
+    assert page.is_hidden("#stats-period")  # no halves in this bundle: no toggle
+    page.context.close()
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def halves(route):
+        body = route.fetch().json()
+        row = {"group": "Pressing", "key": "turnovers", "label": "Turnovers", "unit": "turnovers"}
+        first = {"minute_from": 1, "minute_to": 45,
+                 "rows": [{**row, "home": 7, "away": 3, "confident": True}]}
+        body["insight_stats"] = {"bin_min": 5, "rows": [], "halves": {"first": first}}
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", halves)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.click("#lt-stats")
+    page.wait_for_selector("#stats-period:not([hidden])")
+    assert page.is_hidden("#stats-period ion-segment-button[value=second]")  # before minute 46
+    page.click("#stats-period ion-segment-button[value=first]")
+    page.wait_for_function("document.querySelectorAll('#stat-rows .stat-row').length === 1")
+    assert page.get_attribute("#stat-rows .stat-row", "aria-label") == "Turnovers: Crowmere 7, Dunhollow 3"
+    assert page.locator("#summary-rows .stat-row").count() > 1  # Live's summary stays the whole match
+    page.click("#stats-period ion-segment-button[value=match]")
+    page.wait_for_function("document.querySelectorAll('#stat-rows .stat-row').length > 1")
+    assert not errors
+    ctx.close()

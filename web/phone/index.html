@@ -147,6 +147,11 @@
               </section>
               </div>
               <div class="live-pane" id="pane-stats" role="tabpanel" aria-labelledby="lt-stats" hidden>
+              <ion-segment value="match" id="stats-period" class="seg" aria-label="Which part of the match" hidden>
+                <ion-segment-button value="match"><ion-label>Match</ion-label></ion-segment-button>
+                <ion-segment-button value="first"><ion-label>1st half</ion-label></ion-segment-button>
+                <ion-segment-button value="second"><ion-label>2nd half</ion-label></ion-segment-button>
+              </ion-segment>
               <!-- Match stats: mirrored bars in the clubs' colours, from the footage shown. -->
               <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
                 <h2 class="section-title" id="live-stats-title">Team Stats</h2>
@@ -185,6 +190,7 @@
                 </ion-segment>
                 <svg id="network" class="full-pitch" role="img"></svg>
                 <ul class="stat-list" id="network-rows"></ul>
+                <p class="fine-note">Passes between players the video could name.</p>
               </section>
               <section class="card" id="top-players" aria-labelledby="top-players-title" hidden>
                 <h2 class="section-title" id="top-players-title">Top performers</h2>
