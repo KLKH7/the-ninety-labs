@@ -85,17 +85,6 @@ _RERUN_EVAL = "the agents-live `eval` task at main (it runs factcheck_eval, anal
 # or unknown (name:version), why it is still committed and which run replaces it; the test fails
 # when the file's stale agents differ from that list, so it cannot rot or hide a new change.
 STALE: dict[str, dict] = {
-    "docs/eval/fact-checker.md": {
-        "agents": ["ninety-judge:1"],
-        "why": "ninety-judge:1 (3eea4db1); the Judge is now ninety-judge:4 (2b04c8ad). The nightly "
-        "on judge:4 has run but its reports were never committed (the nightly wrote only runs/eval/).",
-        "rerun": _RERUN_EVAL + ", or the first committed nightly (docs/eval/nightly/)",
-    },
-    "docs/eval/fact-checker.json": {
-        "agents": ["ninety-judge:1"],
-        "why": "the data of docs/eval/fact-checker.md, same run",
-        "rerun": "as docs/eval/fact-checker.md",
-    },
     "docs/eval/analyst.md": {
         "agents": ["ninety-judge:1"],
         "why": "graded with ninety-judge:1; also invalid on its own terms: the Analyst read the deployed "

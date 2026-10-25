@@ -1,0 +1,12 @@
+{
+ "distance_pct": 87,
+ "top_kmh": 12,
+ "sprints_pct": 77,
+ "runs": [
+  "f7-65247ba3",
+  "f11-65247ba3",
+  "f21-65247ba3",
+  "f8076-65247ba3"
+ ],
+ "source": "docs/eval/physical.json"
+}

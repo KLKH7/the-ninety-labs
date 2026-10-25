@@ -11,5 +11,5 @@ Coverage counts *detected* events, false ones included: on the pixel clip a line
 
 Every line must start within 2.0 s of its event (the brief's limit); a line that cannot is shortened, then dropped, never said late.
 
-- seed900001 (detected from the pixels): 5 events; lines by source: 1 event, 1 insight; dropped: 2 x voice busy.
+- seed900001 (detected from the pixels): 6 events; lines by source: 1 event, 1 insight; dropped: 2 x voice busy.
 - seed900001 (hand-written stand-in, whole file): 16 events; lines by source: 10 event, 1 insight; dropped: 1 x voice busy.

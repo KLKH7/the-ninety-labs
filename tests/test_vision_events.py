@@ -97,7 +97,8 @@ def test_a_pass_to_a_team_mate_is_one_successful_pass_struck_where_the_ball_left
 
 def test_a_pass_won_by_an_opponent_fails():
     events, _ = ev.detect(pass_scene(RED))
-    assert [(e["type"], e["team"], e["outcome"]) for e in events] == [("pass", "home", "fail")]
+    assert [(e["type"], e["team"], e["outcome"]) for e in events] == [
+        ("pass", "home", "fail"), ("possession_change", "away", None)]
 
 
 def test_a_completed_pass_names_its_passer_and_receiver_by_side_and_track():
@@ -315,7 +316,7 @@ def test_the_committed_fixture_is_what_the_code_detects_from_the_committed_obser
     lines = (FIXTURES / "detected-seed900001.jsonl").read_text().splitlines()
     committed = [json.loads(x) for x in lines if x]
     assert ev.detect(rows)[0] == committed
-    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play"}
+    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play", "possession_change"}
 
 
 def test_one_kit_in_sun_and_in_shadow_is_one_side():
@@ -418,6 +419,18 @@ def test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure():
         assert all((t.side_confidence > 0) is sure for t in sided)
 
 
+def test_after_law_3_the_events_carry_side_confidence_0():
+    # The pass scene to a team-mate has 6 blue players; standing 5 more far off makes 11, 6 more
+    # makes 12. With 12 every event's team_confidence is 0, so nothing team-named airs; with 11 not.
+    for extra, held in ((5, False), (6, True)):
+        rows = pass_scene(BLUE)
+        for r in rows:
+            r["players"] += row(r["frame"], [(10.0 + 3 * k, 5.0, BLUE) for k in range(extra)])["players"]
+        events, summary = ev.detect(rows)
+        assert events and (summary["teams"]["law3"] is not None) is held
+        assert all((e["team_confidence"] == 0.0) is held for e in events)
+
+
 def bp(frame, x, y):
     return tr.BallPoint(frame, x, y, 0.9)
 
@@ -438,3 +451,161 @@ def test_the_speed_check_allows_both_ends_position_error_and_no_more():
     assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 66.0, 34.0), 48.4)
     edge = ev.CONTROL_M  # a pass exactly at the feet's reach is still no pass
     assert not ev.plausible(bp(0, 50.0, 34.0), bp(25, 50.0 + edge, 34.0), 30.0)
+
+
+def jump_scene(end, receiver_colour=None, jump=True):
+    """A blue player at (50, 34) holds the ball and plays it from frame 20 toward `end`. With
+    `jump` it rolls at 2 m/s, then on frame 40 is seen at `end` (a ball the detector found
+    elsewhere); without, it travels there at 12 m/s. A player of `receiver_colour`, if any,
+    stands at `end` and takes it; else it stays there."""
+    (ex, ey), rows = end, []
+    for f in range(110):  # long enough for the 12 m/s ball to reach the touchline
+        k = max(0, f - 20)
+        if jump:
+            s = 2.0 * k / FPS
+            bx, by = (ex, ey) if f >= 40 else (50.3 + s * (ex - 50.3) / math.dist((50.3, 34.0), end),
+                                               34.0 + s * (ey - 34.0) / math.dist((50.3, 34.0), end))
+        else:
+            s = min(1.0, 12.0 * k / FPS / math.dist((50.3, 34.0), end))
+            bx, by = 50.3 + s * (ex - 50.3), 34.0 + s * (ey - 34.0)
+        people = [(50.0, 34.0, BLUE)] + ([(ex + 0.3, ey, receiver_colour)] if receiver_colour else [])
+        rows.append(row(f, crowd(f) + people, (bx, by)))
+    return rows
+
+
+def test_detect_holds_a_received_pass_the_ball_could_not_have_made():
+    # The wiring in detect(): a pass to a red player, the ball seen 10 m on 0.2 s after it rolled
+    # off at 7 km/h, airs with confidence 0; the same pass struck at 12 m/s does not.
+    for jump, held in ((True, True), (False, False)):
+        (p,) = [e for e in ev.detect(jump_scene((61.7, 34.0), RED, jump))[0] if e["type"] == "pass"]
+        assert p["outcome"] == "fail" and p["end_x"] == 61.7  # the premise: the pass is told
+        assert (p["confidence"] == 0.0) is held
+
+
+def test_detect_holds_a_pass_out_of_play_the_ball_could_not_have_made():
+    # The same for a ball that goes out over the touchline (y 70): the pass ends where it went out.
+    for jump, held in ((True, True), (False, False)):
+        events = ev.detect(jump_scene((50.3, 70.0), None, jump))[0]
+        assert any(e["type"] == "out_of_play" for e in events)  # the premise
+        (p,) = [e for e in events if e["type"] == "pass"]
+        assert p["outcome"] == "fail" and p["end_y"] == ev.PITCH_Y
+        assert (p["confidence"] == 0.0) is held
+
+
+# Possession changes (docs/eval/possession-change-plan.md): a spell of the other side, the ball in
+# play between the two as far as the picture shows.
+
+
+def changes(rows, **kw):
+    return [e for e in ev.detect(rows, **kw)[0] if e["type"] == "possession_change"]
+
+
+def test_a_pass_the_other_side_takes_is_a_possession_change_where_and_when_he_has_it():
+    rows = pass_scene(RED)
+    (c,) = changes(rows)
+    (spell,) = [s for s in ev.spells(tr.ball_path(rows), tr.track_players(rows)) if s.first > 20]
+    assert (c["team"], c["player"], c["frame"]) == ("away", "a-t10", spell.first)
+    ball = next(r["ball"][0] for r in rows if r["frame"] == spell.first)
+    assert (c["x"], c["y"]) == (round(ball["x"], 2), round(ball["y"], 2))
+    assert c["confidence"] == 0.8  # the ball's score, his spell long enough to count in full
+    assert c["source"] == "vision" and c["outcome"] is None
+
+
+def test_a_pass_to_a_team_mate_is_no_possession_change():
+    assert changes(pass_scene(BLUE)) == []
+
+
+def restart_scene(goes_out: bool):
+    """A blue player near the touchline plays the ball toward it at frame 12. With `goes_out` it
+    lies over the line (y 69) for frames 20 to 27; then a red player stands with it at his feet on
+    the line, as a throw-in's taker. Without, it stops short of the line, where the red player is."""
+    rows = []
+    for f in range(60):
+        if f < 12:
+            ball, blue = (50.2, 66.0), (50.0, 66.2)
+        elif f < 20 or not goes_out:
+            ball, blue = (50.0, min(66.0 + 0.4 * (f - 11), 67.9)), (50.0, 60.0)
+        elif f < 28:
+            ball, blue = (50.0, 69.0), (50.0, 60.0)
+        else:
+            ball, blue = (50.0, 67.9), (50.0, 60.0)
+        red = (50.0, 68.0) if f >= 28 or not goes_out else (45.0, 66.0)
+        rows.append(row(f, crowd(f) + [(*blue, BLUE), (*red, RED)], ball))
+    return rows
+
+
+def test_after_the_ball_went_out_the_taker_of_the_restart_is_no_possession_change():
+    events, _ = ev.detect(restart_scene(goes_out=True))
+    assert any(e["type"] == "out_of_play" for e in events)  # the premise: the scene's ball went out
+    assert changes(restart_scene(goes_out=True)) == []
+
+
+def test_the_same_ball_won_in_play_is_one():
+    events, _ = ev.detect(restart_scene(goes_out=False))
+    assert not any(e["type"] == "out_of_play" for e in events)
+    assert [c["team"] for c in changes(restart_scene(goes_out=False))] == ["away"]
+
+
+def two_sides_scene(gap: int):
+    """A blue player holds the ball at (50, 34) for 30 frames; `gap` frames later (a broadcast cut
+    when gap > 1) a red player has it at his feet at (40, 10) for 30 frames."""
+    rows = [row(f, crowd(f) + [(50.0, 34.0, BLUE)], (50.3, 34.0)) for f in range(30)]
+    start = 29 + gap
+    rows += [row(f, crowd(f) + [(40.0, 10.0, RED)], (40.3, 10.0)) for f in range(start, start + 30)]
+    return rows
+
+
+def test_across_a_broadcast_cut_a_change_of_side_is_not_told():
+    assert changes(two_sides_scene(gap=500)) == []
+
+
+def test_without_the_cut_the_same_change_of_side_is():
+    assert [c["team"] for c in changes(two_sides_scene(gap=1))] == ["away"]
+
+
+def misread_scene():
+    """The dribbler of test_a_dribbler_the_tracker_loses...: on frame 30 his detection jumps 1.5 m
+    sideways and from then on his kit is read red. One player, two tracks, two sides."""
+    rows = []
+    for f in range(60):
+        x, y = 40.0 + 5.0 * f / FPS, 34.0 + (1.5 if f >= 30 else 0.0)
+        rows.append(row(f, crowd(f) + [(x, y, BLUE if f < 30 else RED)], (x + 0.3, y)))
+    return rows
+
+
+def test_one_player_whose_kit_is_read_two_ways_in_two_tracks_is_no_possession_change():
+    tracks = tr.track_players(misread_scene())
+    tr.assign_teams(tracks)
+    assert {t.team for t in tracks if t.xy[0][1] < 50} == {"home", "away"}  # the premise
+    assert changes(misread_scene()) == []
+
+
+def test_measured_without_the_rule_it_would_be_one():
+    assert [c["team"] for c in changes(misread_scene(), join_breaks=False)] == ["away"]
+
+
+def test_a_spell_of_a_track_with_no_side_is_passed_over():
+    # Blue passes to a player of a third colour in midfield (no side: not a keeper in his box), who
+    # passes on to blue. Possession never left blue's side; a sideless spell must not reset it.
+    rows, bx = [], 50.3
+    for f in range(100):
+        if 20 < f <= 45:
+            bx = min(bx + 12.0 / FPS, 61.7)
+        elif f > 60:
+            bx = min(bx + 12.0 / FPS, 73.7)
+        line = [(50.0, 34.0, BLUE), (62.0, 34.0, GREEN_KEEPER), (74.0, 34.0, BLUE)]
+        rows.append(row(f, crowd(f) + line, (bx, 34.0)))
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    middle = next(t for t in tracks if t.xy[0] == (62.0, 34.0))
+    assert middle.team is None  # the premise
+    assert len([s for s in ev.spells(tr.ball_path(rows), tracks) if s.track is middle]) == 1
+    assert changes(rows) == []
+
+
+def test_a_change_seen_on_a_short_spell_is_less_sure():
+    rows = pass_scene(RED, frames=48)  # the clip ends a few frames after the red player has it
+    (spell,) = [s for s in ev.spells(tr.ball_path(rows), tr.track_players(rows)) if s.first > 20]
+    assert spell.frames < 2 * ev.MIN_SPELL_FRAMES  # the premise: a spell too short to count in full
+    (c,) = changes(rows)
+    assert c["confidence"] == round(0.8 * spell.frames / (2 * ev.MIN_SPELL_FRAMES), 3)

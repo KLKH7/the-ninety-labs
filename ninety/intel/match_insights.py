@@ -20,13 +20,32 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, offside, overloads, pass_options, roles, shape, style
+from ninety.intel import (
+    ball_share,
+    counter_press,
+    line_breaks,
+    offside,
+    overloads,
+    pass_options,
+    passing,
+    physical,
+    roles,
+    scoring,
+    set_pieces,
+    shape,
+    shot_map,
+    style,
+)
 from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
 BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
+HALF_MIN = 45  # Law 7: two halves of 45 minutes (GROUNDING I23)
+# The kinds a key moment is drawn from, each already a checked fact (GROUNDING I23, *design*).
+MOMENT_KINDS = ("goal", "shot", "counter", "one_two", "line_break")
+TOP_LINE_BREAKS = 3  # design: a window's key line breaks are its biggest three
 KIND_FACTS = ("line_break", "overload", "counter_press", "pass_options")
 
 
@@ -94,29 +113,24 @@ class MatchInsights:
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
         facts["one_two"] = style.one_twos(facts["pass"])
+        # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
+        facts["possession"] = ball_share.possession_rows(events)
+        facts["territory"] = ball_share.territory_rows(f.frames)
+        facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
+        facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
+        facts["running"] = physical.rows(f.frames)  # each track's running, per minute (I22)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
-        facts["goal"] = [
-            {
-                "id": f"goal:{e['id']}",
-                "kind": "goal",
-                "team": e["team"],
-                "minute": int(float(e["t"]) // 60) + 1,
-                "t": round(float(e["t"]), 2),
-                "event": e["id"],
-                "event_confidence": e.get("confidence"),
-                "team_confidence": e.get("team_confidence"),
-                "player": e.get("player"),
-                "confident": True,
-            }
-            for e in events
-            if e.get("type") == "goal"
-        ]
+        facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
+        facts["save"] = scoring.saves(events)
+        facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
-                for k in ("passer", "receiver"):
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
+                for k in ("passer", "receiver", "assister"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
+                if r.get("kind") == "goal" and r.get("player") in people:
+                    r["scorer_is"] = people[r["player"]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
         mi = cls(clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames))
         from ninety.intel.stats_table import stats_table
@@ -281,6 +295,133 @@ class MatchInsights:
         if team is not None:
             out = [r for r in out if r["team"] == team]
         return {"facts": out, "summary": []}
+
+    def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
+        return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+
+    def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Where the ball was over the minutes: each club's share with it in its attacking third."""
+        return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
+
+    def shots(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The shot map over the minutes: each shot's spot, its distance from the goal and the angle
+        the posts make there, nearest first; and each club's shots and those from inside the penalty area."""
+        team = self.team(club)
+        rows = self._rows("shot", minute_from, minute_to, club)
+        top = sorted(rows, key=lambda r: (r["value"], r["t"]))[:MAX_FACTS]
+        clubs = self.fixture.clubs
+        got = shot_map.summary(self.facts.get("shot", ()), minute_from, minute_to)
+        summary = [
+            {**r, "club": clubs.get(t)} for t, r in got.items() if t == "all" or team in (None, t)
+        ]
+        return {"facts": top, "summary": summary}
+
+    def passing(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """What the passes did over the minutes (progressive, into the final third, long,
+        intercepted), each club's count and the total; and the pairs of named players who passed to
+        each other most."""
+        team = self.team(club)
+        rows = self.facts.get("pass_type", ())
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in passing.summary(rows, minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        pairs = [
+            {**r, "club": clubs[r["team"]]}
+            for r in passing.network(rows, self.people, minute_from, minute_to)
+            if team in (None, r["team"])
+        ]
+        return {"facts": pairs, "summary": summary}
+
+    def physical(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each named player's distance (km, from the footage shown, with its measured label), top
+        speed, sprints above 25.2 km/h and the zone he was in most, over the minutes."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        lb, bar = physical.labels(), team_stats_mod.within_pct()
+        # Each figure is said only when the grading of named players (docs/eval/physical.md) is no
+        # worse than the bar the phone already accepts for it: team distance's label for distance and
+        # sprint counts, the phone card's worst measured top-speed error for top speed (GROUNDING I22).
+        held = physical.held(lb, bar)
+        facts = []
+        for r in physical.players(self.facts.get("running", ()), self.people, minute_from, minute_to):
+            if team not in (None, r["team"]):
+                continue
+            r = {**r, "club": clubs[r["team"]]}
+            why = held.get(r["metric"])
+            if why:
+                r["confident"], r["why_held"] = False, why
+            elif r["metric"] == "player_km":
+                r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
+            facts.append(r)
+        return {"facts": facts, "summary": []}
+
+    def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each kind of restart over the minutes: the total, and each club's count with bounds."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in set_pieces.summary(self.facts.get("restart", ()), minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        return {"facts": [], "summary": summary}
+
+    def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The score after minute_to (said only when no goal's side is in doubt), each goal up to then
+        with its scorer and assist, oldest first, and each club's saves over the minutes."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]
+        summary = [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
+        summary += [
+            {**r, "club": clubs[t]}
+            for t, r in scoring.save_counts(self.facts.get("save", ()), minute_from, minute_to).items()
+            if team in (None, t)
+        ]
+        timeline = sorted((g for g in goals if team in (None, g["team"])), key=lambda g: g["t"])
+        return {"facts": timeline[:MAX_FACTS], "summary": summary}
+
+    def halves(self, minute_from: int = 1, minute_to: int | None = None, club: str | None = None) -> dict:
+        """The same summaries for each half (Law 7's 45 minutes) up to minute_to (the match so far
+        when None): where the ball was, the shots and what the passes did, first half then second, so
+        a fan can compare them. minute_from is ignored: a half starts where the Law starts it."""
+        now = self.minutes if minute_to is None else min(minute_to, self.minutes)
+        spans = [(1, min(HALF_MIN, now))]
+        if now > HALF_MIN:
+            spans.append((HALF_MIN + 1, now))
+        summary = []
+        for lo, hi in spans:
+            for tool in (self.territory, self.shots, self.passing):
+                summary += tool(lo, hi, club)["summary"]
+        return {"facts": [], "summary": summary}
+
+    def key_moments(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The window's key moments, latest first: its goals, shots, regains that led to a shot,
+        one-twos and its biggest line breaks, each a fact code can say."""
+        moments = []
+        for kind in MOMENT_KINDS:
+            rows = [r for r in self._rows(kind, minute_from, minute_to, club) if r.get("confident")]
+            if kind == "line_break":
+                rows = sorted(rows, key=lambda r: (-r["value"], r["t"]))[:TOP_LINE_BREAKS]
+            moments += rows
+        # Every goal stays, however many other moments there are: a recap never drops a goal. The
+        # rest fill the remaining places, latest first.
+        goals = [r for r in moments if r["kind"] == "goal"]
+        rest = sorted((r for r in moments if r["kind"] != "goal"), key=lambda r: -r["t"])
+        kept = goals + rest[: max(0, MAX_FACTS - len(goals))]
+        kept.sort(key=lambda r: -r["t"])
+        return {"facts": kept, "summary": []}
+
+    def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
+        team = self.team(club)
+        got = fn(self.facts.get(kind, ()), minute_from, minute_to)
+        clubs = self.fixture.clubs
+        summary = [{**r, "club": clubs[t], "clubs": clubs} for t, r in got.items() if team in (None, t)]
+        return {"facts": [], "summary": summary}
 
     def style(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """How each club played over the minutes: its passing channels, its width beside the other
