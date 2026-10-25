@@ -55,7 +55,8 @@ MATCH_TOOLS = (
     "territory",
 )
 TOOL_HELP = {
-    "possession": "each club's share of the passes, the way TV counts possession (not time on the ball); "
+    "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
+    "on the ball); "
     "unsure when the video could not tell whose some passes were",
     "territory": "where the ball was: each club's share of the time with it in its attacking third, as "
     "a range (the ball near a third's line could be on either side)",
@@ -708,7 +709,7 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "possession_share":
         if fact.get("value") is None:
             return []
-        return [f"{club} had {fact['value']}% of possession {span}, counted by passes as TV counts it."]
+        return [f"{club} had {fact['value']}% of possession {span}, counted by share of passes."]
     if metric == "final_third_share":
         lo, hi = fact["lo"], fact["hi"]
         share = f"{lo}%" if lo == hi else f"between {lo}% and {hi}%"
