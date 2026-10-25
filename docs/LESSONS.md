@@ -3004,6 +3004,26 @@ short and actionable. This file is public: no research sources, product names or
   and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
   phrasings) fail when the gate's zone, ambiguity or player filter is removed.
 
+### 251. A confidence calibrated on validation is not a guarantee: check what the Laws make impossible
+- **What happened:** on the demo match (seed 8080) the home team's dark purple hoops have white
+  shorts, and the away kit is near-white. Main's kit reader takes one median colour of the shirt
+  patch, and on hoops the white second colour fills it, so both outfield teams read as white. Kit
+  clustering then split "everyone" from a minority (shaded players on the broadcast, the red keeper
+  on the tactical views), and the depth vote named the two cameras' clusters opposite ways: the
+  broadcast saw about 90% home, the views about 95% away, the joined frames 21 away to 1 home. Side
+  confidence on main is a track's colour margin, so tracks far from the minority looked sure, and
+  three events cleared the 0.96 gate at 0.975 and 0.989. The same dry run aired passes of 16 m at
+  3 km/h and of 0 m at 14 km/h at confidence 0.777.
+- **Rule:** a confidence fitted on validation can be confidently wrong on a case validation never
+  held, so hard limits from the Laws and from physics stand beside it and override it: no more than
+  11 players of one side on the pitch (Law 3), no pass shorter than the ball at a player's feet, and
+  no ball averaging faster than it was struck. Each limit is a sourced rule, never a fitted one, and
+  it holds (confidence 0), it does not guess.
+- **Check:** `tests/test_vision_events.py::test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure`
+  (11 kept, 12 held), `::test_a_pass_the_ball_could_not_have_made_is_held` and
+  `::test_the_speed_check_allows_both_ends_position_error_and_no_more`; on the demo's t001350 every
+  event's side confidence is 0 and the three impossible passes are held.
+
 ### 252. A test waits on the state it checks; one read of a screen is a race
 - **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
   `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its

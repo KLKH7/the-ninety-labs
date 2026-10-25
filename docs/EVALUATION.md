@@ -548,6 +548,17 @@ its screen-reader summary names a dot's club from it; the phone's answer picture
 the insight facts' own team, gated by those tools' confidence, not by this threshold; and the team
 stats count each detected event for the side the tracker voted.
 
+**Hard limits beside the confidence** (lesson 251; GROUNDING G1, G2). A confidence measured on
+validation can be confidently wrong on a case validation never held (the demo's kit clash), so two
+limits override it. **Law 3** (`track.law3`): a frame with more than 11 tracks of one side gives every
+track in the clip side confidence 0. Measured on tactical1 validation's broadcast clips at the
+commit that added it: it trips on 7 of the 15 clips whose sides were told wrong, and on 1 of the 8
+told right, whose team claims are then held (its cost: 1 of 8 right-sided clips loses its sides);
+8 wrong-sided clips do not trip it. It is a backstop, not a fix, and a one-frame trigger: one stray
+duplicate track holds the whole clip. **Pass sanity** (`events.plausible`): a pass no longer than the
+ball at a player's feet, or one the ball would have had to cover faster on average than it was
+struck, keeps its place in the log at confidence 0. Its recall cost on validation is not yet measured.
+
 **Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
 is looked at again: the fact-checker re-runs R3's event detection (`ninety.vision.events.detect`,
 unchanged) on another camera's observations, a 3 s window and then the whole clip, at most 3 looks a
