@@ -68,11 +68,16 @@ WORDS = {
 }
 
 
+SUMMARY_TOOLS = (
+    "line_breaks", "overloads", "counter_press", "pass_options", "possession", "territory", "shots",
+)
+
+
 def facts_and_summaries(mi) -> list[dict]:
     rows = [f for kind in mi.facts.values() for f in kind]
     for lo in range(1, mi.minutes + 1, cm.WINDOW_MIN):
         hi = lo + cm.WINDOW_MIN - 1
-        for tool in ("line_breaks", "overloads", "counter_press", "pass_options", "possession", "territory"):
+        for tool in SUMMARY_TOOLS:
             rows += getattr(mi, tool)(lo, hi)["summary"]
         rows += mi.players(lo, hi)["facts"]
         rows += mi.style(lo, hi)["summary"]

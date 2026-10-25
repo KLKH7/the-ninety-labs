@@ -81,6 +81,8 @@ UNIT_WORDS = {
     "regains": ("regains", "regain", "times"),
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
+    "shots": ("shots", "shot"),
+    "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the

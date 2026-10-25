@@ -128,6 +128,13 @@ def stats_table(mi) -> dict:
         ),
         # The lower bound: the seconds with the ball near a third's line may add to it (GROUNDING I18).
         ("Attack", "territory", "Ball in the attacking third, at least", "%", _territory(mi)),
+        (
+            "Attack",
+            "shots_inside",
+            "Shots from inside the penalty area",
+            "shots",
+            _summary(mi.shots, "shots", "inside_box"),
+        ),
         ("Attack", "counters", "Regains that led to a shot", "regains", _count(mi, "counter")),
         ("Attack", "one_twos", "One-twos", "one-twos", _count(mi, "one_two")),
         ("Attack", "crosses", "Crosses", "crosses", _summary(mi.style, "crosses")),
