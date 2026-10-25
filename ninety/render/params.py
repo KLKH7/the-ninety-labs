@@ -247,7 +247,7 @@ KEEPER_DISTANCE = 0.5  # sample_kits's own keeper rule
 
 def broadcast_kits_ok(home: Kit, home_pattern: str, away: Kit, away_pattern: str,
                       hgk: Kit, agk: Kit) -> bool:
-    """Broadcast kits a viewer tells apart as drawn (lesson 243): every colour one team's shirt is
+    """Broadcast kits a viewer tells apart as drawn (lesson 246): every colour one team's shirt is
     drawn in passes the broadcast test against every colour of the other's, and the shirts as seen
     (pattern mixed in) pass it too; each keeper's shirt is KEEPER_DISTANCE from every outfield
     colour, from the grass and from the other keeper."""
@@ -437,7 +437,7 @@ def validate(p: RenderParams) -> None:
             raise ValueError(f"{name} must be true or false")
     if p.kit_contrast == "broadcast" and not broadcast_kits_ok(
             p.home_kit, p.home_pattern, p.away_kit, p.away_pattern, p.home_gk, p.away_gk):
-        raise ValueError("broadcast kits a viewer could not tell apart as drawn (lesson 243): "
+        raise ValueError("broadcast kits a viewer could not tell apart as drawn (lesson 246): "
                          f"{p.home_kit} {p.home_pattern} v {p.away_kit} {p.away_pattern}, "
                          f"keepers {p.home_gk.shirt} {p.away_gk.shirt}")
     for name, ok in PLANNED.items():

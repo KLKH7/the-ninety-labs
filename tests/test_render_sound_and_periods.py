@@ -68,7 +68,7 @@ def test_the_demo_kits_as_given_pass_and_crest_crimson_is_refused():
              away_gk="#2BD9C3/#111111/#2BD9C3")
     p = sample_params(8080, **a)
     assert (p.home_kit.shirt, p.away_kit.shirt) == ("#1b2f5b", "#e63942")
-    with pytest.raises(ValueError, match="lesson 243"):
+    with pytest.raises(ValueError, match="lesson 246"):
         sample_params(8080, **{**a, "away_kit": "#B3202A/#7A0F16/#B3202A"})
     with pytest.raises(ValueError, match="shirt/shorts/socks"):
         sample_params(8080, **{**a, "home_kit": "navy"})
