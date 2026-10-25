@@ -31,7 +31,8 @@ coordinates); otherwise it is on the ground. Ground frames keep observe.py's pos
 does a flight frame whose fitted place is less sure than MAX_SE_M (a short, low hop).
 
 DRAG_K and NOISE_PX are derived on validation clips by `--derive`, from pixel residuals only
-(derive_noise, derive_drag); the answer key is never read here.
+(derive_noise, derive_drag), and the ball-size spread from its box sizes (derive_size); the answer
+key is never read here.
 """
 
 from __future__ import annotations
@@ -88,6 +89,27 @@ ANCHOR_MAX_S = 0.1
 # out where the ground place is about 1 m out. 1.0 m is the strict place tolerance the events are
 # graded by (docs/EVALUATION.md, Vision scoring): a place less sure than that is not used (design).
 MAX_SE_M = 1.0
+# The ball's apparent size is a second measure of its depth, which gravity does not enter: a ball
+# BALL_D_M across at depth d is f * BALL_D_M / d pixels wide (f the focal length in pixels). Each
+# frame's log(box size / that size) is compared at a flight's depth and at the ground place's, and
+# a flight the sizes speak against is not one (Piece.in_flight). The size only chooses; it does
+# not move the fit (over a long flight gravity pins the depth better). On validation, short
+# pieces with impossible launch speeds (85 to 494 m/s) showed a box 0.60 to 0.88 of the size their
+# fit implies, while the ground place explained it (0.98 to 0.99): frames of them passed MAX_SE_M
+# near the anchor and were moved.
+# The box's shorter side is the size (motion blur stretches the longer one). SIZE_BIAS_LOG and
+# SIZE_SD_LOG: the median and the robust spread (1.4826 * MAD) of that log ratio over every frame
+# of the validation ground pieces of 10 frames or more (derive_size; 927 frames, 50 pieces, the
+# 13 clips DRAG_K came from); 3% of those frames lie beyond 3 sigma (a ball half hidden), so one
+# frame's term is capped at SIZE_CAP_SIGMA (design).
+BALL_D_M = 0.22  # Law 2: circumference 68 to 70 cm, so 0.216 to 0.223 m across
+SIZE_BIAS_LOG = -0.0161
+SIZE_SD_LOG = 0.0293
+SIZE_CAP_SIGMA = 3.0
+# No football is struck faster than this: the fastest shot on record is about 211 km/h (58.6 m/s;
+# Ronny Heberson, 2006, as media reported it, verify). A flight whose fitted start is faster is not
+# physical (design: the record, rounded up).
+MAX_LAUNCH_MPS = 60.0
 # A model dropped from a growing piece is retried from a cold start only while the piece is this
 # short: a wrong first guess drops a flight on a few frames, not on a second of them, and a cold
 # flight fit over a long roll costs seconds (design, for speed).
@@ -111,9 +133,24 @@ class Track:
     t: np.ndarray  # (N,) seconds
     uv: np.ndarray  # (N, 2) detected centre, pixels
     P: np.ndarray  # (N, 3, 4) camera
+    size: np.ndarray | None = None  # (N,) the box's shorter side, pixels
 
     def __len__(self) -> int:
         return len(self.t)
+
+
+def focal_px(P: np.ndarray) -> np.ndarray:
+    """(N, 3, 4) -> (N,) focal length in pixels: P = K [R | t] with square pixels and no skew, so
+    the first row's rotation part is f * r1 + cx * r3 and r1 is a unit vector at right angles to r3."""
+    m0, m2 = P[:, 0, :3], P[:, 2, :3] / np.linalg.norm(P[:, 2, :3], axis=1, keepdims=True)
+    along = np.einsum("ni,ni->n", m0, m2)
+    return np.sqrt(np.einsum("ni,ni->n", m0, m0) - along**2)
+
+
+def depth(P: np.ndarray, X: np.ndarray) -> np.ndarray:
+    """(N, 3, 4), (..., N, 3) -> (..., N): each point's distance in front of its camera."""
+    n = np.linalg.norm(P[:, 2, :3], axis=1)
+    return (np.einsum("ni,...ni->...n", P[:, 2, :3], X) + P[:, 2, 3]) / n
 
 
 def ball_track(rows: list[dict]) -> Track:
@@ -129,11 +166,13 @@ def ball_track(rows: list[dict]) -> Track:
             continue
         _, j = max(cands)
         x0, y0, x1, y1 = r["ball"][j]["bbox"]
-        keep.append((i, j, r["t"], ((x0 + x1) / 2, (y0 + y1) / 2), cam["P"]))
+        keep.append((i, j, r["t"], ((x0 + x1) / 2, (y0 + y1) / 2), cam["P"], min(x1 - x0, y1 - y0)))
     if not keep:
-        return Track(np.zeros(0, int), np.zeros(0, int), np.zeros(0), np.zeros((0, 2)), np.zeros((0, 3, 4)))
-    i, j, t, uv, P = zip(*keep, strict=True)
-    return Track(np.array(i), np.array(j), np.array(t, float), np.array(uv, float), np.array(P, float))
+        return Track(np.zeros(0, int), np.zeros(0, int), np.zeros(0), np.zeros((0, 2)), np.zeros((0, 3, 4)),
+                     np.zeros(0))
+    i, j, t, uv, P, size = zip(*keep, strict=True)
+    return Track(np.array(i), np.array(j), np.array(t, float), np.array(uv, float), np.array(P, float),
+                 np.array(size, float))
 
 
 def project(P: np.ndarray, X: np.ndarray) -> np.ndarray:
@@ -207,6 +246,8 @@ class Fit:
     times: np.ndarray  # (N,) from the window's first frame
     k: float
     residuals: object  # the fitted function: (B, n) parameters -> (B, m) residuals, noise units
+    size_sse: float | None = None  # a flight's box sizes against its depth (size_sse), pixel^2 units
+    size_sse_ground: float | None = None  # the same at observe.py's ground place
 
 
 def centre_se(f: Fit, noise_px: float) -> np.ndarray:
@@ -278,7 +319,10 @@ def fit(kind: str, tr: Track, lo: int, hi: int, use: np.ndarray, k: float = DRAG
         start: np.ndarray | None = None, anchor: np.ndarray | None = None,
         noise_px: float = NOISE_PX) -> Fit:
     """Fit one model to frames lo..hi-1 of the track (those in `use`, a mask over the window),
-    with the soft terms: no centre under the ground, and the first frame near `anchor` if given."""
+    with the soft terms: no centre under the ground, and the first frame near `anchor` if given.
+    A flight fit also records how well the ball's box size agrees with its depth and with the
+    ground place's (size_sse, size_sse_ground); the size does not move the fit, because over a long
+    flight gravity pins the depth better than a 3% size does."""
     times = tr.t[lo:hi] - tr.t[lo]
     P, uv = tr.P[lo:hi], tr.uv[lo:hi]
 
@@ -306,7 +350,23 @@ def fit(kind: str, tr: Track, lo: int, hi: int, use: np.ndarray, k: float = DRAG
     p, r = best
     centres = _paths(kind, p[None], times, k)[0]
     resid = np.linalg.norm(project(P, centres) - uv, axis=1)
-    return Fit(kind, p, float(tr.t[lo]), float(r @ r), resid, centres, times, k, residuals)
+    fitted = Fit(kind, p, float(tr.t[lo]), float(r @ r), resid, centres, times, k, residuals)
+    if kind == "flight" and tr.size is not None:
+        ground = np.c_[on_plane(P, uv, BALL_CENTRE_Z), np.full(len(P), BALL_CENTRE_Z)]
+        fitted.size_sse = size_sse(tr.size[lo:hi], P, centres, use, noise_px)
+        fitted.size_sse_ground = size_sse(tr.size[lo:hi], P, ground, use, noise_px)
+    return fitted
+
+
+def size_sse(size: np.ndarray, P: np.ndarray, X: np.ndarray, use: np.ndarray, noise_px: float) -> float:
+    """Sum over the used frames with a box of ((log(box / BALL_D_M's size at X's depth) - bias) /
+    SIZE_SD_LOG)^2, each capped at SIZE_CAP_SIGMA and put in the pixel error's units (noise_px^2)."""
+    m = use & (size > 0)
+    if not m.any():
+        return 0.0
+    d = np.maximum(depth(P[m], X[m]), 1e-3)
+    r = (np.log(size[m] / (focal_px(P[m]) * BALL_D_M / d)) - SIZE_BIAS_LOG) / SIZE_SD_LOG
+    return float(((np.clip(r, -SIZE_CAP_SIGMA, SIZE_CAP_SIGMA) * noise_px) ** 2).sum())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -328,17 +388,27 @@ class Piece:
         f, g = self.flight, self.ground
         if f is None or not _physical(f):
             return False
+        m = int(self.use.sum())
+        # The box size must not favour the ground place by more than one unknown is worth (BIC).
+        if f.size_sse is not None and (f.size_sse - f.size_sse_ground) / self.noise_px**2 > math.log(m):
+            return False
         if g is None:
             return True
-        return (g.sse - f.sse) / self.noise_px**2 > math.log(2 * int(self.use.sum()))
+        return (g.sse - f.sse) / self.noise_px**2 > math.log(2 * m)
 
     @property
-    def best(self) -> Fit:
+    def best(self) -> Fit | None:
+        """The flight if the piece is in flight, else the ground roll; None when only a flight fitted
+        the pixels and the ball's size speaks against it (its frames are then left as observed)."""
         return self.flight if self.in_flight else self.ground
 
 
 def _physical(f: Fit) -> bool:
-    return bool(f.centres[:, 2].min() >= BALL_CENTRE_Z - Z_TOL_M)
+    """Never far under the ground, and for a flight no faster at its start than any football is
+    struck (a falling ball gains a few m/s at most over a flight, far below the bound's margin)."""
+    if f.centres[:, 2].min() < BALL_CENTRE_Z - Z_TOL_M:
+        return False
+    return f.kind != "flight" or bool(np.linalg.norm(f.p[3:6]) <= MAX_LAUNCH_MPS)
 
 
 def _fits(f: Fit, use: np.ndarray, gate: float) -> bool:
@@ -368,7 +438,7 @@ def _fit_both(tr, lo, hi, use, k, noise_px, anchor, prev: Piece | None, retry: b
 def _anchor(tr: Track, last: Piece | None, lo: int, k: float) -> np.ndarray | None:
     """Where the last piece's model puts the ball at frame lo, if that piece ended just before;
     never under the ground (a bounce happens between the two frames)."""
-    if last is None or tr.t[lo] - tr.t[last.hi - 1] > ANCHOR_MAX_S:
+    if last is None or last.best is None or tr.t[lo] - tr.t[last.hi - 1] > ANCHOR_MAX_S:
         return None
     best = last.best
     at = _paths(best.kind, best.p[None], np.array([tr.t[lo] - best.t0]), k)[0, 0]
@@ -463,6 +533,8 @@ def derive_noise(tracks: list[Track], k: float = DRAG_K, rounds: int = 3) -> flo
         for tr in tracks:
             for piece in segment(tr, k, sigma):
                 f, m = piece.best, int(piece.use.sum())
+                if f is None:
+                    continue
                 dof = 2 * m - len(f.p)
                 if dof > 0:
                     scaled += list(f.resid[piece.use] * math.sqrt(2 * m / dof))
@@ -470,6 +542,31 @@ def derive_noise(tracks: list[Track], k: float = DRAG_K, rounds: int = 3) -> flo
             break
         sigma = float(np.median(scaled)) / math.sqrt(2 * math.log(2))
     return sigma
+
+
+def derive_size(tracks: list[Track], k: float = DRAG_K, noise_px: float = NOISE_PX,
+                min_frames: int = 10) -> dict:
+    """SIZE_BIAS_LOG and SIZE_SD_LOG: log(box's shorter side / BALL_D_M's size at the fitted depth)
+    over every frame of the ground pieces of at least min_frames frames, the pieces found from the
+    pixels alone (no size term, so the size does not pick the frames it is measured on). The spread
+    is 1.4826 * the median absolute deviation, robust to a half-hidden ball."""
+    vals = []
+    for tr in tracks:
+        bare = Track(tr.rows, tr.balls, tr.t, tr.uv, tr.P)
+        for piece in segment(bare, k, noise_px):
+            if piece.in_flight or piece.use.sum() < min_frames:
+                continue
+            idx = piece.lo + np.flatnonzero(piece.use)
+            P = tr.P[idx]
+            d = depth(P, piece.ground.centres[piece.use])
+            vals += list(np.log(tr.size[idx] / (focal_px(P) * BALL_D_M / d)))
+    v = np.array(vals)
+    if not len(v):
+        return {"frames": 0}
+    med = float(np.median(v))
+    sd = 1.4826 * float(np.median(np.abs(v - med)))
+    return {"frames": len(v), "bias_log": round(med, 4), "sd_log": round(sd, 4),
+            "beyond_3sd": round(float(np.mean(np.abs(v - med) > 3 * sd)), 4)}
 
 
 def derive_drag(tracks: list[Track], ks, noise_px: float, min_frames: int = 10, rounds: int = 2) -> dict:
@@ -524,9 +621,11 @@ def main(argv: list[str] | None = None) -> None:
         if test:
             raise SystemExit(f"refused: evaluation seeds are never used to set constants: {test}")
         tracks = [ball_track(_read(p)) for p in a.observations]
-        sigma = derive_noise(tracks)
-        drag = derive_drag(tracks, np.linspace(0.0, 0.03, 13), sigma)
-        report = {"clips": [p.name for p in a.observations], "noise_px": round(sigma, 3), "drag": drag}
+        bare = [Track(t.rows, t.balls, t.t, t.uv, t.P) for t in tracks]  # pixels only, as derived
+        sigma = derive_noise(bare)
+        drag = derive_drag(bare, np.linspace(0.0, 0.03, 13), sigma)
+        report = {"clips": [p.name for p in a.observations], "noise_px": round(sigma, 3), "drag": drag,
+                  "size": derive_size(tracks, noise_px=sigma)}
         if a.report:
             a.report.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
         print(json.dumps(report))
