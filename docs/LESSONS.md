@@ -2922,6 +2922,34 @@ short and actionable. This file is public: no research sources, product names or
   when the phone reads an event's side without the threshold;
   `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
 
+### 246. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
+
+### 247. A paid machine's cap runs on the machine, and its results leave it as they are made
+- **What happened:** on Oct 24–25 two rented GPU hosts ran past their hard caps. Each cap was a
+  timer on the maintainer's laptop. The first fired 14 min late with the laptop asleep, hit a DNS
+  failure, and exited. The second retried with the laptop kept awake, but the laptop was offline
+  for about 1 h 40 min, so the host billed about 1.5 h past its 2 h cap. Each time, finished work
+  that had not been copied back was lost when the host was finally deleted: the shot-outcome set's
+  renders and its validation scoring.
+- **Rule:** the cap is enforced on the host itself: the first thing a rented host runs is its own
+  deletion at the cap, started before any other work. The laptop's retrying timer is only a second
+  line. Every finished result (a clip's report, a score, a set list) is copied off the host as it
+  is written, never in a batch at the end.
+- **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
+  deadline the host enforces on itself, and the cadence at which results are copied back (every
+  couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+
 ### 248. A place along the pitch is checked against the pitch before it is cut into thirds
 - **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
   capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
@@ -2975,3 +3003,38 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
   and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
   phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 252. A test waits on the state it checks; one read of a screen is a race
+- **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
+  `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
+  top-level `await import('./mock')`. The other read each screen's clock once, from a DOM attribute
+  written each time a frame is drawn: on a loaded runner the phone read 0.5 s behind the big
+  screen (61.77 / 61.27 / 61.93). The clock check also had a gap: it passed a phone whose clock
+  did not advance between the big screen's once-a-second messages, so it read right once a
+  second.
+- **Rule:**
+  - A browser test waits for the state it checks (an element visible, a ready flag, a status's
+    state), never a single read after an action, and never a longer timeout in its place.
+  - A value a screen writes per frame is read after a fresh frame.
+  - A sync check settles for at most one sync period (the sender's own interval, cited), keeps the
+    product's bar, then requires the next samples to stay in step. A phone constantly off, or one
+    whose clock stops between messages, still fails.
+- **Check:** `tests/test_phone.py::test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap`
+  waits for `#mockbar`. `assert_in_step` (fresh frames, `SETTLE_S`, then `STEPS` more samples)
+  fails `test_the_phone_clock_stays_within_tolerance_of_the_laptop` and
+  `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
+  shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
+  messages (mutant runs, #341 and its follow-up).
+
+### 253. A rule that walks back through events must stop at a cut
+- **What happened:** the highlights reel's `origin` rule (#324) walked back from a shot through the
+  detected events to find how the attack began. A development run on the demo match found a wrong
+  origin: a throw-in seen before a broadcast cut was read as the free kick after it, because the
+  condensed match's cut had skipped minutes and a foul in between. The run had also given every
+  origin as null before, because the rule stopped at event types it did not know.
+- **Rule:** an event before a cut says nothing about what followed it. A rule that reads backwards
+  through events stops at a cut (a restart after the cut is the restart detector's to see), and the
+  list of event types it understands is checked against the types the source writes, so "null for
+  everything" is noticed.
+- **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
+  fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.

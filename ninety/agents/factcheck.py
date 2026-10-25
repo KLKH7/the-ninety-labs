@@ -730,6 +730,32 @@ def label_reasons(text: str, label: str) -> list[str]:
             for m in [pattern.search(text)] if m]
 
 
+# How the attack started (ninety/highlights.py, `origin`; the plan's Amendment 2). A caption may name
+# a restart only of a moment whose origin is that restart. Counter-attacks are never given (the rule
+# does not try them), so their words are always refused.
+SET_PIECES = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off")
+ORIGIN_WORDS = tuple((re.compile(p, re.I), frozenset(origins)) for p, origins in (
+    # "corner" the restart, not a part of the goal ("top corner", "far corner of the net")
+    (r"(?<!top )(?<!far )(?<!near )(?<!upper )(?<!lower )(?<!bottom )\bcorners?(?:[\s-]kicks?)?\b"
+     r"(?!\s+of\s+the)", ("corner",)),
+    (r"\bthrow[\s-]?ins?\b", ("throw_in",)),
+    (r"\bgoal[\s-]?kicks?\b", ("goal_kick",)),
+    (r"\bkick[\s-]?offs?\b", ("kick_off",)),
+    (r"\bset[\s-]?pieces?\b|\bdead[\s-]ball\b|\brestarts?\b", SET_PIECES),
+    (r"\bfree[\s-]?kicks?\b", ("free_kick",)),
+    (r"\bpenalt(?:y|ies)\b|\bspot[\s-]kicks?\b|\bfrom\s+the\s+spot\b", ("penalty_kick",)),
+    (r"\bcounter(?:[\s-]?attack(?:s|ing)?)?\b|\bon\s+the\s+break\b", ()),
+))
+
+
+def origin_reasons(text: str, origin: str | None) -> list[str]:
+    """A caption may say how the attack started only as the code found it (ninety/highlights.py)."""
+    said = origin.replace("_", " ") if origin else "not seen"
+    return [f"'{m.group()}' does not fit how this attack started ({said})"
+            for pattern, origins in ORIGIN_WORDS if origin not in origins
+            for m in [pattern.search(text)] if m]
+
+
 def confidence_gate(
     claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE, team_view: bool = False
 ) -> Verdict:

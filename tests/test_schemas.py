@@ -18,6 +18,7 @@ STRICT = {
     "agent_trace": "agent_trace.jsonl",
     "companion_message": "companion_message.jsonl",
     "minimap": "minimap.jsonl",
+    "highlight_reel": "highlight_reel.jsonl",
     # truth events around the end of the first half (lesson 213): engine output, seed 7, a 70 s half
     "match_event": "match_event.jsonl",
 }
