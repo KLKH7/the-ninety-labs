@@ -96,3 +96,7 @@ falls under the fact-checker's 0.5 gate. The interval is wide and the M2 sample 
 The stand-in's noise model gains an error shared across each frame and over each clip, and the bar is
 read on M4 (equal shares) instead of M1; the rule, its constants and the bar's numbers are unchanged.
 Written once, in [interception-plan.md](interception-plan.md), "Amendment 1".
+
+**Outcome of amendment 1:** on M4 pressure finds 37 of 55 (0.67) with 37 of 52 right (0.71): the bar is
+met with room, and pressure stays written. M1's narrow pass (28 of 55) and M3's 40 of 55 bracket it.
+Details in [interception-plan.md](interception-plan.md), "Amendment 1, outcome".

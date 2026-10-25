@@ -207,3 +207,36 @@ amendment, written before its run.
 **Also reported,** for the tackle question: in M4, how often a ball at a player's feet reads faster
 than ARRIVE_MPS over the speed window. That is the cause the tackle outcome names as likely but
 unmeasured.
+
+### Amendment 1, outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `89c8148`)
+
+Run as written; M1, M2 and M0 in the report are byte-identical to the earlier run's. Strict matching.
+Development numbers on stand-in observations, validation only; not vision results.
+
+30 windows, every player seen (the decision is read on M4):
+
+| Kind | M1 (all own) found, right | **M4 (equal shares) found, right** | M3 (all clip offset) found, right |
+|---|---|---|---|
+| Pressure | 28 of 55, 28 of 45 | **37 of 55 (0.67, 0.54 to 0.78), 37 of 52 (0.71, 0.58 to 0.82)** | 40 of 55, 40 of 55 |
+| Interception | 12 of 25, 12 of 86 | **12 of 25 (0.48), 12 of 60 (0.20, 0.12 to 0.32)** | 17 of 25, 17 of 61 |
+| Tackle | 3 of 44, 3 of 4 | **5 of 44 (0.11, 0.05 to 0.24), 5 of 6** | 40 of 44, 40 of 44 |
+
+The 4 rendered clips, broadcast view, M4: pressure 4 of 6 found and 4 of 7 right; interceptions 1 of 2
+and 1 of 5; tackles 1 of 6 and 1 of 1.
+
+**Decision (the bar read on M4):** pressure meets it and stays in `events.WRITTEN`; interceptions
+(precision 0.20) and tackles (recall 0.11) miss it and stay out. Nothing in the code changes. M3
+gives the same counts as no noise at all: a constant offset moves nothing relative to anything else,
+and 0.188 m stays inside the 1.0 m match radius.
+
+**Why tackles fail, now measured.** Of the frames where a player truly has the ball at his feet and
+the ball is seen, the share that reads at `ARRIVE_MPS` (6 m/s) or faster over the speed window is
+296 of 2,834 (10%) under M3 and 1,993 of 2,834 (70%) under M4. So the rule's "no strike" test reads
+the ball's speed on the pitch, and a carrier running at speed already moves it near 6 m/s. A frame
+part of the noise of 0.11 m per axis is enough to put most of those frames over it. The engine's
+definition is about the ball leaving the player, so the test should be on speed **relative to the
+holder**, as `CARRY_MPS` already is. That is a change to the rule, so it is not made here: it needs
+its own amendment and a run before any number from it.
+
+Interceptions on M4: 25 of the 60 detections sit on a true recovery (the stand-in's lean, M0), and
+most of the rest on false failed passes (pass precision 0.49 on M4).

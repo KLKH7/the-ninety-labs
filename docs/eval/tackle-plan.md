@@ -103,3 +103,9 @@ tackle replace it? That changes the pass rule and its published numbers, so it i
 The stand-in's noise model gains an error shared across each frame and over each clip, and the bar is
 read on M4 (equal shares) instead of M1; the rule, its constants and the bar's numbers are unchanged.
 Written once, in [interception-plan.md](interception-plan.md), "Amendment 1".
+
+**Outcome of amendment 1:** on M4 tackles find 5 of 44 (0.11): the bar is missed and tackles stay out.
+The cause is now measured: a ball truly at a player's feet reads at 6 m/s or faster in 70% of frames on
+M4 (10% on M3), because the strike test reads the ball's speed on the pitch, not relative to the
+holder. A test relative to the holder is the proposed change; it needs its own amendment and run.
+Details in [interception-plan.md](interception-plan.md), "Amendment 1, outcome".

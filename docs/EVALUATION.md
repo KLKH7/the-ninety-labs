@@ -465,12 +465,14 @@ plus 0.188 m of noise per frame, a kit colour per side): the possession set's 30
 windows, and its 4 rendered validation clips with only what the broadcast shows
 ([turnovers-dev.json](eval/turnovers-dev.json)). These are not vision numbers and not test numbers.
 
-- **Pressure** met its bar, narrowly (strict recall 28 of 55, precision 28 of 45; another noise draw
-  gave 32 of 55), and is written by default.
-- **Interceptions** missed it (precision 12 of 86): built, not written. The pass's aim is not in the
+- **Pressure** met its bar, read (amendment 1) with the noise split equally between a clip offset, a
+  shift per frame and each object's own: strict recall 37 of 55, precision 37 of 52. Written by default.
+  With all noise independent it was 28 of 55, with all of it one offset 40 of 55.
+- **Interceptions** missed it (precision 12 of 60): built, not written. The pass's aim is not in the
   picture; its stand-in (where the ball, struck at the speed seen, slows to 6 m/s) disagrees with the
   engine on 133 of 477 validation passes an opponent controlled, even with a perfect ball.
-- **Tackles** missed it (recall 3 of 44 with noise, 40 of 44 without): built, not written.
+- **Tackles** missed it (recall 5 of 44; 40 of 44 with only a clip offset): built, not written. Their
+  strike test reads the ball's speed on the pitch, which a running carrier's ball already nears.
 
 ### Who: team and track
 
