@@ -183,3 +183,22 @@ Both see the same stoppage, so agreement can be shared structure rather than det
    either is a change of the answer key or of the scoring rule, not of this detector.
 3. The cue from a cut is the frame-number jump the index carries. A real broadcast's frames carry no
    match frame number; `--cuts` (pixels) is the honest cue, and it is off by default.
+
+## Amendment 1 (2026-10-24, while writing the code, before it or any observation ran on a clip)
+
+Three holes in the signal above, found by reading it against the engine, not by any result:
+- **Still is too loose.** Under `CARRY_MPS` (4 m/s) a ball dribbled at a jog is "still", so after a
+  cue a dribble could be read as a set ball. A set ball also stays where it is: every ball position
+  of the still run must lie within `BALL_TOL_M` of the run's median (its own measured position error;
+  no new constant), as well as under `CARRY_MPS`.
+- **A set ball is on the field.** In the hold before the edit's cut the dead ball rolls off and is
+  stopped beyond a line; a still ball more than `BALL_TOL_M` outside the lines is never a set ball
+  (a throw-in has its own rule).
+- **The clip's first frame** is a cue only for a kick-off (a clip opening on the centre spot, as at
+  the match's start); a clip that opens in open play must not admit a free kick at its first stop.
+- The clause "no detected pass, shot or spell between the cue and the run" is dropped as ill-defined
+  (a restart's own strike is a pass). Instead the latest cue before a candidate governs, and one cue
+  admits one restart, the first candidate after it.
+
+Known limit, not tested as a pass: where no cut hides the wait, the ball knocked to the spot by
+another player and stopped there reads as a restart at the knock, and the real one is missed.
