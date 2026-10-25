@@ -29,6 +29,14 @@ difference (a digit lost behind a stinger, a misread) changes nothing and is cou
 
 `confidence` is the new digit's mean correlation over its holding samples: a score, not a
 probability.
+
+**Reconciling with vision's goals** (`reconcile`; docs/eval/scorebug-plan.md, W stated before any
+validation score). A score change with a vision goal of that side within W confirms it, their
+confidences combined as independent evidence. A score change with none adds a goal there, the
+scorer by look-back: the side's last detected shot before it within LOOKBACK_S with nothing of the
+other side between, named only as that shot's `player` (already identity-gated, events.attribute),
+the assist the last completed pass to him before it. A vision goal no score change confirms is held
+back. A scoreline is shown only from `score_change` events.
 """
 
 from __future__ import annotations
@@ -56,6 +64,9 @@ CELL_H, CELL_W = 24, 16  # a template: one 16 px digit with its margins
 MIN_NCC, MIN_MARGIN = 0.85, 0.05
 SAMPLE_FRAMES = FPS  # about once a second
 STABLE = 2  # samples in a row: a reading held for a second outlasts the 0.5 s pop and 0.42 s slide
+W_S = 1.0  # event_score.WINDOW_S: the renderer shows a goal's score from its own frame
+LOOKBACK_S = 10.0  # design: well over a shot's 1 to 3 s flight to the goal
+OTHER_SIDE = frozenset({"pass", "shot", "possession_change", "tackle", "interception"})
 
 
 def scale(height: int) -> float:
@@ -183,6 +194,65 @@ def score_events(changes_: list[dict]) -> list[dict]:
             for n, c in enumerate(changes_, start=1)]
 
 
+def look_back(events: list[dict], team: str, t: float) -> tuple[dict | None, dict | None]:
+    """(shot, assist pass): the side's last detected shot before t within LOOKBACK_S with no event of
+    the other side between, and the last completed pass to its shooter before it, in that attack."""
+    before = sorted((e for e in events if e["t"] <= t), key=lambda e: e["t"])
+    shot, cut = None, None
+    for e in reversed(before):
+        if t - e["t"] > LOOKBACK_S:
+            break
+        if e.get("team") != team and e["type"] in OTHER_SIDE:
+            cut = e
+            break
+        if e["type"] == "shot" and e.get("team") == team and shot is None:
+            shot = e
+    if shot is None or not shot.get("player"):
+        return shot, None
+    start = cut["t"] if cut else t - LOOKBACK_S
+    passes = [e for e in before if start < e["t"] < shot["t"] and e["type"] == "pass"
+              and e.get("team") == team and e.get("outcome") == "success"
+              and e.get("receiver") == shot["player"]]
+    return shot, (passes[-1] if passes else None)
+
+
+def reconcile(events: list[dict], score_changes: list[dict]) -> tuple[list[dict], dict]:
+    """The events with each score change confirming, adding or holding back a goal (see above)."""
+    goals = [e for e in events if e["type"] == "goal"]
+    used: set[str] = set()
+    out = [e for e in events if e["type"] != "goal"]
+    confirmed, added = 0, 0
+    for c in score_changes:
+        near = sorted((g for g in goals if g["team"] == c["team"] and g["id"] not in used
+                       and abs(g["t"] - c["t"]) <= W_S), key=lambda g: abs(g["t"] - c["t"]))
+        if near:
+            g = dict(near[0])
+            used.add(g["id"])
+            a, b = g.get("confidence") or 0.0, c["confidence"] or 0.0
+            g["confidence"] = round(1 - (1 - a) * (1 - b), 3)
+            out.append(g)
+            confirmed += 1
+            continue
+        shot, assist = look_back(events, c["team"], c["t"])
+        added += 1
+        out.append({"id": f"g{added:05d}", "t": c["t"], "frame": c["frame"], "type": "goal",
+                    "team": c["team"], "team_confidence": None,
+                    "player": shot.get("player") if shot else None,
+                    "receiver": None, "assist": assist.get("player") if assist else None,
+                    "x": ev_goal_x(c["team"]), "y": 34.0, "end_x": None, "end_y": None, "outcome": None,
+                    "ball_speed_kmh": None, "source": "vision", "confidence": c["confidence"]})
+    held = [g["id"] for g in goals if g["id"] not in used]
+    out += score_changes
+    out.sort(key=lambda e: (e["frame"], e["type"]))
+    return out, {"confirmed": confirmed, "added": added, "held": held}
+
+
+def ev_goal_x(team: str) -> float:
+    """The goal line a side scores on (home attacks x = 105, ninety/vision/events.py): a goal is the
+    ball over that line between the posts (Law 10), where an added goal is placed."""
+    return 105.0 if team == "home" else 0.0
+
+
 def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None) -> tuple[list[dict], dict]:
     """Score changes from a staged clip folder (`index.jsonl` and `images/`), and a summary."""
     from PIL import Image
@@ -244,6 +314,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path)
     ap.add_argument("--summary", type=Path)
     ap.add_argument("--make-glyphs", action="store_true", help="rasterise the digit templates")
+    ap.add_argument("--events", type=Path, help="detected.jsonl: reconcile its goals with the score changes")
+    ap.add_argument("--reconciled", type=Path, help="where to write the reconciled events (with --events)")
     a = ap.parse_args(argv)
     if a.make_glyphs:
         make_glyphs()
@@ -251,6 +323,11 @@ def main(argv: list[str] | None = None) -> None:
     found, summary = read_clip(a.clip)
     if a.out:
         a.out.write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
+    if a.events:
+        detected = [json.loads(x) for x in a.events.read_text().splitlines() if x.strip()]
+        merged, summary["reconcile"] = reconcile(detected, found)
+        if a.reconciled:
+            a.reconciled.write_text("".join(json.dumps(e) + "\n" for e in merged), encoding="utf-8")
     if a.summary:
         a.summary.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"changes": len(found), **summary}))

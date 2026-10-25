@@ -18,8 +18,9 @@ from ninety.vision import scorebug as sb
 GLYPHS = sb.load_glyphs()
 
 
-def frame(home, away, goal_w=0, face="arial-bold", h=720, w=1280):
-    """A 720-line frame: a mid-grey picture, the plate goal_w px right of its 28 px margin, digits."""
+def frame(home, away, goal_w=0, face="arial-bold", h=720, w=1280, pop=0.0):
+    """A 720-line frame: a mid-grey picture, the plate goal_w px right of its 28 px margin, digits.
+    `pop` (0 to 1) lifts and enlarges the home digit as render.js does in a goal's first 0.5 s."""
     g = np.full((h, w), 120.0)
     x0 = 28 + goal_w
     top = sb.BUG_TOP
@@ -32,6 +33,11 @@ def frame(home, away, goal_w=0, face="arial-bold", h=720, w=1280):
             continue
         cell = GLYPHS[face][value]
         y, x = top + 20 - sb.CELL_H // 2, x0 + sb.DIGIT_X[side] - 2
+        if side == "home" and pop:
+            k = 1 + 0.18 * pop  # render.js: scale 1 + 0.18 pop, lifted 5 pop px
+            big = Image.fromarray(cell.astype(np.uint8)).resize((round(sb.CELL_W * k), round(sb.CELL_H * k)))
+            cell = np.asarray(big, dtype=float)[: sb.CELL_H, : sb.CELL_W]
+            y -= round(5 * pop)
         patch = g[y:y + sb.CELL_H, x:x + sb.CELL_W]
         g[y:y + sb.CELL_H, x:x + sb.CELL_W] = np.maximum(patch, cell)
     return g
@@ -41,6 +47,19 @@ def test_the_plate_is_found_where_it_is_drawn_and_follows_the_goal_panel():
     assert sb.plate_x(frame(1, 1)) == 28
     assert sb.plate_x(frame(1, 1, goal_w=96)) == 28 + 96
     assert sb.plate_x(np.full((720, 1280), 120.0)) is None  # no bug drawn: nothing to read
+
+
+def test_a_dark_band_wider_than_the_plate_is_not_the_plate():
+    g = frame(1, 1)
+    g[sb.BUG_TOP:sb.BUG_TOP + sb.BUG_H, 28:28 + sb.PLATE_W + 80] = 14.0
+    g[sb.BUG_TOP + sb.UNDERLINE:sb.BUG_TOP + sb.BUG_H, 28:28 + sb.PLATE_W + 80] = 255.0
+    assert sb.plate_x(g) is None
+
+
+def test_the_popped_digit_is_still_the_best_reading_though_not_accepted():
+    got = sb.read_frame(frame(2, 1, pop=1.0), GLYPHS)
+    assert got["home"][3] == 2  # the best digit, which the frame-accurate timing uses
+    assert got["home"][0] is None  # but under the acceptance bar: never held as a score
 
 
 def test_every_digit_is_read_in_both_faces():
@@ -94,7 +113,8 @@ def test_a_staged_clip_gives_a_change_at_its_first_frame(tmp_path):
     goal = 61  # the first frame showing 2-1
     rows = []
     for f in range(120):
-        im = frame(2 if f >= goal else 1, 1, goal_w=96 if goal <= f < goal + 30 else 0)
+        pop = max(0.0, 1 - (f - goal) / 12) if f >= goal else 0.0  # the pop lasts 0.5 s: 12 frames
+        im = frame(2 if f >= goal else 1, 1, goal_w=96 if goal <= f < goal + 30 else 0, pop=pop)
         name = f"images/{f:05d}.jpg"
         Image.fromarray(im.astype(np.uint8)).save(clip / name, quality=90)
         rows.append({"clip": "c", "frame": 1000 + f, "t": round((1000 + f) / 25, 2), "image": name})
@@ -107,3 +127,53 @@ def test_a_staged_clip_gives_a_change_at_its_first_frame(tmp_path):
     import jsonschema
     schema = json.loads((sb.Path(__file__).parents[1] / "schemas" / "match_event.schema.json").read_text())
     jsonschema.validate(found[0], schema)
+
+
+def E(i, t, kind, team="home", **kw):
+    return {"id": f"v{i}", "t": t, "frame": int(t * 25), "type": kind, "team": team, "x": 90.0, "y": 34.0,
+            "source": "vision", "confidence": 0.8} | kw
+
+
+def change(t, team="home", conf=0.9):
+    return sb.score_events([{"frame": int(t * 25), "t": t, "team": team, "score": {"home": 1, "away": 0},
+                             "confidence": conf}])
+
+
+def test_a_vision_goal_the_scorebug_shows_is_confirmed_and_more_confident():
+    goal = E(1, 10.0 + sb.W_S - 0.04, "goal", confidence=0.6)
+    out, summary = sb.reconcile([goal], change(10.0))
+    [g] = [e for e in out if e["type"] == "goal"]
+    assert g["id"] == "v1" and g["confidence"] == round(1 - 0.4 * 0.1, 3)
+    assert summary == {"confirmed": 1, "added": 0, "held": []}
+
+
+def test_a_scorebug_goal_vision_missed_is_added_with_its_scorer_and_assist_by_look_back():
+    events = [E(1, 2.0, "pass", player="h-t4", receiver="h-t9", outcome="success"),
+              E(2, 5.0, "pass", player="h-t3", receiver="h-t9", outcome="success"),
+              E(3, 6.0, "shot", player="h-t9")]
+    out, summary = sb.reconcile(events, change(7.5))
+    [g] = [e for e in out if e["type"] == "goal"]
+    assert (g["player"], g["assist"], g["team"], g["x"]) == ("h-t9", "h-t3", "home", 105.0)
+    assert summary["added"] == 1
+
+    import jsonschema
+    schema = json.loads((sb.Path(__file__).parents[1] / "schemas" / "match_event.schema.json").read_text())
+    jsonschema.validate(g, schema)
+
+
+def test_look_back_stops_at_the_other_side_and_at_its_horizon():
+    took = [E(1, 6.0, "shot", player="h-t9"), E(2, 6.5, "possession_change", team="away")]
+    assert [e["player"] for e in sb.reconcile(took, change(7.5))[0] if e["type"] == "goal"] == [None]
+    old = [E(1, 7.5 - sb.LOOKBACK_S - 0.5, "shot", player="h-t9")]
+    assert [e["player"] for e in sb.reconcile(old, change(7.5))[0] if e["type"] == "goal"] == [None]
+    unnamed = [E(1, 2.0, "pass", player="h-t4", receiver="h-t9", outcome="success"),
+               E(2, 6.0, "shot", player=None)]
+    [g] = [e for e in sb.reconcile(unnamed, change(7.5))[0] if e["type"] == "goal"]
+    assert g["player"] is None and g["assist"] is None  # no scorer named: no assist to him either
+
+
+def test_a_vision_goal_no_score_change_confirms_is_held_back():
+    late = E(1, 10.0 + sb.W_S + 0.2, "goal")
+    other = E(2, 10.0, "goal", team="away")
+    out, summary = sb.reconcile([late, other], [])
+    assert [e for e in out if e["type"] == "goal"] == [] and summary["held"] == ["v1", "v2"]
