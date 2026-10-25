@@ -82,6 +82,10 @@ class Still:
     sightings: int
 
 
+def _clip(v: float, hi: float) -> float:
+    return round(min(max(v, 0.0), hi), 2)
+
+
 def cut_frames(rows: list[dict]) -> list[int]:
     """The last frame shown before each cut: where the frame numbers jump."""
     return [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
@@ -171,7 +175,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
             "id": "", "t": t_of[s.last], "frame": s.last, "type": "kickoff", "team": law8["team"],
             "team_confidence": taker.side_confidence,
             "player": ev.attribute(taker, path[index[s.last]], tracks), "receiver": None,
-            "x": ev._clip(s.x, ev.PITCH_X), "y": ev._clip(s.y, ev.PITCH_Y), "end_x": None, "end_y": None,
+            "x": _clip(s.x, ev.PITCH_X), "y": _clip(s.y, ev.PITCH_Y), "end_x": None, "end_y": None,
             "outcome": None, "ball_speed_kmh": None, "source": "vision",
             "confidence": round(s.score * law8["share"], 3),
         })
