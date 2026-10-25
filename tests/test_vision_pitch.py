@@ -174,3 +174,116 @@ def test_a_clip_is_tracked_frame_to_frame_and_every_frame_is_ok(pan, small_grid)
     for f, v, a in zip(fits, truths, pts, strict=True):
         assert pitch._median(f.view, a) <= pitch.MAX_MEDIAN_PX
         assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+
+
+# Camera cuts (pitch.shot_starts, pitch.fit_shots; docs/eval/camera-cuts-plan.md).
+
+
+def test_the_cut_distance_is_the_mean_grey_change_over_the_thumbnail():
+    a = grass(72, 128)  # whole thumbnail cells, 4 x 4 px
+    b = grass(72, 128)
+    b[:36] = (240, 240, 240)  # the top half turns white
+    ta, tb = pitch.thumbnail(a), pitch.thumbnail(b)
+    assert pitch.cut_distance(ta, ta) == 0.0
+    grey = np.mean(grass()[0, 0].astype(float))
+    assert pitch.cut_distance(ta, tb) == pytest.approx(0.5 * (240 - grey))
+
+
+def test_a_shot_starts_at_every_frame_at_least_the_threshold_from_the_last():
+    t0 = pitch.thumbnail(grass())
+    half = grass()
+    half[:30] = (240, 240, 240)
+    t1 = pitch.thumbnail(half)
+    d = pitch.cut_distance(t0, t1)
+    thumbs = [t0, t0, t1, t1, t0]
+    assert pitch.shot_starts(thumbs, threshold=d) == [0, 2, 4]  # at the threshold is a cut
+    assert pitch.shot_starts(thumbs, threshold=d + 0.01) == [0]
+    assert pitch.shot_starts([t0, t1]) == [0, 1]  # the adopted threshold sees half the picture change
+
+
+def stripes(offset: int, h: int = 180, w: int = 320) -> np.ndarray:
+    """Mowing stripes 40 px wide, two greens, shifted `offset` px: a pan across the grass."""
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    light = ((np.arange(w) + offset) // 40) % 2 == 0
+    img[:, light] = (70, 140, 20)
+    img[:, ~light] = (50, 110, 10)
+    return img
+
+
+def test_a_pan_across_the_grass_is_not_a_cut():
+    # A pan of 8 px a frame here, as at about 0.02 rad a frame on a 1280 px picture with a wide lens
+    # (pitch.STEP_SD), moves the thumbnail by a few grey levels, far under the threshold.
+    d = pitch.cut_distance(pitch.thumbnail(stripes(0)), pitch.thumbnail(stripes(8)))
+    assert 0 < d < pitch.CUT_THRESHOLD / 2
+
+
+OTHER_GANTRY = (50.0, -38.0, 15.0)  # another camera on the same stand, 8 m along it
+
+
+def two_shots():
+    first = [view(pan=0.29 - 0.27 * k, tilt=0.14 + 0.01 * k) for k in range(3)]
+    second = [view(pan=0.42 - 0.3 * k, tilt=0.15, focal=3000.0, gantry=OTHER_GANTRY) for k in range(3)]
+    return first + second
+
+
+def test_after_a_cut_each_shot_gets_its_own_gantry_and_every_frame_fits(small_grid):
+    truths = two_shots()
+    pts = [marking_pixels(v) for v in truths]
+    gantries, fits = pitch.fit_shots(pts, W, H, [0, 3], anchor_every=1)
+    assert math.dist(gantries[0], GANTRY) < GANTRY_GROSS_M
+    assert math.dist(gantries[1], OTHER_GANTRY) < GANTRY_GROSS_M
+    assert all(f.ok for f in fits)
+    for f, v in zip(fits, truths, strict=True):
+        assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+    # One gantry for both shots, as before the change, cannot fit them all.
+    _, joint = pitch.fit_clip(pts, W, H, anchor_every=1)
+    assert not all(f.ok and pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M
+                   for f, v in zip(joint, truths, strict=True))
+
+
+def test_a_shot_without_markings_gets_no_camera_and_the_others_are_still_fitted(monkeypatch):
+    calls = []
+
+    def fit_clip(points, w, h, anchor_every=25):
+        calls.append(len(points))
+        if not any(len(p) for p in points):
+            raise ValueError("no frame shows enough pitch markings to place the camera")
+        return GANTRY, [pitch.FrameFit(view(), 0.5, len(p), True) for p in points]
+
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    some, none = np.zeros((100, 2)), np.zeros((0, 2))
+    gantries, fits = pitch.fit_shots([some, some, none, none, some], W, H, [0, 2, 4])
+    assert calls == [2, 2, 1] and gantries == [GANTRY, None, GANTRY]
+    assert [f.ok for f in fits] == [True, True, False, False, True] and fits[2].view is None
+    with pytest.raises(ValueError):  # a clip of one shot with no markings is still an error
+        pitch.fit_shots([none, none], W, H, [0])
+
+
+def test_a_clip_without_a_cut_is_fitted_exactly_as_before(monkeypatch):
+    seen = []
+    def fit_clip(points, w, h, anchor_every=25):
+        seen.append((points, anchor_every))
+        return GANTRY, ["fits"]
+
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    pts = [np.zeros((100, 2)) for _ in range(4)]
+    assert pitch.fit_shots(pts, W, H, [0]) == ([GANTRY], ["fits"])
+    assert len(seen) == 1 and seen[0][1] == 25
+    assert len(seen[0][0]) == len(pts) and all(a is b for a, b in zip(seen[0][0], pts, strict=True))
+
+
+def test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot():
+    # Why test seed 900003's reverse angle is fitted 44 m wrong (lesson 244): Law 1's markings are
+    # the same after a half turn about the centre spot, so a camera in the far stand and its twin on
+    # the near gantry, turned the same way, see identical lines. Nothing in the markings, and so in
+    # this fit, can tell them apart; that needs a cue the half turn changes (the stands, the boards).
+    near = view()
+    far = pitch.View(pitch.PITCH_X - GANTRY[0], pitch.PITCH_Y - GANTRY[1], GANTRY[2],
+                     near.pan + math.pi, near.tilt, near.focal, W, H)
+    pts = marking_pixels(far)
+    assert len(pts) > pitch.MIN_POINTS
+    assert pitch._median(near, pts) < 0.05
+    # And the twin puts the ground a pitch-length's worth wrong: the centre of the picture lands
+    # tens of metres from where the far camera is looking.
+    centre = np.array([[W / 2, H / 2]])
+    assert math.dist(near.to_ground(centre)[0], far.to_ground(centre)[0]) > 20.0
