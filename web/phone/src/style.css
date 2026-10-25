@@ -762,3 +762,4 @@ ion-modal { --backdrop-opacity: 0.45; }
 .technical[open] summary::after { content: " ⌄"; }
 .stat-row .within { color: var(--text-3); font-size: 13px; }
 .chip[aria-disabled="true"] { opacity: 0.35; }
+.stat-row.empty .bar { background: rgba(118, 118, 128, 0.24); }

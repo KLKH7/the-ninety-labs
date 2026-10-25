@@ -1069,7 +1069,11 @@ function showInvolved(id: string, t: number) {
 function renderCompareChips(id: string) {
   // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
   const side = { home: 0, away: 0 };
-  const others = rosterIds().filter((o) => o !== id && ++side[team(o)] <= 11);
+  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
+  const others = rosterIds()
+    .filter((o) => o !== id)
+    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    .filter((o) => ++side[team(o)] <= 11);
   $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
@@ -1963,8 +1967,10 @@ function renderStats(st: MatchData["stats"][number]) {
       li.querySelector(".label")!.append(pm);
       li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
     }
-    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly, in grey (nothing to
+    // share yet, so no club's colour); 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
+    li.classList.toggle("empty", h + a === 0);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
     (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
