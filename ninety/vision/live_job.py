@@ -10,10 +10,6 @@ owns it, nothing re-implemented here:
     detect (RF-DETR) -> observe (camera from the markings, boxes on the pitch)
     -> events (tracks, teams, possession, passes, shots, out of play) -> tracked_frames (minimap)
 
-With `--restarts` (off until measured: docs/eval/set-piece-detection-plan.md), ninety.vision.restarts
-adds set pieces and kick-offs to detected.jsonl after the events stage, and writes each one's kind
-to restarts.json (the event schema has no field for it).
-
 The input folder may hold only `index.jsonl` (ninety.vision.frame_index: clip id, frame, time and
 image path per frame) and `images/`, or, for the fixed tactical camera, only `views/<name>/`, each
 view holding only its own `index.jsonl` and `images/`. Anything else, at any depth, is refused
@@ -65,7 +61,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import fuse, observe, restarts, track, tracked_frames
+from ninety.vision import fuse, observe, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX, VIEWS
@@ -133,12 +129,10 @@ def _jsonl(path: Path, rows: list[dict]) -> None:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
-def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None,
-        with_restarts: bool = False) -> dict:
+def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None) -> dict:
     """Run the live path on `clip` into `out` and return run.json's contents. `load_detector()`
     loads the model and returns a function from frame rows to detections; it is passed in so the
-    tests run the real stages after it without rfdetr installed. `with_restarts` adds set pieces and
-    kick-offs (off by default until measured)."""
+    tests run the real stages after it without rfdetr installed."""
     views = check_views(clip)
     out.mkdir(parents=True, exist_ok=True)
     seconds: dict[str, float] = {}
@@ -170,11 +164,6 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
     # Read back as the events stage always reads its input, so this run and the CLIs agree.
     obs = track.read_observations(out / "observations.jsonl")
     found, summary = ev.detect(obs)
-    if with_restarts:
-        added, side = restarts.detect(obs, found)
-        found = sorted(found + added, key=lambda e: (e["frame"], e["type"]))
-        (out / "restarts.json").write_text(json.dumps(side, indent=2) + "\n", encoding="utf-8")
-        summary["events"] |= {k: sum(1 for e in added if e["type"] == k) for k in ("set_piece", "kickoff")}
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     lap("events")
     rows = next(iter(views.values()))
@@ -236,8 +225,6 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--resolution", type=int, default=None, help="default: the trained size")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
-    ap.add_argument("--restarts", action="store_true",
-                    help="also detect set pieces and kick-offs (off until measured)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--echo", action="store_true",
                     help="also print run.json and each detected event, one JSON line each (the job's log)")
@@ -265,7 +252,7 @@ def main(argv: list[str] | None = None) -> None:
         "tiles": a.tiles,
         "commit": os.environ.get("NINETY_COMMIT", "unknown"),
     }
-    report = run(a.clip, a.out, load_detector, about, with_restarts=a.restarts)
+    report = run(a.clip, a.out, load_detector, about)
     print(json.dumps({k: report[k] for k in ("clip", "frames", "events", "seconds")}))
     if a.echo:  # the Container Apps job holds no storage role, so its log carries the result
         print(json.dumps({"run": report}, separators=(",", ":")))

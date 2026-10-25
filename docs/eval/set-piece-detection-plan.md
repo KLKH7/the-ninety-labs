@@ -252,8 +252,8 @@ The fault is the camera fit's, outside this plan (R3, `ninety/vision/pitch.py`);
 
 ### Validation, first two clips (amendment 3's rule; the corner and goal-kick clips are still rendering)
 
-Drawn labels as detections throughout. [validation-live.md](set-pieces/validation-live.md) is the
-live path; [validation-true-camera.md](set-pieces/validation-true-camera.md) the diagnostic.
+Drawn labels as detections throughout. [validation-live.md](set-pieces/set-aside-detector/validation-live.md) is the
+live path; [validation-true-camera.md](set-pieces/set-aside-detector/validation-true-camera.md) the diagnostic.
 
 | Clip | Restart | Live camera | Live: found as | Strict match | Why not |
 |---|---|---|---|---|---|

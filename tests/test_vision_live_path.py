@@ -109,20 +109,16 @@ def test_tracks_and_events_from_the_committed_observations_open_no_truth():
 
 
 RESTART_STAGE = """
-    from ninety.vision import events, restarts, track
-    from tests.test_vision_restarts import open_play, set_ball
+    from ninety.vision import restarts, track
     rows = track.read_observations("tests/fixtures/observations-seed900001.jsonl")
-    _, real = restarts.detect(rows, events.detect(rows)[0])
-    scene = open_play() + set_ball((104.5, 67.5), (104.0, 66.6))
-    found, side = restarts.detect(scene, events.detect(scene)[0])
-    OUT = {"real_cues": real["summary"]["cues"], "kinds": [r["kind"] for r in side["restarts"]]}
+    found, summary = restarts.detect(rows)
+    OUT = {"restarts": len(found), "ball_sightings": summary["ball_sightings"]}
 """
 
 
-def test_restarts_from_the_committed_observations_and_a_planted_corner_open_no_truth():
+def test_restarts_from_the_committed_observations_open_no_truth():
     run = run_audited(RESTART_STAGE)
-    assert run["out"]["kinds"] == ["corner"]  # it did the work
-    assert run["out"]["real_cues"] >= 1
+    assert run["out"]["ball_sightings"] > 0  # it read the ball's path, so the guard is not passing on nothing
     assert any(o.endswith("observations-seed900001.jsonl") for o in run["opened"])
     assert truth_reads(run) == []
 

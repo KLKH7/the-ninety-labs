@@ -104,3 +104,26 @@ def test_every_file_a_manifest_can_list_is_one_the_pack_publishes():
              and "." in n.value and " " not in n.value}  # file names, not the mode it compares with
     assert {"cards.json", "commentary.json", "radar.json", "match.json"} <= names  # the list was found
     assert names | {"speech.json"} <= replay.FILES, sorted(names - replay.FILES)
+
+
+def test_a_bundle_with_every_highlight_recording_packs_and_another_suffix_does_not(tmp_path, monkeypatch):
+    # #312: highlights.record writes <event>.jpg and <event>.webm under highlights/; the pack refused the
+    # folder (the failure #328 hit with commentary.json), so a --match bundle with recordings never shipped.
+    from ninety import highlights
+    from ninety.match.timeline import Timeline
+
+    images = tmp_path / "images"
+    images.mkdir()
+    for i in range(50):
+        (images / f"{i:05d}.jpg").write_bytes(b"\xff\xd8")
+    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(highlights.subprocess, "run", lambda cmd, check: Path(cmd[-1]).write_bytes(b"webm"))
+    timeline = Timeline([{"index": 0, "frame": 1500, "frames": 50}], 25)
+    reel = {"moments": [{"event": "v2", "t": 61.0, "clip": [60.4, 61.4]}]}
+    b = bundle(tmp_path / "b")
+    highlights.record(reel, timeline, sorted(images.glob("*.jpg")), b, encode=True)
+    names = [p.relative_to(b).as_posix() for p in replay.members(b)]
+    assert "highlights/v2.jpg" in names and "highlights/v2.webm" in names
+    (b / "highlights" / "v2.mp4").write_bytes(b"x")  # a suffix the viewer does not read
+    with pytest.raises(SystemExit, match="not a viewer file"):
+        replay.members(b)
