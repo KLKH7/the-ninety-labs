@@ -82,3 +82,15 @@ detector missed gets its scorer by look-back. Nothing on the live path reads the
 - **Licence, pending a decision:** the digit templates are rasters of Helvetica Bold and Arial
   Bold (THIRD_PARTY_NOTICES.md). If they are not acceptable, they are replaced by digits cropped
   from our own renders.
+
+## Which digit is home's, and what is refused (R4's N3 and N4, 2026-10-25)
+
+- **Left is home, by the renderer's draw order, not by kit.** `render.js` draws, left to right, the
+  home code, the home digit, a dash, the away digit and the away code, from `score = [home, away]`
+  (`ninety/render/clip.py`). Tested: a frame drawn with home 3 and away 7 reads home 3, away 7, for
+  every digit in both faces.
+- **Plausibility.** A held score never decreases, and it changes only by exactly +1 on one side
+  (Law 10), held `STABLE` samples before it counts. A held read that goes down or jumps by two is
+  refused: not emitted, not adopted, and counted (`inconsistent` in the reader's summary,
+  `refused_reads` in the validation table). Tested: down, +2 on one side, +1 on both, and a
+  misread jump that must not move the count.

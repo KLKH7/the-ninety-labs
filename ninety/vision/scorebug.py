@@ -11,7 +11,10 @@ underline, in the top-left corner, its top 24 px down, scaled with the picture h
 GOAL panel slides open the plate moves right, so the plate is found on each frame rather than
 assumed: the longest run of columns, in the left of the picture, whose middle rows are dark and whose
 underline rows are bright. The home digit is drawn from 62 px and the away digit from 104 px into
-the plate, 16 px semi-bold sans-serif, centred on the plate's middle row.
+the plate, 16 px semi-bold sans-serif, centred on the plate's middle row. Which digit is home's
+comes from the renderer's draw order, never from a kit: render.js draws the home code, the home
+digit, a dash, the away digit and the away code, left to right, from `score = [home, away]`
+(ninety/render/clip.py), so the left digit is home's.
 
 **Reading a digit.** Each digit cell is compared, by normalised cross-correlation over a few pixels
 of shift, with templates of the ten digits rasterised from the two faces Chromium's `sans-serif`

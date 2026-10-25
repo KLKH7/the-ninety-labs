@@ -42,6 +42,7 @@ def score(items: list[tuple[Path, Path, Path, Path | None]], final_test: bool = 
     refuse_test([clip for clip, *_ in items], final_test)
     n_true = n_det = hits = 0
     dts, right, read, sampled, clips = [], 0, 0, 0, []
+    refused = 0  # held reads that were not one goal on one side (down, or a jump): refused, counted
     for clip, found, summary_path, match_events in items:
         shown = {r["frame"]: r["t"] for r in _jsonl(clip / "frames.jsonl")}
         goals = [e for e in _jsonl(clip / "events.jsonl") if e["type"] == "goal" and e["frame"] in shown]
@@ -56,6 +57,7 @@ def score(items: list[tuple[Path, Path, Path, Path | None]], final_test: bool = 
                 pairs.append((goals[i], det[j]))
         n_true, n_det, hits = n_true + len(goals), n_det + len(det), hits + len(pairs)
         dts += [round(d["t"] - g["t"], 2) for g, d in pairs]
+        refused += json.loads(summary_path.read_text()).get("inconsistent", 0)
         row = {"clip": clip.name, "goals": len(goals), "changes": len(det), "matched": len(pairs),
                "missed": [g["id"] for i, g in enumerate(goals) if i not in used_g],
                "false": [d["id"] for j, d in enumerate(det) if j not in used_d]}
@@ -77,7 +79,7 @@ def score(items: list[tuple[Path, Path, Path, Path | None]], final_test: bool = 
     return {
         "window_s": WINDOW_S,
         "changes": {"recall": rate(hits, n_true), "precision": rate(hits, n_det),
-                    "timing_error_s": sorted(dts)},
+                    "timing_error_s": sorted(dts), "refused_reads": refused},
         "digits": ({"right_of_read": rate(right, read), "unread": rate(sampled - read, sampled)}
                    if sampled else None),
         "clips": clips,

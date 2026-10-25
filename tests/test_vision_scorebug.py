@@ -296,3 +296,22 @@ def test_a_clip_with_a_cut_is_sampled_by_frame_number(tmp_path):
     found, summary = sb.read_clip(clip)
     assert [r[0] for r in summary["readings"]] == [0, 25, 45, 70, 95, 120]  # 45: the first after the cut
     assert [(e["type"], e["frame"]) for e in found] == [("score_read", 0), ("score_change", 45)]
+
+
+def test_the_left_digit_is_home_s_by_the_renderer_s_draw_order():
+    got = sb.read_frame(frame(3, 7), GLYPHS)  # frame() draws home at DIGIT_X["home"], left of away
+    assert sb.DIGIT_X["home"] < sb.DIGIT_X["away"]
+    assert (got["home"][0], got["away"][0]) == (3, 7)
+
+
+def test_the_grader_tables_refused_reads(tmp_path):
+    from ninety.eval import scorebug_score
+    clip = tmp_path / "seed920101"
+    clip.mkdir()
+    (clip / "meta.json").write_text(json.dumps({"seed": 920101}))
+    (clip / "frames.jsonl").write_text(json.dumps({"frame": 0, "t": 0.0}) + "\n")
+    (clip / "events.jsonl").write_text("")
+    (tmp_path / "s.jsonl").write_text("")
+    (tmp_path / "s.json").write_text(json.dumps({"inconsistent": 2, "readings": []}))
+    report = scorebug_score.score([(clip, tmp_path / "s.jsonl", tmp_path / "s.json", None)])
+    assert report["changes"]["refused_reads"] == 2
