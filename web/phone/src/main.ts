@@ -1931,49 +1931,45 @@ $("story-mode").addEventListener("ionChange", (e) => {
 
 // --- team stats and the score, from the bundle's match.json (match mode) -----------------------
 
-/** Under the band, the goals vision spotted so far, never a score (Kian, Oct 25: vision finds 2 of
- * the demo's 3 goals, so a count would contradict the broadcast's scorebug). Each: the club's crest
- * on a side told surely, the scorer (his name when the detection names him, else his club, else
- * "A goal"), the minute and the detection's confidence, quietly. */
+/** Each club's scorers under its crest, as Apple Sports writes them ("⚽ Okafor 12′, 59′"): goals
+ * vision spotted, never a score (Kian, Oct 25: vision finds 2 of the demo's 3 goals, so a count
+ * would contradict the broadcast's scorebug). The scorer's name when the detection names him, else
+ * "London goal"; a goal on a side not told surely sits under the clock as "Goal". Each line opens
+ * How we know, with the detection's confidence; none is printed on the band. */
 let spottedKey = "";
 function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
   const key = `${goals.map((g) => g.event).join()}|${teams.home}`;
   if (key === spottedKey) return;
   spottedKey = key;
-  const list = $("scorers");
-  list.hidden = false;
-  list.classList.toggle("none", goals.length === 0);
-  if (!goals.length) {
-    const li = document.createElement("li");
-    li.className = "spotted-none";
-    li.textContent = "None yet";
-    list.replaceChildren(li);
-    return;
+  const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
+  for (const side of ["home", "away", null] as const) {
+    const mine = goals.filter((g) => (g.team ?? null) === side);
+    // One line per scorer, his goals' minutes in order.
+    const lines = new Map<string, typeof mine>();
+    for (const g of mine) {
+      const who = bundleEvents.get(g.event)?.player;
+      const label = who ? playerName(who) : side ? `${teams[side]} goal` : "Goal";
+      lines.set(label, [...(lines.get(label) ?? []), g]);
+    }
+    $(side ? `goals-${side}` : "goals-unsure").replaceChildren(
+      ...[...lines].map(([label, gs]) => {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "side-goal";
+        b.textContent = `${label} ${gs.map(minute).join(", ")}`;
+        const sure = gs.map((g) => bundleEvents.get(g.event)?.confidence).filter((c): c is number => typeof c === "number");
+        b.addEventListener("click", () => {
+          const said = gs.map((g, k) => `${minute(g)}${typeof sure[k] === "number" ? `, ${Math.round(100 * sure[k])}% sure` : ""}`).join("; ");
+          void openHow({ t: gs[gs.length - 1].t, visual: null, source: "code", evidence: gs.map((g) => g.event),
+            why: { question: "", text: `Vision spotted ${gs.length === 1 ? "this goal" : "these goals"}: ${said}. The score is the broadcast's.` } });
+        });
+        li.append(b);
+        return li;
+      }),
+    );
   }
-  list.replaceChildren(
-    ...goals.map((g) => {
-      const e = bundleEvents.get(g.event);
-      const li = document.createElement("li");
-      li.className = `spotted-goal ${g.team ?? "neutral"}`;
-      li.innerHTML = g.team ? `<span class="crest" aria-hidden="true">${crestSvg(teams[g.team], g.team)}</span>` : '<span class="crest" aria-hidden="true"></span>';
-      const who = document.createElement("span");
-      who.className = "who-scored";
-      who.textContent = e?.player ? playerName(e.player) : g.team ? teams[g.team] : "A goal";
-      const min = document.createElement("span");
-      min.className = "min";
-      min.textContent = `${Math.floor(g.t / 60) + 1}′`;
-      li.append(who, min);
-      if (typeof e?.confidence === "number") {
-        const sure = document.createElement("span");
-        sure.className = "sure";
-        sure.textContent = `${Math.round(100 * e.confidence)}%`;
-        sure.setAttribute("aria-label", `vision ${Math.round(100 * e.confidence)} percent sure`);
-        li.append(sure);
-      }
-      return li;
-    }),
-  );
 }
 
 let statsKey = "";
@@ -2506,9 +2502,6 @@ async function refreshFlow() {
     flowBusy = false;
   }
 }
-
-// Kian's open choice for the band (Oct 25): crests and names in the numerals' place, or ?band=quiet.
-if (new URLSearchParams(location.search).get("band") === "quiet") document.body.dataset.band = "quiet";
 
 // --- every frame -----------------------------------------------------------------------------
 

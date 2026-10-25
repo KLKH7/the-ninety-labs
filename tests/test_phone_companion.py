@@ -805,13 +805,12 @@ def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip
     assert not errors
 
 
-def test_the_band_lists_goals_spotted_by_vision_and_says_none_yet_on_one_line(browser, site):  # noqa: F811
+def test_the_band_is_crests_and_names_with_no_score_and_no_scorer_lines_before_a_goal(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
-    page.wait_for_selector("#scorers:not([hidden])")
-    assert page.inner_text("#spotted-title") == "Goals spotted by vision"
+    page.wait_for_selector(".band .home-name")
     goals = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["goals"]
-    if not [g for g in goals if g["t"] <= 1505 / FPS]:
-        assert page.inner_text("#scorers") == "None yet"
+    assert not [g for g in goals if g["t"] <= 1505 / FPS]
+    assert page.locator(".side-goal").count() == 0 and "%" not in page.inner_text(".band")
     assert page.locator("#teams-note").is_hidden()  # the clip names both clubs
     assert not errors
 
@@ -898,11 +897,9 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
     page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
     page.reload()
     page.wait_for_selector("body[data-state=live]")
-    page.wait_for_function("document.querySelector('#scorers') && !document.querySelector('#scorers').hidden")
-    row = page.locator("#scorers .spotted-goal")
-    assert row.locator(".who-scored").inner_text() == "A goal" and row.locator(".min").inner_text() == "2′"
-    assert row.locator(".crest svg").count() == 0  # no club's crest on a side not told surely
-    assert row.locator(".sure").inner_text().endswith("%")  # the detection's confidence, quietly
+    page.wait_for_selector("#goals-unsure .side-goal")
+    assert page.inner_text("#goals-unsure .side-goal") == "Goal 2′"  # under the clock, under no club
+    assert page.locator("#goals-home .side-goal, #goals-away .side-goal").count() == 0
     assert not errors
 
 
@@ -1085,7 +1082,13 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
-    page.wait_for_selector("#scorers .spotted-goal")
+    page.wait_for_selector("#goals-home .side-goal")
+    assert page.inner_text("#goals-home .side-goal").endswith(" 2′")  # under the club's crest
+    assert "%" not in page.inner_text(".band")  # the confidence lives behind a tap
+    page.click("#goals-home .side-goal")
+    page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('% sure')")
+    assert "The score is the broadcast's" in page.inner_text("#how-body")
+    page.click("#close-how")
     assert page.locator("#score-home, #score-away, .mh, .ma, .tally").count() == 0
     js = """() => [...document.querySelectorAll('.band, .score-line, #insights, #panel-ask ion-header')]
         .flatMap((el) => [el.innerText, el.getAttribute('aria-label') || ''])"""
