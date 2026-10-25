@@ -88,3 +88,19 @@ def test_every_file_ninety_e2e_writes_is_one_the_pack_publishes(tmp_path):
               "--events-file", str(events)])
     files = set(json.loads((out / "manifest.json").read_text())["files"])
     assert "commentary.json" in files and files <= {p.name for p in replay.members(out)}
+
+
+def test_every_file_a_manifest_can_list_is_one_the_pack_publishes():
+    # Every option's file, not only the default bundle's: the names in ninety-e2e's `files` list
+    # (radar.json, match.json, cards.json, agents.json, ...) and the read-aloud step's speech.json.
+    import ast
+
+    tree = ast.parse((ROOT / "ninety" / "e2e.py").read_text())
+    listed = {node for d in ast.walk(tree) if isinstance(d, ast.Dict)
+              for k, v in zip(d.keys, d.values, strict=True)
+              if isinstance(k, ast.Constant) and k.value == "files"
+              for node in ast.walk(v)}
+    names = {n.value for n in listed if isinstance(n, ast.Constant) and isinstance(n.value, str)
+             and "." in n.value and " " not in n.value}  # file names, not the mode it compares with
+    assert {"cards.json", "commentary.json", "radar.json", "match.json"} <= names  # the list was found
+    assert names | {"speech.json"} <= replay.FILES, sorted(names - replay.FILES)
