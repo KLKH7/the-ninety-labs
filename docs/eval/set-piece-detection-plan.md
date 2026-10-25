@@ -310,3 +310,6 @@ detections. Every clip rendered here at `65247ba` passes `ninety-validate`.
 - **Against the bar:** nothing here decides the default; `--restarts` stays off and set pieces stay
   `planned` in the challenge map. To go on it needs the test split rendered, the camera fit working
   on this look, and an answer to open question 2 (which moment a set piece is).
+- **Correction to amendment 2's figures** (read then from the gantries by eye): measured as
+  distances, the live fit's gantry is 16.6 m from the true one on the possession sample, 22.4 m on
+  the throw-in clip and 11.4 m on the corner clip; each true gantry lies inside the search grid.
