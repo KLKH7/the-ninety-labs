@@ -16,7 +16,7 @@ import math
 from collections.abc import Iterable, Mapping
 
 from ninety.agents.factcheck import side_known
-from ninety.intel.scene import PITCH_X, PITCH_Y, minute_of
+from ninety.intel.scene import PITCH_X, PITCH_Y, POSITION_ERROR_M, minute_of
 
 GOAL_W = 7.32  # Law 1: the distance between the posts (GROUNDING L1)
 # Law 1: the penalty area reaches 16.5 m into the field from the goal line, and 16.5 m out from each
@@ -37,6 +37,19 @@ def geometry(x: float, y: float, team: str | None) -> tuple[float, float]:
     dx, dy = abs(gx - x), y - PITCH_Y / 2
     a = math.atan2(GOAL_W / 2 - dy, dx) + math.atan2(GOAL_W / 2 + dy, dx)  # to each post, summed
     return math.hypot(dx, dy), math.degrees(a)
+
+
+def near_box_line(x: float, y: float, team: str | None) -> bool:
+    """Whether the spot is within the players' position error of the penalty area's line, so the
+    shot could have been inside it or outside (I1's 1.26 m, the spot being a ball and player's)."""
+    if team is None:
+        team = "home" if x > PITCH_X / 2 else "away"
+    depth = PITCH_X - x if team == "home" else x
+    dy = abs(y - PITCH_Y / 2)
+    e = POSITION_ERROR_M
+    return (abs(depth - BOX_DEPTH_M) <= e and dy <= BOX_HALF_W + e) or (
+        abs(dy - BOX_HALF_W) <= e and depth <= BOX_DEPTH_M + e
+    )
 
 
 def inside_box(x: float, y: float, team: str | None) -> bool:
@@ -63,6 +76,7 @@ def shots(events: Iterable[Mapping]) -> list[dict]:
                 "t": round(float(e["t"]), 2),
                 "passer": e.get("player"),  # named as a passer is: the role gate decides (I6)
                 "inside_box": inside_box(float(e["x"]), float(e["y"]), e["team"] if known else None),
+                "near_box_line": near_box_line(float(e["x"]), float(e["y"]), e["team"] if known else None),
                 "x": round(float(e["x"]), 1),
                 "y": round(float(e["y"]), 1),
                 "value": round(dist),
@@ -77,6 +91,21 @@ def shots(events: Iterable[Mapping]) -> list[dict]:
             }
         )
     return out
+
+
+def _inside(rows: Iterable[Mapping]) -> dict:
+    """The shots from inside the penalty area, with bounds from those within the error of its line:
+    the count is said only when no shot is that close (`inside_exact`)."""
+    rows = list(rows)
+    lo = sum(r["inside_box"] and not r["near_box_line"] for r in rows)
+    hi = sum(r["inside_box"] or r["near_box_line"] for r in rows)
+    return {
+        "inside_box": lo,
+        "inside_lo": lo,
+        "inside_hi": hi,
+        "inside_exact": lo == hi,
+        "also": [[lo, "shots", INSIDE_CONTEXT]] if lo == hi else [],
+    }
 
 
 def summary(rows: Iterable[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
@@ -94,14 +123,12 @@ def summary(rows: Iterable[Mapping], minute_from: int, minute_to: int) -> dict[s
             "minute_to": minute_to,
             "value": len(window),
             "unit": "shots",
-            "inside_box": sum(r["inside_box"] for r in window),
-            "also": [[sum(r["inside_box"] for r in window), "shots", INSIDE_CONTEXT]],
+            **_inside(window),
             "confident": True,
         }
     }
     for team in ("home", "away"):
         known = [r for r in window if r["side_known"] and r["team"] == team]
-        inside = sum(r["inside_box"] for r in known)
         out[team] = {
             "id": f"shots:{team}:m{minute_from}-{minute_to}",
             "kind": "shots",
@@ -113,8 +140,7 @@ def summary(rows: Iterable[Mapping], minute_from: int, minute_to: int) -> dict[s
             "unit": "shots",
             "lo": len(known),
             "hi": len(known) + len(unknown),
-            "inside_box": inside,
-            "also": [[inside, "shots", INSIDE_CONTEXT]],
+            **_inside(known),
             "confident": not unknown,
         }
     return out
