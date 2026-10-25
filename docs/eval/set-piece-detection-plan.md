@@ -349,3 +349,25 @@ lenses' band), drawn labels as detections, graded at the true kick
 - **Timing at the kick** (that plan's rule, also open question 2 above) puts every found restart
   within 0.12 s. Graded instead at the answer key's event, as event_score does, only the corner
   (which the engine writes as its taker strikes it) would match.
+
+### The same with #283's kit reader (2026-10-25)
+
+#283 (open) reads both shirt colours (`KIT_READER = "R4"`) and names sides through `sides.assign`.
+Measured on the same four clips: its `observe.recolour` re-reads every kit and keeps each frame's
+camera and boxes (#283 changes no camera fit or placing). `main`'s `restarts.py` was run with the
+one change #283 makes there (sides from `sides.assign`), at #283's head `56c543b`, in a scratch
+worktree; nothing was committed to #283 ([main-detector-with-283/](set-pieces/main-detector-with-283/)).
+
+| | Live: kick-offs | Live: set pieces | True camera: set pieces |
+|---|---|---|---|
+| `main` | 1 of 1 | 1 of 4 (free kick) | 2 of 4 (free kick, corner) |
+| with #283 | 1 of 1 | 1 of 4 (free kick) | 1 of 4 (free kick; the corner lost) |
+
+It does not recover the goal kick or the throw-in's side, and loses the corner. The cause is
+side naming on three of the four clips, measured directly: the share of tracked player-frames with
+the true player's side is 0.60, 0.43 and 0.50 with `main`'s sides and 0.61, 0.30 and 0.39 with
+#283's (920101, 920106, 920109), against 0.97 and 0.98 on 920108. Even the better of each naming and
+its flip leaves those three at about 0.6: the two kits are not told apart, not only named the wrong
+way round. On 920108 the kits are black and white sashes; on the other three, black and navy at low
+contrast, or two-colour halves or hoops that share white or black with the other side's kit
+(`side-accuracy.json` lists them). That is a pattern in four clips, not a measured cause.

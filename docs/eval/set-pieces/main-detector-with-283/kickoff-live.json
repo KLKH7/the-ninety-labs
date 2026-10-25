@@ -1,0 +1,77 @@
+{
+  "kind": "kickoff",
+  "window_s": 1.0,
+  "recall": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "precision": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "recall_any_side": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "precision_any_side": {
+    "k": 1,
+    "n": 1,
+    "rate": 1.0,
+    "wilson95": [
+      0.21,
+      1.0
+    ]
+  },
+  "timing_error_s": [
+    0.12
+  ],
+  "clips": [
+    {
+      "clip": "seed920101-421",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920108-1061",
+      "true": 1,
+      "detected": 1,
+      "matched": 1,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920106-4570",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    },
+    {
+      "clip": "seed920109-3109",
+      "true": 0,
+      "detected": 0,
+      "matched": 0,
+      "missed": [],
+      "false": []
+    }
+  ]
+}
