@@ -219,7 +219,9 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone = ctx.new_page()
     errors = watch(phone)
     phone.goto(f"{mock_site}?mock=1&clip=mock")
-    assert phone.is_visible("#mockbar")  # the mock says so on every screen
+    # The page imports the mock feed before it shows the bar (main.ts: `await import("./mock")`):
+    # wait for the bar itself, the sign the mock is ready, never a read the moment the page loads.
+    phone.wait_for_selector("#mockbar", state="visible")  # the mock says so on every screen
 
     phone.fill("#code", "12")
     assert phone.is_disabled("#connect")  # a TV-code form: Connect is on only once a code could work
