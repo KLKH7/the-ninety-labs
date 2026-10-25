@@ -146,7 +146,8 @@ ARRIVE_MPS = 6.0
 HELD = 0.49
 # The new kinds `detect` writes by default; each plan's bar decides whether its kind is in. On the
 # validation stand-in (docs/eval/turnovers-dev.json, M4, amendment 1) pressure met it (37 of 55,
-# 37 of 52); interceptions (12 of 60 right) and tackles (5 of 44 found) did not: built, not written.
+# 37 of 52); interceptions (12 of 60 right) and tackles (19 of 44 found, amendment 2) did not: built,
+# not written.
 TURNOVERS = ("interception", "pressure", "tackle")
 WRITTEN = ("pressure",)
 

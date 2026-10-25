@@ -5,7 +5,7 @@
     "docs/eval/tackle-plan.md"
   ],
   "label": "development numbers on stand-in observations (validation only), not vision results",
-  "commit": "89c8148c25492ea0c36fd682cd6aedbebf526f10",
+  "commit": "444a445527ae721ab48788d532ff80088ef9f68b",
   "noise_m": 0.188,
   "m0": {
     "passes": 477,
@@ -118,17 +118,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 4,
-        "tp": 3,
-        "precision": 0.75,
-        "recall": 0.068,
+        "detected": 15,
+        "tp": 11,
+        "precision": 0.733,
+        "recall": 0.25,
         "precision_wilson95": [
-          0.3,
-          0.95
+          0.48,
+          0.89
         ],
         "recall_wilson95": [
-          0.02,
-          0.18
+          0.15,
+          0.39
         ]
       },
       "possession_change": {
@@ -195,17 +195,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 4,
-        "tp": 3,
-        "precision": 0.75,
-        "recall": 0.068,
+        "detected": 15,
+        "tp": 11,
+        "precision": 0.733,
+        "recall": 0.25,
         "precision_wilson95": [
-          0.3,
-          0.95
+          0.48,
+          0.89
         ],
         "recall_wilson95": [
-          0.02,
-          0.18
+          0.15,
+          0.39
         ]
       },
       "possession_change": {
@@ -272,17 +272,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 4,
-        "tp": 3,
-        "precision": 0.75,
-        "recall": 0.068,
+        "detected": 15,
+        "tp": 11,
+        "precision": 0.733,
+        "recall": 0.25,
         "precision_wilson95": [
-          0.3,
-          0.95
+          0.48,
+          0.89
         ],
         "recall_wilson95": [
-          0.02,
-          0.18
+          0.15,
+          0.39
         ]
       },
       "possession_change": {
@@ -318,19 +318,20 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 32,
+      "false_tackles_on_a_true_pass": 3,
       "true_interceptions_detected_only_as_possession_change": 4,
       "tackle_outcome": {
-        "right": 2,
-        "of": 3
+        "right": 5,
+        "of": 11
       },
-      "tackles_kept_through_contact": 1,
-      "tackles_held": 3,
-      "tackles_kept_matched": 1,
-      "tackles_held_matched": 2,
-      "detected_passes_at_a_detected_tackle": 3,
+      "tackles_kept_through_contact": 8,
+      "tackles_held": 7,
+      "tackles_kept_matched": 6,
+      "tackles_held_matched": 5,
+      "detected_passes_at_a_detected_tackle": 11,
       "tackles_missed_by_kind": {
         "knocked_loose": 8,
-        "taken_off_a_dribble": 33
+        "taken_off_a_dribble": 25
       },
       "false_pressures_from_unseen_memory": 6,
       "false_pressures": 17
@@ -338,7 +339,7 @@
     "names": {
       "right": 46,
       "wrong": 2,
-      "null": 26
+      "null": 42
     },
     "sides_right": [
       8976,
@@ -379,9 +380,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -416,9 +417,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -453,25 +454,26 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 1,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
             "taken_off_a_dribble": 0
@@ -604,6 +606,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -663,10 +666,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -700,10 +703,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -737,28 +740,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
+          "tackles_held_matched": 1,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -768,7 +772,7 @@
         "names": {
           "right": 0,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -805,10 +809,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -842,10 +846,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -879,28 +883,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 1,
           "false_pressures": 2
@@ -910,7 +915,7 @@
         "names": {
           "right": 0,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -1030,6 +1035,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1172,6 +1178,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 4,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1314,6 +1321,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1373,10 +1381,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -1410,10 +1418,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -1447,28 +1455,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 4,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
+          "tackles_held_matched": 1,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -1478,7 +1487,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -1598,6 +1607,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1719,6 +1729,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1819,6 +1830,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -1961,15 +1973,16 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
-            "right": 1,
+            "right": 0,
             "of": 1
           },
-          "tackles_kept_through_contact": 1,
-          "tackles_held": 0,
-          "tackles_kept_matched": 1,
-          "tackles_held_matched": 0,
+          "tackles_kept_through_contact": 0,
+          "tackles_held": 1,
+          "tackles_kept_matched": 0,
+          "tackles_held_matched": 1,
           "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
@@ -2020,10 +2033,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 1
+              "fn": 2
             }
           },
           "lenient": {
@@ -2057,10 +2070,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 1
+              "fn": 2
             }
           },
           "time_only": {
@@ -2094,27 +2107,28 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 1
+              "fn": 2
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 1,
-            "of": 1
+            "right": 0,
+            "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 1,
+          "tackles_held": 0,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 1,
-          "detected_passes_at_a_detected_tackle": 1,
+          "tackles_held_matched": 0,
+          "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
-            "knocked_loose": 0,
+            "knocked_loose": 1,
             "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
@@ -2125,7 +2139,7 @@
         "names": {
           "right": 0,
           "wrong": 1,
-          "null": 3
+          "null": 1
         }
       },
       {
@@ -2162,10 +2176,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           },
           "lenient": {
@@ -2199,10 +2213,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           },
           "time_only": {
@@ -2236,28 +2250,29 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 2
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
-            "taken_off_a_dribble": 2
+            "knocked_loose": 0,
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -2267,7 +2282,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 0
+          "null": 4
         }
       },
       {
@@ -2366,6 +2381,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -2508,6 +2524,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -2567,10 +2584,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -2604,10 +2621,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -2641,28 +2658,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -2672,7 +2690,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -2750,6 +2768,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -2806,6 +2825,13 @@
               "tp": 2,
               "fp": 0,
               "fn": 2
+            },
+            "tackle": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0
             }
           },
           "lenient": {
@@ -2836,6 +2862,13 @@
               "tp": 2,
               "fp": 0,
               "fn": 2
+            },
+            "tackle": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0
             }
           },
           "time_only": {
@@ -2866,21 +2899,29 @@
               "tp": 2,
               "fp": 0,
               "fn": 2
+            },
+            "tackle": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 1,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 0
@@ -2992,6 +3033,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -3051,9 +3093,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 1,
+              "detected": 0,
               "tp": 0,
-              "fp": 1,
+              "fp": 0,
               "fn": 1
             }
           },
@@ -3088,9 +3130,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 1,
+              "detected": 0,
               "tp": 0,
-              "fp": 1,
+              "fp": 0,
               "fn": 1
             }
           },
@@ -3125,25 +3167,26 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 1,
+              "detected": 0,
               "tp": 0,
-              "fp": 1,
+              "fp": 0,
               "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 1,
+          "tackles_held": 0,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 1,
+          "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 1
@@ -3276,6 +3319,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -3335,10 +3379,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 3
+              "fn": 2
             }
           },
           "lenient": {
@@ -3372,10 +3416,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 3
+              "fn": 2
             }
           },
           "time_only": {
@@ -3409,28 +3453,29 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 3
+              "fn": 2
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 3
+            "taken_off_a_dribble": 2
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -3440,7 +3485,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -3477,9 +3522,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -3514,9 +3559,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -3551,22 +3596,23 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
           "detected_passes_at_a_detected_tackle": 0,
@@ -3619,10 +3665,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           },
           "lenient": {
@@ -3656,10 +3702,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           },
           "time_only": {
@@ -3693,28 +3739,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 1,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_kept_through_contact": 1,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "tackles_held_matched": 1,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -3724,7 +3771,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -3761,10 +3808,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "lenient": {
@@ -3798,10 +3845,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "time_only": {
@@ -3835,28 +3882,29 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
+          "tackles_held_matched": 1,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -3866,7 +3914,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -3903,10 +3951,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 2
+              "fn": 3
             }
           },
           "lenient": {
@@ -3940,10 +3988,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 2
+              "fn": 3
             }
           },
           "time_only": {
@@ -3977,28 +4025,29 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 1,
-              "tp": 1,
+              "detected": 0,
+              "tp": 0,
               "fp": 0,
-              "fn": 2
+              "fn": 3
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 1
+            "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 1,
+          "tackles_held": 0,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 1,
+          "tackles_held_matched": 0,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 3
           },
           "false_pressures_from_unseen_memory": 1,
           "false_pressures": 2
@@ -4008,7 +4057,7 @@
         "names": {
           "right": 0,
           "wrong": 0,
-          "null": 2
+          "null": 0
         }
       },
       {
@@ -4128,6 +4177,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -4187,10 +4237,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -4224,10 +4274,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -4261,28 +4311,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -4292,7 +4343,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -4412,6 +4463,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -4474,14 +4526,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 0,
-        "tp": 0,
-        "precision": null,
-        "recall": 0.0,
-        "precision_wilson95": null,
+        "detected": 1,
+        "tp": 1,
+        "precision": 1.0,
+        "recall": 0.167,
+        "precision_wilson95": [
+          0.21,
+          1.0
+        ],
         "recall_wilson95": [
-          0.0,
-          0.39
+          0.03,
+          0.56
         ]
       },
       "possession_change": {
@@ -4548,14 +4603,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 0,
-        "tp": 0,
-        "precision": null,
-        "recall": 0.0,
-        "precision_wilson95": null,
+        "detected": 1,
+        "tp": 1,
+        "precision": 1.0,
+        "recall": 0.167,
+        "precision_wilson95": [
+          0.21,
+          1.0
+        ],
         "recall_wilson95": [
-          0.0,
-          0.39
+          0.03,
+          0.56
         ]
       },
       "possession_change": {
@@ -4622,14 +4680,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 0,
-        "tp": 0,
-        "precision": null,
-        "recall": 0.0,
-        "precision_wilson95": null,
+        "detected": 1,
+        "tp": 1,
+        "precision": 1.0,
+        "recall": 0.167,
+        "precision_wilson95": [
+          0.21,
+          1.0
+        ],
         "recall_wilson95": [
-          0.0,
-          0.39
+          0.03,
+          0.56
         ]
       },
       "possession_change": {
@@ -4665,18 +4726,19 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 2,
+      "false_tackles_on_a_true_pass": 0,
       "true_interceptions_detected_only_as_possession_change": 0,
       "tackle_outcome": {
         "right": 0,
-        "of": 0
+        "of": 1
       },
-      "tackles_kept_through_contact": 0,
+      "tackles_kept_through_contact": 1,
       "tackles_held": 0,
-      "tackles_kept_matched": 0,
+      "tackles_kept_matched": 1,
       "tackles_held_matched": 0,
-      "detected_passes_at_a_detected_tackle": 0,
+      "detected_passes_at_a_detected_tackle": 1,
       "tackles_missed_by_kind": {
-        "knocked_loose": 2,
+        "knocked_loose": 1,
         "taken_off_a_dribble": 4
       },
       "false_pressures_from_unseen_memory": 1,
@@ -4685,7 +4747,7 @@
     "names": {
       "right": 6,
       "wrong": 1,
-      "null": 3
+      "null": 5
     },
     "sides_right": [
       700,
@@ -4809,6 +4871,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -4951,6 +5014,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -5093,6 +5157,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -5152,10 +5217,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -5189,10 +5254,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -5226,27 +5291,28 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
+            "knocked_loose": 0,
             "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
@@ -5257,7 +5323,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       }
     ]
@@ -5298,16 +5364,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -5375,16 +5441,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -5452,16 +5518,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -5497,19 +5563,20 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 33,
+      "false_tackles_on_a_true_pass": 0,
       "true_interceptions_detected_only_as_possession_change": 3,
       "tackle_outcome": {
-        "right": 34,
-        "of": 40
+        "right": 35,
+        "of": 41
       },
       "tackles_kept_through_contact": 44,
       "tackles_held": 0,
-      "tackles_kept_matched": 40,
+      "tackles_kept_matched": 41,
       "tackles_held_matched": 0,
       "detected_passes_at_a_detected_tackle": 42,
       "tackles_missed_by_kind": {
         "knocked_loose": 2,
-        "taken_off_a_dribble": 2
+        "taken_off_a_dribble": 1
       },
       "false_pressures_from_unseen_memory": 7,
       "false_pressures": 15
@@ -5517,7 +5584,7 @@
     "names": {
       "right": 67,
       "wrong": 1,
-      "null": 109
+      "null": 111
     },
     "sides_right": [
       660,
@@ -5641,6 +5708,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -5783,6 +5851,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -5925,6 +5994,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -6067,6 +6137,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -6209,6 +6280,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -6268,10 +6340,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "lenient": {
@@ -6305,10 +6377,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "time_only": {
@@ -6342,28 +6414,29 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 1,
-            "of": 1
+            "right": 2,
+            "of": 2
           },
-          "tackles_kept_through_contact": 1,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
-          "tackles_kept_matched": 1,
+          "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 1,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -6373,7 +6446,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 4
+          "null": 6
         }
       },
       {
@@ -6493,6 +6566,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -6635,6 +6709,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -6777,6 +6852,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -6898,6 +6974,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -6998,6 +7075,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -7140,6 +7218,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 1,
@@ -7282,6 +7361,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -7424,6 +7504,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -7545,6 +7626,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -7687,6 +7769,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -7829,6 +7912,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -7929,6 +8013,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -8050,6 +8135,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -8171,6 +8257,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -8313,6 +8400,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -8455,6 +8543,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -8597,6 +8686,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 3,
@@ -8656,9 +8746,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           },
@@ -8693,9 +8783,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           },
@@ -8730,25 +8820,26 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           }
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 1,
             "of": 1
           },
-          "tackles_kept_through_contact": 3,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
           "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 3,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 0
@@ -8881,6 +8972,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -9023,6 +9115,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -9165,6 +9258,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -9307,6 +9401,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -9449,6 +9544,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -9591,6 +9687,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 3,
@@ -9853,6 +9950,7 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 5,
+      "false_tackles_on_a_true_pass": 0,
       "true_interceptions_detected_only_as_possession_change": 0,
       "tackle_outcome": {
         "right": 6,
@@ -9997,6 +10095,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -10139,6 +10238,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -10281,6 +10381,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -10423,6 +10524,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -10486,16 +10588,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -10563,16 +10665,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -10640,16 +10742,16 @@
       "tackle": {
         "true": 44,
         "detected": 44,
-        "tp": 40,
-        "precision": 0.909,
-        "recall": 0.909,
+        "tp": 41,
+        "precision": 0.932,
+        "recall": 0.932,
         "precision_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ],
         "recall_wilson95": [
-          0.79,
-          0.96
+          0.82,
+          0.98
         ]
       },
       "possession_change": {
@@ -10685,19 +10787,20 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 33,
+      "false_tackles_on_a_true_pass": 0,
       "true_interceptions_detected_only_as_possession_change": 3,
       "tackle_outcome": {
-        "right": 34,
-        "of": 40
+        "right": 35,
+        "of": 41
       },
       "tackles_kept_through_contact": 44,
       "tackles_held": 0,
-      "tackles_kept_matched": 40,
+      "tackles_kept_matched": 41,
       "tackles_held_matched": 0,
       "detected_passes_at_a_detected_tackle": 42,
       "tackles_missed_by_kind": {
         "knocked_loose": 2,
-        "taken_off_a_dribble": 2
+        "taken_off_a_dribble": 1
       },
       "false_pressures_from_unseen_memory": 7,
       "false_pressures": 15
@@ -10705,7 +10808,7 @@
     "names": {
       "right": 67,
       "wrong": 1,
-      "null": 109
+      "null": 111
     },
     "sides_right": [
       660,
@@ -10828,11 +10931,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 17,
+          "fast": 13,
           "of": 88
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -10979,6 +11083,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -11120,11 +11225,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 12,
+          "fast": 14,
           "of": 96
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -11266,11 +11372,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 11,
+          "fast": 10,
           "of": 98
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -11412,11 +11519,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 6,
+          "fast": 4,
           "of": 94
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -11476,10 +11584,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "lenient": {
@@ -11513,10 +11621,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "time_only": {
@@ -11550,32 +11658,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
-              "tp": 1,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 10,
+          "fast": 14,
           "of": 81
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 1,
-            "of": 1
+            "right": 2,
+            "of": 2
           },
-          "tackles_kept_through_contact": 1,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
-          "tackles_kept_matched": 1,
+          "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 1,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -11585,7 +11694,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 4
+          "null": 6
         }
       },
       {
@@ -11709,6 +11818,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -11855,6 +11965,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -11996,11 +12107,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 13,
+          "fast": 12,
           "of": 95
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -12121,11 +12233,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 12,
+          "fast": 14,
           "of": 66
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -12225,11 +12338,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 13,
+          "fast": 12,
           "of": 78
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -12371,11 +12485,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 6,
+          "fast": 8,
           "of": 78
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 1,
@@ -12517,11 +12632,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 13,
+          "fast": 14,
           "of": 92
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -12668,6 +12784,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -12788,11 +12905,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 12,
           "of": 100
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -12934,11 +13052,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 11,
           "of": 126
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -13080,11 +13199,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 8,
+          "fast": 7,
           "of": 89
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -13184,11 +13304,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 13,
           "of": 137
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -13309,11 +13430,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 15,
+          "fast": 13,
           "of": 84
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -13434,11 +13556,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 15,
+          "fast": 18,
           "of": 94
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -13580,11 +13703,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 7,
+          "fast": 8,
           "of": 107
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -13726,11 +13850,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 11,
+          "fast": 14,
           "of": 77
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -13872,11 +13997,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 8,
+          "fast": 7,
           "of": 115
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 3,
@@ -13936,9 +14062,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           },
@@ -13973,9 +14099,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           },
@@ -14010,29 +14136,30 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 3,
+              "detected": 2,
               "tp": 1,
-              "fp": 2,
+              "fp": 1,
               "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 11,
+          "fast": 6,
           "of": 85
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 1,
             "of": 1
           },
-          "tackles_kept_through_contact": 3,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
           "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 3,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 0
@@ -14169,6 +14296,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -14310,11 +14438,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 8,
           "of": 80
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -14461,6 +14590,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -14602,11 +14732,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 6,
+          "fast": 4,
           "of": 133
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -14748,11 +14879,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 8,
           "of": 87
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -14894,11 +15026,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 9,
+          "fast": 8,
           "of": 108
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 3,
@@ -14931,7 +15064,7 @@
       0.0
     ],
     "fast_at_feet": {
-      "fast": 296,
+      "fast": 300,
       "of": 2834
     }
   },
@@ -15170,6 +15303,7 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 5,
+      "false_tackles_on_a_true_pass": 0,
       "true_interceptions_detected_only_as_possession_change": 0,
       "tackle_outcome": {
         "right": 6,
@@ -15313,11 +15447,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 17,
+          "fast": 13,
           "of": 87
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -15464,6 +15599,7 @@
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -15605,11 +15741,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 12,
+          "fast": 14,
           "of": 96
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -15751,11 +15888,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 11,
+          "fast": 10,
           "of": 97
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 2,
@@ -15788,7 +15926,7 @@
       0.0
     ],
     "fast_at_feet": {
-      "fast": 52,
+      "fast": 49,
       "of": 396
     }
   },
@@ -15827,17 +15965,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 6,
-        "tp": 5,
-        "precision": 0.833,
-        "recall": 0.114,
+        "detected": 31,
+        "tp": 19,
+        "precision": 0.613,
+        "recall": 0.432,
         "precision_wilson95": [
           0.44,
-          0.97
+          0.76
         ],
         "recall_wilson95": [
-          0.05,
-          0.24
+          0.3,
+          0.58
         ]
       },
       "possession_change": {
@@ -15904,17 +16042,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 6,
-        "tp": 5,
-        "precision": 0.833,
-        "recall": 0.114,
+        "detected": 31,
+        "tp": 19,
+        "precision": 0.613,
+        "recall": 0.432,
         "precision_wilson95": [
           0.44,
-          0.97
+          0.76
         ],
         "recall_wilson95": [
-          0.05,
-          0.24
+          0.3,
+          0.58
         ]
       },
       "possession_change": {
@@ -15981,17 +16119,17 @@
       },
       "tackle": {
         "true": 44,
-        "detected": 6,
-        "tp": 5,
-        "precision": 0.833,
-        "recall": 0.114,
+        "detected": 31,
+        "tp": 19,
+        "precision": 0.613,
+        "recall": 0.432,
         "precision_wilson95": [
           0.44,
-          0.97
+          0.76
         ],
         "recall_wilson95": [
-          0.05,
-          0.24
+          0.3,
+          0.58
         ]
       },
       "possession_change": {
@@ -16027,19 +16165,20 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 25,
+      "false_tackles_on_a_true_pass": 1,
       "true_interceptions_detected_only_as_possession_change": 7,
       "tackle_outcome": {
-        "right": 4,
-        "of": 5
+        "right": 12,
+        "of": 19
       },
-      "tackles_kept_through_contact": 4,
-      "tackles_held": 2,
-      "tackles_kept_matched": 3,
-      "tackles_held_matched": 2,
-      "detected_passes_at_a_detected_tackle": 5,
+      "tackles_kept_through_contact": 21,
+      "tackles_held": 10,
+      "tackles_kept_matched": 16,
+      "tackles_held_matched": 3,
+      "detected_passes_at_a_detected_tackle": 22,
       "tackles_missed_by_kind": {
-        "knocked_loose": 9,
-        "taken_off_a_dribble": 30
+        "knocked_loose": 6,
+        "taken_off_a_dribble": 19
       },
       "false_pressures_from_unseen_memory": 5,
       "false_pressures": 15
@@ -16047,7 +16186,7 @@
     "names": {
       "right": 55,
       "wrong": 1,
-      "null": 40
+      "null": 68
     },
     "sides_right": [
       3964,
@@ -16088,10 +16227,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "lenient": {
@@ -16125,10 +16264,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "time_only": {
@@ -16162,31 +16301,32 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 56,
+          "fast": 14,
           "of": 88
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
+            "knocked_loose": 0,
             "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
@@ -16197,7 +16337,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -16234,10 +16374,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "lenient": {
@@ -16271,10 +16411,10 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           },
           "time_only": {
@@ -16308,32 +16448,33 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 1
+              "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 69,
+          "fast": 14,
           "of": 116
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -16343,7 +16484,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -16380,10 +16521,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -16417,10 +16558,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -16454,32 +16595,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 69,
+          "fast": 14,
           "of": 96
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "tackles_held_matched": 1,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -16489,7 +16631,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -16519,10 +16661,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -16549,10 +16691,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -16579,32 +16721,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 63,
+          "fast": 12,
           "of": 98
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 1,
           "false_pressures": 2
@@ -16614,7 +16757,7 @@
         "names": {
           "right": 0,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -16651,9 +16794,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 3,
               "tp": 0,
-              "fp": 0,
+              "fp": 3,
               "fn": 1
             }
           },
@@ -16688,9 +16831,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 3,
               "tp": 0,
-              "fp": 0,
+              "fp": 3,
               "fn": 1
             }
           },
@@ -16725,29 +16868,30 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 3,
               "tp": 0,
-              "fp": 0,
+              "fp": 3,
               "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 48,
+          "fast": 4,
           "of": 94
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
-          "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_kept_through_contact": 1,
+          "tackles_held": 2,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 1
@@ -16797,10 +16941,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           },
           "lenient": {
@@ -16834,10 +16978,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           },
           "time_only": {
@@ -16871,31 +17015,32 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 2,
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 54,
+          "fast": 14,
           "of": 81
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_through_contact": 1,
+          "tackles_held": 1,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
+            "knocked_loose": 0,
             "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
@@ -16906,7 +17051,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -16943,10 +17088,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 2
+              "fn": 0
             }
           },
           "lenient": {
@@ -16980,10 +17125,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 2
+              "fn": 0
             }
           },
           "time_only": {
@@ -17017,32 +17162,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 2
+              "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 81,
+          "fast": 12,
           "of": 98
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 2
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "knocked_loose": 0,
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 1,
           "false_pressures": 1
@@ -17052,7 +17198,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 5
         }
       },
       {
@@ -17171,11 +17317,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 81,
+          "fast": 5,
           "of": 95
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -17235,10 +17382,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 4,
+              "tp": 2,
+              "fp": 2,
+              "fn": 0
             }
           },
           "lenient": {
@@ -17272,10 +17419,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 4,
+              "tp": 2,
+              "fp": 2,
+              "fn": 0
             }
           },
           "time_only": {
@@ -17309,32 +17456,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
-              "fp": 0,
-              "fn": 2
+              "detected": 4,
+              "tp": 2,
+              "fp": 2,
+              "fn": 0
             }
           }
         },
         "fast_at_feet": {
-          "fast": 68,
+          "fast": 11,
           "of": 95
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 2
           },
-          "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_through_contact": 2,
+          "tackles_held": 2,
+          "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 4,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -17344,7 +17492,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 5
         }
       },
       {
@@ -17442,11 +17590,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 59,
+          "fast": 17,
           "of": 66
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -17546,11 +17695,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 59,
+          "fast": 12,
           "of": 78
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -17610,10 +17760,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -17647,10 +17797,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -17684,32 +17834,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 63,
+          "fast": 8,
           "of": 78
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
-            "of": 0
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 1,
           "false_pressures": 1
@@ -17719,7 +17870,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -17838,11 +17989,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 75,
+          "fast": 16,
           "of": 92
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
@@ -17902,9 +18054,9 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
+              "detected": 2,
               "tp": 0,
-              "fp": 0,
+              "fp": 2,
               "fn": 3
             }
           },
@@ -17939,9 +18091,9 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
+              "detected": 2,
               "tp": 0,
-              "fp": 0,
+              "fp": 2,
               "fn": 3
             }
           },
@@ -17976,29 +18128,30 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
+              "detected": 2,
               "tp": 0,
-              "fp": 0,
+              "fp": 2,
               "fn": 3
             }
           }
         },
         "fast_at_feet": {
-          "fast": 65,
+          "fast": 9,
           "of": 89
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 2,
           "tackles_held": 0,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
             "taken_off_a_dribble": 2
@@ -18109,11 +18262,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 52,
+          "fast": 12,
           "of": 100
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -18255,11 +18409,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 83,
+          "fast": 9,
           "of": 126
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -18319,10 +18474,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -18356,10 +18511,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -18393,32 +18548,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 56,
+          "fast": 7,
           "of": 89
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -18428,7 +18584,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 0
+          "null": 2
         }
       },
       {
@@ -18505,11 +18661,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 84,
+          "fast": 13,
           "of": 137
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -18630,11 +18787,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 63,
+          "fast": 14,
           "of": 84
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -18755,11 +18913,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 75,
+          "fast": 16,
           "of": 94
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -18901,11 +19060,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 87,
+          "fast": 8,
           "of": 107
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -19047,11 +19207,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 57,
+          "fast": 13,
           "of": 77
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 0,
@@ -19111,10 +19272,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
-              "tp": 1,
+              "detected": 1,
+              "tp": 0,
               "fp": 1,
-              "fn": 2
+              "fn": 3
             }
           },
           "lenient": {
@@ -19148,10 +19309,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
-              "tp": 1,
+              "detected": 1,
+              "tp": 0,
               "fp": 1,
-              "fn": 2
+              "fn": 3
             }
           },
           "time_only": {
@@ -19185,32 +19346,33 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
-              "tp": 1,
+              "detected": 1,
+              "tp": 0,
               "fp": 1,
-              "fn": 2
+              "fn": 3
             }
           }
         },
         "fast_at_feet": {
-          "fast": 64,
+          "fast": 7,
           "of": 115
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 1,
-            "of": 1
+            "right": 0,
+            "of": 0
           },
           "tackles_kept_through_contact": 1,
-          "tackles_held": 1,
+          "tackles_held": 0,
           "tackles_kept_matched": 0,
-          "tackles_held_matched": 1,
-          "detected_passes_at_a_detected_tackle": 1,
+          "tackles_held_matched": 0,
+          "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 3
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -19220,7 +19382,7 @@
         "names": {
           "right": 4,
           "wrong": 0,
-          "null": 4
+          "null": 2
         }
       },
       {
@@ -19257,9 +19419,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19294,9 +19456,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19331,29 +19493,30 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 70,
+          "fast": 7,
           "of": 85
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 2,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
           "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
             "taken_off_a_dribble": 1
@@ -19403,9 +19566,9 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
+              "detected": 2,
               "tp": 1,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19440,9 +19603,9 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
+              "detected": 2,
               "tp": 1,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19477,29 +19640,30 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 1,
+              "detected": 2,
               "tp": 1,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 69,
+          "fast": 9,
           "of": 91
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 1,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 1,
             "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 1,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 1,
-          "detected_passes_at_a_detected_tackle": 1,
+          "detected_passes_at_a_detected_tackle": 2,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
             "taken_off_a_dribble": 0
@@ -19631,11 +19795,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 57,
+          "fast": 8,
           "of": 80
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
@@ -19695,9 +19860,9 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
+              "detected": 3,
               "tp": 2,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19732,9 +19897,9 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
+              "detected": 3,
               "tp": 2,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -19769,26 +19934,27 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 2,
+              "detected": 3,
               "tp": 2,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 30,
+          "fast": 0,
           "of": 57
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 1,
+            "right": 0,
             "of": 2
           },
           "tackles_kept_through_contact": 2,
-          "tackles_held": 0,
+          "tackles_held": 1,
           "tackles_kept_matched": 2,
           "tackles_held_matched": 0,
           "detected_passes_at_a_detected_tackle": 2,
@@ -19834,10 +20000,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -19864,10 +20030,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -19894,32 +20060,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 97,
+          "fast": 4,
           "of": 133
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
-            "taken_off_a_dribble": 1
+            "taken_off_a_dribble": 0
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -19929,7 +20096,7 @@
         "names": {
           "right": 3,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -19966,10 +20133,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -20003,10 +20170,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -20040,32 +20207,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 66,
+          "fast": 7,
           "of": 87
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 3,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 0
@@ -20075,7 +20243,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       },
       {
@@ -20105,10 +20273,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           },
           "lenient": {
@@ -20135,10 +20303,10 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           },
           "time_only": {
@@ -20165,32 +20333,33 @@
             },
             "tackle": {
               "true": 3,
-              "detected": 0,
-              "tp": 0,
+              "detected": 2,
+              "tp": 2,
               "fp": 0,
-              "fn": 3
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 73,
+          "fast": 8,
           "of": 108
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 2
           },
-          "tackles_kept_through_contact": 0,
-          "tackles_held": 0,
-          "tackles_kept_matched": 0,
-          "tackles_held_matched": 0,
+          "tackles_kept_through_contact": 1,
+          "tackles_held": 1,
+          "tackles_kept_matched": 1,
+          "tackles_held_matched": 1,
           "detected_passes_at_a_detected_tackle": 0,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 3
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -20200,7 +20369,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 5
         }
       }
     ],
@@ -20210,7 +20379,7 @@
       0.3333333333333333
     ],
     "fast_at_feet": {
-      "fast": 1993,
+      "fast": 304,
       "of": 2834
     }
   },
@@ -20249,17 +20418,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 1,
-        "tp": 1,
-        "precision": 1.0,
-        "recall": 0.167,
+        "detected": 4,
+        "tp": 3,
+        "precision": 0.75,
+        "recall": 0.5,
         "precision_wilson95": [
-          0.21,
-          1.0
+          0.3,
+          0.95
         ],
         "recall_wilson95": [
-          0.03,
-          0.56
+          0.19,
+          0.81
         ]
       },
       "possession_change": {
@@ -20326,17 +20495,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 1,
-        "tp": 1,
-        "precision": 1.0,
-        "recall": 0.167,
+        "detected": 4,
+        "tp": 3,
+        "precision": 0.75,
+        "recall": 0.5,
         "precision_wilson95": [
-          0.21,
-          1.0
+          0.3,
+          0.95
         ],
         "recall_wilson95": [
-          0.03,
-          0.56
+          0.19,
+          0.81
         ]
       },
       "possession_change": {
@@ -20403,17 +20572,17 @@
       },
       "tackle": {
         "true": 6,
-        "detected": 1,
-        "tp": 1,
-        "precision": 1.0,
-        "recall": 0.167,
+        "detected": 4,
+        "tp": 3,
+        "precision": 0.75,
+        "recall": 0.5,
         "precision_wilson95": [
-          0.21,
-          1.0
+          0.3,
+          0.95
         ],
         "recall_wilson95": [
-          0.03,
-          0.56
+          0.19,
+          0.81
         ]
       },
       "possession_change": {
@@ -20449,19 +20618,20 @@
     },
     "diagnostics": {
       "interceptions_on_a_true_recovery": 4,
+      "false_tackles_on_a_true_pass": 1,
       "true_interceptions_detected_only_as_possession_change": 1,
       "tackle_outcome": {
-        "right": 1,
-        "of": 1
+        "right": 3,
+        "of": 3
       },
-      "tackles_kept_through_contact": 1,
+      "tackles_kept_through_contact": 4,
       "tackles_held": 0,
-      "tackles_kept_matched": 1,
+      "tackles_kept_matched": 3,
       "tackles_held_matched": 0,
-      "detected_passes_at_a_detected_tackle": 1,
+      "detected_passes_at_a_detected_tackle": 4,
       "tackles_missed_by_kind": {
-        "knocked_loose": 2,
-        "taken_off_a_dribble": 3
+        "knocked_loose": 1,
+        "taken_off_a_dribble": 2
       },
       "false_pressures_from_unseen_memory": 1,
       "false_pressures": 3
@@ -20469,7 +20639,7 @@
     "names": {
       "right": 6,
       "wrong": 0,
-      "null": 5
+      "null": 9
     },
     "sides_right": [
       378,
@@ -20510,9 +20680,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -20547,9 +20717,9 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           },
@@ -20584,29 +20754,30 @@
             },
             "tackle": {
               "true": 1,
-              "detected": 0,
+              "detected": 1,
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 64,
+          "fast": 13,
           "of": 87
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 0,
+          "false_tackles_on_a_true_pass": 1,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
             "right": 0,
             "of": 0
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
           "tackles_kept_matched": 0,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 1,
             "taken_off_a_dribble": 0
@@ -20738,11 +20909,12 @@
           }
         },
         "fast_at_feet": {
-          "fast": 68,
+          "fast": 13,
           "of": 116
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 2,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 1,
           "tackle_outcome": {
             "right": 1,
@@ -20802,10 +20974,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -20839,10 +21011,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -20876,32 +21048,33 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 55,
+          "fast": 16,
           "of": 96
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
             "knocked_loose": 0,
-            "taken_off_a_dribble": 2
+            "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
           "false_pressures": 1
@@ -20911,7 +21084,7 @@
         "names": {
           "right": 1,
           "wrong": 0,
-          "null": 1
+          "null": 3
         }
       },
       {
@@ -20948,10 +21121,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "lenient": {
@@ -20985,10 +21158,10 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           },
           "time_only": {
@@ -21022,31 +21195,32 @@
             },
             "tackle": {
               "true": 2,
-              "detected": 0,
-              "tp": 0,
+              "detected": 1,
+              "tp": 1,
               "fp": 0,
-              "fn": 2
+              "fn": 1
             }
           }
         },
         "fast_at_feet": {
-          "fast": 64,
+          "fast": 12,
           "of": 97
         },
         "diagnostics": {
           "interceptions_on_a_true_recovery": 1,
+          "false_tackles_on_a_true_pass": 0,
           "true_interceptions_detected_only_as_possession_change": 0,
           "tackle_outcome": {
-            "right": 0,
-            "of": 0
+            "right": 1,
+            "of": 1
           },
-          "tackles_kept_through_contact": 0,
+          "tackles_kept_through_contact": 1,
           "tackles_held": 0,
-          "tackles_kept_matched": 0,
+          "tackles_kept_matched": 1,
           "tackles_held_matched": 0,
-          "detected_passes_at_a_detected_tackle": 0,
+          "detected_passes_at_a_detected_tackle": 1,
           "tackles_missed_by_kind": {
-            "knocked_loose": 1,
+            "knocked_loose": 0,
             "taken_off_a_dribble": 1
           },
           "false_pressures_from_unseen_memory": 0,
@@ -21057,7 +21231,7 @@
         "names": {
           "right": 2,
           "wrong": 0,
-          "null": 2
+          "null": 4
         }
       }
     ],
@@ -21067,7 +21241,7 @@
       0.3333333333333333
     ],
     "fast_at_feet": {
-      "fast": 251,
+      "fast": 54,
       "of": 396
     }
   }

@@ -471,8 +471,9 @@ windows, and its 4 rendered validation clips with only what the broadcast shows
 - **Interceptions** missed it (precision 12 of 60): built, not written. The pass's aim is not in the
   picture; its stand-in (where the ball, struck at the speed seen, slows to 6 m/s) disagrees with the
   engine on 133 of 477 validation passes an opponent controlled, even with a perfect ball.
-- **Tackles** missed it (recall 5 of 44; 40 of 44 with only a clip offset): built, not written. Their
-  strike test reads the ball's speed on the pitch, which a running carrier's ball already nears.
+- **Tackles** missed it (recall 19 of 44, precision 19 of 31): built, not written. Their strike test
+  reads the ball's speed relative to the holder (tackle plan, amendment 2); on the pitch, a running
+  carrier's ball already nears a pass's speed, and recall was 5 of 44.
 
 ### Who: team and track
 

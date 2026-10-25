@@ -145,3 +145,29 @@ matched to no true tackle but within 1.0 s of a true pass of the holder's side.
 M4. The tackle rows of amendment 1's outcome stay above as they were measured. Also reported: the
 same share as before, frames with the ball truly at a player's feet that read at 6 m/s or faster,
 now on the relative speed.
+
+### Amendment 2, outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `444a445`)
+
+Run as written. Every other kind's counts (interceptions, pressure, possession changes, passes) are
+identical to amendment 1's in every run, as they must be. Development numbers on stand-in
+observations, validation only; not vision results. Strict matching.
+
+| Run | Found (recall, 95%) | Right (precision, 95%) | Outcome right | Before (amendment 1) |
+|---|---|---|---|---|
+| **M4, 30 windows (decides)** | **19 of 44 (0.43, 0.30 to 0.58)** | **19 of 31 (0.61, 0.44 to 0.76)** | 12 of 19 | 5 of 44 found, 5 of 6 right |
+| M1, all own noise | 11 of 44 (0.25, 0.15 to 0.39) | 11 of 15 (0.73) | 5 of 11 | 3 of 44, 3 of 4 |
+| M3, one clip offset | 41 of 44 (0.93, 0.82 to 0.98) | 41 of 44 (0.93) | 35 of 41 | 40 of 44, 40 of 44 |
+| M4, 4 rendered clips | 3 of 6 | 3 of 4 | 3 of 3 | 1 of 6, 1 of 1 |
+
+**Bar missed** on M4 (recall 0.43 against 0.5; precision 0.61 meets it), so `tackle` stays out of
+`events.WRITTEN`. Relative speed is better than pitch speed in every run (M4 recall up from 0.11 to
+0.43, M3 from 0.91 to 0.93) at little cost in precision.
+- On M4, 10 of the 31 detected tackles are held under the gate because the tracker lost one of the two
+  players in the contact. 25 true tackles are still missed: 19 taken off a dribble (the kind this rule
+  does not aim at, by design) and 6 knocked loose.
+- The stated risk is small: 1 false tackle on M4 sits on a true pass of the holder's side (3 on M1).
+- Frames with the ball truly at a player's feet that the rule reads as a strike are now 304 of 2,834 on
+  M4 (11%, against 70% before) and 300 on M3. What is left is mostly real: the 0.3 s window after a
+  held frame takes in the strike that follows it.
+- The pass the detector also writes at a tackle is still there: 22 of the 31 on M4. It is still a
+  question for Kian.
