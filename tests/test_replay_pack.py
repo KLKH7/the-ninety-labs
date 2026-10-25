@@ -64,3 +64,43 @@ def test_pack_refuses_events_that_are_not_detected(tmp_path, event):
     (b / "events.jsonl").write_text(detected + "\n" + json.dumps(event) + "\n")
     with pytest.raises(SystemExit, match="not a detected event"):
         replay.pack(b, tmp_path / "out.tar.gz")
+
+
+def test_a_bundle_made_with_the_radar_match_mode_and_live_agents_packs(tmp_path):
+    # ninety-e2e --tracked, --match and --agents live write radar.json, match.json and agents.json:
+    # all three are viewer files, so a demo bundle made with them can be published.
+    b = bundle(tmp_path / "b")
+    for name in ("radar.json", "match.json", "agents.json"):
+        (b / name).write_text("{}\n")
+    names = [p.relative_to(b).as_posix() for p in replay.members(b)]
+    assert {"radar.json", "match.json", "agents.json"} <= set(names)
+
+
+def test_every_file_ninety_e2e_writes_is_one_the_pack_publishes(tmp_path):
+    # #328: the bundle gained commentary.json and the image build refused it. A real bundle, as
+    # ninety-e2e writes it, must pack, so the next file it adds is caught here, not in the image job.
+    from ninety import e2e
+    from tests.e2e_clip import write_clip
+
+    clip, detections, events = write_clip(tmp_path)
+    out = tmp_path / "bundle"
+    e2e.main([str(clip), "--out", str(out), "--detections", str(detections), "--frames",
+              "--events-file", str(events)])
+    files = set(json.loads((out / "manifest.json").read_text())["files"])
+    assert "commentary.json" in files and files <= {p.name for p in replay.members(out)}
+
+
+def test_every_file_a_manifest_can_list_is_one_the_pack_publishes():
+    # Every option's file, not only the default bundle's: the names in ninety-e2e's `files` list
+    # (radar.json, match.json, cards.json, agents.json, ...) and the read-aloud step's speech.json.
+    import ast
+
+    tree = ast.parse((ROOT / "ninety" / "e2e.py").read_text())
+    listed = {node for d in ast.walk(tree) if isinstance(d, ast.Dict)
+              for k, v in zip(d.keys, d.values, strict=True)
+              if isinstance(k, ast.Constant) and k.value == "files"
+              for node in ast.walk(v)}
+    names = {n.value for n in listed if isinstance(n, ast.Constant) and isinstance(n.value, str)
+             and "." in n.value and " " not in n.value}  # file names, not the mode it compares with
+    assert {"cards.json", "commentary.json", "radar.json", "match.json"} <= names  # the list was found
+    assert names | {"speech.json"} <= replay.FILES, sorted(names - replay.FILES)

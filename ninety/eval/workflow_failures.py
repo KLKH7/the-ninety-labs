@@ -54,28 +54,27 @@ COMMAND = "uv run python -m ninety.eval.workflow_failures"
 OUT_MD = ROOT / "docs" / "eval" / "failure-table.md"
 OUT_JSON = ROOT / "docs" / "eval" / "failure-table.json"
 MINUTE = 2
-MAIN = "v00001"  # the M1 clip's confident completed pass in minute 2 (confidence 0.80)
-SIDE = "v00005"  # a second completed pass in the same minute, offered as evidence
 SEEDS = (21, 33)  # the held-out seeds (lesson 11): the live run's other two grounds
-UNSURE = 0.3  # the low-confidence row's confidence for SIDE: below MIN_CONFIDENCE
+UNSURE = 0.3  # the low-confidence row's confidence for the ground's side pass: below MIN_CONFIDENCE
 JUDGE_TIMEOUT_S = 0.05  # production: judge.judge's default; short here so the row runs in a blink
 HANG_S = 60.0  # longer than any timeout here: a call that never answers
 
 
 def claim_on(event_id: str, known: dict[str, dict]) -> Claim:
-    """A true claim about one detected pass, worded from its facts at team level (a detection may name
-    nobody: ninety/vision/events.py, attribution)."""
+    """A true claim about one detected pass, worded from its facts. It names neither player nor side:
+    a detection may name nobody (ninety/vision/events.py, attribution), and the M1 clip's sides were
+    told with team_confidence 0.529, so a claim naming a team is held by the confidence gate
+    (factcheck.MIN_TEAM_CONFIDENCE). This table measures how failures are handled, not team naming,
+    which tests/test_confidence_gate.py covers."""
     e = known[event_id]
-    side = "Away" if e["team"] == "away" else "Home"
-    return Claim(f"{side} complete a pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])
+    return Claim(f"A completed pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])
 
 
 def claim_in_spanish(event_id: str, known: dict[str, dict]) -> str:
     """The same claim worded in Spanish for the stand-in Personalizer: written here, by us, not a
-    model's or a service's translation. The team keeps its name, as the re-check allows."""
+    model's or a service's translation."""
     e = known[event_id]
-    side = "Away" if e["team"] == "away" else "Home"
-    return f"{side} completa un pase de {e['distance_m']} m a {e['ball_speed_kmh']} km/h."
+    return f"Un pase completado de {e['distance_m']} m a {e['ball_speed_kmh']} km/h."
 
 
 def reply(claim: Claim) -> str:
@@ -144,21 +143,29 @@ def applicable(ground: Ground) -> list[Scenario]:
     return [s for s in SCENARIOS if detections(ground) or not s.unsure_side]
 
 
-def m1_ground() -> Ground:
-    events, _, _ = workflow.detected_events(match_server.DETECTED[detected.M1_CLIP]())
-    return Ground(detected.M1_CLIP, tuple(events), MAIN, SIDE)
-
-
-def seed_ground(seed: int) -> Ground:
-    """A held-out seed's minute: its first two completed passes, the simulator's events."""
+def ground_of(match: str, events: list[dict]) -> Ground:
+    """A match's minute as a ground: its first two completed passes, the main one and the side one.
+    Picked by what they are, never by id: a detected event's id is its place in the clip's order
+    (ninety/vision/events.py), so a new kind of event moves every id after it."""
     from ninety.match.facts import compact
 
-    events = workflow.simulated_events(seed, match_server.MINUTES)
     passes = [e["id"] for e in events if compact(e)["minute"] == MINUTE and e["type"] == "pass"
               and e.get("outcome") == "success"]
     if len(passes) < 2:
-        raise ValueError(f"seed {seed}: fewer than two completed passes in minute {MINUTE}")
-    return Ground(match_server.match_id(seed), tuple(events), passes[0], passes[1])
+        raise ValueError(f"{match}: fewer than two completed passes in minute {MINUTE}")
+    return Ground(match, tuple(events), passes[0], passes[1])
+
+
+def m1_ground() -> Ground:
+    """The M1 clip's detected events (the confident completed pass at 66.88 s, confidence 0.80, and
+    the one at 73.72 s)."""
+    events, _, _ = workflow.detected_events(match_server.DETECTED[detected.M1_CLIP]())
+    return ground_of(detected.M1_CLIP, events)
+
+
+def seed_ground(seed: int) -> Ground:
+    """A held-out seed's minute, the simulator's events."""
+    return ground_of(match_server.match_id(seed), workflow.simulated_events(seed, match_server.MINUTES))
 
 
 @dataclass(frozen=True)
@@ -560,9 +567,17 @@ def main() -> None:
         args.out.mkdir(parents=True, exist_ok=True)
         commit = workflow._commit()  # the engine the seeds were simulated with, and everything else
         reports = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
-        md = f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n{reports}"
+        # The workflow's agents and the Personalizer, as run_live and core.published_ask pin them.
+        from ninety.agents import evidence, foundry
+        from ninety.personalizer.core import personalizer_agent
+
+        defs = evidence.of_code(
+            lambda client: [*foundry.workflow_agents(client).values(), personalizer_agent(client)]
+        )
+        md = (f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n"
+              f"{evidence.md_line(defs)}\n\n{reports}")
         body = {"command": COMMAND + " --live", "commit": commit, "minute": MINUTE,
-                "models": "the published Foundry agents",
+                "models": "the published Foundry agents", evidence.KEY: defs,
                 "grounds": [{"match": t[0]["match"], "rows": t} for t in tables]}
         for name, text in (("failure-table-live.md", md),
                            ("failure-table-live.json", json.dumps(body, indent=1, allow_nan=False) + "\n")):

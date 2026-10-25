@@ -44,7 +44,7 @@ import logging
 import os
 import secrets
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -54,11 +54,12 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
-from ninety.agents import companion
+from ninety.agents import companion, companion_match
 from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validator
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
 from ninety.mcp import match_server
+from ninety.speech import voice
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ MODES = ("on", "standin", "off")  # NINETY_COMPANION; unset means `on`
 CLIPS = (*sorted(match_server.MATCHES), *tracking.TRACKED_CLIPS)
 # Requests a client may make in a minute (design: a person tapping, never a script).
 LIMITS = {"pair": 6, "join": 30, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
+MAX_SPOKEN = 2_000  # design: answers remembered for read-aloud; minutes of a busy demo
 SWEEP_KEYS = 10_000  # design: rate-limit keys kept before idle ones are swept
 # design: 20 Live answers a viewer, 400 a day. A Live answer (the Companion's draft and the Judge)
 # is about 1,400 tokens in and 100 out (our instructions and prompts at 4 characters a token, as
@@ -164,7 +166,11 @@ class Room:
     laptop: WebSocket | None = None
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
+    stored_at: dict[str, float] = field(default_factory=dict)  # when each was stored (Companion.clock)
     sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
+    # The match conversation: each phone question and its answer, so a follow-up has its context
+    # (ninety/agents/companion_match.py). Capped; it lives and dies with the pairing.
+    turns: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -173,6 +179,8 @@ class LiveModels:
 
     ask: Ask
     judge: Judge
+    match_ask: Ask | None = None  # the match Companion (ninety-companion-match), for match questions
+    referee_ask: Ask | None = None  # the Referee (ninety-referee), handed rules questions
 
 
 def client_ip(request: Request | WebSocket) -> str:
@@ -262,6 +270,9 @@ class Companion:
         self.rooms: dict[str, Room] = {}
         self.limits = {name: RateLimit(n) for name, n in LIMITS.items()}
         self.budget = Budget(SESSION_MODEL_CALLS, DAY_MODEL_CALLS, clock)
+        # Keys (ninety/speech/voice.key) of the answers given lately: the only text the Live
+        # read-aloud route (ninety/api/speak.py) will send to Speech.
+        self.spoken: OrderedDict[str, None] = OrderedDict()
 
     def _served(self, clip: str) -> tracking.Track | JSONResponse:
         """The clip's track, or a 503 when its positions are ground truth and this server may not
@@ -357,7 +368,7 @@ class Companion:
         if role == "laptop":
             room.laptop = ws
         else:
-            box = Outbox(ws, deque(room.latest.values()), flushing=True)
+            box = Outbox(ws, deque(self._catch_up(room)), flushing=True)
             room.phones[ws] = box
         try:
             await ws.accept()
@@ -380,6 +391,7 @@ class Companion:
                     await ws.close(code=1007)  # not a clock or focus message
                     return
                 room.latest[message["type"]] = message
+                room.stored_at[message["type"]] = self.clock()
                 for phone_box in list(room.phones.values()):
                     phone_box.items.append(message)
                     # Each phone is sent to on its own task, so a stalled phone holds up only itself.
@@ -392,6 +404,18 @@ class Companion:
             if role == "laptop" and room.laptop is ws:
                 room.laptop = None
             room.phones.pop(ws, None)
+
+    def _catch_up(self, room: Room) -> list[dict]:
+        """The latest state for a phone joining late. A playing clock has run on since the laptop
+        sent it (up to a second ago), so it is sent as it stands now, not as it stood then; a
+        paused clock and a focus are sent as stored."""
+        out = []
+        for kind, message in room.latest.items():
+            if kind == "clock" and message.get("playing"):
+                held = max(0.0, self.clock() - room.stored_at.get(kind, self.clock()))
+                message = {**message, "t": round(message["t"] + held, 2)}
+            out.append(message)
+        return out
 
     @staticmethod
     async def _flush(room: Room, box: Outbox) -> None:
@@ -548,6 +572,26 @@ class Companion:
             return track
         if question.player is not None and question.player not in track.roster:
             return _error(422, f"{question.player!r} is not on the roster of {room.clip}")
+        if question.player is None:
+            insights = _insights(room.clip)
+            if insights is not None:
+                # A match question: the match Companion chooses the insight tools in Live mode (within
+                # the session's budget), with the pairing's earlier turns; code routes and answers
+                # otherwise or when it fails.
+                ask = judge = referee_ask = None
+                if live and self.budget.take(question.session):
+                    models = await self._live_models()
+                    if models is not None and models.match_ask is not None:
+                        ask, judge = models.match_ask, models.judge
+                        referee_ask = models.referee_ask
+                result = await companion_match.answer_match(
+                    question, insights, ask, judge, history=room.turns, referee_ask=referee_ask
+                )
+                turn = {"question": question.text, "answer": result.answer.text, "calls": list(result.tools)}
+                room.turns = [*room.turns, turn][-MAX_TURNS:]
+                return JSONResponse(
+                    _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
+                )
         window = None
         if question.player is not None:
             _, window = self._window(track, question.player, 0.0, question.t)
@@ -557,9 +601,18 @@ class Companion:
             if models is not None:
                 ask, judge = models.ask, models.judge
         result = await companion.answer(question, window, ask, judge)
-        return JSONResponse(_send(
-            {"type": "answer", "answer": answer_json(result.answer), "source": result.source}
-        ))
+        message = _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
+        for said in (message["answer"].get("text"), message["answer"].get("spoken")):
+            if isinstance(said, str) and said.strip():
+                self.spoken[voice.key(said)] = None
+                self.spoken.move_to_end(voice.key(said))
+        while len(self.spoken) > MAX_SPOKEN:
+            self.spoken.popitem(last=False)
+        return JSONResponse(message)
+
+    def answered(self, key: str) -> bool:
+        """Whether an answer with this text (ninety/speech/voice.key) was given lately."""
+        return key in self.spoken
 
     async def _live_models(self) -> LiveModels | None:
         """The Live models, built on the first Live question. A failure to build them (no identity,
@@ -586,6 +639,19 @@ class Companion:
         ]
 
 
+MAX_TURNS = 6  # design: a pairing remembers its last six exchanges, more than the model is shown
+
+
+def _insights(clip: str):
+    """The clip's insight facts, or None when it has no tracked frames or is not served."""
+    from ninety.mcp import match_server
+
+    try:
+        return match_server.insights_of(clip)
+    except ValueError:
+        return None
+
+
 def answer_json(answer: Answer) -> dict:
     return {
         "status": answer.status,
@@ -596,6 +662,11 @@ def answer_json(answer: Answer) -> dict:
         "evidence": list(answer.evidence),
         "t_from": answer.t_from,
         "t_to": answer.t_to,
+        "visual": answer.visual,
+        "names": answer.names,
+        "spoken": answer.spoken,
+        "follow_ups": list(answer.follow_ups),
+        "headline": answer.headline,
     }
 
 
@@ -619,7 +690,11 @@ async def foundry_models() -> LiveModels:
     await credentials.sign_in(credential)
     client = foundry.chat_client(credential)
     agents = []
-    for local in (companion.companion_agent(client), judge_agent(client)):
+    from ninety.agents.referee import referee_agent
+
+    match_agent = companion_match.companion_match_agent(client)
+    locals_ = (companion.companion_agent(client), judge_agent(client), match_agent, referee_agent(client))
+    for local in locals_:
         name, version = foundry.pinned(local)
         published = FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT,
@@ -628,7 +703,7 @@ async def foundry_models() -> LiveModels:
             credential=credential,
         )
         agents.append(await stack.enter_async_context(published))
-    companion_ag, judge_ag = agents
+    companion_ag, judge_ag, match_ag, referee_ag = agents
 
     async def ask(prompt: str) -> str:
         return (await companion_ag.run(prompt)).text
@@ -636,7 +711,13 @@ async def foundry_models() -> LiveModels:
     async def judge(claim: Claim, evidence: list[dict]) -> Verdict:
         return await run_judge(judge_ag, claim, evidence)
 
-    return LiveModels(ask, judge)
+    async def match_ask(prompt: str) -> str:
+        return (await match_ag.run(prompt)).text
+
+    async def referee_ask(prompt: str) -> str:
+        return (await referee_ag.run(prompt)).text
+
+    return LiveModels(ask, judge, match_ask, referee_ask)
 
 
 def from_env(env: dict[str, str] | None = None) -> Companion | None:

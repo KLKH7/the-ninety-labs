@@ -19,7 +19,7 @@ from jsonschema.exceptions import ValidationError
 from ninety.intel.stats import calculate_facts
 from ninety.match.facts import compact
 
-Kind = Literal["event", "fact", "moment", "claim", "cue"]
+Kind = Literal["event", "fact", "moment", "claim", "cue", "decision"]  # decision: the Insight Director's
 KINDS: tuple[str, ...] = get_args(Kind)
 OVERLAY_SCHEMA = json.loads(
     (Path(__file__).resolve().parents[2] / "schemas" / "overlay_cue.schema.json").read_text()

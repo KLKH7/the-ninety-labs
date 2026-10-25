@@ -24,7 +24,7 @@ from pathlib import Path
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, foundry_evals
+from ninety.agents import credentials, evidence, foundry, foundry_evals
 from ninety.agents.factcheck import Claim, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
@@ -58,20 +58,28 @@ def cases(seed: int, minutes: float) -> list[dict]:
     meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
                     and "distance_m" in e and "intended" in e]
     meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
+    # A pass said to go "to" or to "pick out" its receiver states that he was the one meant: true only
+    # when nobody else was (audit 4a, the review of #251: "a7 plays a long ball to a1", meant for a3,
+    # was labelled true and its rejection counted as the Judge's error).
+    as_meant = [e for e in done if e.get("intended") in (None, e.get("receiver"))]
     tackles = [e for e in events if e["type"] == "tackle"]
+    # "Wins the ball" is true only of a tackle that won it (audit 4a: four failed tackles were labelled
+    # true under these words, and the Judge rejecting them was counted as its error).
+    tackles_won = [e for e in tackles if e.get("outcome") == "success"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
     # as goals do.
     all_shots = [e for e in extended if e["type"] == "shot" and e.get("outcome") != "goal"]
-    short_slow = [e for e in done if e["distance_m"] <= SHORT_SLOW[0]
+    short_slow = [e for e in as_meant if e["distance_m"] <= SHORT_SLOW[0]
                   and (e.get("ball_speed_kmh") or 0) <= SHORT_SLOW[1]]
-    long_balls = [e for e in done if e["distance_m"] >= LONG_PASS_M]
+    long_balls = [e for e in as_meant if e["distance_m"] >= LONG_PASS_M]
     fast_passes = [e for e in done if (e.get("ball_speed_kmh") or 0) >= FAST_PASS_KMH]
     long_range = [e for e in all_shots if e.get("distance_m", 0) >= LONG_RANGE_M]
     fast_shots = [e for e in all_shots if (e.get("ball_speed_kmh") or 0) >= FAST_SHOT_KMH]
     interceptions = [e for e in events if e["type"] == "interception"]
     pressure = [e for e in events if e["type"] == "pressure"]
-    goals = [e for e in extended if e["type"] == "goal"]
+    # A goal names its scorer; one that names nobody gave the claim "None scores." (audit 4a).
+    goals = [e for e in extended if e["type"] == "goal" and e.get("player")]
     other = {"home": "away", "away": "home"}
 
     def teammate(e):
@@ -83,23 +91,25 @@ def cases(seed: int, minutes: float) -> list[dict]:
     # not in the event) and {rival} (the other team).
     kinds = {
         "true: completed pass": (
-            True, done, "{player} plays a {distance_m} m pass to {receiver}."
+            True, as_meant, "{player} plays a {distance_m} m pass to {receiver}."
         ),
         "true: cited clock": (
             True, done, "{player} plays a pass at {clock}."
         ),
         "true: tackle": (
-            True, tackles, "{player} wins the ball from {receiver} with a tackle."
+            True, tackles_won, "{player} wins the ball from {receiver} with a tackle."
         ),
         "true: shot": (
             True, shots, "{player} shoots at {ball_speed_kmh} km/h."
         ),
         # true claims with interpretation: a commentator's reading of supported facts
         "true: interpreted tackle": (
-            True, tackles, "{player} wins the ball back from {receiver}, a crucial defensive intervention."
+            True, tackles_won,
+            "{player} wins the ball back from {receiver}, a crucial defensive intervention."
         ),
         "true: interpreted pass": (
-            True, done, "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
+            True, as_meant,
+            "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
         ),
         "true: interpreted shot": (
             True, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
@@ -266,26 +276,29 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
 @contextlib.asynccontextmanager
 async def judge_under_test(local: bool):
-    """The Judge to measure, and its label for the report: the published version by default. Signs
-    in first: the cases are simulated after this, and can outlast agents-live's sign-in."""
+    """The Judge to measure, its label for the report and its definition (name, version,
+    fingerprint; ninety/agents/evidence.py): the published version by default. Signs in first: the
+    cases are simulated after this, and can outlast agents-live's sign-in."""
     async with credentials.new_credential() as credential:
         await credentials.sign_in(credential)
         local_judge = judge_agent(foundry.chat_client(credential))
         if local:
-            yield local_judge, f"local definition on `{config.MODEL}`"
+            yield local_judge, f"local definition on `{config.MODEL}`", evidence.local([local_judge])
             return
         name, version = foundry.pinned(local_judge)
+        defs = evidence.record([local_judge])
         async with FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
             credential=credential,
         ) as published:
-            yield published, f"`{name}:{version}` on `{config.MODEL}`"
+            yield published, f"`{name}:{version}` on `{config.MODEL}`", defs
 
 
 async def run(seeds: list[int], minutes: float, concurrency: int = 3, local: bool = False):
-    """Every claim with both layers' verdicts, and the label of the Judge that gave them."""
-    async with judge_under_test(local) as (agent, label):
-        return await _run(agent, seeds, minutes, concurrency), label
+    """Every claim with both layers' verdicts, the label of the Judge that gave them, and its
+    definition."""
+    async with judge_under_test(local) as (agent, label, defs):
+        return await _run(agent, seeds, minutes, concurrency), label, defs
 
 
 async def _run(agent, seeds: list[int], minutes: float, concurrency: int) -> list[dict]:
@@ -317,7 +330,8 @@ def passed(row: dict) -> bool:
 
 
 def report(
-    rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None
+    rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None,
+    *, defs: dict,
 ) -> str:
     git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     sha = git.stdout.strip()
@@ -327,7 +341,11 @@ def report(
         f"Generated by `uv run python -m ninety.eval.factcheck_eval` on {datetime.date.today()} "
         f"at commit `{sha}`, simulator seeds {seed}, judge {judge_label}. Each claim cites "
         "the one event it describes, so its truth is known. A layer *catches* a false claim by "
-        "rejecting it, and *wrongly rejects* a true one.",
+        "rejecting it, and *wrongly rejects* a true one. A claim the Judge never answered (a "
+        "service error or timeout) is held back: it counts as caught or wrongly rejected, and is "
+        "also counted apart.",
+        "",
+        evidence.md_line(defs),
         "",
         "| Kind | Claims | Code alone | Code + judge |",
         "|---|---|---|---|",
@@ -355,11 +373,15 @@ def report(
         if r.get("category") not in {"service", "timeout"}
     )
     true_service_errors = sum(r in true for r in service_errors)
+    false_service_errors = len(service_errors) - true_service_errors
     semantic_denominator = len(true) - true_service_errors
     lines += [
         "",
         f"**False claims caught:** code alone {code_catch}/{len(false)}, "
-        f"code + judge {both_catch}/{len(false)}.  ",
+        f"code + judge {both_catch}/{len(false)} "
+        f"(of which held by a service/timeout error, not judged: {false_service_errors}; "
+        f"caught by a decision of the code checks or the Judge: "
+        f"{both_catch - false_service_errors}/{len(false) - false_service_errors}).  ",
         f"**True claims wrongly rejected:** code + judge {both_wrong}/{len(true)} "
         f"(excluding service/timeout holds: {semantic_true_wrong}/{semantic_denominator}).",
         f"**Judge service/timeout errors:** {len(service_errors)} total, "
@@ -385,6 +407,14 @@ def report(
     if not misses:
         lines.append("None.")
     return "\n".join(lines) + "\n"
+
+
+def refuse_outage(rows: list[dict]) -> None:
+    """NothingMeasured when the Judge left too many of the claims it was sent unanswered (a service
+    error or timeout): that run measured an outage, and writes no report (lesson 131)."""
+    asked = [r for r in rows if r["code_ok"]]
+    unanswered = sum(r.get("category") in {"service", "timeout"} for r in asked)
+    evidence.refuse_outage(unanswered, len(asked), "claims sent to the Judge")
 
 
 FOUNDRY_EVAL = "ninety-fact-checker"
@@ -423,7 +453,8 @@ def main() -> None:
     ap.add_argument("--foundry", action="store_true", help="record the run in Foundry's Evaluations")
     args = ap.parse_args()
     seeds = [int(seed) for seed in args.seeds.split(",")]
-    rows, label = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    rows, label, defs = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    refuse_outage(rows)  # before anything is recorded in Foundry or written
     foundry_run = None
     if args.foundry:
         foundry_run = foundry_evals.record(
@@ -431,7 +462,7 @@ def main() -> None:
             [foundry_item(r) for r in rows], FOUNDRY_CRITERIA,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, label, foundry_run))
+    args.out.write_text(report(rows, args.seeds, label, foundry_run, defs=defs))
     print(args.out.read_text())
     (args.out.with_suffix(".json")).write_text(
         json.dumps([{**r, "claim": r["claim"].text, "evidence": r["evidence"]} for r in rows], indent=1)

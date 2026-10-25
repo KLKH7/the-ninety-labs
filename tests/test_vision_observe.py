@@ -163,7 +163,7 @@ def test_observe_judges_each_frame_against_its_neighbours(monkeypatch):
         dets.append(SimpleNamespace(frame=f, t=f / 25, detections=tuple(boxes)))
     fits = [pitch.FrameFit(view_at(10.0 if f == 5 else 0.0), 1.0, 200, True) for f in range(11)]
     monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
-    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h, **k: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
     rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets,
                            lambda path: np.zeros((720, 1280, 3), np.uint8))
     assert P is not None and [r["camera"]["ok"] for r in rows][4:7] == [True, False, False]
@@ -175,6 +175,59 @@ def test_a_trusted_frame_with_no_trusted_neighbour_near_it_is_not_trusted():
     assert [r["camera"]["ok"] for r in rows] == [False, False]
     together = observe.agree(clip({}, frames=2))
     assert [r["camera"]["ok"] for r in together] == [True, True]
+
+
+def in_shots(rows: list[dict], starts: list[int]) -> list[dict]:
+    """Label each row with its shot, the shots beginning at the given frames."""
+    for r in rows:
+        r["camera"]["shot"] = sum(r["frame"] >= s for s in starts) - 1
+    return rows
+
+
+def test_after_a_cut_frames_are_judged_against_their_own_shot():
+    # Frames 6 to 10 are another camera, 30 m from the first: each shot agrees within itself. Judged
+    # across the cut, frame 6 would meet frame 5 first (the tie goes to the earlier) and be lost.
+    rows = observe.agree(in_shots(clip({f: 30.0 for f in range(6, 11)}), [0, 6]))
+    assert all(r["camera"]["ok"] for r in rows)
+    across = observe.agree(clip({f: 30.0 for f in range(6, 11)}))
+    assert [r["camera"]["ok"] for r in across] == [True] * 6 + [False] + [True] * 4
+
+
+def test_a_shot_of_one_frame_has_no_neighbour_and_is_not_trusted():
+    # Frame 5 alone between two cuts: its camera agrees with the frames either side, but they are
+    # other shots, so nothing vouches for it.
+    rows = observe.agree(in_shots(clip({}), [0, 5, 6]))
+    assert [r["camera"]["ok"] for r in rows] == [True] * 5 + [False] + [True] * 5
+
+
+def test_observe_fits_each_shot_on_its_own_and_labels_it(monkeypatch):
+    # The images change colour at frame 6 (a cut); the fit is stubbed and must be called once per
+    # shot, with that shot's frames only.
+    from types import SimpleNamespace
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=tuple(
+        SimpleNamespace(cls="player", bbox=tuple(d["bbox"]), score=0.9) for d in row()["players"]))
+        for f in range(11)]
+    calls = []
+
+    def fit_clip(points, w, h, **k):
+        calls.append(len(points))
+        return (VIEW.cx, VIEW.cy, VIEW.cz), [pitch.FrameFit(VIEW, 1.0, 200, True) for _ in points]
+
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    grass, stands = np.zeros((72, 128, 3), np.uint8), np.zeros((72, 128, 3), np.uint8)
+    grass[...] = (60, 120, 10)
+    stands[...] = (120, 120, 140)
+    load = lambda path: stands if int(path.stem) >= 6 else grass  # noqa: E731
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load, cuts=True)
+    assert calls == [6, 5]
+    assert [r["camera"]["shot"] for r in rows] == [0] * 6 + [1] * 5
+    assert [s["frame"] for s in rows[0]["shots"]] == [0, 6]
+    assert all(r["camera"]["ok"] for r in rows)
+    # Off by default (docs/eval/camera-cuts-plan.md, Outcome): the same images are one shot.
+    calls.clear()
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load)
+    assert calls == [11] and {r["camera"]["shot"] for r in rows} == {0} and "shots" not in rows[0]
 
 
 @pytest.mark.xfail(strict=True, reason="no check of one frame against another can see a whole clip offset "

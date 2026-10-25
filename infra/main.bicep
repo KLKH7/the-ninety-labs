@@ -54,6 +54,9 @@ param budgetStart string = '2026-10-01'
 param foundryAccountName string = 'ninety-labs-ai'
 param foundryProjectName string = 'the-ninety-labs'
 
+@description('The Speech resource, created by hand: the API speaks Live answers with it (ninety/api/speak.py).')
+param speechAccountName string = 'ninety-labs-speech'
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -178,7 +181,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret, passcodeSecret]
+  dependsOn: [apiPull, apiReadsSecrets, apiSpeaks, mcpKeySecret, passcodeSecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -208,6 +211,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }
             { name: 'NINETY_DEMO_PASSCODE', secretRef: 'demo-passcode' }
+            // DefaultAzureCredential signs in as this user-assigned identity only when told its id.
+            { name: 'AZURE_CLIENT_ID', value: apiIdentity.properties.clientId }
+            { name: 'NINETY_SPEECH_RESOURCE_ID', value: speech.id }
+            // The TTS host is <region>.tts.speech.microsoft.com: the region's name, lowercase, no spaces.
+            { name: 'NINETY_SPEECH_REGION', value: toLower(replace(speech.location, ' ', '')) }
           ]
           probes: apiExists
             ? [
@@ -222,6 +230,25 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       // Oct 20), which Foundry's first MCP call also waits for; apiMinReplicas 1 removes it.
       scale: { minReplicas: apiMinReplicas, maxReplicas: 1 }
     }
+  }
+}
+
+// Speech: the Live read-aloud route (ninety/api/speak.py) signs in as the API's identity, never a
+// key (key auth is off on the resource). "Cognitive Services Speech User" on this resource only,
+// looked up with `az role definition list --name "Cognitive Services Speech User"`.
+resource speech 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: speechAccountName
+}
+
+var speechUser = 'f2dc8367-1007-4938-bd23-fe263f013447'
+
+resource apiSpeaks 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: speech
+  name: guid(speech.id, apiIdentity.id, speechUser)
+  properties: {
+    principalId: apiIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', speechUser)
   }
 }
 
