@@ -16,7 +16,7 @@ agent may explain a fact, but the fact's value and source ids come from code.
   share is rounded to two places and the away share is one minus it, so they always sum to one.
 - **Player movement:** consecutive frame displacement divided by the frame timestamp delta,
   converted from metres per second to km/h. No speed is capped or silently corrected.
-- **Sprint frames:** movement samples at or above the display threshold of 25 km/h. This is a
+- **Sprint frames:** movement samples at or above the sprint threshold of 25.2 km/h (`stats.SPRINT_THRESHOLD_KMH`, cited in docs/GROUNDING.md I22). This is a
   product threshold, not a claim about a player's maximum speed. Its source is still to be
   cited in `docs/GROUNDING.md` (*verify*).
 
