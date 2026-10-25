@@ -17,7 +17,7 @@ import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
+import { fullName, nameIds, playerLabel, setSidesKnown, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -332,6 +332,7 @@ interface BundleManifest {
   footage: { kind: "video" | "frames"; src: string; frames: number };
   detector?: string | null;
   teams?: unknown;
+  sides_known?: unknown;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -377,6 +378,7 @@ async function loadBundle() {
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
     Object.assign(teams, teamNames(m.teams));
+    setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
     showTeams();
     const cuts = timeline(m);
     laptop.cuts = cuts;

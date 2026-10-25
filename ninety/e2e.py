@@ -70,7 +70,7 @@ from ninety import condensed, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict, side_known
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected, territory
@@ -191,6 +191,23 @@ def teams_of(meta: dict) -> dict | None:
     params = meta.get("params", {})
     home, away = params.get("home_code"), params.get("away_code")
     return {"home": home, "away": away} if home and away else None
+
+PEOPLE = ("player", "receiver", "intended", "interceptor", "deflected_by")
+
+
+def sides_known(events: list[dict]) -> list[str]:
+    """The track ids whose side the screens may name: each one the actor of a detected event whose
+    side was told surely (factcheck.side_known), and named in no event that was not. A track id's
+    letter is the tracker's side vote, so a screen reading it as a club would name a side the gate
+    holds; the viewer and the phone say "a player" for every track id not listed here (fail
+    closed: a receiver or an interceptor is someone else, whose side that event did not measure)."""
+    actors = {e["player"] for e in events if e.get("player")}
+    # Anyone named where that event did not vouch for his side: its actor when the side was unsure,
+    # and everyone else it names (a receiver, an interceptor) whatever it said of the actor's side.
+    doubted = {e[k] for e in events for k in PEOPLE
+               if e.get(k) and (k != "player" or not side_known(e))}
+    return sorted(i for i in actors - doubted if "-t" in i)
+
 
 def load_clip(clip_dir: Path) -> Clip:
     meta = json.loads((clip_dir / "clip.json").read_text())
@@ -720,6 +737,8 @@ async def run(args: argparse.Namespace) -> dict:
         # The clubs' fictional codes the scorebug draws (ninety/render/params.py, TEAM_CODES); the
         # viewer and the phone name the clubs from them (web/viewer/src/teams.ts).
         "teams": teams_of(clip.meta),
+        # The track ids a screen may name by club (`sides_known`); every other one is "a player".
+        "sides_known": sides_known(events),
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},

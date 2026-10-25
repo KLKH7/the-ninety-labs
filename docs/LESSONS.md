@@ -2842,3 +2842,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_insights.py::test_a_name_binds_to_one_player_at_a_time` and
   `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
   when the overlap test or the merge is mutated.
+
+### 242. A side the voice holds is held on every screen, or the gate protects only one of them
+- **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
+  out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
+  track id into a club from its first letter (`h-t8` became "a London player"), and that letter is
+  only the tracker's side vote. The offline dry run on two demo segments found it: every side there
+  was told at 0.18, so the voice said "a player" while the screen named a club.
+- **Rule:** the bundle lists the track ids whose side the gate vouches for (`sides_known`: each the
+  actor of an event told surely, and named by no event that did not vouch for him). The viewer and
+  the phone name a club only for those ids; every other tracked player is "a player" ("Player 12"
+  as a title). A writer that names a side and a screen that names it from an id ask the same rule.
+- **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
+  and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
+  fail when the screens ignore the list; `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club`
+  pins the list.

@@ -373,3 +373,28 @@ def test_a_live_graph_s_judge_steps_are_never_relabelled_as_not_run():
     offline = e2e.review_trace(review, result, 2, {"e1": 61.0}, False, "graph offline")
     assert [s["action"] for s in live["steps"]] == ["verify"]
     assert [s["action"] for s in offline["steps"]] == ["skip"]
+
+
+def _ev(i, player, team_confidence, **people):
+    return {"id": i, "type": "pass", "team": "home", "player": player, "team_confidence": team_confidence,
+            "confidence": 0.9, **people}
+
+
+def test_only_a_track_whose_side_was_told_surely_may_be_named_by_club():
+    events = [
+        _ev("v1", "h-t4", 0.99, receiver="h-t8"),  # h-t4 sure; h-t8 only received: not measured
+        _ev("v2", "a-t9", 0.30),  # unsure
+        _ev("v3", "h-t5", 0.99),
+        _ev("v4", "a-t2", 0.99, interceptor="h-t5"),  # h-t5 also in a role this event did not measure
+        _ev("v5", "h-t6", 0.96),  # at the threshold: not above it
+        _ev("v6", "h7", 0.99),  # a squad id is no track id: it carries no tracker vote
+        _ev("v7", None, 0.99),
+    ]
+    assert e2e.sides_known(events) == ["a-t2", "h-t4"]
+    assert e2e.sides_known([]) == []
+
+
+def test_the_bundle_lists_the_tracks_it_vouches_for(tmp_path):
+    sure = {**EVENTS[0], "player": "h-t4", "receiver": "h-t8", "intended": "h-t8", "team_confidence": 0.99}
+    out, manifest = run(tmp_path, events=[sure])
+    assert manifest["sides_known"] == ["h-t4"]

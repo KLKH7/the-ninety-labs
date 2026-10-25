@@ -48,14 +48,27 @@ export function teamNames(from: unknown): TeamNames {
   return home && away && home !== away ? { home, away } : DEFAULT_TEAMS;
 }
 
+/** The track ids whose side the fact-checker vouches for: the bundle's `sides_known` (ninety/e2e.py).
+ * A track id's letter is only the tracker's side vote, so a tracked player outside this list is "a
+ * player", never a club. null for a bundle written before the list, which names clubs as before. */
+let sidesKnown: Set<string> | null = null;
+
+export function setSidesKnown(ids: unknown): void {
+  sidesKnown = Array.isArray(ids) ? new Set(ids.filter((i): i is string => typeof i === "string")) : null;
+}
+
+const sideUnsure = (id: string): boolean => sidesKnown !== null && id.includes("-t") && !sidesKnown.has(id);
+
 /** A player as a fan reads him: the name or role a payload gives (`names`), otherwise his club and
  * shirt ("Lisbon 7"), or for a tracked player his club and the tracker's number ("Lisbon player
- * 12"): never an invented name, shirt or role. */
+ * 12"), or only the number when his side is unsure ("Player 12"): never an invented name, shirt,
+ * role or side. */
 export function playerLabel(id: string, teams: TeamNames, names?: Record<string, string>): string {
   const given = names?.[id];
   if (given) return given;
   const club = teams[id.startsWith("h") ? "home" : "away"];
   const track = /^[ha]-t(\d+)$/.exec(id);
+  if (track && sideUnsure(id)) return `Player ${track[1]}`;
   return track ? `${club} player ${track[1]}` : `${club} ${id.slice(1)}`;
 }
 
@@ -65,7 +78,7 @@ export function playerLabel(id: string, teams: TeamNames, names?: Record<string,
 export function nameIds(text: string, teams: TeamNames, names?: Record<string, string>): string {
   return text.replace(/\b[ha](?:-t\d+|[1-9]|1[01])\b/g, (id, at: number) => {
     if (names?.[id] || !id.includes("-t")) return playerLabel(id, teams, names);
-    const club = teams[id.startsWith("h") ? "home" : "away"];
-    return at === 0 ? `A ${club} player` : `a ${club} player`;
+    const who = sideUnsure(id) ? "player" : `${teams[id.startsWith("h") ? "home" : "away"]} player`;
+    return at === 0 ? `A ${who}` : `a ${who}`;
   });
 }

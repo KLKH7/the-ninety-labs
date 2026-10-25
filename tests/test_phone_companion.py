@@ -39,6 +39,13 @@ def site(browser, tmp_path_factory):  # noqa: F811
     jpeg = page.screenshot(type="jpeg")
     page.close()
     clip, detections, events = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    # a-t3's side was told surely (a detected pass of his), so the screens may name his club; the
+    # other tracked players are in no event that vouches for their side, so each is "a player".
+    sure = {"id": "e4", "t": 62.6, "frame": 1565, "type": "pass", "team": "away", "team_confidence": 0.99,
+            "player": "a-t3", "receiver": None, "intended": None, "interceptor": None, "deflected_by": None,
+            "x": 70.0, "y": 20.0, "end_x": 60.0, "end_y": 25.0, "outcome": "fail", "ball_speed_kmh": 40.0,
+            "source": "vision", "confidence": 0.9}
+    events.write_text(events.read_text() + json.dumps(sure) + "\n")
     meta = json.loads((clip / "clip.json").read_text())
     (clip / "clip.json").write_text(json.dumps({**meta, "segments": SEGMENTS}))
     tracked = root / "tracked.json"
@@ -55,6 +62,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     worker.join()
     manifest = json.loads((www / "bundle" / "manifest.json").read_text())
     assert manifest["teams"] == {"home": "CRW", "away": "DUN"}
+    assert manifest["sides_known"] == ["a-t3"]
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -111,7 +119,21 @@ def test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot(b
     box = page.locator("#map").bounding_box()  # measured once the page has stopped moving
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
-    assert page.inner_text("#player-title") == "Dunhollow player 3"
+    assert page.inner_text("#player-title") == "Dunhollow player 3"  # a side the bundle vouches for
+    assert not errors
+
+
+def test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone(browser, site):  # noqa: F811
+    # Dry run of the demo (Oct 24): a track id's letter is the tracker's side vote, which the
+    # fact-checker did not pass for h-t1, so his card names no club.
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.wait_for_function(f"Math.abs(window.ninetyPhone.laptop.time() - {1505 / FPS}) < 0.05")
+    page.wait_for_function("document.querySelector('#status').dataset.state === 'paused'")
+    x, y = page.evaluate("window.ninetyPhone.screenOf(21, 30)")  # h-t1 at frame 1505
+    box = page.locator("#map").bounding_box()
+    page.touchscreen.tap(box["x"] + x, box["y"] + y)
+    page.wait_for_selector("#player:not([hidden])")
+    assert page.inner_text("#player-title") == "Player 1"
     assert not errors
 
 
