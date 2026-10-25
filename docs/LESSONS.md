@@ -2846,6 +2846,17 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
   when the overlap test or the merge is mutated.
 
+### 242. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
+
 ### 243. An id that is a place in an order moves when anything is added before it
 - **What happened:** adding possession changes to the detected events regenerated the M1 clip's
   fixture, and every event after the first change moved up one id. The failure table pinned its
