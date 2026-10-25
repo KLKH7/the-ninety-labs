@@ -18,9 +18,11 @@ digit, a dash, the away digit and the away code, left to right, from `score = [h
 
 **Reading a digit.** Each digit cell is compared, by normalised cross-correlation over a few pixels
 of shift, with templates of the ten digits rasterised from the two faces Chromium's `sans-serif`
-resolves to where we render: Helvetica Bold on the Mac and Liberation Sans Bold on Linux, whose
-digit shapes are Arial Bold's (`scorebug_glyphs.json`, made by `--make-glyphs` from the system's
-font files; only the 24 x 16 digit rasters are committed, no font). A reading counts when its best
+resolves to where we render: Helvetica Bold on the Mac; on the Linux render pods most digits are
+Arial Bold's shapes but the 1 is DejaVu Sans Bold's (found on the demo's development check, before
+any validation score; docs/eval/scorebug-plan.md), so all three faces are compared
+(`scorebug_glyphs.json`, made by `--make-glyphs`; only the 24 x 16 digit rasters are committed,
+no font). A reading counts when its best
 correlation is at least MIN_NCC and beats the best other digit by MIN_MARGIN.
 
 **A change of score.** The digits are read every SAMPLE_FRAMES frames. A score holds once STABLE
@@ -46,7 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +63,9 @@ SEARCH_W = 500  # the plate's left edge lies within the GOAL panel's 96 px plus 
 # and its white underline is 255; JPEG and the digits' own white pixels move a column's median by
 # far less than the midway thresholds between them and the picture's sky and stands (design).
 DARK, BRIGHT = 70, 170
+# The clock panel (#ececea) right of the plate is 74 px wide, its time dark text over part of it; at
+# least this much of it reads light in every column's median (design).
+CLOCK_MIN = 40
 CELL_H, CELL_W = 24, 16  # a template: one 16 px digit with its margins
 # Acceptance (design, stated before any validation score, docs/eval/scorebug-plan.md): on pod-rendered
 # training frames a 0 reads at 0.99 with the next digit at 0.87; the goal's pop reads near 0.79.
@@ -82,19 +87,22 @@ def load_glyphs(path: Path = GLYPHS) -> dict[str, np.ndarray]:
 
 
 def plate_x(gray: np.ndarray) -> int | None:
-    """The plate's left edge in this frame, or None when no plate is drawn (a stinger, a cut)."""
+    """The plate's left edge in this frame, or None when no plate is drawn (a stinger, a cut).
+    The plate is PLATE_W columns that read as plate (dark middle, bright underline) ending where the
+    light clock panel begins: render.js always draws the clock right of the plate. Its left edge
+    is not looked for, since a dark crowd behind a white board edge can read as plate beside it."""
     s = scale(gray.shape[0])
     top, h = round(BUG_TOP * s), round(BUG_H * s)
-    under = gray[top + round(UNDERLINE * s): top + h, : round(SEARCH_W * s)].mean(axis=0)
-    middle = np.median(gray[top + round(2 * s): top + round(35 * s), : round(SEARCH_W * s)], axis=0)
+    span = round((SEARCH_W + PLATE_W + CLOCK_MIN) * s)
+    under = gray[top + round(UNDERLINE * s): top + h, :span].mean(axis=0)
+    middle = np.median(gray[top + round(2 * s): top + round(35 * s), :span], axis=0)
     plate = (middle < DARK) & (under > BRIGHT)
-    best, run, start = (0, None), 0, 0
-    for x, p in enumerate(plate):
-        run, start = (run + 1, start) if p else (0, x + 1)
-        if run > best[0]:
-            best = (run, start)
-    width = round(PLATE_W * s)
-    return best[1] if best[1] is not None and abs(best[0] - width) <= max(3, round(3 * s)) else None
+    clock = middle > BRIGHT
+    width, light = round(PLATE_W * s), round(CLOCK_MIN * s)
+    for end in range(width, len(plate) - light + 1):
+        if plate[end - width:end].all() and clock[end:end + light].all():
+            return end - width
+    return None
 
 
 def _ncc(a: np.ndarray, b: np.ndarray) -> float:
@@ -103,12 +111,13 @@ def _ncc(a: np.ndarray, b: np.ndarray) -> float:
     return float((a * b).sum() / n) if n else 0.0
 
 
-Reading = tuple[int | None, float, float, int]
+Reading = tuple[int | None, float, float, int, list[float]]
 
 
 def read_digit(gray: np.ndarray, x0: int, glyphs: dict[str, np.ndarray]) -> Reading:
-    """(digit, best correlation, margin over the best other digit, best digit) for the cell drawn
-    from x0; digit is None when the reading is not accepted (MIN_NCC, MIN_MARGIN)."""
+    """(digit, best correlation, margin over the best other digit, best digit, each digit's best
+    correlation) for the cell drawn from x0; digit is None when the reading is not accepted
+    (MIN_NCC, MIN_MARGIN)."""
     s = scale(gray.shape[0])
     top = round(BUG_TOP * s)
     cell = gray[top + round(4 * s): top + round(36 * s), x0 - round(6 * s): x0 + round(16 * s)]
@@ -126,7 +135,7 @@ def read_digit(gray: np.ndarray, x0: int, glyphs: dict[str, np.ndarray]) -> Read
     order = np.argsort(-best)
     top_d, top_v, second = int(order[0]), float(best[order[0]]), float(best[order[1]])
     ok = top_v >= MIN_NCC and top_v - second >= MIN_MARGIN
-    return (top_d if ok else None), round(top_v, 3), round(top_v - second, 3), top_d
+    return (top_d if ok else None), round(top_v, 3), round(top_v - second, 3), top_d, best.round(3).tolist()
 
 
 def read_frame(gray: np.ndarray, glyphs: dict[str, np.ndarray]) -> dict | None:
@@ -145,29 +154,56 @@ class Sample:
     home: int | None
     away: int | None
     ncc: dict
+    scores: dict = field(default_factory=dict)  # side -> each digit's best correlation
+    settled: tuple | None = None  # (home, away) as `changes` read it, the constrained reading included
 
 
-def changes(samples: list[Sample], first_frame_showing=None) -> tuple[list[dict], dict]:
+def settle(smp: Sample, side: str, held: tuple[int, int] | None) -> int | None:
+    """The side's digit: the free reading when accepted; otherwise, with a score held, whichever of
+    the held digit and one more (a goal adds exactly one, Law 10) clears MIN_NCC and leads the other
+    by MIN_MARGIN. Two hypotheses are told apart where ten may not be (a 3 is near an 8)."""
+    free = smp.home if side == "home" else smp.away
+    if free is not None or held is None or side not in smp.scores:
+        return free
+    h = held[0] if side == "home" else held[1]
+    sc = smp.scores[side]
+    a, b = sc[h], (sc[h + 1] if h + 1 < 10 else -1.0)
+    digit, top, other = (h, a, b) if a >= b else (h + 1, b, a)
+    return digit if top >= MIN_NCC and top - other >= MIN_MARGIN else None
+
+
+def changes(samples: list[Sample], first_frame_showing=None,
+            held_start: tuple[int, int] | None = None) -> tuple[list[dict], dict]:
     """The score changes the held readings show, and a summary. `first_frame_showing(lo, hi, side,
     value)` gives the first frame in (lo, hi] whose reading of `side` is `value` (frame-accurate
-    timing); without it a change is timed at the first sample that shows it."""
-    held: tuple[int, int] | None = None
+    timing); without it a change is timed at the first sample that shows it. `held_start` is the
+    score already held when the footage starts (a continuous broadcast read in pieces)."""
+    held: tuple[int, int] | None = held_start
     last_held: Sample | None = None  # the last sample that read the held score
     run: list[Sample] = []
-    out, odd = [], 0
+    out, odd, read_out = [], 0, False
+
+    def read_event(run: list[Sample], key: tuple[int, int]) -> dict:
+        conf = float(np.mean([np.mean(list(r.ncc.values())) for r in run]))
+        return {"frame": run[0].frame, "t": run[0].t, "team": None,
+                "score": {"home": key[0], "away": key[1]}, "confidence": round(conf, 3)}
+
     for smp in samples:
-        key = (smp.home, smp.away)
+        key = (settle(smp, "home", held), settle(smp, "away", held))
+        smp.settled = key
         if None in key:
             run = []
             continue
         if key == held:
             last_held = smp
-        run = run + [smp] if run and (run[-1].home, run[-1].away) == key else [smp]
+        run = run + [smp] if run and run[-1].settled == key else [smp]
+        if len(run) == STABLE and key == held and not read_out:
+            out.append(read_event(run, key))  # the score held when the footage starts, as read
+            read_out = True
         if len(run) == STABLE and key != held:
             if held is None:  # the first score held: what the bug shows when the footage starts
-                conf = float(np.mean([np.mean(list(r.ncc.values())) for r in run]))
-                out.append({"frame": run[0].frame, "t": run[0].t, "team": None,
-                            "score": {"home": key[0], "away": key[1]}, "confidence": round(conf, 3)})
+                out.append(read_event(run, key))
+                read_out = True
             else:
                 dh, da = key[0] - held[0], key[1] - held[1]
                 if sorted((dh, da)) == [0, 1]:
@@ -181,7 +217,8 @@ def changes(samples: list[Sample], first_frame_showing=None) -> tuple[list[dict]
                         found = first_frame_showing(last_held.frame, first.frame, side, value)
                         if found is not None:
                             frame, t = found
-                    conf = float(np.mean([r.ncc[side] for r in run]))
+                    conf = float(np.mean([r.scores[side][key[0] if dh else key[1]] if r.scores
+                                          else r.ncc[side] for r in run]))
                     out.append({"frame": frame, "t": t, "team": side,
                                 "score": {"home": key[0], "away": key[1]}, "confidence": round(conf, 3)})
                     held, last_held = key, smp
@@ -192,8 +229,8 @@ def changes(samples: list[Sample], first_frame_showing=None) -> tuple[list[dict]
                     odd += 1
                 continue
             held, last_held = key, smp
-    return out, {"samples": len(samples), "unread": sum(1 for s in samples if None in (s.home, s.away)),
-                 "inconsistent": odd, "first_held": None}
+    return out, {"samples": len(samples), "unread": sum(1 for s in samples if None in (s.settled or (None,))),
+                 "inconsistent": odd, "first_held": None, "last_held": list(held) if held else None}
 
 
 def score_events(changes_: list[dict]) -> list[dict]:
@@ -279,8 +316,10 @@ def ev_goal_x(team: str) -> float:
     return 105.0 if team == "home" else 0.0
 
 
-def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None) -> tuple[list[dict], dict]:
-    """Score changes from a staged clip folder (`index.jsonl` and `images/`), and a summary."""
+def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None,
+              held: tuple[int, int] | None = None) -> tuple[list[dict], dict]:
+    """Score changes from a staged clip folder (`index.jsonl` and `images/`), and a summary. `held`:
+    the score held at the end of the footage just before this (a continuous broadcast in pieces)."""
     from PIL import Image
     glyphs = glyphs or load_glyphs()
     rows = [json.loads(x) for x in (clip / "index.jsonl").read_text().splitlines() if x.strip()]
@@ -294,7 +333,7 @@ def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None) -> tuple[
         if got is None:
             return Sample(r["frame"], r["t"], None, None, {})
         return Sample(r["frame"], r["t"], got["home"][0], got["away"][0],
-                      {k: got[k][1] for k in ("home", "away")})
+                      {k: got[k][1] for k in ("home", "away")}, {k: got[k][4] for k in ("home", "away")})
 
     def first_showing(lo: int, hi: int, side: str, value: int):
         # The held readings have settled the new score; here only its first frame is looked for, so
@@ -315,19 +354,23 @@ def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None) -> tuple[
             last = r["frame"]
         prev = r["frame"]
     samples = [sample(r) for r in picks]
-    found, summary = changes(samples, first_showing)
-    held = next(((s.home, s.away) for s in samples if None not in (s.home, s.away)), None)
-    summary["first_held"] = {"home": held[0], "away": held[1]} if held else None
-    summary["readings"] = [[x.frame, x.home, x.away] for x in samples]  # for grading digit accuracy
+    found, summary = changes(samples, first_showing, held)
+    first = next((x.settled for x in samples if x.settled and None not in x.settled), None)
+    summary["first_held"] = {"home": first[0], "away": first[1]} if first else None
+    # For grading digit accuracy: each sample as read, the constrained reading included.
+    summary["readings"] = [[x.frame, *(x.settled or (None, None))] for x in samples]
     return score_events(found), summary
 
 
-def make_glyphs(out: Path = GLYPHS) -> None:
-    """Rasterise the ten digits from the system's font files (run once, on a Mac with Helvetica and
-    Arial Bold). Only the 24 x 16 rasters are written."""
+def make_glyphs(out: Path = GLYPHS, dejavu: str | None = None) -> None:
+    """Rasterise the ten digits from font files (run once, on a Mac with Helvetica and Arial Bold,
+    and DejaVu Sans Bold from matplotlib's wheel, the vision group's: `--dejavu <path>`). Only the
+    24 x 16 rasters are written."""
     from PIL import Image, ImageDraw, ImageFont
     faces = {"helvetica-bold": ("/System/Library/Fonts/Helvetica.ttc", 1),
              "arial-bold": ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0)}
+    if dejavu:
+        faces["dejavu-bold"] = (dejavu, 0)
     raster = {}
     for name, (path, index) in faces.items():
         font = ImageFont.truetype(path, 16, index=index)
@@ -347,13 +390,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path)
     ap.add_argument("--summary", type=Path)
     ap.add_argument("--make-glyphs", action="store_true", help="rasterise the digit templates")
+    ap.add_argument("--dejavu", help="with --make-glyphs: matplotlib's DejaVuSans-Bold.ttf")
+    ap.add_argument("--held", help="the score held when this footage starts, home-away (e.g. 2-1)")
     ap.add_argument("--events", type=Path, help="detected.jsonl: reconcile its goals with the score changes")
     ap.add_argument("--reconciled", type=Path, help="where to write the reconciled events (with --events)")
     a = ap.parse_args(argv)
     if a.make_glyphs:
-        make_glyphs()
+        make_glyphs(dejavu=a.dejavu)
         return
-    found, summary = read_clip(a.clip)
+    held = tuple(int(v) for v in a.held.split("-")) if a.held else None
+    found, summary = read_clip(a.clip, held=held)
     if a.out:
         a.out.write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     if a.events:

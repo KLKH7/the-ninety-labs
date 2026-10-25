@@ -29,6 +29,7 @@ def frame(home, away, goal_w=0, face="arial-bold", h=720, w=1280, pop=0.0):
         g[top:top + sb.BUG_H, 28:x0] = 244.0  # the GOAL panel
     g[top:top + sb.BUG_H, x0:x0 + sb.PLATE_W] = 14.0
     g[top + sb.UNDERLINE:top + sb.BUG_H, x0:x0 + sb.PLATE_W] = 255.0
+    g[top:top + sb.BUG_H, x0 + sb.PLATE_W:x0 + sb.PLATE_W + 74] = 236.0  # the clock panel
     for value, side in ((home, "home"), (away, "away")):
         if value is None:
             continue
@@ -50,11 +51,20 @@ def test_the_plate_is_found_where_it_is_drawn_and_follows_the_goal_panel():
     assert sb.plate_x(np.full((720, 1280), 120.0)) is None  # no bug drawn: nothing to read
 
 
-def test_a_dark_band_wider_than_the_plate_is_not_the_plate():
-    g = frame(1, 1)
+def test_a_dark_band_with_no_clock_panel_after_it_is_not_the_plate():
+    g = np.full((720, 1280), 120.0)
     g[sb.BUG_TOP:sb.BUG_TOP + sb.BUG_H, 28:28 + sb.PLATE_W + 80] = 14.0
     g[sb.BUG_TOP + sb.UNDERLINE:sb.BUG_TOP + sb.BUG_H, 28:28 + sb.PLATE_W + 80] = 255.0
     assert sb.plate_x(g) is None
+
+
+def test_a_dark_crowd_behind_a_white_board_beside_the_plate_does_not_hide_it():
+    g = frame(1, 1)
+    top = sb.BUG_TOP
+    for a, b in ((0, 28), (28 + sb.PLATE_W + 74, 480)):  # dark stands, a board's white edge in line
+        g[top:top + sb.BUG_H, a:b] = 20.0
+        g[top + sb.UNDERLINE:top + sb.BUG_H, a:b] = 250.0
+    assert sb.plate_x(g) == 28
 
 
 def test_the_popped_digit_is_still_the_best_reading_though_not_accepted():
@@ -278,7 +288,7 @@ def test_a_poor_match_is_not_accepted_however_far_ahead():
         g[c] = np.clip(g[c] + np.random.default_rng(0).normal(0, 75, g[c].shape), 0, 255)
     got = sb.read_frame(g, GLYPHS)
     for k in ("home", "away"):
-        digit, ncc, margin, best = got[k]
+        digit, ncc, margin, best, _ = got[k]
         assert best == 4 and ncc < sb.MIN_NCC and margin >= sb.MIN_MARGIN  # the premise
         assert digit is None
 
@@ -315,3 +325,40 @@ def test_the_grader_tables_refused_reads(tmp_path):
     (tmp_path / "s.json").write_text(json.dumps({"inconsistent": 2, "readings": []}))
     report = scorebug_score.score([(clip, tmp_path / "s.jsonl", tmp_path / "s.json", None)])
     assert report["changes"]["refused_reads"] == 2
+
+
+def scores_for(d, top=0.92, near=0.89, near_digit=8, rest=0.6):
+    """Each digit's correlation: `d` at `top`, a look-alike at `near` (too close to accept freely)."""
+    sc = [rest] * 10
+    sc[d], sc[near_digit] = top, near
+    return sc
+
+
+def test_with_a_score_held_a_digit_is_told_between_the_held_one_and_one_more():
+    held = (2, 1)
+    smp = sb.Sample(0, 0.0, None, 1, {"home": 0.92, "away": 0.95},
+                    {"home": scores_for(3), "away": scores_for(1)})
+    assert sb.settle(smp, "home", held) == 3  # 3 against 2 (0.6), though an 8 is near: one goal more
+    assert sb.settle(smp, "home", None) is None  # nothing held: ten digits, too close to call
+    far = sb.Sample(0, 0.0, None, 1, {"home": 0.92}, {"home": scores_for(5)})
+    assert sb.settle(far, "home", held) is None  # neither 2 nor 3 reads well: not read
+
+
+def test_a_goal_read_by_the_constrained_reading_is_a_change():
+    def smp(i, h_scores, free=None):
+        return sb.Sample(i * sb.SAMPLE_FRAMES, float(i), free, 1, {"home": 0.95, "away": 0.95},
+                         {"home": h_scores, "away": scores_for(1)})
+    samples = [smp(0, scores_for(2), 2), smp(1, scores_for(2), 2),
+               smp(2, scores_for(3)), smp(3, scores_for(3))]
+    found, _ = scored(samples)
+    assert [(c["team"], c["score"]) for c in found] == [("home", {"home": 3, "away": 1})]
+
+
+def test_footage_that_starts_with_a_held_score_continues_it():
+    samples = [S(0, 2, 1), S(1, 2, 1), S(2, 3, 1), S(3, 3, 1)]
+    found, summary = sb.changes(samples, held_start=(2, 1))
+    assert [(c["team"], c["score"]) for c in found] == [(None, {"home": 2, "away": 1}),
+                                                       ("home", {"home": 3, "away": 1})]
+    assert summary["last_held"] == [3, 1]
+    straight = [S(0, 3, 1), S(1, 3, 1)]  # the goal came between the two pieces of footage
+    assert [c["team"] for c in sb.changes(straight, held_start=(2, 1))[0]] == ["home"]

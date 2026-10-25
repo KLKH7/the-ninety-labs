@@ -94,3 +94,34 @@ detector missed gets its scorer by look-back. Nothing on the live path reads the
   refused: not emitted, not adopted, and counted (`inconsistent` in the reader's summary,
   `refused_reads` in the validation table). Tested: down, +2 on one side, +1 on both, and a
   misread jump that must not move the count.
+
+## Amendments after the development check on the demo (2026-10-25, before any validation score)
+
+The first run over the new demo footage (seed 8080, 34 pod-rendered segments) found three faults
+in the reader, none in its thresholds. Each was fixed by a rule, and no threshold moved:
+
+1. **The pod's 1 is not Arial's.** On Linux, the pod's 0, 2 and 4 match Arial Bold (0.97 to 0.99),
+   but its 1 reads 0.82 against Arial and 0.95 against DejaVu Sans Bold. DejaVu Sans Bold, from
+   matplotlib's wheel in the vision group, is added as a third face.
+2. **A dark crowd behind a white board edge reads as plate** beside the real one, so the run was too
+   long and was refused. The plate is now the `PLATE_W` plate-like columns that end where the light
+   clock panel begins; render.js always draws the clock right of the plate.
+3. **A pod 3 is near an Arial 8** (0.92 against 0.89), so a free reading of ten digits refuses it.
+   With a score held, a digit is told only between the held digit and one more (a goal adds exactly
+   one, Law 10), by the same `MIN_NCC` and `MIN_MARGIN` (`settle`).
+
+A clip may also start from the score the footage before it held (`--held`), so a continuous
+broadcast read in pieces keeps its count: the demo's segments are read in match order.
+
+**Development check with these (not a result):** all 34 segments, read in match order.
+
+| Measure | Result |
+|---|---|
+| Score changes | 5 of 5 goals found, none false |
+| Timing error | 0.04, 0.04, 0.04, 0.16, 0.16 s |
+| Digits right, of samples read | 1,018 of 1,018 |
+| Samples unread | 5 of 1,023 |
+| Reads refused | 0 |
+
+Report: `runs/scorebug-8080/dev-check.json` (local). The validation measurement is still to come;
+these rules are what it measures.

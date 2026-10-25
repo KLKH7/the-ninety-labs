@@ -132,6 +132,7 @@ def _bug_frame(home, away):  # the plate, its underline and two digits, as rende
     top, x0 = scorebug.BUG_TOP, 28
     g[top:top + scorebug.BUG_H, x0:x0 + scorebug.PLATE_W] = 14.0
     g[top + scorebug.UNDERLINE:top + scorebug.BUG_H, x0:x0 + scorebug.PLATE_W] = 255.0
+    g[top:top + scorebug.BUG_H, x0 + scorebug.PLATE_W:x0 + scorebug.PLATE_W + 74] = 236.0
     for value, side in ((home, "home"), (away, "away")):
         y, x = top + 20 - scorebug.CELL_H // 2, x0 + scorebug.DIGIT_X[side] - 2
         g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W] = _np.maximum(
