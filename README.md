@@ -125,7 +125,7 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Audited against `main` at `a7570a96` on Oct 24, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
+Audited against `main` at `c88fbe64` on Oct 24, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
 `65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
 seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
