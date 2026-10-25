@@ -1,4 +1,4 @@
-"""Automatic restart detection: the ball set still at its spot, then played. Kick-offs first.
+"""Automatic restart detection: the ball set still at its spot, then played.
 
     uv run python -m ninety.vision.restarts <observations.jsonl> --out restarts.jsonl
 
@@ -9,7 +9,7 @@ every tolerance is the measured position error, set before any restart was score
 (docs/eval/restarts-vision-plan.md).
 
 **Still.** A restart is taken with the ball stationary on its spot (Laws 8, 13, 15 to 17). A still
-spell is a run of ball sightings, none more than SPELL_GAP_FRAMES apart and none across a cut of
+spell is a run of ball sightings, none more than KICK_GAP_FRAMES apart and none across a cut of
 the broadcast's edit, each within STILL_M of the run's median place, lasting MIN_STILL_S or more.
 The restart is taken at its last frame: the next sighting is off the spot, so the ball was kicked
 and clearly moved (Law 8). A still spell the clip ends in has not been taken yet: nothing is said.
@@ -30,7 +30,12 @@ possession between, is a goal (the goal rule of automatic event detection, PR #2
 `confidence` is a score from 0 to 1 (the ball detection's median score over the still spell, times
 the share of players where Law 8 puts them), not a calibrated probability.
 
-Planned, in this module, by the same rules: corner, goal kick, throw-in and free kick.
+**Set pieces** (Laws 13 to 17): where the still ball lies says which restart it can be
+(`place_kind`: a corner arc, a goal area, a penalty mark, a touchline, elsewhere on the field), and
+the players' arrangement at the kick must fit that Law (`set_piece_arrangement`), which also names
+the side. A set piece restarts a stopped game, so the still must open the picture after a cut (which
+leaves the wait out) or last MIN_STOPPAGE_S: a ball held still for a second in open play is not set,
+nor is one the clip happens to start on. They are written `type: "set_piece"` with `restart` naming the kind.
 """
 
 from __future__ import annotations
@@ -45,6 +50,7 @@ from statistics import median
 from ninety.vision import events as ev
 from ninety.vision.track import (
     FPS,
+    MAX_GAP_FRAMES,
     BallPoint,
     Track,
     assign_teams,
@@ -64,12 +70,31 @@ CIRCLE_M = 9.15
 POSITION_ERROR_M = ev.RIVAL_M
 STILL_M = POSITION_ERROR_M
 SPOT_M = POSITION_ERROR_M
+# Law 1 (GROUNDING L1): the areas, from the goal's centre on its line; the posts are 3.66 m either
+# side of it, the goal area reaches 5.5 m and the penalty area 16.5 m from each post and into the
+# field; the penalty mark is 11 m out; the corner arc's radius is 1 m.
+GOAL_AREA_X, GOAL_AREA_HALF_Y = 5.5, 3.66 + 5.5
+PENALTY_AREA_X, PENALTY_AREA_HALF_Y = 16.5, 3.66 + 16.5
+PENALTY_MARK_M = 11.0
+CORNER_ARC_M = 1.0
+THROW_KEEP_OFF_M = 2.0  # Law 15 (GROUNDING L7): opponents 2 m from the thrower
 # A still spell lasts at least this long (design, set before measuring: the broadcast comes back
 # from its cut 2 s before a restart, ninety/render/edit.py SHOW_BEFORE_RESTART_S, so a set ball is
 # on screen at least that long; half of it leaves room for the ball hidden by the taker).
 MIN_STILL_S = 1.0
-# Sightings of a still ball may be missing (the taker's legs) for up to events.SPELL_GAP_FRAMES.
+# A still ball, and the kick, may be hidden by players (the taker's body as he strikes it: a free
+# kick on the demo, frames 17336 to 17345) for up to the tracker's own wait for a hidden player,
+# track.MAX_GAP_FRAMES (a second), never across a cut.
+KICK_GAP_FRAMES = MAX_GAP_FRAMES
+# A still spell opens a picture when its first sighting comes within events.SPELL_GAP_FRAMES (a
+# quarter of a second) of the picture's first frame, with nothing seen before it.
 SPELL_GAP_FRAMES = ev.SPELL_GAP_FRAMES
+# A set piece restarts a stopped game (Laws 13 to 17), and its wait is long (GROUNDING R1: 16 s or
+# more on average). A broadcast leaves out any dead ball's wait longer than MIN_STOPPAGE_S and comes
+# back to the set ball (ninety/render/edit.py MIN_CUT_S, design), so a set ball is seen either just
+# after a cut (or as the clip opens on it), or still for at least that long. A ball held still for
+# a second or so in open play is neither (development check on the demo: 13 such, 1.0 to 1.6 s).
+MIN_STOPPAGE_S = 4.0
 
 
 @dataclass(frozen=True)
@@ -80,6 +105,7 @@ class Still:
     y: float
     score: float  # the ball detection's median score over it
     sightings: int
+    opens: bool = False  # it is what a picture opens on, just after a cut
 
 
 def cut_frames(rows: list[dict]) -> list[int]:
@@ -87,13 +113,19 @@ def cut_frames(rows: list[dict]) -> list[int]:
     return [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
 
 
-def stills(path: list[BallPoint], cuts: list[int]) -> list[Still]:
+def stills(path: list[BallPoint], cuts: list[int], shots: tuple[int, ...] = ()) -> list[Still]:
     """The still spells of the ball that end with it played: two sightings in a row off its spot,
-    the first within SPELL_GAP_FRAMES of the spell and none across a cut. One sighting off the spot
-    with the next back on it is the detector's error, not the ball's, and is passed over."""
+    the first within KICK_GAP_FRAMES of the spell and none across a cut. `shots` are the first frames
+    of each picture after a cut, so a spell a picture opens on is marked as one.
+    One sighting off the spot with the next back on it is the detector's error, not the ball's, and
+    is passed over."""
 
     def joined(p: BallPoint, q: BallPoint) -> bool:
-        return q.frame - p.frame <= SPELL_GAP_FRAMES and not any(p.frame <= c < q.frame for c in cuts)
+        return q.frame - p.frame <= KICK_GAP_FRAMES and not any(p.frame <= c < q.frame for c in cuts)
+
+    def opens(i: int) -> bool:
+        return any(0 <= path[i].frame - f <= SPELL_GAP_FRAMES and (i == 0 or path[i - 1].frame < f)
+                   for f in shots)
 
     def fits(run: list[BallPoint], q: BallPoint) -> bool:
         pts = run + [q]
@@ -118,7 +150,7 @@ def stills(path: list[BallPoint], cuts: list[int]) -> list[Still]:
             j += 1  # a lone sighting off the spot
         if played and (run[-1].frame - run[0].frame + 1) / FPS >= MIN_STILL_S:
             out.append(Still(run[0].frame, run[-1].frame, median(b.x for b in run),
-                             median(b.y for b in run), median(b.score for b in run), len(run)))
+                             median(b.y for b in run), median(b.score for b in run), len(run), opens(i)))
         i = max(j, i + 1)
     return out
 
@@ -152,6 +184,81 @@ def kick_off_arrangement(s: Still, tracks: list[Track]) -> dict | None:
     return {"team": team, "taker": taker, "share": share, "seen": len(seen)}
 
 
+def place_kind(x: float, y: float) -> str | None:
+    """Which restart a ball set still at (x, y) can be, from where it lies alone, the position error
+    allowed (Laws 1, 8, 13 to 17): None for a ball outside the field. A ball on a touchline, held
+    or placed, is a throw-in's (Law 15: thrown from where it crossed)."""
+    e = POSITION_ERROR_M
+    if x < -e or x > ev.PITCH_X + e or y < -e or y > ev.PITCH_Y + e:
+        return None
+    if math.hypot(x - CENTRE[0], y - CENTRE[1]) <= SPOT_M:
+        return "kick_off"
+    corners = [(cx, cy) for cx in (0.0, ev.PITCH_X) for cy in (0.0, ev.PITCH_Y)]
+    if min(math.hypot(x - cx, y - cy) for cx, cy in corners) <= CORNER_ARC_M + e:
+        return "corner"
+    if y <= e or y >= ev.PITCH_Y - e:
+        return "throw_in"
+    from_line, across = min(x, ev.PITCH_X - x), abs(y - CENTRE[1])
+    if from_line <= GOAL_AREA_X + e and across <= GOAL_AREA_HALF_Y + e:
+        return "goal_kick"
+    if math.hypot(from_line - PENALTY_MARK_M, across) <= e:
+        return "penalty_kick"
+    return "free_kick"
+
+
+def _attacker_at(x: float) -> str:
+    """The side attacking the goal nearer x: home attacks x = 105 (ninety/vision/events.py)."""
+    return "home" if x >= CENTRE[0] else "away"
+
+
+def _in_penalty_area(q: tuple[float, float], end_x: float, shrink: float) -> bool:
+    return (abs(q[0] - end_x) <= PENALTY_AREA_X - shrink
+            and abs(q[1] - CENTRE[1]) <= PENALTY_AREA_HALF_Y - shrink)
+
+
+def set_piece_arrangement(kind: str, s: Still, tracks: list[Track]) -> dict | None:
+    """The side taking a set piece and its taker, if the players stand as its Law says at the still
+    spell's last frame; None if they do not. A player is held to a distance only when he is inside
+    it by more than the position error.
+    - corner (Law 17): the side attacking that goal; no opponent within 9.15 m of the ball;
+    - goal kick (Law 16): the side defending it; no opponent inside the penalty area;
+    - penalty kick (Law 14): the side attacking it; nobody else in the penalty area but its keeper;
+    - free kick (Law 13): the side of the nearest player, within reach of the ball (GROUNDING P6);
+      no opponent within 9.15 m;
+    - throw-in (Law 15): the side of the player holding it, the same way; no opponent within 2 m.
+    For either, the nearest a keeper in his own penalty area is his hold (Law 12): not a set piece."""
+    e = POSITION_ERROR_M
+    seen = [(t, t.at(s.last)) for t in tracks if t.team is not None]
+    seen = [(t, q) for t, q in seen if q is not None]
+    near = sorted(seen, key=lambda tq: math.hypot(tq[1][0] - s.x, tq[1][1] - s.y))
+    end_x = 0.0 if s.x < CENTRE[0] else ev.PITCH_X
+    if kind in ("corner", "penalty_kick"):
+        team = _attacker_at(s.x)
+    elif kind == "goal_kick":
+        team = "away" if _attacker_at(s.x) == "home" else "home"
+    else:  # a free kick or a throw-in: the side of the player at the ball
+        if not near or math.hypot(near[0][1][0] - s.x, near[0][1][1] - s.y) > ev.CONTROL_M + e:
+            return None
+        t0, q0 = near[0]
+        if t0.keeper and _in_penalty_area(q0, end_x, -e):
+            return None
+        team = t0.team
+    rivals = [(t, q) for t, q in seen if t.team != team]
+    if kind in ("corner", "free_kick", "throw_in"):
+        keep_off = THROW_KEEP_OFF_M if kind == "throw_in" else CIRCLE_M
+        if any(math.hypot(q[0] - s.x, q[1] - s.y) < keep_off - e for _, q in rivals):
+            return None
+    elif kind == "goal_kick":
+        if any(_in_penalty_area(q, end_x, e) for _, q in rivals):
+            return None
+    elif kind == "penalty_kick":
+        inside = [t for t, q in seen if _in_penalty_area(q, end_x, e) and not (t.keeper and t.team != team)]
+        if len(inside) > 1:
+            return None
+    mates = [t for t, _ in near if t.team == team]
+    return {"team": team, "taker": mates[0] if mates else None}
+
+
 def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     """The detected restarts, and a summary of how they were found."""
     t_of = {r["frame"]: r["t"] for r in rows}
@@ -160,28 +267,46 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     found: list[dict] = []
-    spells = stills(path, cut_frames(rows))
-    on_spot = [s for s in spells if math.hypot(s.x - CENTRE[0], s.y - CENTRE[1]) <= SPOT_M]
-    for s in on_spot:
-        law8 = kick_off_arrangement(s, tracks)
-        if law8 is None:
+    # The pictures after each cut; not the clip's own start, which may fall anywhere in a wait, so
+    # a set ball it opens on shows no stoppage (the demo's segments: a ball held at a player's feet).
+    shots = tuple(q["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1)
+    spells = stills(path, cut_frames(rows), shots)
+    kinds = {k: 0 for k in ("kick_off", "corner", "goal_kick", "penalty_kick", "free_kick", "throw_in")}
+
+    def event(kind: str, s: Still, team: str, taker: Track | None, conf: float) -> None:
+        e = {"id": "", "t": t_of[s.last], "frame": s.last,
+             "type": "kickoff" if kind == "kick_off" else "set_piece", "team": team,
+             "team_confidence": taker.side_confidence if taker else None,
+             "player": ev.attribute(taker, path[index[s.last]], tracks) if taker else None, "receiver": None,
+             "x": ev._clip(s.x, ev.PITCH_X), "y": ev._clip(s.y, ev.PITCH_Y), "end_x": None, "end_y": None,
+             "outcome": None, "ball_speed_kmh": None, "source": "vision", "confidence": round(conf, 3)}
+        if kind != "kick_off":
+            e["restart"] = kind
+        found.append(e)
+
+    for s in spells:
+        kind = place_kind(s.x, s.y)
+        if kind is None:
             continue
-        taker: Track = law8["taker"]
-        found.append({
-            "id": "", "t": t_of[s.last], "frame": s.last, "type": "kickoff", "team": law8["team"],
-            "team_confidence": taker.side_confidence,
-            "player": ev.attribute(taker, path[index[s.last]], tracks), "receiver": None,
-            "x": ev._clip(s.x, ev.PITCH_X), "y": ev._clip(s.y, ev.PITCH_Y), "end_x": None, "end_y": None,
-            "outcome": None, "ball_speed_kmh": None, "source": "vision",
-            "confidence": round(s.score * law8["share"], 3),
-        })
+        kinds[kind] += 1
+        if kind == "kick_off":
+            law8 = kick_off_arrangement(s, tracks)
+            if law8 is not None:
+                event(kind, s, law8["team"], law8["taker"], s.score * law8["share"])
+            continue
+        if not (s.opens or (s.last - s.first + 1) / FPS >= MIN_STOPPAGE_S):
+            continue  # no stoppage seen before it: a ball held still in play
+        law = set_piece_arrangement(kind, s, tracks)
+        if law is not None:
+            event(kind, s, law["team"], law["taker"], s.score)
     for n, e in enumerate(found, start=1):
         e["id"] = f"r{n:05d}"
     summary = {
         "ball_sightings": len(path),
         "still_spells": len(spells),
-        "on_centre_mark": len(on_spot),
-        "events": {"kickoff": len(found)},
+        "on_centre_mark": kinds["kick_off"],
+        "still_at": kinds,
+        "events": {k: sum(1 for e in found if (e.get("restart") or "kick_off") == k) for k in kinds},
     }
     return found, summary
 
@@ -192,7 +317,7 @@ def merge(events: list[dict], restarts: list[dict]) -> list[dict]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description="Detect restarts (kick-offs) from observations.")
+    ap = argparse.ArgumentParser(description="Detect restarts from observations.")
     ap.add_argument("observations", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--summary", type=Path, default=None, help="how the restarts were found, as JSON")

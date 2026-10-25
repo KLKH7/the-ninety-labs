@@ -63,7 +63,7 @@ def test_a_kick_off_is_found_at_its_kick_with_the_side_taking_it():
     assert k["team"] == "home" and k["source"] == "vision"
     assert math.hypot(k["x"] - CX, k["y"] - CY) <= rs.SPOT_M
     assert 0 < k["confidence"] <= 1
-    assert summary["events"] == {"kickoff": 1}
+    assert summary["events"]["kick_off"] == 1 and sum(summary["events"].values()) == 1
 
 
 def test_the_side_taking_it_is_the_one_inside_the_circle():
@@ -97,7 +97,7 @@ def test_an_opponent_inside_the_circle_counts_against_law_8():
 
 def test_a_still_ball_off_the_centre_mark_is_not_a_kick_off():
     found, summary = rs.detect(scene(LAW8, ball_at=(CX - 3 * rs.SPOT_M, CY)))
-    assert summary["still_spells"] == 1 and found == []
+    assert summary["still_spells"] == 1 and [e for e in found if e["type"] == "kickoff"] == []
 
 
 def test_too_short_a_still_is_not_a_set_ball():
@@ -140,3 +140,161 @@ def test_merge_keeps_both_detectors_ids_in_time_order():
     a = [{"id": "v00001", "frame": 5, "type": "pass"}, {"id": "v00002", "frame": 30, "type": "shot"}]
     b = [{"id": "r00001", "frame": 20, "type": "kickoff"}]
     assert [e["id"] for e in rs.merge(a, b)] == ["v00001", "r00001", "v00002"]
+
+
+# Set pieces. Phase A names the sides as above; in phase B the players stand as each Law says.
+PX = 105.0  # the goal home attacks
+# A set piece follows a stoppage: here the set ball is seen still for the whole of it.
+STOPPAGE = int(rs.MIN_STOPPAGE_S * FPS) + 1
+
+
+def set_scene(set_up, **kw):
+    return scene(set_up, still=STOPPAGE, **kw)
+
+
+def test_where_a_still_ball_lies_says_which_restart_it_can_be():
+    e = rs.POSITION_ERROR_M
+    assert rs.place_kind(CX, CY) == "kick_off"
+    assert rs.place_kind(PX - 0.5, 0.5) == rs.place_kind(0.5, 67.5) == "corner"
+    assert rs.place_kind(PX - rs.GOAL_AREA_X, CY + rs.GOAL_AREA_HALF_Y) == "goal_kick"
+    assert rs.place_kind(rs.GOAL_AREA_X + e + 0.1, CY) == "free_kick"
+    assert rs.place_kind(PX - rs.PENALTY_MARK_M, CY) == rs.place_kind(rs.PENALTY_MARK_M, CY) == "penalty_kick"
+    assert rs.place_kind(40.0, 20.0) == "free_kick"
+    assert rs.place_kind(40.0, -e - 0.1) is None  # off the field: out of play, not set
+
+
+CORNER = [(PX - 1.5, 1.5, BLUE), (PX - 12.0, 30.0, BLUE), (PX - 8.0, 40.0, RED), (PX - 4.0, 34.0, RED),
+          (PX - 14.0, 12.0, RED), (60.0, 30.0, BLUE), (55.0, 40.0, RED), (30.0, 34.0, BLUE)]
+
+
+def test_a_corner_is_found_for_the_side_attacking_that_goal():
+    found, _ = rs.detect(set_scene(CORNER, ball_at=(PX - 0.5, 0.5), kick_dx=-1.0))
+    assert [(e["type"], e.get("restart"), e["team"]) for e in found] == [("set_piece", "corner", "home")]
+
+
+def test_a_corner_with_an_opponent_at_the_ball_is_not_taken_as_one():
+    crowded = CORNER + [(PX - 3.0, 3.0, RED)]
+    assert rs.detect(set_scene(crowded, ball_at=(PX - 0.5, 0.5)))[0] == []
+
+
+GOAL_KICK = [(2.0, CY + 2.0, BLUE), (16.0, 20.0, BLUE), (16.0, 48.0, BLUE), (40.0, 34.0, BLUE),
+             (rs.PENALTY_AREA_X + 3.0, 30.0, RED), (rs.PENALTY_AREA_X + 6.0, 45.0, RED), (50.0, 20.0, RED),
+             (70.0, 34.0, RED)]
+
+
+def test_a_goal_kick_is_found_for_the_side_defending_that_goal():
+    found, _ = rs.detect(set_scene(GOAL_KICK, ball_at=(3.0, CY + 3.0), kick_dx=1.0))
+    assert [(e.get("restart"), e["team"]) for e in found] == [("goal_kick", "home")]
+
+
+def test_an_attacker_inside_the_penalty_area_stops_a_goal_kick():
+    inside = GOAL_KICK + [(10.0, 40.0, RED)]
+    assert rs.detect(set_scene(inside, ball_at=(3.0, CY + 3.0), kick_dx=1.0))[0] == []
+
+
+FREE_KICK = [(39.4, 20.0, RED), (30.0, 30.0, RED), (45.0, 40.0, RED), (60.0, 34.0, RED),
+             (40.0 - rs.CIRCLE_M - 0.5, 20.0, BLUE), (25.0, 26.0, BLUE), (25.0, 14.0, BLUE),
+             (20.0, 34.0, BLUE)]
+
+
+def test_a_free_kick_is_the_taker_side_with_opponents_kept_back():
+    found, _ = rs.detect(set_scene(FREE_KICK, ball_at=(40.0, 20.0), kick_dx=-1.0))
+    assert [(e.get("restart"), e["team"]) for e in found] == [("free_kick", "away")]
+
+
+def test_a_ball_held_still_with_an_opponent_close_is_open_play_not_a_free_kick():
+    pressed = FREE_KICK + [(43.0, 22.0, BLUE)]
+    assert rs.detect(set_scene(pressed, ball_at=(40.0, 20.0)))[0] == []
+
+
+def test_a_still_ball_with_nobody_at_it_is_not_a_free_kick():
+    far = [(x + 8.0, y, c) if c == RED else (x, y, c) for x, y, c in FREE_KICK]
+    assert rs.detect(set_scene(far, ball_at=(40.0, 20.0)))[0] == []
+
+
+GREEN = [60.0, 230.0, 170.0]  # a goalkeeper's kit, far from both outfield kits
+WHITE = [240.0, 240.0, 240.0]  # another, far in brightness (the kit feature this scene's sides choose)
+PENALTY = [(PX - rs.PENALTY_MARK_M - 0.6, CY, BLUE), (PX - 0.2, CY, WHITE),
+           (PX - rs.PENALTY_AREA_X - 3.0, 20.0, BLUE), (PX - rs.PENALTY_AREA_X - 3.0, 48.0, BLUE),
+           (PX - rs.PENALTY_AREA_X - 2.0, 30.0, RED), (PX - rs.PENALTY_AREA_X - 2.0, 40.0, RED),
+           (60.0, 20.0, RED), (40.0, 34.0, BLUE)]
+
+
+def test_a_penalty_is_found_with_only_the_taker_and_the_keeper_in_the_area():
+    tracks = tr.track_players(set_scene(PENALTY))
+    tr.assign_teams(tracks)
+    assert [t.keeper for t in tracks if t.at(SET + 1) == (PX - 0.2, CY)] == [True]  # the premise
+    found, _ = rs.detect(set_scene(PENALTY, ball_at=(PX - rs.PENALTY_MARK_M, CY), kick_dx=1.0))
+    assert [(e.get("restart"), e["team"]) for e in found] == [("penalty_kick", "home")]
+
+
+def test_a_third_player_in_the_area_stops_a_penalty():
+    inside = PENALTY + [(PX - 8.0, CY + 5.0, RED)]
+    assert rs.detect(set_scene(inside, ball_at=(PX - rs.PENALTY_MARK_M, CY), kick_dx=1.0))[0] == []
+
+
+def test_a_keeper_holding_the_ball_in_his_area_is_not_a_free_kick():
+    hold = [(12.0, CY + 10.0, GREEN), (25.0, 20.0, BLUE), (25.0, 48.0, BLUE), (40.0, 34.0, BLUE),
+            (35.0, 30.0, RED), (45.0, 50.0, RED), (60.0, 20.0, RED), (70.0, 34.0, RED)]
+    tracks = tr.track_players(set_scene(hold, ball_at=(12.0, CY + 10.3)))
+    tr.assign_teams(tracks)
+    assert [t.keeper for t in tracks if t.at(SET + 1) == (12.0, CY + 10.0)] == [True]  # the premise
+    assert rs.detect(set_scene(hold, ball_at=(12.0, CY + 10.3), kick_dx=1.0))[0] == []
+
+
+def test_every_restart_is_a_valid_match_event():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    schema = json.loads((Path(__file__).parents[1] / "schemas" / "match_event.schema.json").read_text())
+    found = (rs.detect(scene(LAW8))[0] + rs.detect(set_scene(CORNER, ball_at=(PX - 0.5, 0.5)))[0]
+             + rs.detect(set_scene(GOAL_KICK, ball_at=(3.0, CY + 3.0), kick_dx=1.0))[0]
+             + rs.detect(set_scene(FREE_KICK, ball_at=(40.0, 20.0)))[0]
+             + rs.detect(set_scene(PENALTY, ball_at=(PX - rs.PENALTY_MARK_M, CY), kick_dx=1.0))[0])
+    assert {e.get("restart") for e in found} == {None, "corner", "goal_kick", "free_kick", "penalty_kick"}
+    for e in found:
+        jsonschema.validate(e, schema)
+
+
+def test_a_set_ball_needs_a_stoppage_seen_before_it():
+    at = {"ball_at": (40.0, 20.0)}
+    assert rs.detect(scene(FREE_KICK, **at))[0] == []  # 2 s still in play, nothing cut: held, not set
+    assert rs.detect(scene(FREE_KICK, still=STOPPAGE - LAG - 2, **at))[0] == []
+    assert rs.detect(set_scene(FREE_KICK, **at))[0] != []
+    # Just after a cut, the wait having been left out, 2 s is enough; not as the clip happens to start.
+    rows = scene(FREE_KICK, **at)
+    cut = rows[:SET - 1] + [r | {"frame": r["frame"] + 300} for r in rows[SET - 1:]]
+    assert [e.get("restart") for e in rs.detect(cut)[0]] == ["free_kick"]
+    assert rs.detect(rows[SET:])[0] == []
+
+
+THROW = [(60.0, -0.5, RED), (66.0, 6.0, RED), (75.0, 20.0, RED), (85.0, 34.0, RED),
+         (55.0, 5.0, BLUE), (50.0, 20.0, BLUE), (40.0, 40.0, BLUE), (30.0, 34.0, BLUE)]
+
+
+def test_a_throw_in_is_the_side_holding_the_ball_on_the_touchline():
+    found, _ = rs.detect(set_scene(THROW, ball_at=(60.2, -0.3), kick_dx=1.0))
+    assert [(e.get("restart"), e["team"]) for e in found] == [("throw_in", "away")]
+    near = THROW + [(60.6, 0.2, BLUE)]  # an opponent at the thrower, within 2 m by more than the error
+    assert rs.detect(set_scene(near, ball_at=(60.2, -0.3), kick_dx=1.0))[0] == []
+
+
+def test_a_kick_hidden_by_the_taker_for_up_to_a_second_is_still_seen():
+    rows = set_scene(FREE_KICK, ball_at=(40.0, 20.0))
+    kick = SET + STOPPAGE - 1
+    hidden = rs.KICK_GAP_FRAMES - 1
+    for r in rows[kick + 1:kick + 1 + hidden]:
+        r["ball"] = []
+    assert [e.get("restart") for e in rs.detect(rows)[0]] == ["free_kick"]
+    for r in rows[kick + 1:kick + 3 + rs.KICK_GAP_FRAMES]:
+        r["ball"] = []  # lost longer than that: whether it was kicked is not seen
+    assert rs.detect(rows)[0] == []
+
+
+def test_a_ball_seen_rolling_to_a_stop_after_a_cut_does_not_open_the_picture():
+    rows = scene(FREE_KICK, ball_at=(40.0, 20.0))
+    cut = rows[:SET - 1] + [r | {"frame": r["frame"] + 300} for r in rows[SET - 1:]]
+    for k, r in enumerate(cut[SET - 1:SET + 2]):  # seen rolling in for three frames, then still
+        r["ball"] = [{"bbox": [0, 500, 8, 508], "score": 0.8, "x": 40.0 - 4.0 + 1.0 * k, "y": 20.0}]
+    assert rs.detect(cut)[0] == []
