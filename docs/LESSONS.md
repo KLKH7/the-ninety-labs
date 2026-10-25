@@ -2877,7 +2877,30 @@ short and actionable. This file is public: no research sources, product names or
   report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
   where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
 
-### 244. A rule copied from the engine is read from the engine's line, not from a plan's paraphrase
+### 244. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
+- **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
+  test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's
+  last shot is a reverse angle (a camera in the far stand). Law 1's markings are the same after a
+  half turn about the centre spot, so the near gantry turned that way draws identical lines. The fit
+  found that twin, the markings and the players' heights both passed, and 20 frames were trusted
+  about 44 m wrong. Validation had 5 cuts and no reverse angle, so nothing there could show it.
+  Scoring it also showed main's own baseline had moved: #270's height band, measured on renderer
+  0.5.15, rejects most right frames on the frozen test set (renderer 0.3.2). Main's pass F1 there is
+  0.25, while the docs still said 0.67.
+- **Rule:**
+  - Before a fit is trusted on a new kind of view, list the views its model cannot tell apart (here,
+    any camera and its half turn about the centre spot). Each needs a cue the symmetry changes, or
+    is refused.
+  - Validation for a change must hold every kind of case the change opens up (here, every kind of
+    second angle), not just whichever ones the seeds happened to draw.
+  - A threshold measured on one look is re-measured before it judges clips of another, and a
+    published number is re-run when a change to its pipeline lands (lesson 215).
+- **Check:**
+  - `tests/test_vision_pitch.py::test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`.
+  - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
+    following off by default until it passes its bar.
+
+### 245. A rule copied from the engine is read from the engine's line, not from a plan's paraphrase
 - **What happened:** the detection-gaps plan described the engine's pressure event as "at most once
   per 8 s for each presser". The engine's line keys its memory by the pressing side
   (`self.pressed[opp]`, `opp` a team), so a second presser of the same side within 8 s is never
