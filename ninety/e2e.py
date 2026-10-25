@@ -66,7 +66,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ninety import condensed, radar
+from ninety import condensed, highlights, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
@@ -684,7 +684,10 @@ async def run(args: argparse.Namespace) -> dict:
     write_jsonl(out / "events.jsonl", events)
     match_info = None
     if args.match:
-        body = condensed.build(clip.meta, events)
+        verdict = None
+        if args.highlights_verdict:
+            verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
+        body = condensed.build(clip.meta, events, verdict)
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
@@ -698,7 +701,8 @@ async def run(args: argparse.Namespace) -> dict:
                 body["lineup"] = lineup
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
-                      "min_confidence": body["min_confidence"]}
+                      "min_confidence": body["min_confidence"],
+                      "highlights": len(body["highlights"]["moments"])}
     cards_info = None
     if args.cards:
         cards = read_cards(args.cards)
@@ -788,6 +792,9 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--highlights-verdict", type=Path, default=None,
+                    help="the highlights measurement's report (docs/eval/shot-flight.json): turns on the "
+                         "save filter and the labels it passed; without it every save is in, unlabelled")
     ap.add_argument("--cards", type=Path, default=None,
                     help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
     ap.add_argument("--team-stats", type=Path, default=None,
