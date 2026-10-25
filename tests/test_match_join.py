@@ -52,7 +52,8 @@ def _write(tmp_path: Path, runs=RUNS, params=PARAMS, obs_shift=0) -> tuple[Path,
         for v in ("tac-l", "tac-r"):
             w = vision / name / "views" / "views" / v
             w.mkdir(parents=True)
-            rows = [{"frame": f, "t": f / 25, "camera": {"ok": True}, "players": [], "ball": []} for f in frames]
+            rows = [{"frame": f, "t": f / 25, "camera": {"ok": True}, "players": [], "ball": []}
+                    for f in frames]
             (w / "observations.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
         (j / "association.json").write_text(json.dumps(
             {"match_m": 1.319, "tracks": {"h-t1": {"track": "a-t4", "confidence": 1.0}}}))
