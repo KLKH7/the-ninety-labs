@@ -733,6 +733,9 @@ function netTexture() {
 // Capsule UVs do not carry a shirt graphic (a sphere samples one texel of it). The pattern is
 // computed from world position in the material, so every piece of the shirt agrees.
 const PATTERN_ID = { solid: 0, stripes: 1, hoops: 2, sash: 3, halves: 4, bands: 5 };
+// How much wider the scorebug's clock panel is while it carries the period card (design: fits
+// "FULL-TIME" (about 75px in the 14px bold face) with the clock's own 12px inset).
+const PERIOD_EXTRA = 34;  // 96 (GOAL panel) + 270 + 34 = the 400px canvas, so the two never overflow it
 
 function numberTexture(n) {
   const c = document.createElement('canvas');
@@ -2196,7 +2199,8 @@ class BroadcastRenderer {
   layoutBug(spec) {
     const open = this.goalOpen(spec.goal_age);
     const s = this.bugScale;
-    const canvasW = Math.round(96 * open) + 270;
+    // The clock panel widens to carry HALF-TIME or FULL-TIME (the period card) in place of the time.
+    const canvasW = Math.round(96 * open) + 270 + (spec.period ? PERIOD_EXTRA : 0);
     const x0 = Math.round(28 * s), y0 = Math.round(24 * s);
     const w = Math.round(canvasW * s), h = Math.round(40 * s);
     this.bugRect = [x0, y0, x0 + w, y0 + h];
@@ -2211,7 +2215,7 @@ class BroadcastRenderer {
     g.clearRect(0, 0, 400, 40);
     const goalW = Math.round(96 * open);
     const plateW = 196;
-    const clockW = 74;
+    const clockW = 74 + (spec.period ? PERIOD_EXTRA : 0);
     if (goalW > 1) {
       g.fillStyle = '#f4f4f2';
       g.fillRect(0, 0, goalW, 40);
@@ -2255,7 +2259,8 @@ class BroadcastRenderer {
     g.fillRect(clockX, 0, clockW, 40);
     g.fillStyle = '#141414';
     g.font = '600 15px sans-serif';
-    g.fillText(spec.clock, clockX + 12, 20);
+    if (spec.period) g.font = '700 14px sans-serif';
+    g.fillText(spec.period || spec.clock, clockX + 12, 20);
     // The painted bar is canvasW wide. The mesh shows the whole 400px canvas, left aligned.
     if (canvasW < 400) g.clearRect(canvasW, 0, 400 - canvasW, 40);
     this.bugTex.needsUpdate = true;
