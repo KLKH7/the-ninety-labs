@@ -59,8 +59,11 @@ MATCH_TOOLS = (
     "halves",
     "key_moments",
     "score",
+    "set_pieces",
 )
 TOOL_HELP = {
+    "set_pieces": "corners, goal kicks, penalties, throw-ins and free kicks: the total of each, and each "
+    "club's (unsure for throw-ins and free kicks while the video could not tell whose)",
     "score": "the score after minute_to (unsure while a goal's side is in doubt), each goal with its scorer "
     "and the pass that made it (an assist), and each club's goalkeeper's saves",
     "halves": "the first half against the second (Law 7's 45 minutes): where the ball was, the shots and "
@@ -105,6 +108,11 @@ TOOL_WORDS = (
         "referee",
         r"\b(?:offside|onside|referee|ref|var|foul\w*|hand ?ball|penalty|pen|rules?|law|booked|booking"
         r"|yellow|red card|sent off|dive|dived)\b",
+    ),
+    (
+        "set_pieces",
+        r"\b(?:corners?|free[- ]kicks?|throw[- ]ins?|goal[- ]kicks?|penalties|how many penalt\w*"
+        r"|set[- ]pieces?)\b",
     ),
     (
         "score",
@@ -405,6 +413,11 @@ FOLLOW_UPS = {
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
         "How are {club} playing?",
+    ),
+    "set_pieces": (
+        "How many shots have there been?",
+        "Where has the ball been?",
+        "What's the score?",
     ),
     "score": (
         "Why did {club} score?",
@@ -888,6 +901,14 @@ def code_texts(fact: dict) -> list[str]:
         if fact.get("scorer_is"):
             out.append(f"{fact['scorer_is']} scored for {club} in minute {m}.")
         return [*out, f"{club} scored in minute {m}."]
+    if fact.get("kind") == "set_pieces":
+        from ninety.intel.set_pieces import WORDS
+
+        n = fact["value"]
+        noun = WORDS[fact["restart"]][0 if n == 1 else 1]
+        if fact.get("team") is None:
+            return [f"There {'was' if n == 1 else 'were'} {n} {noun} {span}."]
+        return [f"{club} had {n} {noun} {span}."]
     if metric == "score":
         cl = fact["clubs"]
         h, a, m = fact["home"], fact["away"], fact["minute"]

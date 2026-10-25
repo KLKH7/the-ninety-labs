@@ -151,6 +151,17 @@ def stats_table(mi) -> dict:
                 ("intercepted", "Passes intercepted"),
             )
         ],
+        *[
+            # Under Attack: the phone draws the groups it knows (web/phone, Attack to Physical).
+            ("Attack", key, label, unit, _summary(mi.set_pieces, key))
+            for key, label, unit in (
+                ("corner", "Corners", "corners"),
+                ("free_kick", "Free kicks", "free kicks"),
+                ("throw_in", "Throw-ins", "throw-ins"),
+                ("goal_kick", "Goal kicks", "goal kicks"),
+                ("penalty_kick", "Penalties", "penalties"),
+            )
+        ],
         (
             "Attack",
             "shots_inside",

@@ -83,6 +83,11 @@ UNIT_WORDS = {
     "m": ("m", "metres", "metre", "meters", "meter"),
     "shots": ("shots", "shot"),
     "goals": ("goals", "goal"),
+    "corners": ("corners", "corner"),
+    "goal kicks": ("goal kicks", "goal kick"),
+    "penalties": ("penalties", "penalty"),
+    "throw-ins": ("throw-ins", "throw-in"),
+    "free kicks": ("free kicks", "free kick"),
     "saves": ("saves", "save"),
     "km": ("km", "kilometres", "kilometers"),
     "km/h": ("km/h", "kilometres an hour", "kph"),
@@ -521,6 +526,11 @@ DIRECTED = (
     "shot_distance_m",
     "score",
     "saves",
+    *(
+        f"{k}{a}"
+        for k in ("corner", "goal_kick", "penalty_kick", "throw_in", "free_kick")
+        for a in ("", "_all")
+    ),
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -575,6 +585,17 @@ TEMPLATES = {
         r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
     ],
     "saves": [rf"made {_N} saves?"],
+    **{
+        f"{k}{a}": [rf"(?:had|there (?:was|were)) {_N} {w}"]
+        for k, w in (
+            ("corner", r"corners?"),
+            ("goal_kick", r"goal kicks?"),
+            ("penalty_kick", r"penalt(?:y|ies)"),
+            ("throw_in", r"throw-ins?"),
+            ("free_kick", r"free kicks?"),
+        )
+        for a in ("", "_all")
+    },
     "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
     "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
     "shot_distance_m": [
