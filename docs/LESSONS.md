@@ -289,6 +289,9 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+- **Again (Oct 23):** `uv run ruff check . | tail -1 && git commit ... && git push` committed and
+  pushed a branch with 2 lint errors: `tail` succeeded, so `&&` went on. Gate on the command itself
+  (`uv run ruff check . && ...`), never on a pipe that trims its output.
 
 ### 30. Run the commands you document
 - **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
@@ -2853,3 +2856,122 @@ short and actionable. This file is public: no research sources, product names or
   output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
 - **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
   folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. An id that is a place in an order moves when anything is added before it
+- **What happened:** adding possession changes to the detected events regenerated the M1 clip's
+  fixture, and every event after the first change moved up one id. The failure table pinned its
+  evidence pass as `SIDE = "v00005"`, "a second completed pass in the minute": that id became the
+  out of play, which the agents' view drops, and every CI shard failed with `KeyError: 'v00005'`.
+  The PR's local run covered the vision tests, not the workflow tests that read the same fixture.
+- **Rule:** an event is chosen by what it is (its type, outcome, minute, order among its kind),
+  never by a detected id, which is only its place in the clip. When a fixture is regenerated,
+  every reader of it is found (`grep -rn <fixture name>` and the modules those tests call) and
+  their tests are run in the same change (lesson 91).
+- **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
+  plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
+  the old fixed ids put back, the file fails to collect.
+- **Again, the next day:** `ninety/eval/describe_eval.py` (#268, merged after the fixture changed)
+  read which detections are real from event-report-v2's pairs, whose ids are the older detector's.
+  Its own guard refused them (`v00005 is not the event it matched`), as it should. The fix grades
+  the current detector (`docs/eval/event-report-v3.json`, written by `possession_report` beside its
+  report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
+  where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
+
+### 244. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
+- **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
+  test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's
+  last shot is a reverse angle (a camera in the far stand). Law 1's markings are the same after a
+  half turn about the centre spot, so the near gantry turned that way draws identical lines. The fit
+  found that twin, the markings and the players' heights both passed, and 20 frames were trusted
+  about 44 m wrong. Validation had 5 cuts and no reverse angle, so nothing there could show it.
+  Scoring it also showed main's own baseline had moved: #270's height band, measured on renderer
+  0.5.15, rejects most right frames on the frozen test set (renderer 0.3.2). Main's pass F1 there is
+  0.25, while the docs still said 0.67.
+- **Rule:**
+  - Before a fit is trusted on a new kind of view, list the views its model cannot tell apart (here,
+    any camera and its half turn about the centre spot). Each needs a cue the symmetry changes, or
+    is refused.
+  - Validation for a change must hold every kind of case the change opens up (here, every kind of
+    second angle), not just whichever ones the seeds happened to draw.
+  - A threshold measured on one look is re-measured before it judges clips of another, and a
+    published number is re-run when a change to its pipeline lands (lesson 215).
+- **Check:**
+  - `tests/test_vision_pitch.py::test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`.
+  - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
+    following off by default until it passes its bar.
+
+### 245. A side the voice holds is held on the screens too, or the gate protects only one of them
+- **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
+  out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
+  track id into a club from its first letter (`h-t8` became "a London player"), and that letter is
+  only the tracker's side vote. The offline dry run on two demo segments found it: every side there
+  was told at 0.18, so the voice said "a player" while the screen named a club.
+- **Rule:** the bundle lists the track ids whose side the gate vouches for (`sides_known`: each the
+  actor of an event told surely, and named by no event that did not vouch for him). The viewer and
+  the phone name a club only for those ids; every other tracked player is "a player" ("Player 12"
+  as a title). An event's own side (`team`) is named the same way: the bundle carries the
+  fact-checker's threshold (`min_team_confidence`), and the phone's play-by-play, story colours and
+  shot list name a club only above it ("A player completes a pass"; an unsure shot is in "All"
+  only, listed but not drawn; an unsure goal is "Goal 43′" and in no club's score). A writer that
+  names a side and a screen that names it ask the same rule; what still reads the tracker's vote is
+  listed in EVALUATION.md as a residual, not left unsaid.
+- **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
+  and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
+  fail when the screens ignore the list, and
+  `tests/test_phone_companion.py::test_the_play_by_play_names_a_club_only_for_a_side_told_surely`
+  when the phone reads an event's side without the threshold;
+  `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
+
+### 248. A place along the pitch is checked against the pitch before it is cut into thirds
+- **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
+  capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
+  depth gives index -1, and `THIRDS[-1]` is "final", so a ball behind one goal counted as the final
+  third for both clubs at once. The merge queue's review caught it (x = 108 gave both 100%); no test
+  had a ball off the pitch.
+- **Rule:** a position is checked against the pitch (0 to 105 m along it) before it is cut into
+  zones. One off the pitch is out of play and in no zone. A capped index is not a clamp: capping
+  the top end still leaves Python's negative indices at the bottom.
+- **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
+  (x = -3, -0.5, 106, 108) fails when the check is removed.
+
+### 249. A phrase that states a direction is bound to the fact's own role, not only approved
+- **What happened:** the closed direction check (lesson 221) approved a sentence when every word
+  was one of the cited fact's own phrases. The phrases were approved as words, though, not as this
+  fact's values. The merge queue's reviews of #321, #323 and #326 got these through:
+  - "Hugo passed to Sami" against Sami-to-Hugo (both names, the same words);
+  - "did not sprint" against a count of 4 (the zero phrase is one of the fact's phrases);
+  - "their final third on the left" against own-third-right (any third matched);
+  - a recap's twelve-moment cap dropping a goal.
+  Numbers already had roles (lesson 221); orders, zeros and places did not.
+- **Rule:** wherever a phrase carries a fact's value, the check binds it to that value:
+  - a pair is said passer-to-receiver;
+  - a zero phrase only of a zero;
+  - a zone only as the fact's own third and channel.
+  A cap on a list never drops the kind the list exists for (goals in a recap). A review probe that
+  differs from the fact only in who, where or whether is a test.
+- **Check:** `tests/test_passing_network.py::test_a_pair_is_said_in_its_order_and_with_its_caveat`,
+  `tests/test_player_running.py::test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it` and
+  `tests/test_halves_and_moments.py::test_a_recap_never_drops_a_goal_however_many_moments_follow`
+  fail when their binding is removed.
+
+
+### 250. A guard on what a fan asked is a list of words, so every phrasing it misses gets an answer
+
+- **What happened:** while a named player's running figures were held, the physical tool still
+  said the zone each player was in most (#323). A guard (`held_ask`) matched "distance", "fastest",
+  "sprint" and a few more, and refused those questions. Every other phrasing got the first zone
+  fact, verified, with a player's name as the headline: "Who looks most tired?", "Who ran the
+  furthest?", "How many km has Kai done?". Then "who is on the left?" got the zone of someone who
+  played on the right, and "Where does Alex play?" got one of three Alexes. Three reviews found
+  more phrasings each time. The fact-check never sees the question, so a true sentence that does
+  not answer the question passes it.
+- **Rule:** gate on the kind of answer the question asks for, and refuse anything else:
+  - a figure, at its highest, or of the one player the question names;
+  - the zone, only for a question of where, about one named player.
+  
+  Several players fitting are named back to the fan, never picked for him. A side or a third alone is not
+  a question of where. The model path is held to the same target: an answer about another player,
+  or not the figure asked, falls back to code.
+- **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
+  and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
+  phrasings) fail when the gate's zone, ambiguity or player filter is removed.
