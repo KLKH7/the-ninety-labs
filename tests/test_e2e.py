@@ -402,7 +402,7 @@ def test_the_bundle_passes_the_clips_clubs_to_the_describer(tmp_path, monkeypatc
 def test_the_bundle_has_a_commentary_track_from_its_checked_events(tmp_path):
     out, manifest = run(tmp_path)
     body = json.loads((out / "commentary.json").read_text())
-    assert manifest["commentary"] == {"lines": len(body["lines"]), "dropped": len(body["dropped"]),
+    assert manifest["commentary"] == {"count": len(body["lines"]), "dropped": len(body["dropped"]),
                                       "refused": len(body["refused"]),
                                       "chars": sum(len(line["text"]) for line in body["lines"])}
     assert "commentary.json" in manifest["files"]

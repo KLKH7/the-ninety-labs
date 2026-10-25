@@ -143,6 +143,7 @@ def write(bundle: Path, synth: Synth | None = None, cache: Path | None = None,
     body = {"voice": voice.VOICE, "format": voice.FORMAT, "insight_rate": voice.INSIGHT_RATE,
             "key": "sha256 of the text, whitespace collapsed", "lines": index}
     (bundle / "speech.json").write_text(json.dumps(body, indent=1, sort_keys=True) + "\n")
+    _point_commentary_at_audio(bundle, index)
     took.sort()
     return {
         "voice": voice.VOICE,
@@ -158,6 +159,18 @@ def write(bundle: Path, synth: Synth | None = None, cache: Path | None = None,
         "chars_total": sum(len(t) for t, _ in wanted),
         "usd_at_s1": round(sum(len(t) for t, _ in wanted) * USD_PER_CHAR, 4),
     }
+
+
+def _point_commentary_at_audio(bundle: Path, index: dict[str, dict]) -> None:
+    """Each commentary call's `audio` (commentary.json, the big-screen player's format): its file,
+    or None when its synthesis failed and the player shows the caption alone."""
+    path = bundle / "commentary.json"
+    if not path.is_file():
+        return
+    body = json.loads(path.read_text())
+    for line in body["lines"]:
+        line["audio"] = (index.get(voice.key(line["text"])) or {}).get("file")
+    path.write_text(json.dumps(body, indent=1) + "\n")
 
 
 def estimate(bundle: Path, cache: Path | None = None) -> dict:

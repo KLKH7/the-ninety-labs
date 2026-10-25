@@ -53,8 +53,8 @@ def test_a_goal_is_never_crowded_out_by_an_insight_or_a_restart():
     cue = {"id": "insight-m-v3", "kind": "insight", "persona": "analyst", "verified": True, "t_in": 10.4,
            "text": "h-t4 plays it 12 m to h-t8, at 40 km/h.", "evidence": ["v3"]}
     said = lines(events, [cue])
-    assert said[0]["kind"] == "goal" and said[0]["t_in"] == 10.2  # on its moment, whatever came first
-    assert all(line["kind"] != "insight" or line["t_in"] >= said[0]["t_out"] + GAP_S for line in said)
+    assert said[0]["kind"] == "goal" and said[0]["t"] == 10.2  # on its moment, whatever came first
+    assert all(line["kind"] != "insight" or line["t"] >= said[0]["t_end"] + GAP_S for line in said)
 
 
 def test_an_insight_is_said_only_when_verified_and_never_names_an_unsure_side():
@@ -89,24 +89,38 @@ def test_lines_never_overlap_leave_silence_and_are_never_late():
     said = body["lines"]
     assert said and body["dropped"]  # the play outruns one voice: some calls must go
     for a, b in zip(said, said[1:], strict=False):
-        assert b["t_in"] >= a["t_out"] + GAP_S - 1e-9
-    assert all(0 <= line["t_in"] - line["t_event"] <= MAX_LAG_S + 1e-9 for line in said)
+        assert b["t"] >= a["t_end"] + GAP_S - 1e-9
+    assert all(0 <= line["t"] - line["t_event"] <= MAX_LAG_S + 1e-9 for line in said)
     goals = [e for e in events if e["type"] == "goal"]
     called = {line["evidence"][0] for line in said}
     # A goal is dropped only when another goal holds the voice.
     for g in goals:
         if g["id"] not in called:
-            assert any(line["kind"] == "goal" and line["t_in"] - GAP_S < g["t"] + MAX_LAG_S
-                       and line["t_out"] + GAP_S > g["t"] for line in said)
+            assert any(line["kind"] == "goal" and line["t"] - GAP_S < g["t"] + MAX_LAG_S
+                       and line["t_end"] + GAP_S > g["t"] for line in said)
 
 
 def test_the_bundle_voices_every_call_and_the_estimate_calls_nothing(tmp_path):
     body = commentary.commentary([ev("v1", 10.0, "shot", outcome="on_target")], [], CLUBS)
     summary = commentary.write(body, tmp_path)
-    assert summary == {"lines": 1, "dropped": 0, "refused": 0, "chars": len("London shoot, on target.")}
+    assert summary == {"count": 1, "dropped": 0, "refused": 0, "chars": len("London shoot, on target.")}
     assert ("London shoot, on target.", "commentary") in bundle.lines(tmp_path)
     cost = bundle.estimate(tmp_path, cache=tmp_path / "empty-cache")
     assert cost["by_kind"]["commentary"] == 1 and cost["new_lines"] == cost["lines"]
     assert cost["usd_at_s1"] == round(cost["chars"] * bundle.USD_PER_CHAR, 4)
     assert not (tmp_path / "speech.json").exists()  # an estimate synthesises nothing
     assert json.loads((tmp_path / "commentary.json").read_text())["format"] == 1
+
+
+def test_voicing_the_bundle_points_each_call_at_its_audio(tmp_path):
+    from tests.test_speech import FakeSynth
+
+    events = [ev("v1", 10.0, "shot", outcome="on_target"), ev("v2", 30.0, "goal", team="away")]
+    commentary.write(commentary.commentary(events, [], CLUBS), tmp_path)
+    # The goal's synthesis fails: its call keeps no audio, and the player shows its caption alone.
+    bundle.write(tmp_path, synth=FakeSynth(fail={"Goal!"}), cache=tmp_path / "cache", sleep=lambda s: None)
+    lines = {line["text"]: line for line in json.loads((tmp_path / "commentary.json").read_text())["lines"]}
+    shot = lines["London shoot, on target."]
+    assert shot["audio"].startswith("speech/") and (tmp_path / shot["audio"]).is_file()
+    assert lines["Goal! Lisbon score!"]["audio"] is None
+    assert [k for k in ("t", "t_end", "text", "audio", "event") if k not in shot] == []

@@ -60,15 +60,19 @@ class Call:
 
 @dataclass
 class Line:
+    """One call in commentary.json (the format agreed with the big-screen player, web/viewer)."""
+
     id: str
-    t_event: float
-    t_in: float
-    t_out: float
+    t: float  # match seconds the call starts, the clock of cues and events
+    t_end: float
+    text: str  # exactly what is said
+    event: str | None  # the detected event called, or None for an insight
     kind: str
     priority: int
-    text: str
     short: bool
+    t_event: float
     evidence: list[str]
+    audio: str | None = None  # the call's audio, relative to the bundle: set by ninety/speech/bundle.py
 
 
 def _side(event: dict) -> str | None:
@@ -164,22 +168,23 @@ def schedule(found: list[Call], clubs: dict[str, str] | None = None,
             seconds = duration(text)
             start = _first_gap(placed, call.t, seconds)
             if start is not None:
-                line = Line(f"cm-{call.key}", call.t, round(start, 2), round(start + seconds, 2), call.kind,
-                            PRIORITY[call.kind], text, n > 0, call.evidence)
+                event = None if call.kind == "insight" else call.key
+                line = Line(f"cm-{call.key}", round(start, 2), round(start + seconds, 2), text, event,
+                            call.kind, PRIORITY[call.kind], n > 0, call.t, call.evidence)
                 break
         if line is None:
             dropped.append({"id": call.key, "t": call.t, "reason": "no room within the lag limit"})
             continue
         placed.append(line)
-    return sorted(placed, key=lambda line: line.t_in), dropped
+    return sorted(placed, key=lambda line: line.t), dropped
 
 
 def _first_gap(placed: list[Line], t: float, seconds: float) -> float | None:
     """The earliest start in [t, t + MAX_LAG_S] with GAP_S clear of every placed line, or None."""
-    starts = [t] + [p.t_out + GAP_S for p in placed if t <= p.t_out + GAP_S <= t + MAX_LAG_S]
+    starts = [t] + [p.t_end + GAP_S for p in placed if t <= p.t_end + GAP_S <= t + MAX_LAG_S]
     for start in sorted(starts):
         end = start + seconds
-        if all(end + GAP_S <= p.t_in or start >= p.t_out + GAP_S for p in placed):
+        if all(end + GAP_S <= p.t or start >= p.t_end + GAP_S for p in placed):
             return start
     return None
 
@@ -195,5 +200,5 @@ def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | Non
 def write(body: dict, out: Path) -> dict:
     """commentary.json in `out`; returns the summary for the bundle's manifest."""
     (out / "commentary.json").write_text(json.dumps(body, indent=1) + "\n")
-    return {"lines": len(body["lines"]), "dropped": len(body["dropped"]), "refused": len(body["refused"]),
+    return {"count": len(body["lines"]), "dropped": len(body["dropped"]), "refused": len(body["refused"]),
             "chars": sum(len(line["text"]) for line in body["lines"])}
