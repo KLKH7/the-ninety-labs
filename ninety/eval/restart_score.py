@@ -1,7 +1,7 @@
 """Grade detected restarts against the answer key: kick-offs, timed at the kick.
 
     uv run python -m ninety.eval.restart_score <clip> <restarts.jsonl> [<clip> <restarts.jsonl> ...] \\
-        [--out report.json]
+        [--out report.json] [--final-test]
 
 Each clip is a rendered clip folder with its answer key (frames.jsonl, events.jsonl, meta.json);
 each restarts file is what `ninety.vision.restarts` wrote for it. Ground truth is read here, for
@@ -14,6 +14,12 @@ true kick-off is timed at its kick: the last frame, from its event on, before th
 leaves the centre mark. A detection matches a true kick-off within event_score.WINDOW_S (1.0 s) of
 that kick, one to one, nearest first, as event_score matches events. A true kick-off counts only
 when its kick is on a frame the clip shows.
+
+**Test seeds are refused.** A clip whose seed (meta.json's, else the digits ending its folder's
+name) is a test seed, of the fixed test set (900001 to 900030), the shot-outcome set's test half or
+the set-piece set's test split (920201 to 920230), or whose seed cannot be read, is refused unless
+`--final-test` is given: the plan scores the test split once, at a frozen commit. Validation clips
+(the set-piece set's 920101 to 920115) are graded freely.
 
 Headline: recall and precision with the side right (type and team, as event_score grades every
 event), with 95% Wilson intervals; beside them, the same with the side not asked, and the timing
@@ -28,11 +34,33 @@ import math
 from pathlib import Path
 
 from ninety.eval.event_score import EPS, WINDOW_S, wilson
+from ninety.eval.shot_flight import clip_seed
+from ninety.eval.shot_flight import sealed_seeds as _sealed
 
 # The true ball has left its spot once it is this far from it: well under one frame of a kicked
 # ball's travel (event-motion.md: about 0.4 m a frame after a pass), and above the rounding of
 # positions in frames.jsonl (cm).
 MOVED_M = 0.05
+
+
+def sealed_seeds() -> set[int]:
+    """Every test split's seeds: the shot-flight scorer's (the fixed test set and the shot-outcome
+    set's test half) and the set-piece set's test split."""
+    from ninety.eval.set_piece_set import TEST
+    return _sealed() | set(TEST)
+
+
+def refuse_test(clips: list[Path], final_test: bool) -> None:
+    """Stop unless every clip is known not to be a test clip, or this is the final test look."""
+    if final_test:
+        return
+    sealed = sealed_seeds()
+    for clip in clips:
+        seed = clip_seed(clip)
+        if seed is None:
+            raise SystemExit(f"refused: {clip} has no seed to check against the test splits")
+        if seed in sealed:
+            raise SystemExit(f"refused: {clip} is test seed {seed}: scored once, with --final-test")
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -79,7 +107,8 @@ def match(truth: list[dict], detected: list[dict], sided: bool) -> list[tuple[di
     return pairs
 
 
-def score(pairs_of_files: list[tuple[Path, Path]]) -> dict:
+def score(pairs_of_files: list[tuple[Path, Path]], final_test: bool = False) -> dict:
+    refuse_test([clip for clip, _ in pairs_of_files], final_test)
     clips, n_true, n_det, hits, hits_any, dts = [], 0, 0, 0, 0, []
     for clip, found in pairs_of_files:
         truth = truth_kickoffs(clip)
@@ -114,10 +143,12 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Grade detected kick-offs against the answer key.")
     ap.add_argument("pairs", nargs="+", type=Path, help="clip folder, then its restarts.jsonl, repeated")
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--final-test", action="store_true",
+                    help="score test seeds (900001-900030, the shot-outcome and set-piece test splits): once")
     a = ap.parse_args(argv)
     if len(a.pairs) % 2:
         raise SystemExit("give a restarts file after each clip folder")
-    report = score(list(zip(a.pairs[::2], a.pairs[1::2], strict=True)))
+    report = score(list(zip(a.pairs[::2], a.pairs[1::2], strict=True)), a.final_test)
     text = json.dumps(report, indent=2) + "\n"
     if a.out:
         a.out.write_text(text, encoding="utf-8")

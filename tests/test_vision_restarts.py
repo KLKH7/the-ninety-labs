@@ -352,3 +352,45 @@ def test_a_set_piece_names_no_taker_when_nobody_of_its_side_is_at_the_ball():
     no_taker = [p for p in CORNER if p[:2] != (PX - 1.5, 1.5)]
     found, _ = rs.detect(set_scene(no_taker, ball_at=(PX - 0.5, 0.5)))
     assert [(e.get("restart"), e["player"], e["team_confidence"]) for e in found] == [("corner", None, None)]
+
+
+
+# Boundaries, from the sources rather than the module's own constants (the merge queue's review):
+# the position error is events.RIVAL_M (the players' measured p90), the circle Law 1's 9.15 m.
+E = rs.ev.RIVAL_M
+
+
+def test_the_centre_mark_is_found_within_the_position_error_and_not_beyond():
+    assert [e["type"] for e in rs.detect(scene(LAW8, ball_at=(CX - (E - 0.3), CY)))[0]] == ["kickoff"]
+    assert rs.detect(scene(LAW8, ball_at=(CX - (E + 0.4), CY)))[0] == []
+
+
+def test_a_still_of_well_under_a_second_is_not_a_set_ball():
+    assert rs.detect(scene(LAW8, still=12))[0] == []  # about half a second, the kick's lag included
+
+
+def test_a_player_beyond_halfway_by_more_than_the_error_counts_against_law_8():
+    s = rs.stills(tr.ball_path(scene(LAW8)), [])[0]
+    over = [(CX + E + 1.0, 20.0, BLUE) if (x, y) == (40.0, 20.0) else (x, y, c) for x, y, c in LAW8]
+    tracks = tr.track_players(scene(over))
+    tr.assign_teams(tracks)
+    assert rs.kick_off_arrangement(s, tracks)["share"] < 1.0
+
+
+def test_nobody_inside_the_circle_means_nobody_is_taking_a_kick_off():
+    away = [(CX - (9.15 - E) - 0.5, CY, BLUE) if (x, y) == (CX - 0.6, CY) else (x, y, c) for x, y, c in LAW8]
+    away = [(38.0, 34.0, c) if (x, y) == (45.0, 34.0) else (x, y, c) for x, y, c in away]  # out of the circle
+    assert rs.detect(scene(away, ball_at=(CX, CY)))[0] == []
+
+
+def test_a_keeper_is_no_evidence_that_his_side_stands_in_its_half():
+    white = [240.0, 240.0, 240.0]  # a keeper's kit, far in brightness from both outfield kits
+    blue_and_away_keeper = [p for p in LAW8 if p[2] == BLUE] + [(104.5, CY, white)]
+    tracks = tr.track_players(scene(blue_and_away_keeper))
+    tr.assign_teams(tracks)
+    assert [t.team for t in tracks if t.keeper] == ["away"]  # the premise: he is read as away's keeper
+    assert rs.detect(scene(blue_and_away_keeper))[0] == []
+
+
+def test_a_kick_off_confidence_is_the_ball_score_times_the_law_8_share():
+    assert rs.detect(scene(LAW8))[0][0]["confidence"] == 0.8  # every player where Law 8 puts him
