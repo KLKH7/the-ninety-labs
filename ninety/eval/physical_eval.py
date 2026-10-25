@@ -34,12 +34,19 @@ TEAMS = ("home", "away")
 
 
 def true_players(rows) -> dict[str, dict]:
-    out: dict[str, dict] = defaultdict(lambda: {"top_kmh": 0.0, "sprints": 0, "m": 0.0})
+    def blank() -> dict:
+        return {"top_kmh": 0.0, "sprints": 0, "m": 0.0, "zones": defaultdict(float)}
+
+    out: dict[str, dict] = defaultdict(blank)
     for r in rows:
         p = out[r["track"]]
         p["top_kmh"] = max(p["top_kmh"], r["top_kmh"])
         p["sprints"] += r["sprints"]
         p["m"] += r["m"]
+        for z, sec in r["zones"].items():
+            p["zones"][z] += sec
+    for p in out.values():
+        p["zone"] = tuple(max(p["zones"], key=p["zones"].get).split("-")) if p["zones"] else None
     return dict(out)
 
 
@@ -80,6 +87,8 @@ def grade(run: Path, minutes: float, fragment_s: float, seed: int = 1) -> dict:
             "top_error_kmh": round(got["player_top_kmh"]["value"] - t["top_kmh"], 1),
             "sprints": got["player_sprints"]["value"],
             "sprints_true": t["sprints"],
+            "zone_right": (got["player_zone"]["third"], got["player_zone"]["channel"]) == t["zone"]
+            if "player_zone" in got and t.get("zone") else None,
         })
     km = [r["km_ratio"] for r in out]
     top = [r["top_error_kmh"] for r in out]
@@ -96,6 +105,8 @@ def grade(run: Path, minutes: float, fragment_s: float, seed: int = 1) -> dict:
         "sprints": {
             "tracked": s_seen, "true": s_true, "ratio": round(s_seen / s_true, 2) if s_true else None
         },
+        "zone_right": {"right": sum(r["zone_right"] is True for r in out),
+                       "of": sum(r["zone_right"] is not None for r in out)},
         "rows": out,
     }
 
@@ -150,15 +161,16 @@ def main(argv: list[str] | None = None) -> None:
         "player graded against the true player of his role.",
         "",
         "| Match | Fragment mean | Named | Distance, tracked / true, median (range) "
-        "| Top speed, tracked − true (km/h) | Sprints, tracked / true |",
-        "|---|---|---|---|---|---|",
+        "| Top speed, tracked − true (km/h) | Sprints, tracked / true | Main zone right |",
+        "|---|---|---|---|---|---|---|",
     ]
     for name, got in report["runs"].items():
         for g in got:
             k, t, s = g["km_ratio"], g["top_error_kmh"], g["sprints"]
             lines.append(
                 f"| {name} | {g['fragment_s']:g} s | {g['named']} | {k['median']} ({k['min']} to {k['max']}) "
-                f"| {t['median']} ({t['min']} to {t['max']}) | {s['tracked']} / {s['true']} ({s['ratio']}) |"
+                f"| {t['median']} ({t['min']} to {t['max']}) | {s['tracked']} / {s['true']} ({s['ratio']}) "
+                f"| {g['zone_right']['right']}/{g['zone_right']['of']} |"
             )
     lines += [
         "",
