@@ -195,7 +195,12 @@ def diagnostics(truth: list[dict], detected: list[dict], report: dict, frames: l
     false_pr = [d for d in detected if d["type"] == "pressure" and d["id"] not in matched]
     memory = sum(1 for d in false_pr
                  if d["t"] - t0 <= ev.PRESSURE_REPEAT_S and any(e["team"] == d["team"] for e in pre))
+    # Amendment 2's risk: a pass played on by a passer running its way reads slow relative to him.
+    true_passes = [e for e in truth if e["type"] == "pass"]
+    on_pass = sum(1 for d in tk if d["id"] not in matched and any(
+        e["team"] != d["team"] and abs(e["t"] - d["t"]) <= event_score.WINDOW_S for e in true_passes))
     return {"interceptions_on_a_true_recovery": on_recovery,
+            "false_tackles_on_a_true_pass": on_pass,
             "true_interceptions_detected_only_as_possession_change": only_pc,
             "tackle_outcome": {"right": sum(out_right), "of": len(out_right)},
             "tackles_kept_through_contact": len(kept), "tackles_held": len(tk) - len(kept),
