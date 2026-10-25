@@ -73,7 +73,14 @@ def test_the_sentence_says_the_likely_cause_and_never_a_fouler():
     assert describe.event_versions(restart("corner", **sure))[1] == "Corner to away."
     # An unsure side is not named (factcheck.side_known), and neither is any player.
     unsure = restart("free_kick", cause="foul_likely", team_confidence=MIN_TEAM_CONFIDENCE)
-    assert describe.event_versions(unsure)[1] == "Free kick, likely for a foul."
+    assert describe.event_versions(unsure)[1] == "A free kick, likely for a foul."
+    # Spoken, a sure side is the club's name; an unsure one stays unnamed.
+    clubs = {"home": "London", "away": "Lisbon"}
+    said = describe.spoken(describe.event_versions(restart("free_kick", cause="foul_likely", **sure))[1],
+                           True, clubs=clubs)
+    assert said == "Free kick to Lisbon, likely for a foul."
+    assert describe.spoken(describe.event_versions(unsure)[1], False, clubs=clubs) == \
+        "A free kick, likely for a foul."
 
 
 def test_a_pass_after_an_offside_one_means_play_went_on():

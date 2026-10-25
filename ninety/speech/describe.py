@@ -193,9 +193,11 @@ def event_versions(event: dict) -> list[str]:
         return [f"Kick-off, {who}.", ]
     if kind == "set_piece":
         name = RESTART_NAMES.get(event.get("restart") or "", "Set piece")
-        side = f" to {event['team']}" if side_known(event) else ""
+        # The side by name when it was told surely (spoken() turns it into the club's name), else
+        # no side at all: "A free kick".
+        head = f"{name} to {event['team']}" if side_known(event) else f"A {name.lower()}"
         why = CAUSE_WORDS.get(event.get("cause") or "", "")
-        head = f"{name}{side}" + (f", {why}" if why else "")
+        head += f", {why}" if why else ""
         return [f"{head}, {place}.", f"{head}."]
     return []
 
