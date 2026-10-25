@@ -1,0 +1,483 @@
+{
+  "command": "uv run python -m ninety.eval.possession_report --test-dir <rebuilt answer key> --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/possession-change",
+  "commit": "c986af594ad4149667d673a68a97a63c0266737c",
+  "date": "2026-10-23",
+  "pooled": {
+    "strict": {
+      "true": 5,
+      "detected": 1,
+      "tp": 1,
+      "fp": 0,
+      "fn": 4,
+      "precision": 1.0,
+      "recall": 0.2,
+      "precision_95": [
+        0.21,
+        1.0
+      ],
+      "recall_95": [
+        0.04,
+        0.62
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 4,
+          "tp": 1,
+          "recall": 0.25,
+          "recall_95": [
+            0.05,
+            0.7
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    },
+    "lenient": {
+      "true": 5,
+      "detected": 1,
+      "tp": 1,
+      "fp": 0,
+      "fn": 4,
+      "precision": 1.0,
+      "recall": 0.2,
+      "precision_95": [
+        0.21,
+        1.0
+      ],
+      "recall_95": [
+        0.04,
+        0.62
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 4,
+          "tp": 1,
+          "recall": 0.25,
+          "recall_95": [
+            0.05,
+            0.7
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    },
+    "time_only": {
+      "true": 5,
+      "detected": 1,
+      "tp": 1,
+      "fp": 0,
+      "fn": 4,
+      "precision": 1.0,
+      "recall": 0.2,
+      "precision_95": [
+        0.21,
+        1.0
+      ],
+      "recall_95": [
+        0.04,
+        0.62
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 4,
+          "tp": 1,
+          "recall": 0.25,
+          "recall_95": [
+            0.05,
+            0.7
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    }
+  },
+  "pooled_without_developed_on": {
+    "strict": {
+      "true": 3,
+      "detected": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "precision": null,
+      "recall": 0.0,
+      "precision_95": null,
+      "recall_95": [
+        0.0,
+        0.56
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 2,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.66
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    },
+    "lenient": {
+      "true": 3,
+      "detected": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "precision": null,
+      "recall": 0.0,
+      "precision_95": null,
+      "recall_95": [
+        0.0,
+        0.56
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 2,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.66
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    },
+    "time_only": {
+      "true": 3,
+      "detected": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "precision": null,
+      "recall": 0.0,
+      "precision_95": null,
+      "recall_95": [
+        0.0,
+        0.56
+      ],
+      "by_phase": {
+        "open_play": {
+          "true": 2,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.66
+          ]
+        },
+        "at_restart": {
+          "true": 1,
+          "tp": 0,
+          "recall": 0.0,
+          "recall_95": [
+            0.0,
+            0.79
+          ]
+        }
+      }
+    }
+  },
+  "clips": [
+    {
+      "seed": 900001,
+      "camera_ok": 238,
+      "frames": 250,
+      "spells": 5,
+      "events": {
+        "strict": {
+          "true": 2,
+          "detected": 1,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "time_error_s": {
+            "mean": 0.12,
+            "max": 0.12
+          },
+          "distance_m": {
+            "mean": 0.429535,
+            "max": 0.429535
+          },
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 1,
+              "fn": 1,
+              "recall": 0.5
+            },
+            "at_restart": {
+              "true": 0,
+              "tp": 0,
+              "fn": 0,
+              "recall": null
+            }
+          }
+        },
+        "lenient": {
+          "true": 2,
+          "detected": 1,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "time_error_s": {
+            "mean": 0.12,
+            "max": 0.12
+          },
+          "distance_m": {
+            "mean": 0.429535,
+            "max": 0.429535
+          },
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 1,
+              "fn": 1,
+              "recall": 0.5
+            },
+            "at_restart": {
+              "true": 0,
+              "tp": 0,
+              "fn": 0,
+              "recall": null
+            }
+          }
+        },
+        "time_only": {
+          "true": 2,
+          "detected": 1,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "time_error_s": {
+            "mean": 0.12,
+            "max": 0.12
+          },
+          "distance_m": {
+            "mean": 0.429535,
+            "max": 0.429535
+          },
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 1,
+              "fn": 1,
+              "recall": 0.5
+            },
+            "at_restart": {
+              "true": 0,
+              "tp": 0,
+              "fn": 0,
+              "recall": null
+            }
+          }
+        }
+      },
+      "false": [],
+      "missed": [
+        {
+          "id": "e00054",
+          "t": 72.4,
+          "team": "away",
+          "phase": "open_play"
+        }
+      ]
+    },
+    {
+      "seed": 900002,
+      "camera_ok": 0,
+      "frames": 250,
+      "spells": 0,
+      "events": {
+        "strict": null,
+        "lenient": null,
+        "time_only": null
+      },
+      "false": [],
+      "missed": []
+    },
+    {
+      "seed": 900003,
+      "camera_ok": 4,
+      "frames": 250,
+      "spells": 0,
+      "events": {
+        "strict": {
+          "true": 3,
+          "detected": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null,
+          "time_error_s": null,
+          "distance_m": null,
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 0,
+              "fn": 2,
+              "recall": 0.0
+            },
+            "at_restart": {
+              "true": 1,
+              "tp": 0,
+              "fn": 1,
+              "recall": 0.0
+            }
+          }
+        },
+        "lenient": {
+          "true": 3,
+          "detected": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null,
+          "time_error_s": null,
+          "distance_m": null,
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 0,
+              "fn": 2,
+              "recall": 0.0
+            },
+            "at_restart": {
+              "true": 1,
+              "tp": 0,
+              "fn": 1,
+              "recall": 0.0
+            }
+          }
+        },
+        "time_only": {
+          "true": 3,
+          "detected": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null,
+          "time_error_s": null,
+          "distance_m": null,
+          "by_phase": {
+            "open_play": {
+              "true": 2,
+              "tp": 0,
+              "fn": 2,
+              "recall": 0.0
+            },
+            "at_restart": {
+              "true": 1,
+              "tp": 0,
+              "fn": 1,
+              "recall": 0.0
+            }
+          }
+        }
+      },
+      "false": [],
+      "missed": [
+        {
+          "id": "e00110",
+          "t": 236.44,
+          "team": "away",
+          "phase": "at_restart"
+        },
+        {
+          "id": "e00113",
+          "t": 240.68,
+          "team": "home",
+          "phase": "open_play"
+        },
+        {
+          "id": "e00116",
+          "t": 241.8,
+          "team": "away",
+          "phase": "open_play"
+        }
+      ]
+    },
+    {
+      "seed": 900004,
+      "camera_ok": 194,
+      "frames": 250,
+      "spells": 4,
+      "events": {
+        "strict": null,
+        "lenient": null,
+        "time_only": null
+      },
+      "false": [],
+      "missed": []
+    },
+    {
+      "seed": 900005,
+      "camera_ok": 248,
+      "frames": 250,
+      "spells": 6,
+      "events": {
+        "strict": null,
+        "lenient": null,
+        "time_only": null
+      },
+      "false": [],
+      "missed": []
+    }
+  ]
+}

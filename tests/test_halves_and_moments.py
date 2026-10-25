@@ -64,3 +64,37 @@ def test_a_planted_window_keeps_only_sure_moments_and_its_three_biggest_line_bre
     body["facts"] = {"line_break": lb, "goal": [], "shot": [], "counter": [], "one_two": []}
     got = MatchInsights.from_dict(body).key_moments(1, 10)["facts"]
     assert [f["id"] for f in got] == ["lb:5", "lb:4", "lb:3"]
+
+
+def _planted(facts, minutes=21):
+    body = json.loads(STANDIN.read_text())
+    body["facts"] = {"line_break": [], "goal": [], "shot": [], "counter": [], "one_two": [], **facts}
+    body["minutes"] = minutes
+    return MatchInsights.from_dict(body)
+
+
+def test_a_recap_never_drops_a_goal_however_many_moments_follow():
+    # The merge queue's review of #326: the minute-12 goal fell off the twelve latest moments.
+    lon = {"team": "home", "club": "London Athletic", "confident": True}
+    goal = {"id": "goal:g1", "kind": "goal", "minute": 5, "t": 250.0, **lon}
+    shots = [{"id": f"shot:s{k}", "kind": "shot", "minute": 6 + k, "t": 300.0 + 60 * k, "value": 18, **lon}
+             for k in range(14)]
+    got = _planted({"goal": [goal], "shot": shots}).key_moments(1, 21)["facts"]
+    assert "goal:g1" in [f["id"] for f in got]
+    assert len(got) == 12  # the goal and the eleven latest shots
+
+
+def test_the_halves_split_at_minute_45():
+    mi = standin(minutes=90)
+    spans = {(r["minute_from"], r["minute_to"]) for r in mi.halves(1, 90)["summary"]}
+    assert spans == {(1, 45), (46, 90)}
+
+
+def test_only_a_recap_or_a_goal_question_is_headed_by_the_goal():
+    mi = standin()
+    goal = {"kind": "goal", "club": "London Athletic", "minute": 12}
+    assert cm.headline("What have I missed?", [goal], mi).startswith("Goal: ")
+    assert cm.headline("Where has the ball been?", [goal], mi) is None or not cm.headline(
+        "Where has the ball been?", [goal], mi).startswith("Goal: ")
+    assert not cm.headline("Who scored?", [goal], mi).startswith("Goal: ")  # a who question names who
+    assert cm.headline("What have I missed?", [{**goal, "minute": None}], mi) is None

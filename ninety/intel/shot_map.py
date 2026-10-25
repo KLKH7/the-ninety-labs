@@ -72,7 +72,7 @@ def shots(events: Iterable[Mapping]) -> list[dict]:
                 "id": f"shot:{e['id']}",
                 "kind": "shot",
                 "metric": "shot_distance_m",
-                "team": e["team"],
+                "team": e["team"] if known else None,  # a side the gate did not pass names no club
                 "minute": minute_of(float(e["t"])),
                 "t": round(float(e["t"]), 2),
                 "passer": e.get("player"),  # named as a passer is: the role gate decides (I6)
@@ -105,7 +105,9 @@ def _inside(rows: Iterable[Mapping]) -> dict:
         "inside_lo": lo,
         "inside_hi": hi,
         "inside_exact": lo == hi,
-        "also": [[lo, "shots", INSIDE_CONTEXT]] if lo == hi else [],
+        # Unsure, the inside count is still bound to its words, to a count no shot can have, so no
+        # number said after "took" passes (merge-queue review of #318); code then leaves it unsaid.
+        "also": [[lo if lo == hi else -1, "shots", INSIDE_CONTEXT]],
     }
 
 

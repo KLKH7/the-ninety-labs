@@ -373,3 +373,27 @@ def test_a_live_graph_s_judge_steps_are_never_relabelled_as_not_run():
     offline = e2e.review_trace(review, result, 2, {"e1": 61.0}, False, "graph offline")
     assert [s["action"] for s in live["steps"]] == ["verify"]
     assert [s["action"] for s in offline["steps"]] == ["skip"]
+
+
+@pytest.mark.parametrize(("params", "clubs"), [
+    ({"home_code": "LON", "away_code": "LIS"}, {"home": "London", "away": "Lisbon"}),  # the demo's
+    ({"home_code": "LON", "away_code": "XXX"}, None),  # a code no team sheet knows: "home", "away"
+    ({}, None),  # a clip rendered without codes
+])
+def test_the_describer_names_the_sides_by_the_clubs_the_clip_was_rendered_with(params, clubs):
+    # Dry run of the demo (Oct 24): the bundle's manifest knew LON and LIS, but the voice said "home".
+    assert e2e.clubs_of({"params": params}) == clubs
+
+
+def test_the_bundle_passes_the_clips_clubs_to_the_describer(tmp_path, monkeypatch):
+    seen = []
+    real = e2e.describe.describe
+
+    def spy(*a, **kw):
+        seen.append(kw.get("clubs"))
+        return real(*a, **kw)
+
+    monkeypatch.setattr(e2e.describe, "describe", spy)
+    monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
+    run(tmp_path)
+    assert seen == [{"home": "London", "away": "Lisbon"}]

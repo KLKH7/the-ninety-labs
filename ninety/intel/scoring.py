@@ -4,7 +4,8 @@ shot outcomes (ninety/vision/events.py, ninety/vision/outcomes.py; #271): nothin
 - A **goal** is a detected `goal` event, and the club that scored it is told by the goal it went
   into, not by a shirt's colour: the ball crossed the goal line at one end (Law 10), and each club
   attacks one end all match (home toward x = PITCH_X, the engine's convention; it does not change
-  ends). A goal whose detected side disagrees with its end is in doubt (an own goal, or a misread),
+  ends). A goal whose detected side disagrees with its end, or whose detection confidence is under
+  the fact-checker's event gate (factcheck.MIN_CONFIDENCE), is in doubt (an own goal, or a misread),
   so the score has bounds and is said only when no goal is in doubt: a wrong score on screen is the
   one mistake a fan never forgives.
 - The **scorer** is the goal's shooter (`player`), named as the role gate allows (I6), else by his
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 
+from ninety.agents.factcheck import MIN_CONFIDENCE
 from ninety.intel.scene import PITCH_X, TEAMS, minute_of
 
 OTHER = {"home": "away", "away": "home"}
@@ -44,7 +46,9 @@ def goals(events: Sequence[Mapping]) -> list[dict]:
              and rows[j].get("outcome") == "goal"),
             None,
         )
-        scorer = g.get("player") or (rows[shot_i].get("player") if shot_i is not None else None)
+        # The goal's `player` is the scoring side's last holder (C, #271): without a shot just before it,
+        # that may not be who put it in (an own goal), so no scorer is named.
+        scorer = (g.get("player") or rows[shot_i].get("player")) if shot_i is not None else None
         assister = None
         if shot_i is not None and shot_i > 0:
             before = rows[shot_i - 1]
@@ -55,7 +59,8 @@ def goals(events: Sequence[Mapping]) -> list[dict]:
             ):
                 assister = before["player"]
         end = attacking_end(float(g["x"])) if g.get("x") is not None else None
-        known = end is not None and end == g["team"]
+        sure = g.get("confidence") is None or float(g["confidence"]) >= MIN_CONFIDENCE
+        known = end is not None and end == g["team"] and sure
         out.append(
             {
                 "id": f"goal:{g['id']}",
