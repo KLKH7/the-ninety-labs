@@ -65,6 +65,7 @@
                 </div>
                 <output class="sr-only" id="score" aria-live="off">– : –</output>
                 <p class="scorers" id="scorers" hidden></p>
+                <p class="scorers" id="teams-note" hidden>Teams not confirmed</p>
                 <p class="scoreline" id="scoreline" hidden></p>
               </section>
 
@@ -235,7 +236,7 @@
             <h2 id="player-title" tabindex="-1">Player</h2>
             <button type="button" class="close" id="close-player" aria-label="Close the player card"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
-          <ion-list inset>
+          <ion-list inset id="so-far-box" hidden>
             <ion-list-header><ion-label class="caps">So far</ion-label></ion-list-header>
             <div class="stats">
               <p class="stat"><span class="value" id="speed">–</span><span class="label">km/h now</span></p>
@@ -255,7 +256,7 @@
             <div class="chips wrap" id="compare-chips" role="group" aria-label="Compare with another player"></div>
             <ul class="stat-rows" id="compare-rows" hidden></ul>
           </section>
-          <ion-list inset>
+          <ion-list inset id="heat-box" hidden>
             <ion-list-header><ion-label class="caps" id="heat-title">Heat map</ion-label></ion-list-header>
             <div class="pad-in">
               <canvas id="heat" role="img" aria-label="Heat map"></canvas>
