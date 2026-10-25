@@ -4,10 +4,12 @@
 # Each clip runs the live path as the demo does (stage_live: index and images only; live_job: detect,
 # observe, events, outcomes), JOBS clips at a time (default 1), each in its own process; only then is
 # the answer key read, once, by ninety.eval.shot_outcomes. Run it at the frozen commit; it writes
-# <out>/report.json and each clip's detected.jsonl. A clip already done is skipped, so a rerun resumes.
+# <out>/report.json, each clip's detected.jsonl and its observations (broadcast) under <out>/observations, so
+# a rule changed later can be re-scored from them without the clips. A clip already done is skipped,
+# so a rerun resumes.
 set -euo pipefail
 SPLIT=$1; CKPT=$2; OUT=$3; JOBS=${JOBS:-1}
-mkdir -p "$OUT/work" "$OUT/detected" "$OUT/logs"
+mkdir -p "$OUT/work" "$OUT/detected" "$OUT/logs" "$OUT/observations"
 NAME=$(uv run python -c "import json,sys; print(json.load(open(sys.argv[1]))['name'])" "$CKPT/train-manifest.json")
 one() {  # one clip: $1 = its folder
   local c; c=$(basename "$1")
@@ -16,6 +18,7 @@ one() {  # one clip: $1 = its folder
     uv run python -m ninety.vision.stage_live "$1" --from 0 --to 1000000 --checkpoint "$CKPT" --out "$OUT/work/$c"
     OMP_NUM_THREADS=${THREADS:-2} uv run --group vision python -m ninety.vision.live_job "$OUT/work/$c/clip" \
       --checkpoint "$NAME" --weights "$OUT/work/$c/checkpoint/checkpoint_best_total.pth" --out "$OUT/live/$c"
+    cp "$OUT/live/$c/observations.jsonl" "$OUT/observations/observations-$c.jsonl"
     cp "$OUT/live/$c/detected.jsonl" "$OUT/detected/detected-$c.jsonl"
     rm -rf "$OUT/work/$c/clip/images"
   } > "$OUT/logs/$c.log" 2>&1 || echo "FAILED $c (see $OUT/logs/$c.log)"
