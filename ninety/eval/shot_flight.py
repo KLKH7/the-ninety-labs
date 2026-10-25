@@ -3,7 +3,7 @@ against the answer key, and the go/no-go gates of docs/eval/highlights-plan.md.
 
     uv run python -m ninety.eval.shot_flight --clip <clip dir> --detected <detected.jsonl> \\
         [--clip ... --detected ...] [--crossings <crossings.jsonl>] [--woodwork <woodwork.jsonl>] \\
-        --out docs/eval/shot-flight
+        [--final-test] --out docs/eval/shot-flight
 
 Each clip directory holds the answer key (events.jsonl, frames.jsonl, meta.json). Detected shots
 are matched to true shots by event_score's strict rule. For every matched shot the report gives
@@ -14,7 +14,9 @@ same side of it, and applies the plan's gates. Optional files add the goal-mouth
 woodwork hits vision reports (Amendment 1).
 
 Grading only, so it reads the answer key; nothing on the live path imports it. It is run on the
-shot-outcome set's validation split only once the plan is merged, and on its test split once.
+shot-outcome set's validation split only once the plan is merged, and on its test split once: a
+clip whose seed is a test seed (900001 to 900030, 910009 to 910016) is refused unless `--final-test`
+is given, which is the one scoring of the test split.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import argparse
 import datetime
 import json
 import math
+import re
 from pathlib import Path
 
 from ninety.eval.event_score import STRICT_M, check_frames, git_commit, load_events, match, ratio, wilson
@@ -144,8 +147,9 @@ def near_frame(crossing: dict) -> bool:
 
 
 def clip_rows(truth: list[dict], frames: list[dict], detected: list[dict],
-              cuts: list[dict] | None = None) -> tuple[list[dict], dict]:
-    """One row per matched shot (strict rule), and the counts of unmatched shots."""
+              cuts: list[dict] | None = None, clip: str | None = None) -> tuple[list[dict], dict]:
+    """One row per matched shot (strict rule), and the counts of unmatched shots. Detected ids count
+    from 1 in every clip, so a row names its clip: an id alone is not a shot."""
     true_shots = [e for e in truth if e["type"] == "shot"]
     det_shots = [e for e in detected if e["type"] == "shot"]
     pairs = match(true_shots, det_shots, frames=frames, radius_m=STRICT_M, cuts=cuts)
@@ -159,7 +163,7 @@ def clip_rows(truth: list[dict], frames: list[dict], detected: list[dict],
         T_vis = flight_time_s(d_vis, d.get("ball_speed_kmh"))
         flight = true_flight(t, frames, truth)
         rows.append({
-            "truth_id": t["id"], "detected_id": d["id"], "outcome": t.get("outcome"),
+            "clip": clip, "truth_id": t["id"], "detected_id": d["id"], "outcome": t.get("outcome"),
             "v_true": t.get("ball_speed_kmh"), "v_vision": d.get("ball_speed_kmh"),
             "d_true": d_true, "d_vision": d_vis,
             "x_error": d["x"] - t["x"], "y_error": d["y"] - t["y"],
@@ -204,7 +208,8 @@ def agreement(rows: list[dict]) -> dict:
     return {"saves": len(saves), "judged": len(judged), "same_side": len(same),
             "share": ratio(len(same), len(saves)), "wilson_95": wilson(len(same), len(saves)),
             "no_vision_speed": len(saves) - len(judged),
-            "disagreements": [{"truth_id": r["truth_id"], "T_true": r["T_true"], "T_vision": r["T_vision"],
+            "disagreements": [{"clip": r.get("clip"), "truth_id": r["truth_id"],
+                               "T_true": r["T_true"], "T_vision": r["T_vision"],
                                "v_true": r["v_true"], "v_vision": r["v_vision"],
                                "d_true": r["d_true"], "d_vision": r["d_vision"]}
                               for r in judged if r not in same]}
@@ -226,13 +231,14 @@ def save_gate(errors: dict, agree: dict) -> dict:
             "p95_T_s": p95, "agreement": share}
 
 
-def crossing_table(rows: list[dict], crossings: dict[str, dict]) -> dict:
-    """Vision's goal-mouth crossings (by detected shot id) against the true crossing point, for
-    matched shots whose true ball crossed within NEAR_FRAME_M of the goal frame."""
+def crossing_table(rows: list[dict], crossings: dict[tuple, dict]) -> dict:
+    """Vision's goal-mouth crossings, keyed by (clip, detected shot id), against the true crossing
+    point, for matched shots whose true ball crossed within NEAR_FRAME_M of the goal frame. The key
+    has the clip because detected ids repeat from clip to clip."""
     measured = [r for r in rows if r["crossing"] is not None and near_frame(r["crossing"])]
-    seen = [r for r in measured if r["detected_id"] in crossings]
-    dy = [crossings[r["detected_id"]]["y"] - r["crossing"]["y"] for r in seen]
-    dz = [crossings[r["detected_id"]]["z"] - r["crossing"]["z"] for r in seen]
+    seen = [r for r in measured if (r.get("clip"), r["detected_id"]) in crossings]
+    dy = [crossings[(r.get("clip"), r["detected_id"])]["y"] - r["crossing"]["y"] for r in seen]
+    dz = [crossings[(r.get("clip"), r["detected_id"])]["z"] - r["crossing"]["z"] for r in seen]
     return {"true_crossings": len(measured), "with_vision_crossing": len(seen),
             "y_m": summary(dy), "z_m": summary(dz),
             "placement_labels": len(seen) >= MIN_CROSSINGS}
@@ -260,20 +266,20 @@ def woodwork_table(n_true: int, n_detected: int, tp: int) -> dict:
 
 
 def score(clips: list[dict]) -> dict:
-    """clips: dicts of truth, frames, detected, cuts, and optionally crossings (detected shot id to
-    {y, z}) and woodwork (detected hits, with frame numbers)."""
+    """clips: dicts of name, truth, frames, detected, cuts, and optionally crossings (this clip's
+    detected shot id to {y, z}) and woodwork (detected hits, with frame numbers)."""
     rows, counts, crossings = [], [], {}
     wood = [0, 0, 0]  # true, detected, matched
     for c in clips:
         check_frames(c["frames"], c.get("cuts"))
-        r, n = clip_rows(c["truth"], c["frames"], c["detected"], c.get("cuts"))
+        r, n = clip_rows(c["truth"], c["frames"], c["detected"], c.get("cuts"), c.get("name"))
         rows += r
         counts.append({"clip": c.get("name"), **n})
         if "woodwork" in c:
             true_hits, det_hits = woodwork_hits(c["frames"]), c["woodwork"] or []
             wood = [wood[0] + len(true_hits), wood[1] + len(det_hits),
                     wood[2] + woodwork_matches(true_hits, det_hits)]
-        crossings.update(c.get("crossings") or {})
+        crossings.update({(c.get("name"), shot): v for shot, v in (c.get("crossings") or {}).items()})
     errors = error_table(rows)
     agree = agreement(rows)
     return {"rules": {"T_dive_s": T_DIVE_S, "gate_T_p95_s": GATE_T_P95_S, "gate_agree": GATE_AGREE,
@@ -284,6 +290,32 @@ def score(clips: list[dict]) -> dict:
             "rows": rows}
 
 
+def sealed_seeds() -> set[int]:
+    """The seeds of the test splits: the fixed test set (900001 to 900030) and the shot-outcome
+    set's test half (910009 to 910016). Scoring them is the plan's one final look."""
+    from ninety.eval.shot_outcome_set import TEST
+    from ninety.render.splits import TEST_SEEDS
+    return set(TEST_SEEDS) | set(TEST)
+
+
+def clip_seed(root: Path) -> int | None:
+    """A clip's seed: meta.json's, else the digits ending its folder's name."""
+    meta = root / "meta.json"
+    if meta.exists():
+        body = json.loads(meta.read_text())
+        if not isinstance(body, dict):
+            return None  # a meta.json that is not an object has no seed: unknown, never the name's
+        if "seed" in body:  # meta.json wins over the name, and a seed it cannot read is unknown
+            seed = body["seed"]
+            if isinstance(seed, float) and seed.is_integer():
+                seed = int(seed)
+            if isinstance(seed, str) and seed.strip().isdigit():
+                seed = int(seed)
+            return seed if isinstance(seed, int) and not isinstance(seed, bool) else None
+    found = re.search(r"(\d+)$", root.name)
+    return int(found.group(1)) if found else None
+
+
 def _jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
@@ -292,13 +324,25 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Grade vision's shot speed, distance and flight time.")
     ap.add_argument("--clip", type=Path, action="append", required=True, help="a clip's answer-key directory")
     ap.add_argument("--detected", type=Path, action="append", required=True, help="its detected events")
-    ap.add_argument("--crossings", type=Path, help="vision's goal-mouth crossings: {shot, y, z} a line")
+    ap.add_argument("--crossings", type=Path,
+                    help="vision's goal-mouth crossings: {clip, shot, y, z} a line")
+    ap.add_argument("--final-test", action="store_true",
+                    help="score the test seeds (900001-900030, 910009-910016): the plan's one look")
     ap.add_argument("--woodwork", type=Path, help="vision's woodwork hits: {clip, frame} a line")
     ap.add_argument("--out", type=Path, required=True, help="report path without suffix")
     args = ap.parse_args(argv)
     if len(args.clip) != len(args.detected):
         raise SystemExit("give one --detected for each --clip")
-    crossings = {c["shot"]: c for c in _jsonl(args.crossings)} if args.crossings else None
+    sealed = sealed_seeds()
+    for root in args.clip:
+        seed = clip_seed(root)
+        if seed is None and not args.final_test:
+            raise SystemExit(f"refused: the seed of {root} is unknown (meta.json's, or ending its name)")
+        if seed in sealed and not args.final_test:
+            raise SystemExit(f"refused: {root} is test seed {seed}: scored once, with --final-test")
+    lines = _jsonl(args.crossings) if args.crossings else None
+    if lines is not None and any("clip" not in c for c in lines):
+        raise SystemExit("every line of --crossings names its clip: {clip, shot, y, z}")
     hits = _jsonl(args.woodwork) if args.woodwork else None
     clips = []
     for root, det in zip(args.clip, args.detected, strict=True):
@@ -307,7 +351,8 @@ def main(argv: list[str] | None = None) -> None:
         clips.append({"name": root.name, "truth": load_events(root / "events.jsonl", "truth"),
                       "frames": _jsonl(root / "frames.jsonl"), "detected": load_events(det, "vision"),
                       "cuts": json.loads(meta.read_text()).get("cuts", []) if meta.exists() else [],
-                      "crossings": crossings,
+                      "crossings": ({c["shot"]: c for c in lines if c["clip"] == root.name}
+                                    if lines is not None else None),
                       **wood})
     report = score(clips)
     report["inputs"] = {"clips": [str(c) for c in args.clip], "git_commit": git_commit(),

@@ -8,6 +8,7 @@ import pytest
 
 from ninety import e2e
 from ninety.agents import captioner
+from ninety.agents.captioner import kind_reasons
 from ninety.agents.factcheck import Verdict, label_reasons
 from ninety.highlights import Verdict as Measured
 from ninety.highlights import reel
@@ -262,3 +263,52 @@ def test_the_code_caption_says_where_the_attack_started():
 def test_a_restart_is_named_only_as_the_code_found_it(text, origin, ok):
     from ninety.agents.factcheck import origin_reasons
     assert (origin_reasons(text, origin) == []) is ok
+
+
+# The kind check (captioner.kind_reasons): a save is never a goal and a goal never a save
+
+
+@pytest.mark.parametrize("text,kind,ok", [
+    ("h9 scores from 26 m", "goal", True),
+    ("h9 scores from 26 m", "save", False),
+    ("h9 finds the net", "save", False),
+    ("h9's rocket is into the net", "save", False),
+    ("what a goal", "save", False),
+    ("h9 beats the keeper", "save", False),
+    ("h9's effort from 26 m is kept out", "save", True),
+    ("h9's effort from 26 m is kept out", "goal", False),
+    ("Denied! the keeper stops h9", "goal", False),
+    ("a fine save", "goal", False),
+    ("h9 puts it wide", "goal", False),
+    ("a thunderbolt from h9, 26 m out", "goal", True),
+    ("a goalkeeper's day at the office", "save", True),
+    ("saved by the keeper", "save", True),
+    ("h9 beats the goalkeeper", "save", False),
+    ("h9 puts the home side ahead", "save", False),
+    ("it is 1-0", "save", False),
+    ("h9 pulls one back", "save", False),
+    ("h9 lashes it in", "save", False),
+    ("the keeper claws it away", "goal", False),
+    ("what a stop", "goal", False),
+    ("the keeper gets a hand to it", "goal", False),
+    ("it flashes past the post", "goal", False),
+    ("Great stop by the keeper from h9's rocket", "save", True),
+    ("A thunderbolt from h9, 26 m out at 112 km/h!", "goal", True),
+    ("h9 is denied from 26 m", "save", True),
+])
+def test_a_save_is_never_captioned_as_a_goal_nor_a_goal_as_a_save(text, kind, ok):
+    assert (kind_reasons(text, kind) == []) is ok
+
+
+def test_a_save_captioned_as_a_goal_keeps_the_code_caption_even_when_the_judge_passes_it():
+    events, r = scene(outcome="on_target")  # the same strike, saved: a ROCKET, kind save
+    assert r["moments"][0]["kind"] == "save"
+    out = run("h9 scores from 26 m!", events_reel=(events, r))
+    assert out["source"] == "code" and "scores" in out["call"]["problem"]
+    ok = run("A rocket from h9, kept out by the keeper.", events_reel=(events, r))
+    assert ok["source"] == "model"
+
+
+def test_a_goal_captioned_as_a_save_keeps_the_code_caption():
+    out = run("A thunderbolt from h9 and the keeper makes the save!")
+    assert out["source"] == "code" and "save" in out["call"]["problem"]

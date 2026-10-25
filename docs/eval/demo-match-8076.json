@@ -1,0 +1,507 @@
+{
+ "rule": "docs/eval/demo-match.md (#243)",
+ "engine_sha": "65247ba3",
+ "seed": 8076,
+ "score": 69.9,
+ "match": "90 min, 4-1 (home-away), half_time event at 2700.04 s, second-half kick-off 2705.84 s",
+ "render_flags": "--set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical",
+ "segments": [
+  {
+   "start_s": 0.0,
+   "end_s": 20.0,
+   "video_start_s": 0.0
+  },
+  {
+   "start_s": 99.64,
+   "end_s": 117.64,
+   "video_start_s": 20.0
+  },
+  {
+   "start_s": 142.2,
+   "end_s": 156.2,
+   "video_start_s": 38.0
+  },
+  {
+   "start_s": 173.44,
+   "end_s": 191.44,
+   "video_start_s": 52.0
+  },
+  {
+   "start_s": 325.8,
+   "end_s": 339.8,
+   "video_start_s": 70.0
+  },
+  {
+   "start_s": 450.76,
+   "end_s": 468.76,
+   "video_start_s": 84.0
+  },
+  {
+   "start_s": 659.24,
+   "end_s": 704.24,
+   "video_start_s": 102.0
+  },
+  {
+   "start_s": 918.08,
+   "end_s": 956.68,
+   "video_start_s": 147.0
+  },
+  {
+   "start_s": 979.6,
+   "end_s": 1000.0,
+   "video_start_s": 185.6
+  },
+  {
+   "start_s": 1066.48,
+   "end_s": 1084.48,
+   "video_start_s": 206.0
+  },
+  {
+   "start_s": 1098.04,
+   "end_s": 1143.04,
+   "video_start_s": 224.0
+  },
+  {
+   "start_s": 1224.52,
+   "end_s": 1242.52,
+   "video_start_s": 269.0
+  },
+  {
+   "start_s": 1274.36,
+   "end_s": 1319.36,
+   "video_start_s": 287.0
+  },
+  {
+   "start_s": 1517.64,
+   "end_s": 1535.64,
+   "video_start_s": 332.0
+  },
+  {
+   "start_s": 1558.96,
+   "end_s": 1576.96,
+   "video_start_s": 350.0
+  },
+  {
+   "start_s": 1625.76,
+   "end_s": 1643.76,
+   "video_start_s": 368.0
+  },
+  {
+   "start_s": 1691.68,
+   "end_s": 1731.84,
+   "video_start_s": 386.0
+  },
+  {
+   "start_s": 1743.6,
+   "end_s": 1761.6,
+   "video_start_s": 426.16
+  },
+  {
+   "start_s": 1908.72,
+   "end_s": 1959.32,
+   "video_start_s": 444.16
+  },
+  {
+   "start_s": 2221.44,
+   "end_s": 2235.44,
+   "video_start_s": 494.76
+  },
+  {
+   "start_s": 2246.28,
+   "end_s": 2278.32,
+   "video_start_s": 508.76
+  },
+  {
+   "start_s": 2376.72,
+   "end_s": 2421.72,
+   "video_start_s": 540.8
+  },
+  {
+   "start_s": 2492.12,
+   "end_s": 2510.12,
+   "video_start_s": 585.8
+  },
+  {
+   "start_s": 2531.36,
+   "end_s": 2545.36,
+   "video_start_s": 603.8
+  },
+  {
+   "start_s": 2690.0,
+   "end_s": 2710.0,
+   "video_start_s": 617.8
+  },
+  {
+   "start_s": 2888.76,
+   "end_s": 2923.32,
+   "video_start_s": 637.8
+  },
+  {
+   "start_s": 3241.28,
+   "end_s": 3259.28,
+   "video_start_s": 672.36
+  },
+  {
+   "start_s": 3281.64,
+   "end_s": 3340.68,
+   "video_start_s": 690.36
+  },
+  {
+   "start_s": 3355.04,
+   "end_s": 3373.04,
+   "video_start_s": 749.4
+  },
+  {
+   "start_s": 3419.16,
+   "end_s": 3437.16,
+   "video_start_s": 767.4
+  },
+  {
+   "start_s": 3497.32,
+   "end_s": 3534.92,
+   "video_start_s": 785.4
+  },
+  {
+   "start_s": 3588.8,
+   "end_s": 3606.8,
+   "video_start_s": 823.0
+  },
+  {
+   "start_s": 3776.08,
+   "end_s": 3794.08,
+   "video_start_s": 841.0
+  },
+  {
+   "start_s": 3826.92,
+   "end_s": 3840.92,
+   "video_start_s": 859.0
+  },
+  {
+   "start_s": 4222.84,
+   "end_s": 4240.84,
+   "video_start_s": 873.0
+  },
+  {
+   "start_s": 4686.6,
+   "end_s": 4723.6,
+   "video_start_s": 891.0
+  },
+  {
+   "start_s": 4800.8,
+   "end_s": 4818.8,
+   "video_start_s": 928.0
+  },
+  {
+   "start_s": 5200.56,
+   "end_s": 5218.56,
+   "video_start_s": 946.0
+  },
+  {
+   "start_s": 5312.24,
+   "end_s": 5330.24,
+   "video_start_s": 964.0
+  },
+  {
+   "start_s": 5359.72,
+   "end_s": 5400.0,
+   "video_start_s": 982.0
+  }
+ ],
+ "chapters": [
+  {
+   "type": "kickoff",
+   "clock": "00:00",
+   "match_s": 0.0,
+   "video_s": 0.0
+  },
+  {
+   "type": "shot",
+   "clock": "01:51",
+   "match_s": 111.64,
+   "video_s": 20.0
+  },
+  {
+   "type": "corner",
+   "clock": "02:24",
+   "match_s": 144.2,
+   "video_s": 38.0
+  },
+  {
+   "type": "save",
+   "clock": "03:05",
+   "match_s": 185.44,
+   "video_s": 52.0
+  },
+  {
+   "type": "corner",
+   "clock": "05:27",
+   "match_s": 327.8,
+   "video_s": 70.0
+  },
+  {
+   "type": "save",
+   "clock": "07:42",
+   "match_s": 462.76,
+   "video_s": 84.0
+  },
+  {
+   "type": "goal",
+   "clock": "11:24",
+   "match_s": 684.24,
+   "video_s": 102.0
+  },
+  {
+   "type": "move",
+   "clock": "15:20",
+   "match_s": 920.08,
+   "video_s": 147.0
+  },
+  {
+   "type": "save",
+   "clock": "16:31",
+   "match_s": 991.6,
+   "video_s": 185.6
+  },
+  {
+   "type": "save",
+   "clock": "17:58",
+   "match_s": 1078.48,
+   "video_s": 206.0
+  },
+  {
+   "type": "goal",
+   "clock": "18:43",
+   "match_s": 1123.04,
+   "video_s": 224.0
+  },
+  {
+   "type": "shot",
+   "clock": "20:36",
+   "match_s": 1236.52,
+   "video_s": 269.0
+  },
+  {
+   "type": "goal",
+   "clock": "21:39",
+   "match_s": 1299.36,
+   "video_s": 287.0
+  },
+  {
+   "type": "shot",
+   "clock": "25:29",
+   "match_s": 1529.64,
+   "video_s": 332.0
+  },
+  {
+   "type": "save",
+   "clock": "26:10",
+   "match_s": 1570.96,
+   "video_s": 350.0
+  },
+  {
+   "type": "shot",
+   "clock": "27:17",
+   "match_s": 1637.76,
+   "video_s": 368.0
+  },
+  {
+   "type": "move",
+   "clock": "28:13",
+   "match_s": 1693.68,
+   "video_s": 386.0
+  },
+  {
+   "type": "shot",
+   "clock": "29:15",
+   "match_s": 1755.6,
+   "video_s": 426.16
+  },
+  {
+   "type": "goal",
+   "clock": "32:19",
+   "match_s": 1939.32,
+   "video_s": 444.16
+  },
+  {
+   "type": "free_kick",
+   "clock": "37:03",
+   "match_s": 2223.44,
+   "video_s": 494.76
+  },
+  {
+   "type": "move",
+   "clock": "37:28",
+   "match_s": 2248.28,
+   "video_s": 508.76
+  },
+  {
+   "type": "goal",
+   "clock": "40:01",
+   "match_s": 2401.72,
+   "video_s": 540.8
+  },
+  {
+   "type": "shot",
+   "clock": "41:44",
+   "match_s": 2504.12,
+   "video_s": 585.8
+  },
+  {
+   "type": "corner",
+   "clock": "42:13",
+   "match_s": 2533.36,
+   "video_s": 603.8
+  },
+  {
+   "type": "half",
+   "clock": "45:00",
+   "match_s": 2700.0,
+   "video_s": 627.8
+  },
+  {
+   "type": "move",
+   "clock": "48:10",
+   "match_s": 2890.76,
+   "video_s": 637.8
+  },
+  {
+   "type": "shot",
+   "clock": "54:13",
+   "match_s": 3253.28,
+   "video_s": 672.36
+  },
+  {
+   "type": "save",
+   "clock": "55:34",
+   "match_s": 3334.68,
+   "video_s": 690.36
+  },
+  {
+   "type": "save",
+   "clock": "56:07",
+   "match_s": 3367.04,
+   "video_s": 749.4
+  },
+  {
+   "type": "save",
+   "clock": "57:11",
+   "match_s": 3431.16,
+   "video_s": 767.4
+  },
+  {
+   "type": "move",
+   "clock": "58:19",
+   "match_s": 3499.32,
+   "video_s": 785.4
+  },
+  {
+   "type": "save",
+   "clock": "60:00",
+   "match_s": 3600.8,
+   "video_s": 823.0
+  },
+  {
+   "type": "save",
+   "clock": "63:08",
+   "match_s": 3788.08,
+   "video_s": 841.0
+  },
+  {
+   "type": "corner",
+   "clock": "63:48",
+   "match_s": 3828.92,
+   "video_s": 859.0
+  },
+  {
+   "type": "shot",
+   "clock": "70:34",
+   "match_s": 4234.84,
+   "video_s": 873.0
+  },
+  {
+   "type": "move",
+   "clock": "78:08",
+   "match_s": 4688.6,
+   "video_s": 891.0
+  },
+  {
+   "type": "save",
+   "clock": "80:12",
+   "match_s": 4812.8,
+   "video_s": 928.0
+  },
+  {
+   "type": "save",
+   "clock": "86:52",
+   "match_s": 5212.56,
+   "video_s": 946.0
+  },
+  {
+   "type": "save",
+   "clock": "88:44",
+   "match_s": 5324.24,
+   "video_s": 964.0
+  },
+  {
+   "type": "save",
+   "clock": "89:31",
+   "match_s": 5371.72,
+   "video_s": 982.0
+  },
+  {
+   "type": "full_time",
+   "clock": "89:40",
+   "match_s": 5380.0,
+   "video_s": 1002.28
+  }
+ ],
+ "total_s": 1022.28,
+ "adjust": [],
+ "render": [
+  "uv run ninety-render --seed 8076 --start 0 --seconds 20 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg00",
+  "uv run ninety-render --seed 8076 --start 99.64 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg01",
+  "uv run ninety-render --seed 8076 --start 142.2 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg02",
+  "uv run ninety-render --seed 8076 --start 173.44 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg03",
+  "uv run ninety-render --seed 8076 --start 325.8 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg04",
+  "uv run ninety-render --seed 8076 --start 450.76 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg05",
+  "uv run ninety-render --seed 8076 --start 659.24 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg06",
+  "uv run ninety-render --seed 8076 --start 918.08 --seconds 38.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg07",
+  "uv run ninety-render --seed 8076 --start 979.6 --seconds 20.4 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg08",
+  "uv run ninety-render --seed 8076 --start 1066.48 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg09",
+  "uv run ninety-render --seed 8076 --start 1098.04 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg10",
+  "uv run ninety-render --seed 8076 --start 1224.52 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg11",
+  "uv run ninety-render --seed 8076 --start 1274.36 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg12",
+  "uv run ninety-render --seed 8076 --start 1517.64 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg13",
+  "uv run ninety-render --seed 8076 --start 1558.96 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg14",
+  "uv run ninety-render --seed 8076 --start 1625.76 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg15",
+  "uv run ninety-render --seed 8076 --start 1691.68 --seconds 40.16 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg16",
+  "uv run ninety-render --seed 8076 --start 1743.6 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg17",
+  "uv run ninety-render --seed 8076 --start 1908.72 --seconds 50.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg18",
+  "uv run ninety-render --seed 8076 --start 2221.44 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg19",
+  "uv run ninety-render --seed 8076 --start 2246.28 --seconds 32.04 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg20",
+  "uv run ninety-render --seed 8076 --start 2376.72 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg21",
+  "uv run ninety-render --seed 8076 --start 2492.12 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg22",
+  "uv run ninety-render --seed 8076 --start 2531.36 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg23",
+  "uv run ninety-render --seed 8076 --start 2690 --seconds 20 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg24",
+  "uv run ninety-render --seed 8076 --start 2888.76 --seconds 34.56 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg25",
+  "uv run ninety-render --seed 8076 --start 3241.28 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg26",
+  "uv run ninety-render --seed 8076 --start 3281.64 --seconds 59.04 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg27",
+  "uv run ninety-render --seed 8076 --start 3355.04 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg28",
+  "uv run ninety-render --seed 8076 --start 3419.16 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg29",
+  "uv run ninety-render --seed 8076 --start 3497.32 --seconds 37.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg30",
+  "uv run ninety-render --seed 8076 --start 3588.8 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg31",
+  "uv run ninety-render --seed 8076 --start 3776.08 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg32",
+  "uv run ninety-render --seed 8076 --start 3826.92 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg33",
+  "uv run ninety-render --seed 8076 --start 4222.84 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg34",
+  "uv run ninety-render --seed 8076 --start 4686.6 --seconds 37 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg35",
+  "uv run ninety-render --seed 8076 --start 4800.8 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg36",
+  "uv run ninety-render --seed 8076 --start 5200.56 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg37",
+  "uv run ninety-render --seed 8076 --start 5312.24 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg38",
+  "uv run ninety-render --seed 8076 --start 5359.72 --seconds 40.28 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg39"
+ ],
+ "notes": [
+  "Each segment is its own clip: ninety-validate and ninety-render-check each; join in order with the stinger at every join.",
+  "Chapters come from the edit (truth events): show as the edit's chapters, never as detections, never to an agent.",
+  "Team stats on screen are labelled 'from the footage shown'."
+ ]
+}

@@ -4,6 +4,7 @@ from ninety.render.params import (
     HARD_CASE_RATE,
     PATTERNS,
     TEAM_CODES,
+    TEAMS,
     apply_overrides,
     color_distance,
     kits_differ,
@@ -117,7 +118,7 @@ def test_sampling_adds_cuts_and_patterns_without_moving_the_camera():
     assert p.lighting == "day" and p.sun_azimuth_deg == 164.5 and p.sun_elevation_deg == 43.7
     assert p.camera.height_m == 21.76 and p.camera.back_m == 38.33 and p.camera.half_width_m == 17.57
     assert p.home_kit.shirt == "#1a1a1a" and p.away_kit.shirt == "#694eb0"
-    assert p.home_code == "DUN" and p.away_code == "GRV"
+    assert p.home_code == "LON" and p.away_code == "LIS"  # the two teams every clip shows (TEAMS)
     assert p.grass_hue == 0.279 and p.motion_blur == 0.31 and p.noise == 0.019
     assert p.home_pattern in PATTERNS and p.away_pattern in PATTERNS
     assert any(sample_params(s).camera_cut for s in range(40))
@@ -134,6 +135,15 @@ def test_parse_override_types():
 
 def test_team_codes_are_fictional():
     assert not set(TEAM_CODES) & PREMIER_LEAGUE_CODES
+    assert not {code for code, _ in TEAMS.values()} & PREMIER_LEAGUE_CODES
+
+
+def test_every_seed_shows_london_athletic_against_lisbon_esportes_and_keeps_its_other_draws():
+    """Kian's teams on every clip; the codes the seed draws are still drawn, so seed 5's camera,
+    kits, grass and patterns are what they were (test_sampling_adds_cuts... pins them)."""
+    for s in (1, 5, 7, 42, 900001):
+        p = sample_params(s)
+        assert (p.home_code, p.away_code) == ("LON", "LIS")
 
 
 def test_hard_cases_are_drawn_from_the_seed():
@@ -220,7 +230,9 @@ def test_a_broadcast_kit_pair_is_clearly_told_apart():
 
 def test_training_kit_draws_are_unchanged_by_the_broadcast_rule():
     """normal and low (and each seed's own draw) are what they were before broadcast existed: a digest
-    of 125 seeds' parameters taken on main before the change."""
+    of 125 seeds' parameters taken on main before the change. The team codes are left out since every
+    clip shows London Athletic and Lisbon Esportes (TEAMS, Oct 24); that digest was taken on main's
+    code (ac21ccc) with the codes left out, so every other draw is still pinned."""
     import hashlib
     import json
 
@@ -228,8 +240,9 @@ def test_training_kit_draws_are_unchanged_by_the_broadcast_rule():
     for s in list(range(1, 121)) + [2001, 3001, 4001, 8001, 900001]:
         for c in ("normal", "low", None):
             p = sample_params(s) if c is None else sample_params(s, kit_contrast=c)
-            h.update(json.dumps(p.to_dict(), sort_keys=True).encode())
-    assert h.hexdigest() == "bc22123420fa763810b6a80c7135234538b9c2692e9157e2ebd4510a4d9fdd8c"
+            d = {k: v for k, v in p.to_dict().items() if k not in ("home_code", "away_code")}
+            h.update(json.dumps(d, sort_keys=True).encode())
+    assert h.hexdigest() == "4f11f5522698c3f5bcc041be96211dfec58aec86a5d8ddaa5c1047b0821f9e6c"
 
 
 def test_only_footage_asks_for_a_broadcast_stadium():

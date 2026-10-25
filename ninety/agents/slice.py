@@ -43,7 +43,7 @@ from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, telemetry
+from ninety.agents import credentials, evidence, foundry, telemetry
 from ninety.agents.contracts import CLOCK_RULE  # noqa: F401  (re-exported: the slice's name before the move)
 from ninety.agents.factcheck import (
     Claim,
@@ -137,13 +137,15 @@ def analyst_prompt(
 
 
 class AnalystExecutor(Executor):
-    def __init__(self, ask: Ask, trace: list[str], plant: bool, live: bool, match: str):
+    def __init__(self, ask: Ask, trace: list[str], plant: bool, live: bool, match: str,
+                 inline: list[dict] | None = None):
         super().__init__(id="analyst")
         self.ask, self.trace, self.plant, self.live, self.match = ask, trace, plant, live, match
+        self.inline = inline  # the minute's events, sent in the prompt when the match is not served
 
     @handler
     async def write(self, task: Task, ctx: WorkflowContext[Draft]) -> None:
-        prompt = analyst_prompt(self.match, task.minute, task.feedback)
+        prompt = analyst_prompt(self.match, task.minute, task.feedback, self.inline)
         started = time.perf_counter()
         with telemetry.stage_span("agents", attempt=task.attempt + 1):
             claim = parse_claim(await self.ask(prompt))
@@ -239,15 +241,18 @@ async def run_workflow(
     live: bool,
     events: list[dict] | None = None,
     stats: list[dict] | None = None,
+    inline: bool = False,
 ) -> Outcome:
     """Runs the slice; checks claims against `events` and `stats`, or the engine's when not given.
-    A claim may cite an event or a window stat by id."""
+    A claim may cite an event or a window stat by id. With `inline`, the Analyst's prompt carries
+    the minute's events (a clip the match server does not serve: the Analyst cannot read it there)."""
     if events is None:
         events = match_events(seed, minutes)
         stats = match_stats(seed, minutes) if stats is None else stats
     known = {e["id"]: e for e in [*events, *(stats or ())]}
     trace: list[str] = []
-    analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed))
+    rows = [e for e in events if e.get("minute") == minute] if inline else None
+    analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed), rows)
     checker = FactCheckExecutor(known, judge_fn, trace, live)
     # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
     builder = WorkflowBuilder(start_executor=analyst)
@@ -371,7 +376,9 @@ def main() -> None:
         print(f"ran {ran}")
         if args.record:
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events).save(
+            # The definitions the run's foundry.pinned accepted, from this same code (evidence.py).
+            defs = evidence.of_code(foundry.slice_agents)
+            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events, defs).save(
                 args.record
             )
     for line in outcome.trace:

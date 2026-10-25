@@ -10,7 +10,16 @@ import json
 import pytest
 
 from ninety import condensed, highlights
-from ninety.highlights import Verdict, distance_m, label, origin, record, reel, verdict_from_report
+from ninety.highlights import (
+    Verdict,
+    distance_m,
+    flight_time_s,
+    label,
+    origin,
+    record,
+    reel,
+    verdict_from_report,
+)
 from ninety.match.timeline import Timeline
 
 # A measured verdict: the filter live, small errors (1 km/h, 0.5 m, 0.2 m along and across, 0.02 s).
@@ -161,6 +170,20 @@ def test_match_json_carries_the_reel_of_confident_events_only():
     body = condensed.build(meta, events)
     assert [m["event"] for m in body["highlights"]["moments"]] == ["g"]
     assert body["highlights"]["save_filter"] is False
+
+
+def test_only_a_goal_is_a_thunderbolt_a_screamer_or_long_range():
+    # The same strike from 26 m outside the area at 101.1 km/h, saved: a rocket, and no goal word.
+    assert tag("save", x=105 - 26.0, kmh=101.1) == "ROCKET"
+    assert tag("save", x=105 - 26.0, kmh=80.0) is None
+    assert tag("save", x=105 - 20.0, kmh=80.0) is None  # long-range is a goal's word
+
+
+def test_a_flight_time_needs_a_positive_speed():
+    assert flight_time_s(10.0, 36.0) == 1.0  # 10 m at 10 m/s
+    assert flight_time_s(10.0, 0.0) is None
+    assert flight_time_s(10.0, -36.0) is None
+    assert flight_time_s(10.0, None) is None
 
 
 # Recording each moment from the footage (highlights.record)
