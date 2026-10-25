@@ -372,6 +372,17 @@ def check(
     if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
         reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
 
+    # Words of a zero say a zero: "did not sprint" only of a count of none (merge-queue review of #323).
+    for f in cited:
+        zero_said = re.search(r"\bdid not sprint\b", claim.text)
+        if f.get("metric") == "player_sprints" and f.get("value") and zero_said:
+            reasons.append(f"it says he did not sprint; the cited fact counts {f['value']}")
+        # A zone is the fact's own third and channel, not any third (merge-queue review of #323).
+        if f.get("metric") == "player_zone":
+            where = "in the centre" if f.get("channel") == "centre" else f"on the {f.get('channel')}"
+            if not re.search(rf"\b{re.escape(str(f.get('third')))} third {re.escape(where)}\b", claim.text):
+                reasons.append(f"the zone is their {f.get('third')} third {where}")
+
     # A pass pair says who passed to whom, in that order, and that it counts only named passes.
     for f in cited:
         if f.get("metric") != "pair_passes":

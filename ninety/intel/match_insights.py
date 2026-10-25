@@ -345,16 +345,26 @@ class MatchInsights:
         """Each named player's distance (km, from the footage shown, with its measured label), top
         speed, sprints above 25.2 km/h and the zone he was in most, over the minutes."""
         team = self.team(club)
-        pct = team_stats_mod.within_pct()
         clubs = self.fixture.clubs
+        lb, bar = physical.labels(), team_stats_mod.within_pct()
+        # A named player's figures are said only when the grading of named players (docs/eval/
+        # physical.md) is no worse than team distance's accepted label: the name rule leaves pieces of
+        # a player's track unnamed, so his sum can miss most of his running (GROUNDING I22).
+        held = not lb or bar is None or lb.get("distance_pct", 1e9) > bar
         facts = []
         for r in physical.players(self.facts.get("running", ()), self.people, minute_from, minute_to):
             if team not in (None, r["team"]):
                 continue
             r = {**r, "club": clubs[r["team"]]}
-            if r["metric"] == "player_km" and pct is not None:
-                r["also"] = [[pct, "%"]]
-                r["within_pct"] = pct
+            if r["metric"] in ("player_km", "player_top_kmh", "player_sprints"):
+                if held:
+                    r["confident"] = False
+                    r["why_held"] = (
+                        f"named players' running is measured to ±{lb.get('distance_pct')}% of the truth, "
+                        f"worse than team distance's ±{bar}%"
+                    )
+                elif r["metric"] == "player_km":
+                    r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
             facts.append(r)
         return {"facts": facts, "summary": []}
 
