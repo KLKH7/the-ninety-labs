@@ -732,3 +732,54 @@ def test_team_distance_says_how_close_it_is_measured(browser, site):  # noqa: F8
     assert row.locator(".within").inner_text().strip() == "±15%"  # quiet, after the label; no caption
     assert row.get_attribute("aria-label").endswith(", measured to within 15 percent")
     assert not errors
+
+
+# --- thin real data: an empty card is hidden, never a dash, an error or a guess -----------------
+
+
+def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip_dims(browser, site):  # noqa: F811
+    """The cut clip's tracks have no player card in the mock feed, as a real track fragment can
+    have none: the sheet keeps its name and hides what it cannot fill."""
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.click("#lt-players")
+    page.locator("#pane-players button.who").first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    page.wait_for_timeout(300)  # the card request has failed by now
+    assert page.locator("#so-far-box").is_hidden() and page.locator("#heat-box").is_hidden()
+    chips = page.locator("#compare-chips button")
+    assert 0 < chips.count() <= 22  # who is on the pitch now, never every fragment
+    chips.first.click()
+    page.wait_for_selector("#compare-chips button[aria-disabled=true]")
+    assert page.locator("#compare-rows").is_hidden()
+    assert "Could not" not in page.inner_text("#player")
+    assert not errors
+
+
+def test_the_score_band_says_no_goals_yet_on_one_line_until_a_goal(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.wait_for_selector("#scorers:not([hidden])")
+    goals = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["goals"]
+    if not [g for g in goals if g["t"] <= 1505 / FPS and g.get("team")]:
+        assert page.inner_text("#scorers") == "No goals yet"
+    assert page.locator("#teams-note").is_hidden()  # the clip names both clubs
+    assert not errors
+
+
+def test_a_bundle_that_names_no_clubs_shows_neutral_sides_and_says_teams_are_not_confirmed(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def no_teams(route):
+        body = route.fetch().json()
+        body.pop("teams", None)
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", no_teams)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#teams-note:not([hidden])")
+    assert page.inner_text(".band .home-name") == "Home" and page.inner_text(".band .away-name") == "Away"
+    assert "London" not in page.inner_text(".band") and "Lisbon" not in page.inner_text(".band")
+    assert not errors

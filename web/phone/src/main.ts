@@ -17,7 +17,7 @@ import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -376,7 +376,12 @@ async function loadBundle() {
     const m = (await get("manifest.json")) as BundleManifest;
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
-    Object.assign(teams, teamNames(m.teams));
+    // A bundle that does not name both clubs is not given the demo's: neutral sides, said so.
+    // (teamNames hands back DEFAULT_TEAMS itself only when it falls back.)
+    const named = teamNames(m.teams);
+    const confirmed = named !== DEFAULT_TEAMS;
+    Object.assign(teams, confirmed ? named : { home: "Home", away: "Away" });
+    $("teams-note").hidden = confirmed;
     showTeams();
     const cuts = timeline(m);
     laptop.cuts = cuts;
@@ -939,6 +944,9 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
+    $("so-far-box").hidden = true;
+    $("heat-box").hidden = true;
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
@@ -987,6 +995,8 @@ async function refreshCard(force = false) {
 }
 
 function showCard(c: PlayerCard) {
+  $("so-far-box").hidden = false;
+  $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
@@ -1057,13 +1067,17 @@ function showInvolved(id: string, t: number) {
 
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  const others = rosterIds().filter((o) => o !== id);
+  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
+  const side = { home: 0, away: 0 };
+  const others = rosterIds().filter((o) => o !== id && ++side[team(o)] <= 11);
+  $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
     ...others.map((o) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
+      b.dataset.player = o;
       b.textContent = playerName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
@@ -1077,9 +1091,12 @@ async function compare(a: string, b: string) {
   let cb: PlayerCard;
   try {
     [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
-  } catch (e) {
-    $("compare-rows").hidden = false;
-    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+  } catch {
+    // No numbers for one of them yet: nothing is drawn, and that player's chip says so quietly.
+    $("compare-rows").hidden = true;
+    const chip = $("compare-chips").querySelector<HTMLButtonElement>(`[data-player="${b}"]`);
+    chip?.setAttribute("aria-disabled", "true");
+    chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
   const rows: [string, number, number, number][] = [
@@ -1856,13 +1873,15 @@ function showMatch(t: number) {
   // when the detection names no player).
   const scored = m.goals.filter((g) => g.t <= t && g.team);
   const scorers = $("scorers");
-  scorers.hidden = scored.length === 0;
-  const said = scored
+  // Always one line, so the band never grows when the first goal goes in.
+  scorers.hidden = false;
+  scorers.classList.toggle("none", scored.length === 0);
+  const said = scored.length === 0 ? "No goals yet" : scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
       return `${who ? playerName(who) : teams[g.team!]} ${Math.floor(g.t / 60) + 1}′`;
     })
-    .join(", ");
+        .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
   if (playsUpTo(t).length !== playsShown) renderInsights();
