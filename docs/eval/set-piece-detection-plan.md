@@ -202,3 +202,34 @@ Three holes in the signal above, found by reading it against the engine, not by 
 
 Known limit, not tested as a pass: where no cut hides the wait, the ball knocked to the spot by
 another player and stopped there reads as a restart at the knock, and the real one is missed.
+
+## Outcome
+
+### The clips (by the rule above)
+
+The validation matches were simulated at `65247ba` for their first 8 minutes, enough to know the
+kinds of every validation clip starting before 183 s (seeds 920101 to 920106, 920108 to 920110), and
+`set_piece_set.windows` on them gives exactly the manifest's starts and lengths. By the rule:
+goal kick seed 920106 from 182.8 s (14.08 s), corner seed 920109 from 124.36 s (14.08 s), free kick
+seed 920108 from 42.44 s (29.72 s, which also holds a kick-off after a goal). With the rendered
+throw-in (seed 920101 from 16.84 s), that is four clips.
+
+## Amendment 2 (2026-10-24, after the live camera fit was run on two clips, before any restart was detected)
+
+**Seen:** the live path's camera fit, with the drawn labels as detections, trusts **0 of 250** frames
+of the possession sample (the tolerance clip) and **0 of 352** of the set-piece throw-in clip. Its
+gantries are 15 m and 18 m from the true ones (true: 55.5, -35.3, 15.0 m, inside the search grid),
+the marking fit's median 12.7 px off. So on the set-piece set's look (renderer 0.5.17,
+`stadium=broadcast`) the live path places nothing, and every restart there is a miss ("no camera").
+The fault is the camera fit's, outside this plan (R3, `ninety/vision/pitch.py`); it is not changed here.
+
+**What changes, before any restart is detected:**
+- The live measurement stands as the headline and is reported as it is: every restart of these
+  clips counts as missed with "no camera" (lesson 231), nothing dropped.
+- A diagnostic is added beside it, never a live number: the same observations (boxes, scores, kit
+  colours) re-placed through each frame's true camera (`ninety/eval/true_camera.py`), every frame
+  trusted. It measures the restart rule with the camera fit taken out, an upper bound.
+- `BALL_TOL_M` and `LINE_TOL_M` cannot be measured on the live reading (no trusted frame). They are
+  measured by the same rule on the true-camera reading of the possession sample, and the scored
+  diagnostic uses that same reading (lesson 227). On the live path they are not yet measured: if the
+  fit is fixed, they are re-measured on its reading before any live restart number is read.
