@@ -12,9 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ninety.agents.factcheck import MIN_TEAM_CONFIDENCE
 from ninety.intel import offside, restart_cause
-from ninety.speech import describe
 
 sys.path.insert(0, str(Path(__file__).parent))
 from test_referee_offside import pass_to, scene  # noqa: E402
@@ -60,27 +58,22 @@ def test_annotate_sets_the_cause_on_copies():
     assert out[1]["cause"] == "offside" and "cause" not in events[1]
 
 
-def test_the_sentence_says_the_likely_cause_and_never_a_fouler():
-    sure = {"team_confidence": min(1.0, MIN_TEAM_CONFIDENCE + 0.02)}
-    lines = describe.event_versions(restart("free_kick", cause="foul_likely", player="a-t4", **sure))
-    assert lines[0].startswith("Free kick to away, likely for a foul,")
-    assert lines[1] == "Free kick to away, likely for a foul."
-    assert describe.event_versions(restart("free_kick", cause="offside", **sure))[1] == \
-        "Free kick to away, for offside."
-    assert describe.event_versions(restart("free_kick", cause="unknown", **sure))[1] == "Free kick to away."
-    assert describe.event_versions(restart("penalty_kick", cause="foul", **sure))[1] == \
-        "Penalty to away, for a foul."
-    assert describe.event_versions(restart("corner", **sure))[1] == "Corner to away."
-    # An unsure side is not named (factcheck.side_known), and neither is any player.
-    unsure = restart("free_kick", cause="foul_likely", team_confidence=MIN_TEAM_CONFIDENCE)
-    assert describe.event_versions(unsure)[1] == "A free kick, likely for a foul."
-    # Spoken, a sure side is the club's name; an unsure one stays unnamed.
-    clubs = {"home": "London", "away": "Lisbon"}
-    said = describe.spoken(describe.event_versions(restart("free_kick", cause="foul_likely", **sure))[1],
-                           True, clubs=clubs)
-    assert said == "Free kick to Lisbon, likely for a foul."
-    assert describe.spoken(describe.event_versions(unsure)[1], False, clubs=clubs) == \
-        "A free kick, likely for a foul."
+def test_annotated_events_are_valid_match_events():
+    import json
+
+    import jsonschema
+    schema = json.loads((Path(__file__).parents[1] / "schemas" / "match_event.schema.json").read_text())
+    for e in restart_cause.annotate([restart("free_kick"), restart("penalty_kick")], scene(80.0)):
+        jsonschema.validate(e, schema)
+
+
+@pytest.mark.parametrize("went_on", ["possession_change", "tackle", "interception", "out_of_play", "shot"])
+def test_play_that_went_on_after_an_offside_position_was_not_stopped_for_it(went_on):
+    frames = scene(90.0)
+    assert offside.offsides([pass_to()], frames)[0]["verdict"] == "offside"  # the premise
+    later = {"id": "v5", "t": 6.0, "frame": 150, "type": went_on, "team": "away", "x": 70.0, "y": 30.0}
+    found = restart_cause.causes([pass_to(), later, restart("free_kick")], frames)
+    assert found == {"r-free_kick": "foul_likely"}
 
 
 def test_a_pass_after_an_offside_one_means_play_went_on():

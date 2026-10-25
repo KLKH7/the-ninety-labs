@@ -128,9 +128,9 @@ version of this note and of PR #325 said 5; the finished segments hold 4.) Why e
 None of the 4 is lost to the still rule itself once the ball is sighted. These are causes on the
 demo, a development check: fixes are chosen from the validation split's misses, never from these.
 
-**Grading set pieces** waits for #299's `restart_kind`, which reads each true set piece's kind from
-the stoppage before it: same kind and side, within 1.0 s of the true kick, by the same rule as
-kick-offs.
+**Grading set pieces** is built in `ninety/eval/restart_score.py` (PR #335): each true set piece's
+kind is read by #299's `restart_kind` (from the stoppage before it), and a detection matches a true
+restart of its own kind and side within 1.0 s of the true kick, as kick-offs are.
 
 **Second audit (independent, on the set pieces), what changed and what is recorded.** Fixed: the
 taker is named only within reach of the ball (the corner, goal-kick or penalty taker had no
@@ -165,3 +165,26 @@ against it: `right` is offside read as offside plus a foul read as `foul_likely`
 left `unknown`; `unknown` is counted apart. One limit is known before measuring: a free kick read
 from a pass that was itself missed (no pass detected) is always `foul_likely`. That is right for
 fouls and wrong for offsides whose pass vision did not see.
+
+
+**When the cause is said (stated 2026-10-25, before any validation score).** The cause stays in the
+data, but the Describer does not say it (`describe.SAY_CAUSE = False`; R4's review) until the
+validation cause table clears this bar: `cause.right`'s 95% Wilson lower bound at least 0.8, on at
+least 10 judged free kicks (*design*: a line said to a blind fan should be right at least four times
+in five, with the uncertainty counted). Then the words are hedged ("likely for offside", "likely
+for a foul"), except a penalty's "for a foul" (Law 14). If the bar is not met, the cause is never
+said.
+
+**More known limits of the cause, stated before measuring:**
+- An offside whistled before the receiver touched the ball has no completed pass to read, so it
+  reads as `foul_likely`.
+- A restart the detector missed (a throw-in, say) does not reset the last pass, so an offside
+  reading from before it can carry into a later foul's free kick. Any detected possession change,
+  tackle, interception, out of play or shot since the pass does reset it (R4's review).
+- An offside whose pass vision missed reads as `foul_likely` (above).
+
+**A second implementation.** Draft PR #330 (another session's, "Set pieces from the video ... off
+by default") builds its own set-piece detector and scorer. Its title reports a validation result
+("0 of 5 live"). I have read that title, as the merge queue's review quoted it, and nothing else of
+#330. That came before any validation score of this module, and nothing here was changed because
+of it. The Coordinator chooses which implementation is kept.

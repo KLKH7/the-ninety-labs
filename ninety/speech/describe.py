@@ -79,7 +79,12 @@ PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, 
 # anyone's: tracking sees positions, not contact.
 RESTART_NAMES = {"corner": "Corner", "goal_kick": "Goal kick", "throw_in": "Throw-in",
                  "free_kick": "Free kick", "penalty_kick": "Penalty"}
-CAUSE_WORDS = {"offside": "for offside", "foul_likely": "likely for a foul", "foul": "for a foul"}
+CAUSE_WORDS = {"offside": "likely for offside", "foul_likely": "likely for a foul", "foul": "for a foul"}
+# The cause is said only once it is measured: SAY_CAUSE is turned on when the validation cause table
+# (ninety/eval/restart_score.py, `cause.right`) clears the bar docs/eval/restarts-vision-plan.md
+# states before scoring. Until then the line names only the restart's kind; the cause stays in the
+# data. A claim ships with its measurement (AGENTS.md).
+SAY_CAUSE = False
 # A shape change is said only when it is larger than tracking error could make it: each minute's
 # value is within the position error (ninety/intel/shape.POSITION_ERROR_M, 1.26 m) of the truth, so
 # their difference is within twice that, 2.52 m; the smallest whole-metre change past it is 3 m.
@@ -196,7 +201,7 @@ def event_versions(event: dict) -> list[str]:
         # The side by name when it was told surely (spoken() turns it into the club's name), else
         # no side at all: "A free kick".
         head = f"{name} to {event['team']}" if side_known(event) else f"A {name.lower()}"
-        why = CAUSE_WORDS.get(event.get("cause") or "", "")
+        why = CAUSE_WORDS.get(event.get("cause") or "", "") if SAY_CAUSE else ""
         head += f", {why}" if why else ""
         return [f"{head}, {place}.", f"{head}."]
     return []

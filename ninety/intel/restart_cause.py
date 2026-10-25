@@ -7,8 +7,9 @@ A free kick follows an offence: offside (Law 11, an indirect free kick) or a fou
 (Laws 12 and 13). Tracking sees positions, not contact, so it can rule on offside but never on a
 foul. The cause of a detected free kick (`ninety/vision/restarts.py`, `restart: "free_kick"`) is
 read from the offside reading (`ninety.intel.offside`) of the last pass before it, since the restart
-before (only a completed pass has a reading; play that went on past an offside position was not
-stopped for it):
+before, with no event since it that shows play went on (a possession change, tackle, interception,
+out of play or shot): only a completed pass has a reading, and play that went on past an offside
+position was not stopped for it:
 
 - that pass's receiver was in an offside position (`offside`): cause `offside`;
 - the reading was too close to call, or offside with an opponent untracked (`too_close`,
@@ -38,6 +39,10 @@ from ninety.intel.scene import Frames
 
 CAUSES = ("offside", "foul_likely", "foul", "unknown")
 RESTARTS = frozenset({"set_piece", "kickoff"})  # the events that put the ball back in play
+# Events that show play went on after the last pass: whatever position its receiver was in, the
+# game was not stopped for it there (a possession change, a tackle, an interception, the ball out of
+# play, a shot). After one, no earlier pass explains the next stoppage.
+PLAY_WENT_ON = frozenset({"possession_change", "tackle", "interception", "out_of_play", "shot"})
 
 
 def causes(events: Iterable[Mapping], frames: Frames) -> dict[str, str]:
@@ -49,6 +54,9 @@ def causes(events: Iterable[Mapping], frames: Frames) -> dict[str, str]:
     for e in rows:
         if e.get("type") == "pass":
             last_pass = e  # any later pass means play went on: only the last one can explain a stoppage
+            continue
+        if e.get("type") in PLAY_WENT_ON:
+            last_pass = None
             continue
         if e.get("type") not in RESTARTS:
             continue
