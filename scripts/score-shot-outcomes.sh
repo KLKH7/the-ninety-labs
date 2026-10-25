@@ -1,6 +1,7 @@
 #!/bin/bash
 # Score goals and saves once, headless, where the shot-outcome set's clips are (docs/eval/shot-outcome-set.md).
 #   JOBS=8 bash scripts/score-shot-outcomes.sh <split dir of rendered clips> <checkpoint folder> <out dir>
+#   NO_SCORE=1 ... (the same, without reading the answer key)
 # Each clip runs the live path as the demo does (stage_live: index and images only; live_job: detect,
 # observe, events, outcomes), JOBS clips at a time (default 1), each in its own process; only then is
 # the answer key read, once, by ninety.eval.shot_outcomes. Run it at the frozen commit; it writes
@@ -25,4 +26,6 @@ one() {  # one clip: $1 = its folder
 }
 export -f one; export OUT CKPT NAME
 ls -d "$SPLIT"/*/ | xargs -P "$JOBS" -I{} bash -c 'one "$@"' _ {}
-uv run python -m ninety.eval.shot_outcomes score --clips "$SPLIT"/*/ --detected "$OUT/detected" --out "$OUT/report.json"
+# NO_SCORE=1 runs the live path only and never reads the answer key (the test split before its freeze:
+# it is scored once, later, from <out>/observations at the frozen commit).
+[ -n "${NO_SCORE:-}" ] || uv run python -m ninety.eval.shot_outcomes score --clips "$SPLIT"/*/ --detected "$OUT/detected" --out "$OUT/report.json"
