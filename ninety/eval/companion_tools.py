@@ -284,6 +284,7 @@ def main(argv: list[str] | None = None) -> None:
             "- By tool: " + ", ".join(f"{k} {v}" for k, v in p["by_tool"].items()),
             f"- Plan latency: {m['plan_latency']}; answer end to end (plan, tools, answer, check, Judge): "
             f"{m['answer_latency']}.",
+            choice_line(m),
             f"- How answers ended on the stand-in match: {m['answers']} (code: the model's draft was "
             "refused or failed, and code's checked answer was shown); "
             f"{m.get('service_errors', 0)} of them because the service failed (counted apart: the "
@@ -341,6 +342,7 @@ async def live(questions: list[dict]) -> dict:
         question = Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1)
         t0 = time.perf_counter()
         r = await cm.answer_match(question, mi, ask, judge, timeout=30.0)
+        code = await cm.answer_match(question, mi)  # code's own choice, for comparison
         ms.append((time.perf_counter() - t0) * 1000)
         end = f"{r.source}:{r.answer.status}"
         ends[end] += 1
@@ -353,6 +355,9 @@ async def live(questions: list[dict]) -> dict:
                 "text": r.answer.text,
                 "tools": [c["name"] for c in r.tools],
                 "reasons": list(r.reasons),
+                "label": q["tool"],
+                "chose": tool_of(r, mi),
+                "code_chose": tool_of(code, mi),
             }
         )
     usd = lc.price(lc.INPUT) * used["in"] + lc.price(lc.OUTPUT) * used["out"]
@@ -364,6 +369,7 @@ async def live(questions: list[dict]) -> dict:
         # Answers where the service itself failed (a rate limit, an outage): code answered, and the
         # model's writing was never tested on them.
         "service_errors": sum("model service error" in r["reasons"] for r in rows),
+        "choice": choice(rows),
         "answer_latency": latency(ms),
         "follow_ups": follow_up_quality(ups, mi),
         "rows": rows,
@@ -378,6 +384,45 @@ async def live(questions: list[dict]) -> dict:
             "how": "tokens at 4 characters a token (latency_cost.tokens); each Judge call adds its "
             "instructions and a reply at the sizes in companion_tools",
         },
+    }
+
+
+def choice_line(m: dict) -> str:
+    """The report's line on choice: the model picks a checked sentence; did it answer the question?"""
+    ch = m.get("choice")
+    if not ch:
+        return ""
+    mo, same, every = ch["model"], ch["code_on_same"], ch["code_all"]
+    return (
+        "- The model chooses which checked sentence answers the question (v4: it returns one of code's "
+        "say_as sentences word for word). Its choice came from the question's labelled tool in "
+        f"{mo['from_labelled_tool']}/{mo['answers']} of its aired answers; code's own choice on those "
+        f"questions: {same['from_labelled_tool']}/{same['answers']}; code on all questions: "
+        f"{every['from_labelled_tool']}/{every['answers']}."
+    )
+
+
+def tool_of(r, mi) -> str | None:
+    """Which tool the answer's first cited fact came from: each called tool is run alone again."""
+    if r.answer.status != "verified" or not r.answer.evidence:
+        return None
+    for c in r.tools:
+        if any(f["id"] == r.answer.evidence[0] for f in cm.run_tools(mi, [c])):
+            return c["name"]
+    return None
+
+
+def choice(rows: list[dict]) -> dict:
+    """How often the sentence chosen came from the tool the question was labelled with, for the
+    model's verified answers and, on the same questions, for code's."""
+    def score(key, which):
+        got = [r for r in rows if which(r) and r[key] is not None and r["label"] is not None]
+        return {"answers": len(got), "from_labelled_tool": sum(r[key] == r["label"] for r in got)}
+
+    return {
+        "model": score("chose", lambda r: r["end"] == "model:verified"),
+        "code_on_same": score("code_chose", lambda r: r["end"] == "model:verified"),
+        "code_all": score("code_chose", lambda r: True),
     }
 
 
