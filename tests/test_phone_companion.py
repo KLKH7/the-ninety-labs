@@ -909,9 +909,8 @@ def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_secti
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
     js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
     order = page.evaluate(js)
-    # "setup" is the Make it yours card (src/setup.ts): offered under the pitch until answered or skipped.
-    assert order == ["card pitch-card", "setup", "just-now", "momentum", "live-summary", "live-shots",
-                     "key-moments", "lineups-teaser"]
+    assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
+                     "lineups-teaser"]
     page.wait_for_selector("#live-summary:not([hidden])")
     page.click("#live-summary .see-all")
     assert page.get_attribute("#lt-stats", "aria-selected") == "true" and page.is_visible("#live-stats")
@@ -982,6 +981,7 @@ def test_a_match_without_squad_numbers_shows_no_empty_squad_cards(browser, site)
 def test_ask_opens_on_a_grid_of_questions_then_recent_answers(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     page.click("#tab-button-ask")
+    page.click("#setup-skip")  # Ask's first open asks Make it yours; then the question grid
     page.wait_for_selector("#ask-start:visible")
     assert page.locator("#ask-grid .chip").count() >= 4
     assert page.is_hidden("#ask-chips") and page.is_hidden("#recent-title")  # one set of suggestions
@@ -1084,21 +1084,24 @@ def stat_labels(page) -> list[str]:
 
 def test_make_it_yours_asks_three_things_and_opens_what_the_fan_wants(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    # Offered under the pitch, never over it: the radar stays on screen while the card asks.
+    assert page.locator("#pane-pitch #setup").count() == 0  # never a card on Live (Kian, Oct 25)
+    page.click("#tab-button-ask")  # Ask's own onboarding, on its first open
     page.wait_for_selector("#setup:not([hidden])")
-    assert page.is_visible("#map")
-    assert page.text_content("#setup-step") == "1 of 3 · Who do you support?"
+    assert page.is_hidden("#ask-start")  # the starter grid waits behind it
+    assert page.text_content("#setup-step") == "1 of 3"
+    assert page.text_content("#setup-title") == "Who do you support?"
     clubs = [b.text_content() for b in page.locator("#setup-options .setup-label").all()]
     assert clubs == ["Crowmere", "Dunhollow", "Neither"]  # the bundle's two clubs, named as it names them
+    assert page.locator("#setup-options .setup-option .crest svg").count() == 2  # the clubs, not Neither
     page.locator(".setup-option", has_text="Crowmere").click()
-    assert page.text_content("#setup-step") == "2 of 3 · How into the stats are you?"
+    assert page.text_content("#setup-title") == "How into the stats are you?"
     page.locator(".setup-option", has_text="Casual").click()
-    assert page.text_content("#setup-step") == "3 of 3 · What do you want most?"
+    assert page.text_content("#setup-title") == "What do you want most?"
     page.locator(".setup-option", has_text="Stats").click()
     # Answered: the card goes, the phone opens Stats in casual, and the fan's club is marked.
     assert page.is_hidden("#setup")
     assert page.evaluate("document.body.dataset.pane") == "stats"
-    assert page.get_attribute(".depth-option[data-depth=casual]", "aria-checked") == "true"
+    assert page.evaluate("document.querySelector('#depth').value") == "casual"
     assert page.evaluate("document.body.dataset.fav") == "home"
     # Kept in this browser: a reload opens where the fan asked, without asking again.
     page.reload()
@@ -1115,30 +1118,25 @@ def test_casual_lists_fewer_stats_but_never_changes_a_number(browser, site):  # 
     page.click("#lt-stats")
     page.wait_for_selector("#stat-rows .stat-row")
     # Before a fan picks, every stat shows (die-hard), as the phone did before the card existed.
-    assert page.get_attribute(".depth-option[data-depth=diehard]", "aria-checked") == "true"
+    assert page.evaluate("document.querySelector('#depth').value") == "diehard"
     page.wait_for_function(f"{PRESSING_SHOWN}")
     full = stat_labels(page)
-    page.click(".depth-option[data-depth=casual]")
+    page.click("#depth ion-segment-button[value=casual]")  # the segmented control in Stats' header
     page.wait_for_function(f"!{PRESSING_SHOWN}")
     simple = stat_labels(page)
     groups = [h.text_content() for h in page.locator("#stat-rows .stat-group h3").all()]
     assert set(groups) <= {"Attack", "Passing"}
     # Fewer rows, each one word for word as die-hard showed it: only what is listed changes.
     assert simple and set(simple) < set(full)
-    hidden = len(full) - len(simple)
-    noun = "stat" if hidden == 1 else "stats"
-    assert page.text_content("#depth-note") == f"Die-hard shows {hidden} more {noun}."
-    # The arrow keys move the choice back (a radio group).
-    page.focus(".depth-option[data-depth=casual]")
-    page.keyboard.press("ArrowRight")
+    page.click("#depth ion-segment-button[value=diehard]")
     page.wait_for_function(PRESSING_SHOWN)
-    assert page.is_hidden("#depth-note")
     assert stat_labels(page) == full
     assert not errors
 
 
 def test_just_show_me_skips_and_redo_setup_brings_the_card_back(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site)
+    page.click("#tab-button-ask")
     page.wait_for_selector("#setup:not([hidden])")
     page.click("#setup-skip")
     assert page.is_hidden("#setup")
@@ -1151,7 +1149,8 @@ def test_just_show_me_skips_and_redo_setup_brings_the_card_back(browser, site): 
     page.click("#setup-redo")
     page.wait_for_selector("#setup:not([hidden])")
     page.wait_for_function("document.activeElement && document.activeElement.id === 'setup-title'")
-    assert page.text_content("#setup-step") == "1 of 3 · Who do you support?"
+    assert page.evaluate("document.body.dataset.tab") == "ask"  # Redo opens it in Ask
+    assert page.text_content("#setup-title") == "Who do you support?"
     assert not errors
 
 
@@ -1163,8 +1162,10 @@ def test_with_neutral_sides_the_card_asks_no_club(browser, site):  # noqa: F811
     page.reload()
     page.wait_for_selector("body[data-state=live]")
     page.wait_for_function("!document.getElementById('teams-note').hidden")  # "Teams not confirmed"
+    page.click("#tab-button-ask")
     page.wait_for_selector("#setup:not([hidden])")
-    assert page.text_content("#setup-step") == "1 of 2 · How into the stats are you?"
+    assert page.text_content("#setup-step") == "1 of 2"
+    assert page.text_content("#setup-title") == "How into the stats are you?"
     page.locator(".setup-option", has_text="Die-hard").click()
     page.locator(".setup-option", has_text="The story").click()
     assert page.is_hidden("#setup")

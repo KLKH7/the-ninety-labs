@@ -912,10 +912,7 @@ function showFavourite() {
   const side = favouriteSide();
   if (side) document.body.dataset.fav = side;
   else delete document.body.dataset.fav;
-  for (const b of document.querySelectorAll<HTMLElement>(".depth-option")) {
-    b.setAttribute("aria-checked", String(b.dataset.depth === mine.depth));
-    b.tabIndex = b.dataset.depth === mine.depth ? 0 : -1;
-  }
+  ($("depth") as HTMLElement & { value: string }).value = mine.depth;
   const parts = [mine.club ?? (mine.done ? "No club" : null), mine.done ? (mine.depth === "diehard" ? "Die-hard" : "Casual") : null];
   $("setup-summary").textContent = parts.filter(Boolean).join(" · ");
 }
@@ -934,22 +931,20 @@ function setDepth(depth: setup.Depth) {
   statsKey = ""; // redraw the rows now
 }
 
-function option(label: string, desc: string, pick: () => void): HTMLButtonElement {
+/** One choice: a row of an iOS grouped list (a club's row leads with its crest), a chevron after. */
+function option(label: string, pick: () => void, side: "home" | "away" | null = null): HTMLLIElement {
+  const li = document.createElement("li");
   const b = document.createElement("button");
   b.type = "button";
   b.className = "setup-option";
+  if (side) b.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
   const l = document.createElement("span");
   l.className = "setup-label";
   l.textContent = label;
   b.append(l);
-  if (desc) {
-    const d = document.createElement("span");
-    d.className = "setup-desc";
-    d.textContent = desc;
-    b.append(d);
-  }
   b.addEventListener("click", pick);
-  return b;
+  li.append(b);
+  return li;
 }
 
 function finishSetup() {
@@ -963,17 +958,18 @@ function finishSetup() {
   announce(`Set up. Showing ${where}. Change it any time under More, Redo setup.`);
 }
 
-/** Draws the card's current question, or hides it once answered or skipped. */
+/** Draws Ask's onboarding at its current question, or hides it once answered or skipped. */
 function renderSetup() {
   const card = $("setup");
   card.hidden = mine.done || document.body.dataset.state !== "live";
+  document.body.dataset.setup = card.hidden ? "" : "open"; // Ask's starter grid waits behind it
   if (card.hidden) return;
   const clubs = clubChoices();
   if (setupStep === 0 && clubs.length === 0) setupStep = 1; // neutral sides: nothing to support yet
   const steps = clubs.length ? 3 : 2;
   const n = clubs.length ? setupStep + 1 : setupStep;
   let question = "";
-  let options: HTMLButtonElement[] = [];
+  let options: HTMLLIElement[] = [];
   const next = () => {
     setupStep += 1;
     renderSetup();
@@ -982,18 +978,18 @@ function renderSetup() {
   if (setupStep === 0) {
     question = "Who do you support?";
     options = [
-      ...clubs.map((c) => option(c, "", () => ((mine.club = c), next()))),
-      option("Neither", "Just here for the football", () => ((mine.club = null), next())),
+      ...clubs.map((c, k) => option(fullName(c), () => ((mine.club = c), next()), k === 0 ? "home" : "away")),
+      option("Neither", () => ((mine.club = null), next())),
     ];
   } else if (setupStep === 1) {
     question = "How into the stats are you?";
-    options = setup.DEPTHS.map((d) => option(d.label, d.desc, () => ((mine.depth = d.value), next())));
+    options = setup.DEPTHS.map((d) => option(d.label, () => ((mine.depth = d.value), next())));
   } else {
     question = "What do you want most?";
-    options = setup.WANTS.map((w) => option(w.label, w.desc, () => ((mine.want = w.value), finishSetup())));
+    options = setup.WANTS.map((w) => option(w.label, () => ((mine.want = w.value), finishSetup())));
   }
-  $("setup-step").textContent = `${n} of ${steps} · ${question}`;
-  $("setup-question").textContent = question;
+  $("setup-step").textContent = `${n} of ${steps}`;
+  $("setup-title").textContent = question;
   $("setup-options").replaceChildren(...options);
 }
 
@@ -1009,26 +1005,16 @@ $("setup-redo").addEventListener("click", () => {
   setup.save(mine);
   setupStep = 0;
   showFavourite();
-  showTab("radar");
-  showPane("pitch");
+  showTab("ask");
   renderSetup();
-  // The sheet hands focus back to its opener as it closes, so the card takes it once it has closed.
-  void settingsSheet.dismiss().then(() => {
-    $("setup").scrollIntoView({ block: "center" });
-    $("setup-title").focus({ preventScroll: true });
-  });
+  // The sheet hands focus back to its opener as it closes, so the question takes it once it has closed.
+  void settingsSheet.dismiss().then(() => $("setup-title").focus({ preventScroll: true }));
 });
-for (const b of document.querySelectorAll<HTMLButtonElement>(".depth-option")) {
-  b.addEventListener("click", () => setDepth(b.dataset.depth as setup.Depth));
-  // A radio group: the arrow keys move the choice (WAI-ARIA radio pattern).
-  b.addEventListener("keydown", (e) => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
-    e.preventDefault();
-    const to: setup.Depth = mine.depth === "casual" ? "diehard" : "casual";
-    setDepth(to);
-    document.querySelector<HTMLElement>(`.depth-option[data-depth=${to}]`)?.focus();
-  });
-}
+// Casual or die-hard: a segmented control in Team Stats' header (keyboard support is Ionic's).
+$("depth").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if (v === "casual" || v === "diehard") setDepth(v);
+});
 showFavourite();
 if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => settingsUp && renderSettings());
 applyText();
@@ -2232,9 +2218,6 @@ function renderStats(st: MatchData["stats"][number]) {
   const depthOf = (gs: [string, Row[]][]) => (mine.depth === "diehard" ? gs : gs.filter(([g]) => setup.CASUAL_GROUPS.includes(g)));
   const showable = (gs: [string, Row[]][]) => gs.reduce((n, [, rows]) => n + rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a)).length, 0);
   const items = listOf(depthOf(groups));
-  const more = showable(groups) - showable(depthOf(groups));
-  $("depth-note").hidden = more <= 0;
-  $("depth-note").textContent = more > 0 ? `Die-hard shows ${more} more ${more === 1 ? "stat" : "stats"}.` : "";
   // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
   const halves = block?.insight_stats?.halves;
   $("stats-period").hidden = !halves?.first;

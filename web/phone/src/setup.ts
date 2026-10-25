@@ -17,16 +17,16 @@ const KEY = "ninety.setup";
 // design: until a fan picks, the phone shows every stat, as it did before this card existed.
 export const DEFAULTS: Setup = { done: false, club: null, depth: "diehard", want: null };
 
-export const DEPTHS: { value: Depth; label: string; desc: string }[] = [
-  { value: "casual", label: "Casual", desc: "The key numbers, kept simple" },
-  { value: "diehard", label: "Die-hard", desc: "Every stat we measure: pressing, shape, distance" },
+export const DEPTHS: { value: Depth; label: string }[] = [
+  { value: "casual", label: "Casual" },
+  { value: "diehard", label: "Die-hard" },
 ];
 
-export const WANTS: { value: Want; label: string; desc: string }[] = [
-  { value: "action", label: "Live action", desc: "The pitch, as it happens" },
-  { value: "stats", label: "Stats", desc: "Team numbers, side by side" },
-  { value: "story", label: "The story", desc: "Key moments and why they matter" },
-  { value: "ask", label: "Ask", desc: "Ask about any player or moment" },
+export const WANTS: { value: Want; label: string }[] = [
+  { value: "action", label: "Live action" },
+  { value: "stats", label: "Stats" },
+  { value: "story", label: "The story" },
+  { value: "ask", label: "Ask" },
 ];
 
 /** The stat groups a casual fan sees; a die-hard sees every group (main.ts, renderStats). */

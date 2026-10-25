@@ -94,17 +94,6 @@
               </div>
               <p class="sr-only" id="map-sides"></p>
                 </section>
-              <!-- Make it yours (src/setup.ts): three taps, under the pitch so it never covers the match.
-                   Offered until answered or dismissed; "Redo setup" in More brings it back. -->
-              <section class="card setup-card" id="setup" aria-labelledby="setup-title" hidden>
-                <div class="section-head">
-                  <h2 class="section-title" id="setup-title" tabindex="-1">Make it yours</h2>
-                  <button type="button" class="see-all no-arrow" id="setup-skip">Just show me</button>
-                </div>
-                <p class="setup-step" id="setup-step" aria-live="polite"></p>
-                <div class="setup-options" id="setup-options" role="group" aria-labelledby="setup-question"></div>
-                <p class="sr-only" id="setup-question"></p>
-              </section>
               <!-- Just now: the latest Story moment, as the lock screen says it. -->
               <section class="card" id="just-now" aria-labelledby="just-now-title" hidden>
                 <h2 class="section-title" id="just-now-title">Just now</h2>
@@ -167,13 +156,12 @@
               <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
                 <div class="section-head">
                   <h2 class="section-title" id="live-stats-title">Team Stats</h2>
-                  <div class="depth" role="radiogroup" aria-label="How many stats">
-                    <button type="button" role="radio" class="depth-option" data-depth="casual" aria-checked="false">Casual</button>
-                    <button type="button" role="radio" class="depth-option" data-depth="diehard" aria-checked="true">Die-hard</button>
-                  </div>
+                  <ion-segment value="diehard" id="depth" class="seg depth" aria-label="How many stats">
+                    <ion-segment-button value="casual"><ion-label>Casual</ion-label></ion-segment-button>
+                    <ion-segment-button value="diehard"><ion-label>Die-hard</ion-label></ion-segment-button>
+                  </ion-segment>
                 </div>
                 <ul class="stat-rows" id="stat-rows"></ul>
-                <p class="fine" id="depth-note" hidden></p>
                 <p class="sr-only" id="stats-note">From the footage shown, so far.</p>
               </section>
               <!-- Shot map: detected shots so far, both clubs toward one goal; only when there are any. -->
@@ -252,6 +240,14 @@
             </ion-header>
             <ion-content fullscreen id="ask-content">
               <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
+              <!-- Make it yours (src/setup.ts): Ask's own onboarding on its first open, as iOS setup asks,
+                   one question at a time as a grouped list. "Redo setup" in More brings it back. -->
+              <section class="setup" id="setup" aria-labelledby="setup-title" hidden>
+                <p class="setup-step" id="setup-step"></p>
+                <h2 class="setup-title" id="setup-title" tabindex="-1" aria-live="polite"></h2>
+                <ul class="setup-options" id="setup-options" role="list" aria-labelledby="setup-title"></ul>
+                <button type="button" class="setup-skip" id="setup-skip">Just show me</button>
+              </section>
               <section class="ask-start" id="ask-start" aria-labelledby="ask-start-title">
                 <h2 class="section-title" id="ask-start-title">Ask about the match</h2>
                 <div class="chip-grid" id="ask-grid" role="group" aria-labelledby="ask-start-title"></div>

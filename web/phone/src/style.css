@@ -826,24 +826,29 @@ ion-modal { --backdrop-opacity: 0.45; }
 #stats-period[hidden] { display: none; }
 .fine-note[hidden] { display: none; }
 
-/* Make it yours (src/setup.ts): a card under the pitch, never over the match. Tap targets 48 px+. */
-.setup-card .section-title { margin-top: 0; }
-.see-all.no-arrow::after { content: none; }
-.setup-step { margin: 0 0 10px; font-size: 15px; color: var(--text-2); }
-.setup-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.setup-option { display: grid; gap: 2px; align-content: center; min-height: 56px; padding: 10px 12px; border-radius: 16px;
-  border: 1px solid var(--hairline); background: var(--bg); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
-.setup-option:active { transform: scale(0.98); }
-.setup-label { font-size: 17px; font-weight: 600; }
-.setup-desc { font-size: 13px; color: var(--text-2); line-height: 1.3; }
+/* Make it yours (src/setup.ts): Ask's onboarding, as iOS setup asks (Kian, Oct 25): a step count,
+   a large question, an inset grouped list of plain rows with chevrons, "Just show me" quietly
+   under it. No accent colour; a club's row leads with its crest. 52 pt rows. */
+.setup { padding: 24px 16px 8px; }
+.setup[hidden] { display: none; }
+body[data-setup="open"] #ask-start, body[data-setup="open"] #ask-chips { display: none; }
+.setup-step { margin: 0; font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.setup-title { margin: 4px 0 16px; font-size: 28px; font-weight: 700; line-height: 1.15; outline: none; }
+.setup-options { list-style: none; margin: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--surface); }
+.setup-options li + li .setup-option { border-top: 0.5px solid var(--hairline); }
+.setup-option { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 0;
+  background: none; color: var(--text); font: inherit; font-size: 17px; text-align: left; cursor: pointer; }
+.setup-option::after { content: "›"; margin-left: auto; font-size: 22px; color: var(--text-3); }
+.setup-option:active { background: rgba(118, 118, 128, 0.24); }
+.setup-option .crest { width: 28px; height: 32px; display: inline-flex; flex: none; }
+.setup-option .crest svg { width: 100%; height: 100%; }
+.setup-skip { display: block; margin: 16px auto 0; min-height: 44px; padding: 0 16px; border: 0; background: none; font: inherit; font-size: 17px; color: var(--text-2); cursor: pointer; }
 
-/* Casual or die-hard: a two-way switch beside Team Stats. */
-.depth { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--bg); border: 1px solid var(--hairline); flex: none; }
-.depth-option { min-height: 44px; min-width: 44px; padding: 0 12px; border: 0; border-radius: 999px; background: none; font: inherit; font-size: 14px; color: var(--text-2); cursor: pointer; }
-.depth-option[aria-checked="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--hairline); }
+/* Casual or die-hard: a segmented control in Team Stats' header. */
+#live-stats .section-head .depth { width: 180px; flex: none; }
 
-/* The fan's club: its name and its numbers stand out a little; nothing about the numbers changes. */
-body[data-fav="home"] .club-name.home-name, body[data-fav="away"] .club-name.away-name { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
-body[data-fav="home"] .stat-row .home-v, body[data-fav="away"] .stat-row .away-v { color: var(--text); text-shadow: 0 0 0.5px currentColor; }
+/* The fan's club: its numbers stand out a little (the club's own colour is already its bar); no
+   number changes. */
+body[data-fav="home"] .stat-row .home-v, body[data-fav="away"] .stat-row .away-v { color: var(--text); }
 body[data-fav] .stat-row .v { color: var(--text-2); }
 .row-note { font-size: 15px; color: var(--text-2); margin-left: auto; }
