@@ -77,3 +77,36 @@ def test_the_inside_count_is_bound_to_its_own_words(text, ok):
 @pytest.mark.parametrize("q", ["How many shots have there been?", "Where did London Athletic shoot from?"])
 def test_shot_questions_route_to_the_shot_map(q):
     assert "shots" in cm.route(q)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"There were 3 shots {SPAN} 1 shot from outside the penalty area.",
+        f"There were 3 shots {SPAN} only 1 shot from inside the penalty area.",
+        "There were 3 shots from minute 1 to minute 90, and players took 1 shot from near the penalty area.",
+    ],
+)
+def test_a_shot_sentence_is_said_in_its_own_words(text):
+    # The merge queue's review of #318: "took 1 shot from outside the penalty area" passed against a fact
+    # of 3 shots with 1 inside. The shot facts are in the closed direction check now.
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    fact = shot_map.summary(shot_map.shots(THREE), 1, 90)["all"]
+    fx = Fixture(7, "OAK", "FEN")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert not verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok
+
+
+def test_a_shot_within_the_error_of_the_areas_line_leaves_the_inside_count_unsaid():
+    near = shot(9, "home", 105 - 16.5 - 0.8, 34)  # 0.8 m outside the line: could be inside
+    got = shot_map.summary(shot_map.shots([shot(1, "home", 94, 34), near]), 1, 90)["all"]
+    assert (got["inside_lo"], got["inside_hi"]) == (1, 2) and not got["inside_exact"]
+    assert cm.code_texts(got) == ["There were 2 shots from minute 1 to minute 90."]
+
+
+def test_a_shot_of_unknown_side_is_inside_the_nearer_goals_area():
+    assert shot_map.inside_box(10.0, 34.0, None) and shot_map.inside_box(95.0, 34.0, None)
+    assert not shot_map.inside_box(40.0, 34.0, None)

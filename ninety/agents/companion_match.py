@@ -722,18 +722,15 @@ def code_texts(fact: dict) -> list[str]:
             f"{span.capitalize()}, {shooter} from {fact['value']} m out, where the posts were "
             f"{fact['angle_deg']} degrees apart."
         ]
-    if metric == "shots_all":
+    if metric in ("shots_all", "shots"):
         n, k = fact["value"], fact["inside_box"]
-        return [
-            f"There were {_plural(n, 'shot')} {span}, and players took {_plural(k, 'shot')} from "
-            "inside the penalty area."
-        ]
-    if metric == "shots":
-        n, k = fact["value"], fact["inside_box"]
-        return [
-            f"{club} had {_plural(n, 'shot')} {span}, and took {_plural(k, 'shot')} from inside the "
-            "penalty area."
-        ]
+        lead = f"There were {_plural(n, 'shot')} {span}" if metric == "shots_all" else (
+            f"{club} had {_plural(n, 'shot')} {span}"
+        )
+        if not fact.get("inside_exact", True):  # a shot near the area's line: the inside count is unsure
+            return [f"{lead}."]
+        who = "players took" if metric == "shots_all" else "took"
+        return [f"{lead}, and {who} {_plural(k, 'shot')} from inside the penalty area."]
     if metric == "possession_share":
         if fact.get("value") is None:
             return []

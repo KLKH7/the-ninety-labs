@@ -11,10 +11,10 @@
    "unsure_claims": 191,
    "unsure_held": 191,
    "unsure_passed": 0,
-   "planted": 4468,
-   "planted_caught": 4468,
+   "planted": 4466,
+   "planted_caught": 4466,
    "caught_by_kind": {
-    "number": 1352,
+    "number": 1350,
     "spelled": 246,
     "club": 379,
     "id": 114,
@@ -29,8 +29,8 @@
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.217,
-    "p95": 0.447
+    "p50": 0.229,
+    "p95": 0.597
    }
   },
   "0.05": {
@@ -41,10 +41,10 @@
    "unsure_claims": 282,
    "unsure_held": 282,
    "unsure_passed": 0,
-   "planted": 3910,
-   "planted_caught": 3910,
+   "planted": 3908,
+   "planted_caught": 3908,
    "caught_by_kind": {
-    "number": 1173,
+    "number": 1171,
     "spelled": 189,
     "club": 338,
     "id": 97,
@@ -59,8 +59,8 @@
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.237,
-    "p95": 0.761
+    "p50": 0.249,
+    "p95": 0.496
    }
   }
  },

@@ -460,6 +460,9 @@ DIRECTED = (
     "regain_to_shot_s",
     "possession_share",
     "final_third_share",
+    "shots_all",
+    "shots",
+    "shot_distance_m",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -495,6 +498,11 @@ TEMPLATES = {
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
     "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
     "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
+    "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
+    "shot_distance_m": [
+        rf"(?:shot|a shot came) from {_N} m out", rf"where the posts were {_N} degrees apart",
+    ],
     "final_third_share": [
         r"the ball was in",
         rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",
