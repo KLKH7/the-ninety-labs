@@ -12,12 +12,11 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
-import londonCrest from "./crests/london-athletic.svg?raw";
-import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
+import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -392,7 +391,12 @@ async function loadBundle() {
     const m = (await get("manifest.json")) as BundleManifest;
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
-    Object.assign(teams, teamNames(m.teams));
+    // A bundle that does not name both clubs is not given the demo's: neutral sides, said so.
+    // (teamNames hands back DEFAULT_TEAMS itself only when it falls back.)
+    const named = teamNames(m.teams);
+    const confirmed = named !== DEFAULT_TEAMS;
+    Object.assign(teams, confirmed ? named : { home: "Home", away: "Away" });
+    $("teams-note").hidden = confirmed;
     setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
     minTeamConfidence = typeof m.min_team_confidence === "number" ? m.min_team_confidence : null;
     showTeams();
@@ -566,8 +570,8 @@ function averagePositions(): Map<string, [number, number]> {
 /** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
  * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  if (club === "London") return londonCrest;
-  if (club === "Lisbon") return lisbonCrest;
+  const own = crestOf(club);
+  if (own) return own;
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
@@ -957,6 +961,9 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
+    $("so-far-box").hidden = true;
+    $("heat-box").hidden = true;
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
@@ -1005,6 +1012,8 @@ async function refreshCard(force = false) {
 }
 
 function showCard(c: PlayerCard) {
+  $("so-far-box").hidden = false;
+  $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
@@ -1075,13 +1084,21 @@ function showInvolved(id: string, t: number) {
 
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  const others = rosterIds().filter((o) => o !== id);
+  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
+  const side = { home: 0, away: 0 };
+  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
+  const others = rosterIds()
+    .filter((o) => o !== id)
+    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    .filter((o) => ++side[team(o)] <= 11);
+  $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
     ...others.map((o) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
+      b.dataset.player = o;
       b.textContent = playerName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
@@ -1095,9 +1112,12 @@ async function compare(a: string, b: string) {
   let cb: PlayerCard;
   try {
     [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
-  } catch (e) {
-    $("compare-rows").hidden = false;
-    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+  } catch {
+    // No numbers for one of them yet: nothing is drawn, and that player's chip says so quietly.
+    $("compare-rows").hidden = true;
+    const chip = $("compare-chips").querySelector<HTMLButtonElement>(`[data-player="${b}"]`);
+    chip?.setAttribute("aria-disabled", "true");
+    chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
   const rows: [string, number, number, number][] = [
@@ -1880,13 +1900,15 @@ function showMatch(t: number) {
   // when the detection names no player, or "Goal 43′" when its side was not told surely).
   const scored = m.goals.filter((g) => g.t <= t);
   const scorers = $("scorers");
-  scorers.hidden = scored.length === 0;
-  const said = scored
+  // Always one line, so the band never grows when the first goal goes in.
+  scorers.hidden = false;
+  scorers.classList.toggle("none", scored.length === 0);
+  const said = scored.length === 0 ? "No goals yet" : scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
       return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
     })
-    .join(", ");
+        .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
   if (playsUpTo(t).length !== playsShown) renderInsights();
@@ -1968,8 +1990,10 @@ function renderStats(st: MatchData["stats"][number]) {
       li.querySelector(".label")!.append(pm);
       li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
     }
-    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly, in grey (nothing to
+    // share yet, so no club's colour); 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
+    li.classList.toggle("empty", h + a === 0);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
     (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
