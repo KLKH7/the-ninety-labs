@@ -1098,3 +1098,18 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
     assert page.locator("#insights .play.goal").count() == 1  # the goal is in Story, with no running score
     assert not errors
     ctx.close()
+
+
+def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: F811
+    """#350 sends no score metric; should one come, the phone still prints no count from it."""
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#tab-button-ask")
+    page.evaluate("""() => window.ninetyPhone.answer("What's the score?", {status: "verified",
+      text: "The broadcast's scorebug shows the score; vision does not keep one.", metric: "score", value: 2,
+      unit: "goals", evidence: ["score:all"], t_from: 0, t_to: 60})""")
+    page.wait_for_selector("#answers .answer:not(.pending) .how")
+    page.locator("#answers .how").first.click()  # How we know: What and Over
+    page.wait_for_selector("#how-body .evidence dd")
+    what = page.locator("#how-body .evidence dd").first.text_content()
+    assert not re.search(r"\d", what), what
+    assert not errors

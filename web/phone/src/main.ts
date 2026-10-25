@@ -1477,7 +1477,8 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   const who = a.evidence.map((id) => /player_([ha](?:-t\d+|[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
   const what = a.metric ? METRIC_WORDS[a.metric] ?? a.metric.replace(/_/g, " ") : "";
   const rows: [string, string][] = [
-    ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
+    // A score's number never shows (Kian, Oct 25: the broadcast carries it; #350 sends none).
+    ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null && !/score|goals?$/.test(a.metric ?? "") ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
   ];
   if (a.t_from !== null && a.t_to !== null) rows.push(["Over", a.t_from === a.t_to ? `${clock(a.t_from)} of the match` : `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
 
