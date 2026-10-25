@@ -2921,3 +2921,15 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_phone_companion.py::test_the_play_by_play_names_a_club_only_for_a_side_told_surely`
   when the phone reads an event's side without the threshold;
   `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
+
+### 248. A place along the pitch is checked against the pitch before it is cut into thirds
+- **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
+  capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
+  depth gives index -1, and `THIRDS[-1]` is "final", so a ball behind one goal counted as the final
+  third for both clubs at once. The merge queue's review caught it (x = 108 gave both 100%); no test
+  had a ball off the pitch.
+- **Rule:** a position is checked against the pitch (0 to 105 m along it) before it is cut into
+  zones. One off the pitch is out of play and in no zone. A capped index is not a clamp: capping
+  the top end still leaves Python's negative indices at the bottom.
+- **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
+  (x = -3, -0.5, 106, 108) fails when the check is removed.
