@@ -14,6 +14,7 @@ tracker spoils it), every sentence code can say about every fact and every 15-mi
 - minute: the minute one later;
 - polarity: the direction turned around (won back or not, lost or completed, to an open teammate
   or not, somebody open or nobody), numbers and names kept;
+- pair count: a pass pair and its reverse cited together, their counts traded;
 - uncited: no evidence.
 
 A planted claim is caught when the check rejects it. Separately, each true claim on a fact that is
@@ -130,6 +131,34 @@ def plants(text: str, fact: dict, mi, other: dict | None) -> list[tuple[str, Cla
     return out
 
 
+def pair_swaps(rows: list[dict], known: dict) -> list[Claim]:
+    """Each pass pair said beside its reverse, cited together, with the two counts traded."""
+    out, seen = [], set()
+    for f in rows:
+        if f.get("metric") != "pair_passes" or not f.get("confident", True) or f["id"] in seen:
+            continue
+        g = next(
+            (
+                g
+                for g in rows
+                if g.get("metric") == "pair_passes" and g.get("confident", True)
+                and (g.get("passer_is"), g.get("receiver_is")) == (f.get("receiver_is"), f.get("passer_is"))
+                and (g.get("minute_from"), g.get("minute_to")) == (f.get("minute_from"), f.get("minute_to"))
+                and g["value"] != f["value"]
+            ),
+            None,
+        )
+        if g is None:
+            continue
+        seen |= {f["id"], g["id"]}
+        swapped = [
+            cm.code_texts({**known[x["id"]], "value": y["value"], "confident": True})[0]
+            for x, y in ((f, g), (g, f))
+        ]
+        out.append(Claim(" ".join(swapped), [f["id"], g["id"]]))
+    return out
+
+
 def run(mi) -> dict:
     rows = facts_and_summaries(mi)
     known = {f["id"]: {**f, "clubs": mi.fixture.clubs} for f in rows}
@@ -178,6 +207,13 @@ def run(mi) -> dict:
                             "status": status_for(pv),
                         }
                     )
+    # Both directions of a pass pair cited together, their counts traded (merge-queue review of #321).
+    for planted in pair_swaps(rows, known):
+        if status_for(verify(planted, known, clubs, people, names)) == "rejected":
+            caught["pair count"] += 1
+        else:
+            missed["pair count"] += 1
+            escapes.append({"kind": "pair count", "text": planted.text, "evidence": planted.evidence})
     return {
         "facts": len(rows),
         "true_claims": true_ok + true_bad,
@@ -270,6 +306,13 @@ def markdown(report: dict) -> str:
             f"- {float(missing):.0%} missing: {kinds}; missed: {missed}; "
             f"check p50 {r['check_ms'].get('p50')} ms, p95 {r['check_ms'].get('p95')} ms"
         )
+    tried = [{**r["caught_by_kind"], **r["missed_by_kind"]} for r in report["by_missing"].values()]
+    if not any("pair count" in kinds for kinds in tried):
+        lines += [
+            "",
+            "No pass pair was named in both directions in this stand-in, so the pair-count plant had "
+            "nothing to trade; tests/test_passing_network.py plants it on a built pair.",
+        ]
     return "\n".join(lines) + "\n"
 
 

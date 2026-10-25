@@ -148,3 +148,71 @@ def test_a_pair_is_said_in_its_order_and_with_its_caveat(said, ok):
     text = said.replace("Kai Terrow", a.name).replace("Femi Railby", b.name)
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
     assert verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, people, names).ok is ok
+
+
+CAVEAT = "of the passes the video could name both players of"
+
+
+@pytest.mark.parametrize(
+    "said, ok",
+    [
+        (f"Kai Terrow passed to Femi Railby 2 times from minute 1 to minute 90, {CAVEAT}; "
+         "Femi Railby passed to Kai Terrow 3 times.", True),
+        # the counts traded between the two cited pairs (merge-queue review of #321)
+        (f"Kai Terrow passed to Femi Railby 3 times from minute 1 to minute 90, {CAVEAT}; "
+         "Femi Railby passed to Kai Terrow 2 times.", False),
+        (f"Kai Terrow passed to Femi Railby 3 times from minute 1 to minute 90, {CAVEAT}; "
+         f"Femi Railby passed to Kai Terrow 2 times, {CAVEAT}.", False),
+        # a pair said with no count of its own beside it
+        (f"Kai Terrow passed to Femi Railby 2 times from minute 1 to minute 90, {CAVEAT}; "
+         "Femi Railby passed to Kai Terrow too.", False),
+    ],
+)
+def test_each_pair_keeps_its_own_count_when_both_are_cited(said, ok):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    fx = Fixture(7, "OAK", "FEN")
+    a, b = fx.sheet("home")[4], fx.sheet("home")[1]
+
+    def named(track, who, role, position):
+        return {"track": track, "team": "home", "name": who.name, "role": role, "position": position,
+                "sheet_name": who.name, "say": who.name}
+
+    people = {"h-t1": named("h-t1", a, "LB", "left-back"), "h-t2": named("h-t2", b, "RB", "right-back")}
+    rows = passing.rows(
+        [p(i, "home", 10, 34, 20, 34) for i in (1, 2)]
+        + [p(i, "home", 10, 34, 20, 34, player="h-t2", receiver="h-t1") for i in (3, 4, 5)]
+    )
+    pairs = passing.network(rows, people, 1, 90)
+    assert sorted(f["value"] for f in pairs) == [2, 3]
+    known = {f["id"]: {**f, "club": "London Athletic"} for f in pairs}
+    text = said.replace("Kai Terrow", a.name).replace("Femi Railby", b.name)
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert verify(Claim(text, list(known)), known, fx.clubs, people, names).ok is ok
+
+
+def test_the_planted_claims_trade_a_pair_and_its_reverse_counts():
+    from ninety.agents.insight_check import verify
+    from ninety.eval.insight_claims import pair_swaps
+    from ninety.intel.teamsheet import Fixture
+
+    fx = Fixture(7, "OAK", "FEN")
+    a, b = fx.sheet("home")[4], fx.sheet("home")[1]
+    people = {
+        t: {"track": t, "team": "home", "name": w.name, "role": r, "position": pos, "sheet_name": w.name,
+            "say": w.name}
+        for t, w, r, pos in (("h-t1", a, "LB", "left-back"), ("h-t2", b, "RB", "right-back"))
+    }
+    rows = passing.rows(
+        [p(i, "home", 10, 34, 20, 34) for i in (1, 2)]
+        + [p(i, "home", 10, 34, 20, 34, player="h-t2", receiver="h-t1") for i in (3, 4, 5)]
+    )
+    pairs = [{**f, "club": "London Athletic"} for f in passing.network(rows, people, 1, 90)]
+    known = {f["id"]: f for f in pairs}
+    [planted] = pair_swaps(pairs, known)
+    assert f"{a.name} passed to {b.name} 3 times" in planted.text
+    assert f"{b.name} passed to {a.name} 2 times" in planted.text
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert not verify(planted, known, fx.clubs, people, names).ok

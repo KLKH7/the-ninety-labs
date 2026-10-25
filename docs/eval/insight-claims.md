@@ -11,5 +11,7 @@ Caveat: the same author wrote the claim templates, the plants and the checker. T
 
 Caught by kind of plant:
 
-- 0% missing: club 379, id 114, kind 619, minute 619, name 97, number 1358, polarity 73, spelled 247, team word 362, uncited 619; missed: none; check p50 0.221 ms, p95 0.419 ms
-- 5% missing: club 338, id 97, kind 563, minute 563, name 84, number 1179, polarity 23, spelled 190, team word 329, uncited 563; missed: none; check p50 0.258 ms, p95 0.482 ms
+- 0% missing: club 379, id 114, kind 619, minute 619, name 97, number 1358, polarity 73, spelled 247, team word 362, uncited 619; missed: none; check p50 0.229 ms, p95 0.427 ms
+- 5% missing: club 338, id 97, kind 563, minute 563, name 84, number 1179, polarity 23, spelled 190, team word 329, uncited 563; missed: none; check p50 0.238 ms, p95 0.426 ms
+
+No pass pair was named in both directions in this stand-in, so the pair-count plant had nothing to trade; tests/test_passing_network.py plants it on a built pair.
