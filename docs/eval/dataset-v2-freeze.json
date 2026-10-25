@@ -1,0 +1,81 @@
+{
+ "name": "dataset v2 (look freeze): training clips at the look-freeze commit",
+ "status": "rendering at aea01f4 on the maintainer's Mac (Oct 21)",
+ "run": "v2freeze",
+ "commit": "aea01f4e5d168b0ff3e8e44143cd4baaaf9a3f60: main after #197 (renderer 0.5.9), main's CI green, given by the Coordinator and recorded here before the first render. #179 is excluded, Kian's decision: the football it changes does not affect the detector. The earlier pending condition (after #179, #183 and motion A) is replaced by this decision; #183 and motion A (#197) are in it. A dry run at #188's merge commit measured speed only; none of its clips joins the dataset",
+ "renderer": "the render commit's (0.5.4-A or later)",
+ "why": "Every training clip in one look and one engine, the look the demo shows. Dataset v1 mixed capsule players (0.3.x) with later mesh clips; the round 2 plan (docs/eval/round2/PLAN.md) needs one render commit for everything.",
+ "seeds": {
+  "rule": "the seed list and overrides of v3 (docs/eval/dataset-v1.json), so the two datasets differ only in engine and look",
+  "groups": [
+   {
+    "first": 3,
+    "last": 132,
+    "overrides": {},
+    "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3 (#87)"
+   },
+   {
+    "first": 2001,
+    "last": 2045,
+    "overrides": {
+     "occlusion": "crowded"
+    }
+   },
+   {
+    "first": 3001,
+    "last": 3045,
+    "overrides": {
+     "kit_contrast": "low"
+    }
+   },
+   {
+    "first": 4001,
+    "last": 4060,
+    "overrides": {
+     "occlusion": "crowded"
+    }
+   }
+  ],
+  "clips": 280,
+  "excluded_in_advance": "none: v1 dropped 82 and 111 for defects of its own engine and renderer; here a seed is excluded only by the checks below",
+  "test_seeds": "none in the training list; the frozen test set is a separate split (test_set below)"
+ },
+ "render": {
+  "seconds": 10,
+  "window": "the seed's own start (render_clip's default), as v3",
+  "gl": "the pod's GPU (infra/pod/render.py --gl gpu: Chromium on the NVIDIA driver through ANGLE, Vulkan or EGL), used only if WebGL reports the GPU, never SwiftShader or llvmpipe, and two renders of the same 10 s clip are byte-identical on the pod; otherwise software GL (SwiftShader) on the same pod, as the Azure job. Pixels are reproducible on this pod; identity with another machine is not required, since every clip renders here. Each clip's clip.json records gl, and each result line the WebGL renderer string",
+  "dead_ball_cut": false,
+  "params": "everything else drawn from the seed; only the overrides above are set"
+ },
+ "checks": {
+  "per_clip": "ninety.render.checks.check_clip: ball and keypoint projection under 1 px, every player's feet in his box, labels complete, and ninety-validate (the data contract)",
+  "rule": "a clip that fails any check is excluded and listed with its report; it is not re-rendered (same seed, same result) and no other seed replaces it",
+  "determinism": "seed 3 rendered twice on the pod, each in a fresh browser, with the GL the run uses: frames.jsonl, events.jsonl and every image byte-identical (infra/pod/render.py determinism), before the first dataset clip; and seeds 3 and 2001 again after the run",
+  "floors": "ninety-data-stats --floors on the passing clips, reported, not used to choose clips"
+ },
+ "machine": "a rented Runpod GPU pod (RTX 4090 class, PyTorch template, 100 GB), deleted after the run and then reused for the detector fine-tune; all 310 clips render on this one pod. Kian's choice over the Mac, which started the test set with software GL at 1 worker (about 20 clips an hour) and is stopped once the pod run is confirmed; its clips are not used, since they are software GL and the pod's are not. Only synthetic renders go to the pod (AGENTS.md, vision models)",
+ "storage": "train: renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; test: truth-test instead of truth; the manifest at renders/<run>/manifest.json",
+ "manifest": "every file of every passing clip, both splits, with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)",
+ "test_set": {
+  "seeds": [
+   900001,
+   900030
+  ],
+  "clips": 30,
+  "why": "train and test share the look; round 2 (docs/eval/round2/PLAN.md) needs its 30-clip test set at the one render commit",
+  "status": "rendered only: never inspected or tuned on, scored only by the frozen step-D protocol",
+  "render": "the seed's own parameters, no overrides (the test split refuses them), 10 s, software GL, no dead-ball cut",
+  "checks": "the same per-clip checks; a failing test clip is listed, never replaced",
+  "storage": "renders/<run>/test/seed<N>/ (images, clip.json) and truth-test/<run>/test/seed<N>/ (frames.jsonl, events.jsonl, meta.json: the answer key, as the 91d1e3b test set), never the truth container",
+  "machine": "rendered first, on the same pod and GL as the training clips; cross-machine identity is not required (every clip renders on the one pod)"
+ },
+ "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)",
+ "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown",
+ "run_log": {
+  "render": "GPU pod (RTX 4090), driver 4fc8f4d, render aea01f4; GL check: ANGLE Vulkan on the RTX 4090, not SwiftShader; determinism smoke (seed 3, two fresh browsers): byte-identical; test set 30 of 30 passed at 8 workers (282 clips an hour)",
+  "infrastructure_failure": "training at 16 workers filled the GPU's 24 GB with Chromium GPU processes (23.9 GB); three clips, seeds 105, 111 and 120, rendered entirely black (VRAM exhaustion, GPU processes respawned) and failed check_clip. A scan of every image of every clip by file size (a black JPEG is under 20 kB, a frame about 250 kB) found no other black frame. The run went back to 8 workers (the same throughput); the unfinished clips were removed and resumed. The same three seeds are re-rendered once at the end at 3 workers (Coordinator's decision: the failure is the machine's, independent of content, and GPU rendering is deterministic); their crashed reports are kept in reports/train-crashed-vram/. If one fails again it is excluded",
+  "excluded_engine": "seeds 2014 ('e00054 shot: ball never reaches (36.79, 53.5)') and 4054 ('e00058 shot: ball never reaches (92.07, 29.99)'): data contract C7, engine defects; excluded and passed to the engine",
+  "rerender_1": "seeds 105, 111 and 120 re-rendered once at 3 workers after the 8-worker run: all three passed",
+  "infrastructure_failure_2": "at 8 workers, seed 4037 crashed black (VRAM) and two workers died on 'Error creating WebGL context', leaving seeds 4017, 4025, 4033, 4041, 4045, 4049, 4053 and 4057 with no report. The detector fine-tune started on the clips present (its own manifest lists them). After it ends, those 9 seeds are rendered once at 3 workers, the same seeds for the same infrastructure reason (Coordinator); any that fails again is excluded, and the dataset manifest is final after that"
+ }
+}
