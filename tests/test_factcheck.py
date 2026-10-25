@@ -640,6 +640,9 @@ PLAY = {e["id"]: e for e in (
     ("h7's pass was followed by a8's interception.", ["p1", "i1"], "one act, not one followed by"),
     ("a8's interception was preceded by h7's pass.", ["p1", "i1"], "one act, not one preceded by"),
     ("The interception came after a8 cut out h7's pass.", ["p1", "i1"], "one act, not one after"),
+    ("a8's interception followed h7's pass.", ["p1", "i1"], "one act, not one followed"),
+    ("h7's pass preceded a8's interception.", ["p1", "i1"], "one act, not one preceded"),
+    ("a8 cut out the pass from h7 after the interception.", ["p1", "i1"], "one act, not one after"),
     ("h7's failed long pass at 01:33 is cut out by a8.", ["p1"], "a long ball is a pass of 32 m or more"),
     # L16: pressure said with no cited pressure event
     ("h4 plays a 32 m pass to h9 despite pressure.", ["lb"], "no cited event is a pressure event"),
@@ -665,6 +668,11 @@ def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence,
     ("After winning the ball, a8 passes to a10.", ["i1", "p2"]),
     ("After h7's pass to h9, a8 intercepts h7's next pass.", ["p0", "p1", "i1"]),  # two passes by h7
     ("After the interception, a8 passes to a10.", ["p1", "i1", "p2"]),  # the pass after is a8's own
+    ("After a8's interception, h7 passes to h9.", ["p1", "i1", "p0"]),  # h7 passing again: another act
+    ("After h7's shot, a8 intercepts the ball.", ["p1", "i1"]),  # not his pass
+    # A known gap, stated: "then" is not read, so the same act said twice with "then" is not caught;
+    # reading it would reject the true "cut out by a8, then a8 passes to a10" above.
+    ("a8 intercepts h7's pass, then a8 cuts out h7's pass.", ["p1", "i1"]),
 ])
 def test_play_words_with_their_fact_cited_still_pass(text, evidence):
     assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons

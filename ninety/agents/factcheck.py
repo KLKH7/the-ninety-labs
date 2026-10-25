@@ -720,7 +720,11 @@ UNDER_PRESSURE = re.compile(
 # A connective that orders two moments in time. Joining an interception to the very pass it cut out
 # makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
 # the interception where the ball arrives.
-BEFORE_AFTER = re.compile(r"\b(?:after|before|following|followed\s+by|preceded\s+by)\b", re.I)
+# "then" is not one: "cut out by a8, then a8 passes" orders two acts, and reading it would reject that
+# true form, so a claim that says the same act twice joined by "then" is not caught (a known gap).
+BEFORE_AFTER = re.compile(
+    r"\b(?:after|before|following|follow(?:s|ed)(?:\s+by)?|precede(?:s|d)(?:\s+by)?)\b", re.I
+)
 WINS_IT = re.compile(
     r"intercept|\bcut(?:s|ting)?\s+(?:it\s+)?out\b|\b(?:wins?|won|winning)\s+(?:it|the\s+ball)\b", re.I
 )
@@ -773,9 +777,11 @@ def _ordered(sentence: str, m: re.Match) -> tuple[str, str]:
 
 
 def _names_pass(part: str, p: dict) -> bool:
-    """This part speaks of the cut-out pass: a pass, by its passer."""
-    passer = re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part)
-    return bool(A_PASS.search(part)) and passer is not None
+    """This part speaks of the cut-out pass itself, as a thing ("h7's pass", "the pass from h7"), not of
+    its passer passing again ("h7 passes to h9" is another act)."""
+    who = re.escape(p["player"])
+    return re.search(rf"(?<!\w){who}['’]s\b[^,;.]*?\bpass\b|\bpass\s+(?:by|from)\s+{who}(?!\w)", part,
+                     re.I) is not None
 
 
 def _names_cut(part: str, p: dict) -> bool:
