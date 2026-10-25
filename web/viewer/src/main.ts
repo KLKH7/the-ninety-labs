@@ -3,7 +3,7 @@ import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, 
 import { drawCues, drawDetections } from "./draw";
 import { AudioTracks, readCommentary } from "./commentary";
 import { setupHud } from "./hud";
-import { pairCardAt, setupMatch } from "./match";
+import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, teamNames } from "./teams";
@@ -443,11 +443,13 @@ async function start() {
     }
   });
 
+  const broadcast = broadcastSchedule(b.cues);
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
     const t = matchTime(v);
-    const aired: Cue[] = onAir(b.cues, persona, t);
+    // The big screen airs the broadcast's few lower thirds; audio description keeps its own cues.
+    const aired: Cue[] = big && persona !== "audio" ? broadcast.filter((c) => c.t_in <= t && t < c.t_out) : onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });

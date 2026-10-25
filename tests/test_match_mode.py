@@ -473,3 +473,24 @@ def test_commentary_with_video_times_plays_by_the_video_clock(browser, site):  #
     seek(page, 30)
     page.wait_for_selector("#captions[hidden]", state="attached")
     ctx.close()
+
+
+def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_five(browser, site):  # noqa: F811
+    """No lower third for a routine pass (that stays in the phone's All plays); a shot, an insight
+    or a recap, at most one starting every 30 s, each held 5 s at most; one moment told for two
+    personas airs once, and the insight wins a tie."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+
+    def cue(cid, kind, t, persona="casual", ev="e1"):
+        return {"id": cid, "kind": kind, "slot": "lower_third", "persona": persona, "t_in": t, "t_out": t + 8,
+                "text": cid, "evidence": [ev], "replaces": None, "anchor": None, "lang": "en"}
+
+    cues = [cue("pass", "pass_arc", 0), cue("shot", "shot_speed", 10, ev="e2"),
+            cue("insight", "insight", 10, persona="analyst", ev="e3"),
+            cue("shot2", "shot_speed", 25, ev="e4"), cue("recap", "recap", 41, ev="e5"),
+            cue("recap-analyst", "recap", 80, persona="analyst", ev="e5"),
+            cue("said", "audio_description", 90, persona="audio", ev="e6")]
+    out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
+    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 15), ("recap", 41, 46)]
+    assert not errors
+    page.context.close()

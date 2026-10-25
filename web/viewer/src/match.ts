@@ -3,7 +3,7 @@
 // from the footage shown, and a "time skip" label at each cut, where the match clock jumps. All of
 // it is match.json (ninety/condensed.py); this only shows it at the right moment.
 
-import { type Bundle, type Manifest, clock } from "./bundle";
+import { type Bundle, type Cue, type Manifest, clock } from "./bundle";
 import { crestOf } from "./crests";
 import type { TeamNames } from "./teams";
 
@@ -51,6 +51,30 @@ export const PAIR_CARD_S = 20;
 export function pairCardAt(v: number, s: { open: boolean; closed: boolean; dock: boolean }): "up" | "docked" | "hidden" {
   if (s.open || (v < PAIR_CARD_S && !s.closed)) return "up";
   return s.dock ? "docked" : "hidden";
+}
+
+/** The big screen's lower thirds, as a broadcaster runs them: only moments that matter (a shot, a
+ * Scout insight, a recap; never a routine pass, which stays in the phone's All plays), at most one
+ * starting every BROADCAST_GAP_S, each held BROADCAST_HOLD_S at most (design: a TV graphics
+ * cadence). An insight is the analyst's cue; the big screen has no personas, so it takes it. */
+export const BROADCAST_KINDS = new Set(["shot_speed", "insight", "recap"]);
+export const BROADCAST_GAP_S = 30;
+export const BROADCAST_HOLD_S = 5;
+export function broadcastSchedule(cues: Cue[]): Cue[] {
+  const rank = (c: Cue) => (c.kind === "insight" ? 0 : c.kind === "shot_speed" ? 1 : 2);
+  const fit = cues
+    .filter((c) => c.slot === "lower_third" && BROADCAST_KINDS.has(c.kind) && c.persona !== "audio")
+    .sort((a, b) => a.t_in - b.t_in || rank(a) - rank(b));
+  const out: Cue[] = [];
+  const seen = new Set<string>();
+  for (const c of fit) {
+    const key = `${c.kind}|${c.evidence.join()}`; // the same moment told for two personas airs once
+    if (seen.has(key)) continue;
+    if (out.length && c.t_in < out[out.length - 1].t_in + BROADCAST_GAP_S) continue;
+    seen.add(key);
+    out.push({ ...c, replaces: null, t_out: Math.min(c.t_out, c.t_in + BROADCAST_HOLD_S) });
+  }
+  return out;
 }
 
 /** The chapter on screen at video time `v`. */
@@ -228,6 +252,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     statsAt: (t: number) => statsAt(m, t),
     skipAt: (v: number) => skipAt(m.chapters, fps, v),
     pairCardAt: (v: number, st: { open: boolean; closed: boolean; dock: boolean }) => pairCardAt(v, st),
+    broadcastSchedule: (cues: Cue[]) => broadcastSchedule(cues),
   };
   return { tick, step };
 }
