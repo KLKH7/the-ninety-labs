@@ -130,7 +130,7 @@ class MatchInsights:
         ]
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
                 for k in ("passer", "receiver"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
@@ -300,7 +300,7 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, as broadcasters count possession."""
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
         return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
 
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
