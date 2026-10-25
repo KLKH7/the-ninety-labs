@@ -2641,6 +2641,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
 
+### 231. A fallback that leaves cases undecided is scored on the cases it leaves, and its reference is measured first
+- **What happened:** the sides plan fixed a fallback, TB (tactical tracks inherit the broadcast's
+  sides), to ship if the tactical sides stayed below the broadcast's, B. B had never been scored,
+  so the condition could not be checked; scored, B was 0.578 and T1a 0.681 (on different track
+  populations and kit readers: PLAN.md's Oct 25 entry), and the fallback was not needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
+  but 38% of the tactical track-frames are players the broadcast never shows, and they get no side.
+  Judged only on what it decided, TB would have looked as good as B.
+- **Rule:** before a rule that compares with a reference is applied, the reference is measured on
+  the same clips. A variant that can leave a case undecided is scored over every case, undecided
+  ones counted against it, with its coverage reported beside its accuracy.
+- **Check:** `docs/eval/sides-tactical/B-validation.json` and `TB-validation.json`; PLAN.md's dated
+  entry gives both rates for TB.
+
 ### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
 - **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
   heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called

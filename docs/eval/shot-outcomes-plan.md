@@ -65,3 +65,131 @@ Goal precision and recall, save precision and recall, with 95% Wilson intervals,
 listed, on the test split of the shot-outcome set ([shot-outcome-set.md](shot-outcome-set.md)),
 rendered for this because the frozen test set shows no goal and one save, and the 24 validation
 clips hold no shot. False goals and false saves are also counted on the frozen 30-clip test set.
+
+## Amendment (Oct 24, before any clip of the shot-outcome set was rendered or scored)
+
+Found on the demo clip (seed 8001, development only, never a measurement): its goal was read as out
+of play and a second, false goal 2.3 s later. Three rule fixes, none of them a threshold:
+
+- **A goal no detected shot led to is still a goal.** A lofted strike's ground track bends wide of
+  the posts as the ball rises, so no shot is read at it (events.py's known limit). Rules 1 to 3 are now
+  also applied to every run of the ball over a goal line (`events.out_of_play`): at rest in the net,
+  it is a goal for the side attacking that goal (an own goal counts for it too, Law 10), with the
+  kick-off evidence as before; the last spell of that side before it becomes the shot, outcome goal.
+- **A strike from behind a goal line is no shot.** A player rolling the ball out of the net toward
+  the pitch had his path "cross the goal line between the posts" (the shot rule's test) and, the ball
+  still in the net, a second goal.
+- **The goal's time is when the ball crossed the line** (Law 10), the first frame of the unbroken
+  stretch over the line that ends at rest in the net, not the first frame at rest: on the demo the
+  ball sat beyond the net's depth for a second first, which put the goal 1.2 s late, outside the
+  scorer's 1.0 s window.
+
+On the demo clip afterwards: one shot (0.3 s from the true strike) and one goal (one frame from the
+true goal), confidence 0.865 with the kick-off seen after the cut.
+
+## Amendment 2 (Oct 24, evening, before any number of the shot-outcome set was read): the restart decides
+
+Kian's call, relayed by the Coordinator: the restart after a shot is evidence of its own, from the
+Laws. After a detected shot, the **first restart seen before the next strike** (across a broadcast cut
+too) decides:
+
+- **kick-off** (GROUNDING L4, Law 8): the ball still within `E_C` of the centre spot on 3 frames running
+  (moving under `CARRY_MPS`), with the players who have a side in their own halves (rule 4's test).
+  Then the shot is a **goal** for the shooter's side. Its confidence is `1 - (1 - line)(1 - kickoff)`,
+  `line` 0 when the net was not seen; its time is the crossing frame when the line was seen, else the
+  ball's last point nearest the goal line before the restart.
+- **goal kick** (L8, Law 16): the ball still inside the goal area of the goal the shot attacked (no more
+  than 5.5 m + `E_X` from the goal line, within 9.16 m + `E_Y` of the centre of the goal). Then
+  **not a goal**: `on_target` if the keeper rule saw a save, else `off_target`.
+- **corner** (L9, Law 17): the ball still within 1 m + `E_Y` of a corner of the end the shot attacked.
+  Then **not a goal**: `on_target` (a save) if the shot was on target, else `blocked`.
+- **none seen:** rules 1 to 5 as before.
+
+A restart seen overrides the line evidence (the Laws say what happened; the net is a pixel judgement).
+Thresholds are Law 1's geometry and the errors already measured on validation (`E_X`, `E_Y`, `E_C`,
+`docs/eval/shot-outcomes.json`); nothing is fitted.
+
+## Amendment 3 (Oct 25, after the validation score at 523f0074 and before any re-score; validation only)
+
+Validation at 523f0074 (`runs/onepod-1025/out/score-val/report.json`, the pod's): goals found 12 of
+16 ungated, 6 false, **0 above the 0.5 gate**; saves **0 of 50**. Diagnosed from the validation clips'
+truth and the detected events only (the test split not opened):
+
+- **Goal confidence:** all 18 detected goals score 0.153 to 0.434. Rule 6 halves the line evidence
+  where no height is known (on the broadcast that is nearly every frame) and again near a post, and
+  the kick-off is almost never inside a 10 s clip, so a goal's confidence cannot reach the gate the
+  other events are judged by. Reliability (detected goals, share true): 0.15 to 0.2, 5 of 9; 0.2 to
+  0.3, 2 of 2; 0.3 to 0.4, 4 of 5; 0.4 to 0.5, 1 of 2.
+- **False goals:** 4 of 6 are saves: a ball in the keeper's hands, placed on the ground, lands
+  behind the line by its height times the camera's slope. `events.out_of_play` already passes over a
+  ball drawn over a player for this reason; the net rule did not. The other 2 are true goals timed
+  1.2 and 2.6 s late (not changed here: the observations needed to see why are not on hand).
+- **Saves:** of the 50, 39 are read as passes and 5 as nothing. About half carry the wrong side:
+  a shot is tested only toward the goal the striker's side attacks, so a side read wrong (the
+  broadcast's side accuracy on validation is about 0.58) makes a shot a pass. Most of the rest are
+  lofted: the first 0.3 s of ground track meets the goal line 4 to 24 m wide of the centre while the
+  keeper takes the ball by it (measured speeds 120 to 230 km/h against 65 to 120 true).
+
+Four changes, none a fitted threshold:
+
+1. **The net ignores a ball drawn over a player** (`on_player`), as `out_of_play` does.
+2. **A shot's side is the side attacking the goal it heads for** (the engine's convention, the one
+   `assign_teams` names sides by: home attacks x = 105), and a strike is tested toward both goals.
+   Its `team_confidence` is the striker's track's when the two agree, else none (the kit says the
+   other side).
+3. **A strike is also a shot when its move ends at that goal**: the line from the strike to where the
+   move ends crosses the goal line between the widened posts (`SHOT_MARGIN_M`) from within
+   `SHOT_MAX_M`, and the move ends with a keeper's spell (`Track.keeper`) inside that goal's penalty
+   area (16.5 m, Law 1), or with the ball over that goal line. The end of a move is on the ground or
+   in the keeper's hands, so a lofted ball's height bends it far less than the strike's first 0.3 s.
+   The same line counts for rule 5's "on target": a shot is on target when either line (the first
+   0.3 s carried on, or the strike to the move's end) meets the goal line within the posts by `E_Y`.
+4. **A goal's line evidence is the mean ball score over the in-net frames**, without the two halvings
+   (they were design weights, and the reliability above shows they put every goal under the gate);
+   a goal's confidence stays `1 - (1 - line)(1 - kickoff)`, the gate stays 0.5.
+
+The validation clips are re-scored with this, the reliability table reported again, and then the
+commit is frozen and the test split scored once.
+
+## Amendment 4 (Oct 25, before any re-score of validation and before the test split is rendered): the kick-off after a ball over a goal line
+
+Found on the demo match (seed 8080, development only, never a measurement): a penalty into the roof
+of the net. Placed on the ground, the high ball lands 6 to 9 m behind the line, past the net's depth,
+so rules 1 to 3 cannot see it; its strike's ground track met the goal line 0.3 m outside the shot
+rule's margin, so no shot was read, and amendment 2's restart rule, which runs only after a detected
+shot, never looked. The kick-off that followed (Law 8: after a goal the side that conceded kicks off)
+was in the clip, after a cut. On validation this cannot be seen: each of the 16 goal clips ends 5 to
+7 s after its goal, before any kick-off.
+
+The change, none of it a threshold: amendment 2's rule is also applied to every run of the ball over
+a goal line (`events.out_of_play`) that rules 1 to 3 do not make a goal. When the first restart seen
+after it, before the next strike, is a kick-off (amendment 2's test), it is a goal for the side
+attacking that goal (an own goal counts for it too, Law 10), timed at the first frame over the line,
+at confidence `kickoff` (the line evidence 0, as amendment 2 has it when the net is not seen); the
+last spell of that side before it becomes the shot, outcome goal. A goal kick or a corner first
+leaves it out of play, as now. Known risk, reported not tuned: on a condensed match a cut can skip
+the goal kick and land on the next half's kick-off.
+
+## Amendment 5 (Oct 25, before any re-score of validation and before the test split is rendered): who kicks off
+
+Amendment 4's known risk, raised by the Coordinator: a ball that went over the goal line without a
+goal, then a cut to the next half's kick-off (Law 8 starts each half with one), would read as a goal.
+The Laws tell the two apart by who kicks off: after a goal, the side that conceded it (Law 8); at the
+start of the second half, the side that did not kick off the first. So a kick-off counts as evidence
+of a goal for a side only when that side is not the one kicking off.
+
+The side kicking off is the side of the nearest outfield player with a side inside the centre circle
+(9.15 m, Law 1, less `events.RIVAL_M`) on the kick-off's last still frame: the same reading as
+`ninety/vision/restarts.py`'s kick-off taker. When no such player is seen, the kick-off stands as
+before (the Laws are not contradicted). This applies everywhere a kick-off is evidence: rule 4's
+kick-off evidence, amendment 2's restart rule and amendment 4. Known cost, reported not tuned: a
+taker whose kit side is read wrong turns a true goal's kick-off away (the broadcast's side accuracy is
+about 0.58 on validation; the tactical views' players are used when given, rule 4).
+
+## How the test split is scored if only part of it is run (Oct 25, before any test clip is rendered)
+
+The test clips are rendered and run on a pod with a fixed stop time; the live path runs without the
+answer key (`NO_SCORE=1`), and only each clip's observations and detected events come back. The test
+score is computed once, on the Mac, at the frozen commit, from those observations, over **every** test
+clip whose observations came back and no other; the clips that did not are listed by name with the
+count, and the result is reported as a score on that subset, never as the whole split's.
