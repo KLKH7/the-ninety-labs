@@ -41,15 +41,16 @@ export function chapterLabel(c: Pick<Chapter, "label">, teams: TeamNames): strin
   return c.label.replace(/, (home|away)$/, (_, side: "home" | "away") => ` · ${teams[side]}`);
 }
 
-/** How long the big screen's pairing card stays up at kick-off and after each chapter starts (design:
- * long enough to scan, short enough not to sit on the play). */
+/** How long the big screen's pairing card stays up at kick-off (design: long enough to scan, short
+ * enough not to sit on the play). After it, the control bar's QR button brings it back. */
 export const PAIR_CARD_S = 20;
 
-/** Whether the pairing card is up at video time `v`: the clip's first PAIR_CARD_S seconds, and the
- * same after each chapter starts. */
-export function pairCardUp(chapters: Pick<Chapter, "index">[], fps: number, v: number): boolean {
-  if (v < PAIR_CARD_S) return true;
-  return chapters.some((c) => v >= c.index / fps && v - c.index / fps < PAIR_CARD_S);
+/** Where the big screen's pairing card is at video time `v`: "up" over the picture for the first
+ * PAIR_CARD_S seconds (until a fan closes it) or while the QR button has it open; "docked" small at
+ * the side otherwise, when the screen docks it (Kian's open choice, `?qr=dock`); else "hidden". */
+export function pairCardAt(v: number, s: { open: boolean; closed: boolean; dock: boolean }): "up" | "docked" | "hidden" {
+  if (s.open || (v < PAIR_CARD_S && !s.closed)) return "up";
+  return s.dock ? "docked" : "hidden";
 }
 
 /** The chapter on screen at video time `v`. */
@@ -216,14 +217,17 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     if (dir === -1 && v - c.index / fps > 1) to = c.n - 1;
     const target = m.chapters[Math.max(0, Math.min(m.chapters.length - 1, to))];
     seek(target.index / fps);
-    buttons.find((x) => x.c.n === target.n)?.btn.focus({ preventScroll: true });
+    // Focus follows to the chapter's button where the chapter bar is shown (not on the big screen,
+    // whose chapters are ticks on the scrubber).
+    const btn = buttons.find((x) => x.c.n === target.n)?.btn;
+    if (btn?.offsetParent) btn.focus({ preventScroll: true });
   };
   (window as unknown as { ninetyMatch: unknown }).ninetyMatch = {
     chapterAt: (v: number) => chapterAt(m.chapters, fps, v),
     scoreAt: (t: number) => scoreAt(m, t),
     statsAt: (t: number) => statsAt(m, t),
     skipAt: (v: number) => skipAt(m.chapters, fps, v),
-    pairCardUp: (chapters: { index: number }[], f: number, v: number) => pairCardUp(chapters, f, v),
+    pairCardAt: (v: number, st: { open: boolean; closed: boolean; dock: boolean }) => pairCardAt(v, st),
   };
   return { tick, step };
 }

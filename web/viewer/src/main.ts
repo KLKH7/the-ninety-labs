@@ -1,7 +1,8 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
-import { pairCardUp, setupMatch } from "./match";
+import { setupHud } from "./hud";
+import { pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, teamNames } from "./teams";
@@ -229,6 +230,7 @@ async function start() {
   overlay.width = m.width;
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
+  document.documentElement.style.setProperty("--ar", String(m.width / m.height)); // the big screen's fit
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
   const { matchTime, videoTime, segmentOf } = timeline(m);
   const teams = teamNames(m.teams);
@@ -246,7 +248,8 @@ async function start() {
 
   let lastAired = "";
   const rememberedPersona = store.get("persona") as Persona | null;
-  let persona: Persona = rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
+  // The big screen has no persona switch: personas are the phone's (Kian, Oct 24).
+  let persona: Persona = !big && rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
   const narrator = new Narrator(b.audio?.said ?? [], b.base);
   document.body.dataset.voice = narrator.state.voice;
   (window as unknown as { ninetyNarrator: Narrator }).ninetyNarrator = narrator; // read by tests/test_viewer.py
@@ -269,12 +272,13 @@ async function start() {
     applyVoice();
   });
   const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
-  const remembered = store.get("reduceMotion");
+  // The big screen has no motion switch: it follows the system setting alone.
+  const remembered = big ? null : store.get("reduceMotion");
   reduceMotionBox.checked = remembered === null ? motionQuery.matches : remembered === "1";
   const applyMotion = () => (document.documentElement.dataset.motion = reduceMotionBox.checked ? "reduce" : "full");
   applyMotion();
   motionQuery.addEventListener("change", () => {
-    if (store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
+    if (big || store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
     applyMotion();
   });
   reduceMotionBox.addEventListener("change", () => {
@@ -285,8 +289,9 @@ async function start() {
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
   const setPersona = (p: Persona, focus = false, picked = true) => {
     if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
+    if (big) p = "casual";
     persona = p;
-    store.set("persona", p);
+    if (!big) store.set("persona", p);
     document.body.dataset.persona = p;
     for (const btn of personaButtons) {
       const on = btn.dataset.persona === p;
@@ -334,6 +339,22 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
+  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
+  const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
+  const hud = big
+    ? setupHud({
+        footage,
+        video: m.footage.kind === "video" ? video : null,
+        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / m.fps, goal: c.kind === "goal" })),
+        play: playButton,
+        scrub,
+        clock: clockOut,
+        qrOpen: (open) => {
+          qrState.open = open;
+          if (!open) qrState.closed = true;
+        },
+      })
+    : null;
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -358,6 +379,15 @@ async function start() {
       case ".":
         footage.pause(); // to the middle of the next or previous frame
         footage.seek((Math.floor(footage.time() * m.fps) + (e.key === "." ? 1 : -1) + 0.5) * step);
+        break;
+      case "f":
+        if (!hud) return;
+        hud.toggleFull();
+        break;
+      case "Escape":
+        if (!hud) return;
+        hud.closeQr();
+        qrState.closed = true;
         break;
       case "1":
         setPersona("casual");
@@ -406,13 +436,15 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
-    if (big) {
-      const up = phone.paired && pairCardUp(b.match?.chapters ?? [], m.fps, v);
+    if (hud) {
+      const at = phone.paired ? pairCardAt(v, qrState) : "hidden";
       const card = $("pair-card");
-      if (card.hidden === up) {
-        card.hidden = !up;
+      if (card.dataset.at !== at) {
+        card.dataset.at = at;
+        card.hidden = at === "hidden";
         card.classList.toggle("still", reduceMotionBox.checked);
       }
+      hud.tick();
     }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
@@ -440,8 +472,10 @@ async function start() {
     if (document.activeElement !== scrub) scrub.value = String(v);
     clockOut.textContent = clock(t);
     const paused = footage.paused();
-    playButton.textContent = paused ? "Play" : "Pause";
-    playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    if (!hud) {
+      playButton.textContent = paused ? "Play" : "Pause";
+      playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    }
     requestAnimationFrame(frame);
   };
   setPersona(persona, false, false);

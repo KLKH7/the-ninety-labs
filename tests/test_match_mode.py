@@ -201,7 +201,7 @@ def test_the_clock_jumps_at_the_cut_under_a_time_skip_label(browser, site):  # n
 
 
 def test_chapters_from_the_keyboard(browser, site):  # noqa: F811
-    page, _ = open_viewer(browser, site + "?bundle=match/")
+    page, _ = open_viewer(browser, site + "?bundle=match/&dev=1")  # the chapter bar's buttons
     seek(page, 10)
     page.locator("body").focus()
     page.keyboard.press("]")
@@ -242,31 +242,83 @@ def test_a_bundle_without_match_json_has_no_match_mode(browser, site):  # noqa: 
 PANELS = ("#radar-section", "#match-stats", "#trace", "#pipeline", "#show-boxes", "#show-radar")
 
 
-def test_the_pairing_card_is_up_at_kick_off_and_each_chapter_then_goes(browser, site):  # noqa: F811
+def test_the_pairing_card_is_up_at_kick_off_then_behind_the_qr_button_or_docked(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=match/")
-    chapters = [{"index": 0}, {"index": 25 * 600}]  # a chapter starting 10 minutes into the video
-    up = lambda v: page.evaluate(f"window.ninetyMatch.pairCardUp({json.dumps(chapters)}, 25, {v})")  # noqa: E731
-    assert up(0.0) and up(19.9)  # PAIR_CARD_S: 20 s from kick-off
-    assert not up(20.1) and not up(599.9)  # then gone, until...
-    assert up(600.0) and up(619.9) and not up(620.1)  # ...20 s from the next chapter's start
+    def at(v, **s):
+        st = json.dumps({"open": False, "closed": False, "dock": False, **s})
+        return page.evaluate(f"window.ninetyMatch.pairCardAt({v}, {st})")
+
+    assert at(0.0) == "up" and at(19.9) == "up"  # PAIR_CARD_S: 20 s from kick-off
+    assert at(20.1) == "hidden" and at(600.0) == "hidden"  # never again on its own, not at a chapter
+    assert at(5.0, closed=True) == "hidden"  # a fan closed it
+    assert at(600.0, open=True) == "up"  # the QR button
+    assert at(600.0, dock=True) == "docked" and at(5.0, dock=True) == "up"  # Kian's open choice
     assert not errors
     page.context.close()
 
 
-def test_the_big_screen_shows_the_broadcast_score_chapters_and_qr_and_nothing_else(browser, site):  # noqa: F811
+def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=match/")
     assert page.get_attribute("body", "data-screen") == "big"
     for hidden in PANELS:  # on the phone instead
         assert not page.is_visible(hidden), hidden
-    for shown in ("#stage", "#score", "#chapters", "#clock"):
+    # No site header, persona tabs, motion switch, title row or chapter bar: the picture alone.
+    for hidden in (".bar", "#persona", "#reduce-motion", ".chapter-bar", ".keys"):
+        assert not page.is_visible(hidden), hidden
+    stage = page.locator("#stage").bounding_box()
+    assert stage["width"] == 1280 or stage["height"] == 900  # full-bleed: it fills the screen one way
+    # The score is the broadcast's own scorebug; our title row is only for a screen reader.
+    assert page.locator("#match").bounding_box()["width"] <= 1
+    # The controls are on the picture: play, the clock and the scrubber with the chapters on it.
+    for shown in ("#hud", "#play", "#scrub", "#clock", "#hud-qr", "#hud-full"):
         assert page.is_visible(shown), shown
-    # Pairing is the TV card over the picture (up once a code exists), not a side panel.
+    assert page.locator("#ticks i").count() == 1  # the second chapter's start (the first is 0)
+    assert page.locator("#ticks i.goal").count() == 0  # chapter 2 is a save; chapter 1 holds the goal
+    assert page.is_hidden("#hud-volume")  # the clip has no sound track: no dead control
     assert not page.is_visible("#phone-panel") and page.locator("#pair-card").count() == 1
     assert not page.is_checked("#show-boxes")  # the detector's boxes are not broadcast graphics
     page.keyboard.press("d")
     assert not page.is_checked("#show-boxes")
+    page.keyboard.press("2")  # personas are the phone's: the keys do nothing here
+    assert page.get_attribute("body", "data-persona") == "casual"
     assert not errors
     page.context.close()  # an open page keeps drawing; the audio tests time real playback
+
+
+def test_the_big_screen_controls_fade_while_it_plays_and_stay_while_paused(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page.mouse.move(400, 300)
+    assert page.get_attribute("body", "data-ui") == "on"
+    page.wait_for_timeout(3300)  # paused: the controls stay
+    assert page.get_attribute("body", "data-ui") == "on"
+    page.locator("body").focus()
+    page.keyboard.press("Space")
+    page.wait_for_function("document.querySelector('#play').dataset.paused === 'false'")
+    assert page.get_attribute("#play", "aria-label") == "Pause"
+    page.wait_for_function("document.body.dataset.ui === 'off'", timeout=6000)  # faded while playing
+    page.mouse.move(420, 320)
+    assert page.get_attribute("body", "data-ui") == "on"  # back on a move
+    assert not errors
+    page.context.close()
+
+
+def test_the_qr_button_opens_and_closes_the_pairing_card(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), lambda ws: None)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("#pair-card:not([hidden])")  # up at kick-off
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#pair-card[hidden]", state="attached")
+    page.click("#hud-qr")
+    page.wait_for_selector("#pair-card:not([hidden])")
+    assert page.get_attribute("#hud-qr", "aria-expanded") == "true"
+    page.click("#hud-qr")
+    page.wait_for_selector("#pair-card[hidden]", state="attached")
+    assert page.get_attribute("#hud-qr", "aria-expanded") == "false"
+    ctx.close()
 
 
 def test_the_dev_flag_keeps_every_panel(browser, site):  # noqa: F811
@@ -315,7 +367,8 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
 
 
 def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(browser, site):  # noqa: F811
-    page, errors = open_viewer(browser, site + "?bundle=match/")
+    """The dev view's title row (the big screen leaves the score to the broadcast's scorebug)."""
+    page, errors = open_viewer(browser, site + "?bundle=match/&dev=1")
     assert page.locator("#score-crest-home svg").count() == 0  # Crowmere has no crest: nothing drawn
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
 
@@ -325,8 +378,9 @@ def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(b
 
     ctx.route("**/match/manifest.json", demo_clubs)
     page = ctx.new_page()
-    page.goto(site + "?bundle=match/")
+    page.goto(site + "?bundle=match/&dev=1")
     page.wait_for_selector("#score-crest-away svg")
+    page.wait_for_function("document.querySelector('#score').textContent.startsWith('London')")
     assert page.locator("#score-crest-home svg").count() == 1
     assert page.inner_text("#score").startswith("London 0 – 0 Lisbon")
     assert not errors

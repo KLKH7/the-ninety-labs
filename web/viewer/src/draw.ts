@@ -81,6 +81,9 @@ export function drawDetections(ctx: CanvasRenderingContext2D, frame: FrameDetect
   ctx.restore();
 }
 
+/** A lower third reads as a sentence: its first letter capital ("a player plays a pass" → "A player…"). */
+const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 function drawLowerThird(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number, H: number) {
   const x = 56 - (1 - a) * 40, y = H - 128, h = 64, pad = 20;
   ctx.save();
@@ -100,7 +103,7 @@ function drawLowerThird(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: n
   ctx.fillText(label, x + pad, y + h / 2);
   ctx.fillStyle = INK;
   ctx.font = `600 28px ${FONT}`;
-  ctx.fillText(cue.text, x + lw + pad, y + h / 2, tw - pad * 2);
+  ctx.fillText(sentence(cue.text), x + lw + pad, y + h / 2, tw - pad * 2);
   ctx.restore();
 }
 

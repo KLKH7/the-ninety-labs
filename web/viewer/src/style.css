@@ -189,3 +189,60 @@ body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
 /* On the big screen the card replaces the side panel. */
 body[data-screen="big"] .side { display: none; }
 body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player"; }
+
+/* ---- The big screen as a streaming player (Kian, Oct 24): the picture full-bleed, nothing round
+   it. The score is the broadcast's own scorebug; the controls (src/hud.ts) sit on the picture and
+   fade while it plays. Personas and motion are the phone's. */
+.hud { display: none; }
+body[data-screen="big"] { background: #000; overflow: hidden; }
+body[data-screen="big"] .bar,
+body[data-screen="big"] .keys,
+body[data-screen="big"] .chapter-bar,
+body[data-screen="big"] .audio-note,
+body[data-screen="big"] .controls { display: none !important; }
+/* The score and chapter stay for a screen reader (announced), not on screen: the scorebug says it. */
+body[data-screen="big"] .match { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+body[data-screen="big"] .layout { display: block; padding: 0; max-width: none; height: 100vh; }
+body[data-screen="big"] .player { height: 100vh; display: grid; place-items: center; }
+body[data-screen="big"] .stage { width: min(100vw, calc(100vh * var(--ar, 1.7778))); border-radius: 0; }
+
+body[data-screen="big"] .hud { display: grid; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 64px 3% 2.2%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0)); color: #fff;
+  font: 600 clamp(13px, 1.2vw, 17px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+@media (prefers-reduced-motion: no-preference) { body[data-screen="big"] .hud { transition: opacity 0.35s ease; } }
+body[data-screen="big"][data-ui="off"] .hud { opacity: 0; pointer-events: none; }
+body[data-screen="big"][data-ui="off"] .stage { cursor: none; }
+.hud-row { display: flex; align-items: center; justify-content: space-between; }
+.hud-left, .hud-right { display: flex; align-items: center; gap: clamp(8px, 1.2vw, 18px); }
+.hud .icon { width: clamp(36px, 3.2vw, 48px); height: clamp(36px, 3.2vw, 48px); padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; display: grid; place-items: center; cursor: pointer; min-width: 0; }
+.hud .icon:hover { background: rgba(255, 255, 255, 0.14); }
+.hud .icon[hidden] { display: none; }
+.hud .icon svg { width: 62%; height: 62%; fill: currentColor; }
+.hud .icon svg .line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hud #play svg:first-child { display: none; }
+.hud #play[data-paused="true"] svg:first-child { display: block; }
+.hud #play[data-paused="true"] svg:last-child { display: none; }
+.hud #hud-qr[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+.hud output { font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, 0.85); }
+/* The scrubber: a thin white track, the chapters as ticks on it (as Hulu marks its chapters). */
+.hud-scrub { position: relative; height: 18px; display: flex; align-items: center; }
+.hud-scrub input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: none; cursor: pointer; }
+.hud-scrub input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.hud-scrub input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #fff; }
+.hud-scrub input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.hud-scrub input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: #fff; }
+.hud-scrub input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+.ticks { position: absolute; inset: 0 7px; pointer-events: none; }
+.ticks i { position: absolute; top: 7px; width: 2px; height: 4px; margin-left: -1px; background: #000; }
+.ticks i.goal { top: 3px; height: 12px; background: #fff; border-radius: 1px; }
+
+/* The pairing card at kick-off and from the QR button: centred low, clear of the scorebug. */
+body[data-screen="big"] .pair-card { right: 3%; bottom: 7%; z-index: 4; }
+body[data-screen="big"][data-ui="on"] .pair-card[data-at="up"] { bottom: calc(7% + 72px); }
+/* Docked (Kian's open choice, ?qr=dock): the QR alone, small, top right below the scorebug's row. */
+body[data-screen="big"] .pair-card[data-at="docked"] { top: 3.5%; bottom: auto; right: 2.5%; padding: 6px; gap: 0; background: rgba(0, 0, 0, 0.6); }
+.pair-card[data-at="docked"] .pair-text { display: none; }
+.pair-card[data-at="docked"] .pair-qr { width: clamp(44px, 4.6vw, 64px); }
+/* With the controls up, the graphics rise above them, as subtitles do in a streaming player. */
+@media (prefers-reduced-motion: no-preference) { body[data-screen="big"] #overlay { transition: transform 0.35s ease; } }
+body[data-screen="big"][data-ui="on"] #overlay { transform: translateY(-9%); }
