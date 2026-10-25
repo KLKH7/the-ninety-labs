@@ -15,6 +15,11 @@ frames, id 0 gave player-shaped boxes (median 32 x 71 px, about 6 a frame) and i
 box a frame (median 9 x 9 px). Read the ids by box shape on a trained model: a barely trained one
 puts out noise, which is how this was once mapped backwards (docs/LESSONS.md).
 
+With `--tiles` each frame is cut into a 2 x 2 grid of overlapping tiles (ninety/vision/tiles.py),
+each tile is detected at the model's input size, and the boxes come back merged in the full
+frame's pixels: the same detections.jsonl, four model passes a frame. It is for the fixed tactical
+camera, whose far players and ball are a few pixels across.
+
 Both checkpoints run at the same input size, so the baseline comparison changes one thing: the COCO
 baseline runs at finetune.json's resolution (640), not rfdetr's default (512), and our checkpoint
 at the resolution in its train-manifest.json.
@@ -29,6 +34,7 @@ from pathlib import Path
 from ninety.vision.detections import SCORE_FLOOR, Detection, FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX
 from ninety.vision.model import load, model
+from ninety.vision.tiles import grid, merge
 
 FINETUNE_CONFIG = Path(__file__).with_name("finetune.json")
 
@@ -85,7 +91,7 @@ def frame_rows(clip_dir: Path, stride: int = 1) -> list[dict]:
     return rows
 
 
-def to_frame_detections(row: dict, xyxy, scores, class_ids, label, model_field) -> FrameDetections:
+def _detections(xyxy, scores, class_ids, label) -> list[Detection]:
     dets = []
     for box, score, cid in zip(xyxy, scores, class_ids, strict=True):
         cls = label(int(cid))
@@ -93,14 +99,53 @@ def to_frame_detections(row: dict, xyxy, scores, class_ids, label, model_field) 
             dets.append(
                 Detection(cls=cls, bbox=tuple(round(float(v), 2) for v in box), score=round(float(score), 4))
             )
+    return dets
+
+
+def to_frame_detections(row: dict, xyxy, scores, class_ids, label, model_field) -> FrameDetections:
+    return frame_detections(row, _detections(xyxy, scores, class_ids, label), model_field)
+
+
+def frame_detections(row: dict, dets: list[Detection], model_field) -> FrameDetections:
     return FrameDetections(
         clip=row["clip"], frame=row["frame"], t=row["t"], model=model_field, detections=tuple(dets)
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def _predict(det, images: list) -> list:
+    preds = det.predict(images, threshold=SCORE_FLOOR, include_source_image=False)
+    return preds if isinstance(preds, list) else [preds]
+
+
+def detect_rows(
+    det, rows: list[dict], label, model_field, batch: int = 8, tiles: bool = False
+) -> list[FrameDetections]:
+    """The loaded detector over `rows` (frame_rows), `batch` images at a time, in frame order.
+    With `tiles`, each image is detected as its tiles.grid tiles and the boxes merged
+    (tiles.merge); a batch then holds the tiles of `batch` images."""
     from PIL import Image
 
+    out_rows = []
+    for i in range(0, len(rows), batch):
+        chunk = rows[i : i + batch]
+        images = [Image.open(r["image"]).convert("RGB") for r in chunk]
+        if not tiles:
+            for r, p in zip(chunk, _predict(det, images), strict=True):
+                out_rows.append(to_frame_detections(r, p.xyxy, p.confidence, p.class_id, label, model_field))
+            continue
+        grids = [grid(*im.size) for im in images]
+        crops = [im.crop((t.x0, t.y0, t.x1, t.y1)) for im, g in zip(images, grids, strict=True) for t in g]
+        preds = iter(_predict(det, crops))
+        for r, im, g in zip(chunk, images, grids, strict=True):
+            per_tile = []
+            for t in g:
+                p = next(preds)
+                per_tile.append((t, _detections(p.xyxy, p.confidence, p.class_id, label)))
+            out_rows.append(frame_detections(r, merge(per_tile, *im.size), model_field))
+    return out_rows
+
+
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Detect players and the ball in a clip's frames.")
     ap.add_argument("clip", type=Path)
     ap.add_argument("--checkpoint", required=True, help='"coco" or our checkpoint name, e.g. ours-v1')
@@ -113,6 +158,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
     ap.add_argument("--out", type=Path, default=None, help="default: <clip>/detections-<checkpoint>.jsonl")
     a = ap.parse_args(argv)
     if (a.checkpoint == "coco") != (a.weights is None):
@@ -120,18 +166,7 @@ def main(argv: list[str] | None = None) -> None:
     det = load(a.weights, resolution=a.resolution or trained_resolution(a.weights))
     label = labels_for(a.checkpoint, det.class_names)
     field = model(a.checkpoint)
-    rows = frame_rows(a.clip, a.stride)
-    out_rows = []
-    for i in range(0, len(rows), a.batch):
-        batch = rows[i : i + a.batch]
-        preds = det.predict(
-            [Image.open(r["image"]).convert("RGB") for r in batch],
-            threshold=SCORE_FLOOR,
-            include_source_image=False,
-        )
-        preds = preds if isinstance(preds, list) else [preds]
-        for r, p in zip(batch, preds, strict=True):
-            out_rows.append(to_frame_detections(r, p.xyxy, p.confidence, p.class_id, label, field))
+    out_rows = detect_rows(det, frame_rows(a.clip, a.stride), label, field, a.batch, a.tiles)
     out = a.out or a.clip / f"detections-{a.checkpoint}.jsonl"
     write_detections(out, out_rows)
     print(

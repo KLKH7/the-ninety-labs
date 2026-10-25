@@ -37,7 +37,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from pathlib import Path
 
-from ninety.agents import workflow
+from ninety.agents import evidence, workflow
 from ninety.agents.contracts import Models
 from ninety.agents.factcheck import Claim, Verdict, check
 from ninety.agents.judge import judge as judge_call
@@ -171,6 +171,8 @@ def report(body: dict, ran: str) -> str:
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
         "to run. Data: `docs/eval/ablation-agents.json`.",
         "",
+        evidence.md_line(body[evidence.KEY]),
+        "",
         "- **one agent**: the slice's Analyst, one published agent, writes the minute's claim, and it airs",
         "  as written.",
         "- **graph**: the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the",
@@ -260,13 +262,14 @@ async def live_arms():
             Models.scripted({}), analyst=ask("analyst"), tactician=ask("tactician"),
             challenger=ask("challenger"), judge=judge,
         )
-        yield models, ask("one agent"), judge, f"{', '.join(sorted(set(ran)))} on {config.MODEL}"
+        defs = evidence.record(locals_.values())
+        yield models, ask("one agent"), judge, f"{', '.join(sorted(set(ran)))} on {config.MODEL}", defs
 
 
-async def live(seeds: tuple[int, ...]) -> tuple[dict, str]:
-    async with live_arms() as (models, one_agent, judge, ran):
+async def live(seeds: tuple[int, ...]) -> tuple[dict, str, dict]:
+    async with live_arms() as (models, one_agent, judge, ran, defs):
         events = {s: workflow.simulated_events(s, MINUTES) for s in seeds}  # after the sign-in
-        return await run(models, one_agent, judge, events), ran
+        return await run(models, one_agent, judge, events), ran, defs
 
 
 def main() -> None:
@@ -278,8 +281,9 @@ def main() -> None:
     if not args.live:
         ap.error("the ablation is measured live (--live); tests/test_agent_ablation.py runs it on scripts")
     logging.getLogger("agent_framework").setLevel(logging.WARNING)
-    body, ran = asyncio.run(live(tuple(int(s) for s in args.seeds.split(","))))
+    body, ran, defs = asyncio.run(live(tuple(int(s) for s in args.seeds.split(","))))
     body["ran"] = ran
+    body[evidence.KEY] = defs  # each agent's version and definition fingerprint (ninety/agents/evidence.py)
     body["commit"] = workflow._commit()  # the engine the seeds were simulated with, and everything else
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "ablation-agents.json").write_text(results(body))

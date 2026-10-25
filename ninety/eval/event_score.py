@@ -145,9 +145,43 @@ def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
     return pairs
 
 
+Z95 = 1.959964  # two-sided 95%
+
+
+def wilson(k: int, n: int) -> list[float] | None:
+    """The 95% Wilson score interval for k successes in n (lessons 48, 89); None for n = 0."""
+    if n == 0:
+        return None
+    p, z2 = k / n, Z95 * Z95  # no ** in evaluation code: it is C's pow (tests/test_fmath.py)
+    centre = (p + z2 / (2 * n)) / (1 + z2 / n)
+    half = Z95 * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / (1 + z2 / n)
+    return [round(max(0.0, centre - half), 2), round(min(1.0, centre + half), 2)]
+
+
 def ratio(num: int, den: int) -> float | None:
     """None when the denominator is zero: undefined, never a made-up 0 or 1."""
     return num / den if den else None
+
+
+def at_restart(truth: list[dict]) -> set[str]:
+    """The ids of the true possession changes given at a restart: the engine writes one at the same
+    moment as the kick-off or set piece of its side when that side did not have the ball
+    (Engine.tick_restart). The rest are won in open play (docs/eval/possession-change-plan.md)."""
+    restarts = {(e["t"], e["team"]) for e in truth if e["type"] in ("kickoff", "set_piece")}
+    return {e["id"] for e in truth if e["type"] == "possession_change" and (e["t"], e["team"]) in restarts}
+
+
+def by_phase(truth: list[dict], pairs: list[dict]) -> dict:
+    """Possession changes' recall split into open play and at a restart: the detector claims only
+    the first, so a restart's is a miss named as such."""
+    restart = at_restart(truth)
+    matched = {p["truth_id"] for p in pairs if p["type"] == "possession_change"}
+    out = {}
+    for phase, ids in (("open_play", {e["id"] for e in truth if e["type"] == "possession_change"} - restart),
+                       ("at_restart", restart)):
+        tp = len(ids & matched)
+        out[phase] = {"true": len(ids), "tp": tp, "fn": len(ids) - tp, "recall": ratio(tp, len(ids))}
+    return out
 
 
 def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
@@ -172,6 +206,8 @@ def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
             "time_error_s": {"mean": sum(dts) / len(dts), "max": max(dts)} if dts else None,
             "distance_m": {"mean": sum(dists) / len(dists), "max": max(dists)} if dists else None,
         }
+        if kind == "possession_change":
+            per_type[kind]["by_phase"] = by_phase(truth, pairs)
     return {"per_type": per_type, "pairs": pairs}
 
 

@@ -90,9 +90,45 @@ def test_a_clip_cuts_only_a_dead_ball_whose_stoppage_and_restart_it_shows():
 
 
 def test_every_hold_is_at_least_the_shortest_shot():
-    """No shot either side of a cut flickers (CUT_HOLD_S), and the restart's closed-up shot and its
-    ease back out are over before the kick (camera.open_on_restart)."""
-    from ninety.render.camera import CUT_HOLD_S, OPEN_EASE_S
+    """No shot before a cut flickers (CUT_HOLD_S). The shot after it runs on into the restart's play,
+    and the camera holds it CUT_HOLD_S (test_render_camera)."""
+    from ninety.render.camera import CUT_HOLD_S
 
     assert edit.HOLD_AFTER_STOP_S >= CUT_HOLD_S and edit.HOLD_AFTER_GOAL_S >= CUT_HOLD_S
-    assert edit.SHOW_BEFORE_RESTART_S >= CUT_HOLD_S + OPEN_EASE_S
+
+
+def test_the_picture_comes_back_when_the_restart_is_imminent():
+    """Demo v1's critic (#4, #5): the picture came back 6 s before each restart, on a frozen close-up
+    of the taker alone. It now comes back between 1 and 2.5 s before the restart: the taker is seen
+    set, and nobody stands still for long (bounds written before the change)."""
+    events = [ev(100, "pass"), ev(130, "out_of_play"), ev(530, "set_piece"), ev(560, "pass")]
+    (c,) = edit.cuts(events, FPS)
+    back = 530 - (c.last_frame + 1)
+    assert 1.0 * FPS <= back <= 2.5 * FPS, back
+
+
+def test_a_goal_is_held_for_the_scorers_celebration():
+    """Demo v1's critic (#5, #8): the goal was cut to the kick-off with no celebration. The goal is
+    held at least 7 s: the engine's scorer reaches the corner flag about 5 s after a goal and his
+    team-mates join him (seed 8001), and the picture stays on them until the cut."""
+    assert edit.HOLD_AFTER_GOAL_S >= 7.0
+
+
+def test_each_cut_has_a_stinger_centred_on_it():
+    """Demo v1's critic (#6): the clock jumped at each cut with no transition. Every cut gets a
+    stinger: progress from -1 to 1 over at most STINGER_S, crossing 0 between the last frame before
+    the cut and the first after it, the same number of frames each side; frames away from a cut and
+    a clip with no cut have none."""
+    shown = list(range(100, 160)) + list(range(400, 460))
+    marks = edit.stingers(shown, FPS)
+    covered = sorted(marks)
+    assert covered, marks
+    assert len(covered) <= round(edit.STINGER_S * FPS) + 1
+    before = [i for i in covered if marks[i] < 0]
+    after = [i for i in covered if marks[i] > 0]
+    assert before and after and len(before) == len(after)
+    assert max(before) == 59 and min(after) == 60
+    seq = [marks[i] for i in covered]
+    assert seq == sorted(seq) and -1 <= seq[0] and seq[-1] <= 1
+    assert 0 not in marks and 119 not in marks
+    assert edit.stingers(list(range(100, 220)), FPS) == {}

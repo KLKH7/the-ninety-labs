@@ -16,5 +16,8 @@
     "@types/node": "22.19.1",
     "typescript": "5.9.3",
     "vite": "6.4.4"
+  },
+  "dependencies": {
+    "@ionic/core": "9.0.6"
   }
 }

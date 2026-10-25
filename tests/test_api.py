@@ -42,7 +42,11 @@ def test_mcp_without_a_configured_key_refuses_everyone():
 def test_mcp_with_the_key_lists_the_match_tools():
     response = call("k" * 64, "k" * 64)
     assert response.status_code == 200
-    assert sorted(t["name"] for t in response.json()["result"]["tools"]) == ["list_events", "match_info"]
+    names = sorted(t["name"] for t in response.json()["result"]["tools"])
+    from ninety.mcp import match_server
+
+    # the Analyst's tools, team shape, re_perceive and the insight tools
+    assert names == sorted(match_server.SERVED)
 
 
 def test_mcp_answers_a_tool_call():

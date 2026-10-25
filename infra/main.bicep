@@ -32,9 +32,30 @@ param renderCommit string = ''
 @description('Only to create or rotate the MCP key: written to Key Vault when set; left alone when empty.')
 param mcpKey string = ''
 
+@secure()
+@description('Only to create or rotate the demo passcode that gates Live mode: written to Key Vault when set; left alone when empty.')
+param demoPasscode string = ''
+
+@description('Replicas the demo app keeps running. 0 scales to zero between viewers (the default; a first request then waits for a cold start, about 50 s measured on 0.25 vCPU). 1 keeps one warm, for the judging window only: infra/README.md has the cost.')
+@minValue(0)
+@maxValue(1)
+param apiMinReplicas int = 0
+
+@description('Monthly cost budget for this resource group, in the billing currency (USD). 0: no budget.')
+param budgetAmount int = 20
+
+@description('Where the budget alert emails go. Kept in the azd environment, never in the repo. Empty: no budget.')
+param budgetEmail string = ''
+
+@description('First day of the budget\'s first month. Azure refuses a change after creation, so it is fixed, not today.')
+param budgetStart string = '2026-10-01'
+
 @description('The Foundry resource and project, created by hand before this file; referenced, not managed.')
 param foundryAccountName string = 'ninety-labs-ai'
 param foundryProjectName string = 'the-ninety-labs'
+
+@description('The Speech resource, created by hand: the API speaks Live answers with it (ninety/api/speak.py).')
+param speechAccountName string = 'ninety-labs-speech'
 
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
@@ -112,6 +133,12 @@ resource mcpKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empt
   properties: { value: mcpKey }
 }
 
+resource passcodeSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(demoPasscode)) {
+  parent: vault
+  name: 'demo-passcode'
+  properties: { value: demoPasscode }
+}
+
 var vaultReaderRole = '4633458b-17de-408a-b874-0445c86b69e6' // built-in role "Key Vault Secrets User" (az role definition list)
 
 resource apiReadsSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -154,7 +181,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret]
+  dependsOn: [apiPull, apiReadsSecrets, apiSpeaks, mcpKeySecret, passcodeSecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -166,7 +193,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
       }
       registries: [{ server: registry.properties.loginServer, identity: apiIdentity.id }]
-      secrets: [{ name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }]
+      secrets: [
+        { name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }
+        { name: 'demo-passcode', keyVaultUrl: '${vault.properties.vaultUri}secrets/demo-passcode', identity: apiIdentity.id }
+      ]
     }
     template: {
       containers: [
@@ -174,8 +204,19 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'api'
           // A public placeholder until the first `azd deploy api`; after that, the deployed image.
           image: apiExists ? apiImage.outputs.image : 'mcr.microsoft.com/k8se/quickstart:latest'
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
-          env: [{ name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }]
+          // Half a vCPU: most of a cold start is our own Python start-up (about 33 of 50 s on a quarter
+          // vCPU, from the Container Apps system log on Oct 20), which scales with CPU. Billed per
+          // active second only, so scale to zero still costs nothing between viewers.
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+          env: [
+            { name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }
+            { name: 'NINETY_DEMO_PASSCODE', secretRef: 'demo-passcode' }
+            // DefaultAzureCredential signs in as this user-assigned identity only when told its id.
+            { name: 'AZURE_CLIENT_ID', value: apiIdentity.properties.clientId }
+            { name: 'NINETY_SPEECH_RESOURCE_ID', value: speech.id }
+            // The TTS host is <region>.tts.speech.microsoft.com: the region's name, lowercase, no spaces.
+            { name: 'NINETY_SPEECH_REGION', value: toLower(replace(speech.location, ' ', '')) }
+          ]
           probes: apiExists
             ? [
                 { type: 'Readiness', httpGet: { path: '/api/health', port: 8000 }, periodSeconds: 10 }
@@ -184,9 +225,30 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             : []
         }
       ]
-      // Scale to zero between viewers; one replica is plenty for a demo and caps spend.
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      // Scale to zero between viewers by default; one replica is plenty for a demo and caps spend.
+      // The price of zero is a cold start on the first request (about 50 s measured on 0.25 vCPU,
+      // Oct 20), which Foundry's first MCP call also waits for; apiMinReplicas 1 removes it.
+      scale: { minReplicas: apiMinReplicas, maxReplicas: 1 }
     }
+  }
+}
+
+// Speech: the Live read-aloud route (ninety/api/speak.py) signs in as the API's identity, never a
+// key (key auth is off on the resource). "Cognitive Services Speech User" on this resource only,
+// looked up with `az role definition list --name "Cognitive Services Speech User"`.
+resource speech 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: speechAccountName
+}
+
+var speechUser = 'f2dc8367-1007-4938-bd23-fe263f013447'
+
+resource apiSpeaks 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: speech
+  name: guid(speech.id, apiIdentity.id, speechUser)
+  properties: {
+    principalId: apiIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', speechUser)
   }
 }
 
@@ -518,9 +580,30 @@ resource renderQueueJob 'Microsoft.App/jobs@2025-01-01' = if (!empty(renderCommi
   }
 }
 
+// The $20 alert (docs/PLAN.md, Budget): emails at half, at the full amount, and when Azure forecasts
+// the month will pass it. A budget only alerts, it never stops anything; the hard stops are scale to
+// zero, one replica, the capped log workspace and the subscription's own credit limit. Covers this
+// resource group, which holds everything the demo runs on, the Foundry resource included.
+resource budget 'Microsoft.Consumption/budgets@2024-08-01' = if (budgetAmount > 0 && !empty(budgetEmail)) {
+  name: 'budget-ninety-${environmentName}'
+  properties: {
+    category: 'Cost'
+    amount: budgetAmount
+    timeGrain: 'Monthly'
+    timePeriod: { startDate: budgetStart, endDate: '2027-09-30' }
+    notifications: {
+      actual50: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 50, thresholdType: 'Actual', contactEmails: [budgetEmail] }
+      actual100: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 100, thresholdType: 'Actual', contactEmails: [budgetEmail] }
+      forecast100: { enabled: true, operator: 'GreaterThan', threshold: 100, thresholdType: 'Forecasted', contactEmails: [budgetEmail] }
+    }
+  }
+}
+
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
+output DEMO_URL string = 'https://${api.properties.configuration.ingress.fqdn}/'
+output BUDGET_NAME string = budgetAmount > 0 && !empty(budgetEmail) ? budget.name : ''
 output FOUNDRY_GUARDRAIL string = guardrail.name
 output RENDER_JOB_NAME string = renderJob.name
 output RENDER_STORAGE_ACCOUNT string = storage.name

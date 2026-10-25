@@ -27,15 +27,20 @@ from ninety.render.camera import CUT_HOLD_S
 STOPS = ("out_of_play", "foul", "offside", "goal")
 RESTARTS = ("set_piece", "kickoff")
 # How long the picture stays on a stoppage before the cut, and how long before the restart it comes
-# back. Each is at least the camera's shortest shot (CUT_HOLD_S), so no shot flickers: the ball
-# going out or the foul and the players reacting; a goal held longer for the scorer and the net.
-# The picture comes back on the restart closed up for CUT_HOLD_S (camera.open_on_restart), then
-# eases out, so the kick is taken on the wide shot about two seconds later, as a broadcast shows a
-# restart. A broadcast is away from the live picture for a replay of about 7 s a time (SoccerNet-v2,
-# GROUNDING V1), so a wait of more than about 15 s is where a cut stands in for what it shows.
+# back (design, renderer only). Each hold before a cut is at least the camera's shortest shot
+# (CUT_HOLD_S), so no shot flickers: the ball going out or the foul and the players reacting. A goal
+# is held for the celebration: the engine's scorer reaches the corner flag about 5 s after a goal
+# and his team-mates join him (seed 8001), and the camera follows him (camera.Director, `scorer`).
+# The picture comes back on the restart's wide shot as the restart is imminent, the taker seen set,
+# so nobody stands still on screen for long (demo v1's critic: 6 s of a frozen close-up). A broadcast
+# is away from the live picture for a replay of about 7 s a time (SoccerNet-v2, GROUNDING V1), so a
+# wait of more than about 15 s is where a cut stands in for what it shows.
 HOLD_AFTER_STOP_S = CUT_HOLD_S
-HOLD_AFTER_GOAL_S = 5.0
-SHOW_BEFORE_RESTART_S = CUT_HOLD_S + 2.0
+HOLD_AFTER_GOAL_S = 8.0
+SHOW_BEFORE_RESTART_S = 2.0
+# Each cut is covered by a stinger, as a broadcast covers the cut into and out of a replay with its
+# graphic (design: about half a second): `stingers` marks the frames either side of it.
+STINGER_S = 0.6
 # A cut that would leave out less than this is not made (design): a jump of a second or two in the
 # same scene reads as a glitch, not an edit.
 MIN_CUT_S = 4.0
@@ -128,3 +133,32 @@ def used(cut_list: list[Cut], frames: list[int]) -> list[Cut]:
     if not frames:
         return []
     return [c for c in cut_list if frames[0] < c.first_frame and c.last_frame < frames[-1]]
+
+
+def stingers(frames: list[int], fps: int) -> dict[int, float]:
+    """For each picture index near a cut (a jump between two consecutive shown match frames): the
+    stinger's progress, from -1 as it starts through 0 at the cut to 1 as it clears. Half of
+    STINGER_S each side of the cut; other indices are absent."""
+    half = max(1, round(STINGER_S * fps / 2))
+    out: dict[int, float] = {}
+    for i in range(1, len(frames)):
+        if frames[i] == frames[i - 1] + 1:
+            continue
+        for k in range(half):  # k frames before the cut's last shown frame, and after its first
+            if i - 1 - k >= 0:
+                out[i - 1 - k] = -(k + 0.5) / half
+            if i + k < len(frames):
+                out[i + k] = (k + 0.5) / half
+    return out
+
+
+def edge_stingers(n: int, fps: int) -> dict[int, float]:
+    """The stinger over a clip's own ends, for clips cut back to back: clearing over its first
+    frames (0 to 1, as after a cut) and coming in over its last (-1 to 0, as before one), half of
+    STINGER_S each, so two such clips joined show one whole stinger across the join."""
+    half = max(1, round(STINGER_S * fps / 2))
+    out: dict[int, float] = {}
+    for k in range(min(half, n)):
+        out[k] = (k + 0.5) / half
+        out[n - 1 - k] = -(k + 0.5) / half
+    return out

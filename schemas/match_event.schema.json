@@ -11,7 +11,7 @@
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul", "half_time"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "team_confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Detected events only, optional: how firmly the side was told from the video, 0 to 1 (a score, not a probability; ninety/vision/track.py, assign_teams). Ground truth leaves it out." },
@@ -25,6 +25,7 @@
     "end_x": { "type": ["number", "null"] },
     "end_y": { "type": ["number", "null"] },
     "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "blocked", "goal", null] },
+    "restart": { "type": ["string", "null"], "enum": ["corner", "goal_kick", "throw_in", "free_kick", "penalty_kick", null], "description": "Detected set pieces only, optional: which restart the video shows (ninety/vision/restarts.py). Ground truth leaves it out: its set_piece carries no kind, which is read from the stoppage before it." },
     "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
     "source": { "type": "string", "enum": ["truth", "vision"] },
     "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }

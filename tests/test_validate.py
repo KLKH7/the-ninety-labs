@@ -378,6 +378,43 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
     assert "P5 ball flight" not in problems
 
 
+# Where a jolt in flight happens, relative to the goal at x = 105 (its net as the renderer draws
+# it: 2 m deep, its back 2 m high, the roof sloping down to it from the 2.44 m crossbar), and
+# whether the net can be what stopped the ball there. The engine holds a ball against the net with
+# its centre a radius (0.11 m) from the back or a side, or its top at the roof, from inside; from
+# outside, its centre a radius off the back or a side, or its lowest point on the roof.
+NET_CASES = [
+    ("in the middle of the goal", 105.9, 34.0, None, False),
+    ("against the back of the net", 106.89, 34.0, None, True),
+    ("against the side netting", 105.9, 37.55, None, True),
+    ("against the net's roof", 106.0, 34.0, 2.0, True),  # roof 2.22 m there, less the ball's 0.22
+    ("a few centimetres off the back of the net", 106.85, 34.0, None, False),
+    ("against the back of the net from behind it", 107.11, 34.0, None, True),  # lesson 200
+    ("against the side netting from beside the goal", 105.9, 37.77, None, True),
+    ("lying on the net's roof", 106.0, 34.0, 2.22, True),  # its lowest point on the roof
+    ("a few centimetres behind the back of the net", 107.16, 34.0, None, False),
+    ("a few centimetres beside the side netting", 105.9, 37.82, None, False),
+    ("beside the goal, above the side netting", 105.9, 37.77, 2.5, False),
+    ("above the roof", 106.0, 34.0, 2.5, False),
+    ("4 m above the back of the net", 106.89, 34.0, 4.8, False),
+]
+
+
+@pytest.mark.parametrize(("where", "x", "y", "z", "contact"), NET_CASES)
+def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, z, contact):
+    """Lessons 184 and 200: a ball touching a goal's net, inside it or out, meets a contact, as at
+    the woodwork. The same jolt anywhere the net cannot be touching the ball is a defect. The ball
+    flies in the middle of the goal; on the jolt's frame it is where the case puts it."""
+    clip = clean_clip()
+    lofted(clip)
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 105.9, 34.0
+    jolt = clip["frames"][PASS_AT + 10]["ball"]
+    jolt["x"], jolt["y"] = x, y
+    jolt["z"] = z if z is not None else jolt["z"] - 0.4
+    assert ("P5 ball flight" in run(tmp_path, clip)) is not contact, where
+
+
 def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
     clip = clean_clip()
     for f in clip["frames"]:
@@ -1034,3 +1071,135 @@ def test_every_check_the_validator_reports_has_a_planted_defect():
     keys = set(re.findall(r'problems\["([A-Z]\d+ [^"]+)"\]', (root / "ninety/validate.py").read_text()))
     tests = Path(__file__).read_text()
     assert keys and not {k for k in keys if f'"{k}"' not in tests}
+
+
+def _down(player, fall=85.0):
+    return {**player, "action": "down", "fall": fall, "fall_dir": 1.0304}
+
+
+def fall_clip(late_at: int | None = None) -> dict:
+    """h9 is fouled at 0.2 s. The free kick is taken at 2.8 s. Down through frame 40 (1.6 s) is
+    1.2 s clear: legal at the 1 s floor, not at 1.5 s. `late_at` is one more frame left down."""
+    players = [
+        {"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"},
+        {"id": "a4", "team": "away", "x": 60.0, "y": 34.0, "action": "stand"},
+        {"id": "h1", "team": "home", "x": 20.0, "y": 20.0, "action": "stand"},
+    ]
+    frames = []
+    for n in range(75):
+        row = [dict(p) for p in players]
+        if 5 <= n <= 40 or n == late_at:
+            row[0] = _down(row[0])
+        frames.append({
+            "frame": n, "t": n / FPS, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "possessor": None, "players": row,
+        })
+    events = [
+        event("e1", 5, "foul", "away", "a4", "h9", x=60.6, y=35.0),
+        event("e2", 70, "set_piece", "home", "h1", x=60.6, y=35.0),
+    ]
+    return {"events": events, "frames": frames, "meta": {"fps": FPS, "score": {"home": 0, "away": 0}}}
+
+
+def test_a_foul_that_lets_him_up_in_time_passes(tmp_path):
+    assert run(tmp_path, fall_clip()) == {}
+
+
+def test_a_player_still_down_within_a_second_of_the_restart_fails(tmp_path):
+    """Frame 50 is at 2.0 s, 0.8 s before the kick: inside the 1 s floor, outside a 0.5 s floor."""
+    assert fails(run(tmp_path, fall_clip(50)), "P18 foul fall", "still down")
+
+
+def test_a_player_down_four_tenths_before_the_restart_fails(tmp_path):
+    """Frame 60 is at 2.4 s. A deeper miss than the floor, so dropping it is not how the 0.5 s
+    mutant goes red: that one is the 0.8 s plant above."""
+    assert fails(run(tmp_path, fall_clip(60)), "P18 foul fall", "still down")
+
+
+def test_a_fall_of_zero_is_not_a_fall(tmp_path):
+    """The schema allows 0. P18 does not: a fall that is present is above 0."""
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["fall"] = 0
+    assert fails(run(tmp_path, clip), "P18 foul fall", "not degrees")
+
+
+def test_a_fall_with_no_direction_fails(tmp_path):
+    clip = fall_clip()
+    del clip["frames"][10]["players"][0]["fall_dir"]
+    assert fails(run(tmp_path, clip), "P18 foul fall", "no fall_dir")
+
+
+def test_a_fall_past_flat_fails():
+    """95° is already illegal in the schema, and validate() returns before P18, so the cap is
+    planted on the check itself."""
+    from collections import defaultdict
+
+    from ninety.validate import check_foul_fall
+
+    problems = defaultdict(list)
+    who = _down({"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"}, 95)
+    check_foul_fall([], [{"frame": 10, "t": 0.4, "players": [who]}], problems)
+    assert fails(problems, "P18 foul fall", "not degrees")
+
+
+def test_a_fall_outside_zero_to_ninety_fails_the_schema():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas/frame.schema.json").read_text())
+    check = Draft202012Validator(schema)
+
+    def frame(fall: float) -> dict:
+        return {
+            "frame": 0, "t": 0.0, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "players": [{"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "fall": fall}],
+        }
+
+    assert list(check.iter_errors(frame(0))) == []  # the schema's minimum is 0; P18 rejects it
+    assert list(check.iter_errors(frame(85))) == []
+    assert list(check.iter_errors(frame(95)))  # maximum 90, not a wider cap
+    assert list(check.iter_errors(frame(-1)))
+
+
+def test_a_fall_without_the_down_action_fails(tmp_path):
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["action"] = "run"
+    assert fails(run(tmp_path, clip), "P18 foul fall", "action run")
+
+
+def test_a_cut_from_the_end_of_a_half_to_the_kick_off_passes(tmp_path):
+    """Law 7, lesson 213: the ball is out of play from the end of a half to the kick-off that starts
+    the next, so a broadcast may cut away there (to a half-time card) as from any stoppage."""
+    clip = restart_clip()
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+        if e["type"] == "set_piece":
+            e["type"] = "kickoff"
+    assert run(tmp_path, cut_away(clip, 60, 120)) == {}
+
+
+def test_a_new_ball_placed_after_the_end_of_a_half_passes(tmp_path):
+    """Law 7, lesson 213: from the end of the first half the ball is out of play until the second
+    half's kick-off, so a new ball may be placed for it, as after any stoppage."""
+    clip = clean_clip()
+    for n in range(100, 150):
+        clip["frames"][n]["possessor"] = None
+    for n in range(105, 150):  # placed on the centre mark at frame 105, before the kick-off at 110
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 52.5, 34.0
+    clip["events"].append(event("e2", 100, "half_time", "away", x=50.0))
+    clip["events"].append(event("e3", 110, "kickoff", "away", "a1", x=52.5, y=34.0))
+    assert "P3 ball speed" not in run(tmp_path, clip)
+
+
+def test_a_substitution_at_half_time_passes(tmp_path):
+    """Law 3: a substitution is made at a stoppage, and the end of a half is one (Law 7)."""
+    clip = clean_clip()
+    substitute(clip, 120)
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+    assert run(tmp_path, clip) == {}

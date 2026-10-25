@@ -56,6 +56,7 @@ RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal dr
 CLOSE_DOWN_M = 2.0  # O1: design: how close the keeper gets to narrow the angle
 DANGER_RANGE_M = 25.0  # O2: design: attackers this near our goal are marked man to man
 MARK_GOAL_SIDE_M = 1.5  # O2: design: a marker stands this far goal-side of his man
+ZONE_RADIUS_M = 5.0  # O2: design: a block defender's zone around his place, about half the block's spacing
 SUPPORT_RANGE_M = (8.0, 14.0)  # O3: a diagonal option about 5 to 15 m from the ball
 RUN_BEYOND_M = 10.0  # O4: design: a run in behind aims this far beyond the defensive line
 
@@ -70,15 +71,18 @@ def keeper_depth_m(distance: float) -> float:
     return lo + (hi - lo) * min(1.0, max(0.0, distance) / SHOT_RANGE_M)
 
 
-def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float, float]:
+def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float,
+                cover: tuple[float, float] | None = None) -> tuple[float, float]:
     """O1: on the line that bisects the angle between the posts as seen from the ball, keeper_depth_m
     off his line, and never outside the posts: on a tight angle, where the bisector leaves the goal
     mouth, he comes back along it until he stands within them (*design*). Never nearer the ball than
     when he rushes out to close it down; with the ball almost on his line he stays on it, between
-    the posts."""
+    the posts. `cover`: the part of his goal line he covers (y at each end), the posts unless a wall
+    covers the rest (O1: at a direct free kick, the part the wall leaves open)."""
     gy = PITCH_Y / 2
-    a1 = fmath.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
-    a2 = fmath.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    lo, hi = cover if cover is not None else (gy - GOAL_HALF_WIDTH, gy + GOAL_HALF_WIDTH)
+    a1 = fmath.atan2(lo - ball_y, own_goal_x - ball_x)
+    a2 = fmath.atan2(hi - ball_y, own_goal_x - ball_x)
     mid = fmath.atan2(fmath.sin(a1) + fmath.sin(a2), fmath.cos(a1) + fmath.cos(a2))
     ux, uy = fmath.cos(mid), fmath.sin(mid)  # from the ball toward the goal, between the posts
     if abs(ux) < 1e-6:
@@ -141,24 +145,68 @@ def close_down_spot(carrier: tuple[float, float], own_goal_x: float) -> tuple[fl
     return cx + (gx - cx) / d * CLOSE_DOWN_M, cy + (gy - cy) / d * CLOSE_DOWN_M
 
 
-def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
-            own_goal_x: float) -> dict[str, tuple[float, float]]:
-    """O2: each attacker near our goal is picked up by the nearest free defender, who stands
-    goal-side of him. Returns defender id -> spot."""
+def pick_up(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float, keep: dict[str, str] | None = None) -> dict[str, str]:
+    """O2: each attacker near our goal, nearest the goal first, is picked up by the nearest free
+    defender. With `keep` (defender id -> attacker id), a defender still free first keeps the man he
+    marks, wherever that man goes: kept only while near, a man seen just at the edge of DANGER_RANGE_M
+    was dropped and picked up again from one look to the next. Returns defender id -> attacker id."""
     threats = sorted((a for a in attackers.items()
                       if math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2) < DANGER_RANGE_M),
                      key=lambda a: math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2))
     free = dict(defenders)
-    spots = {}
-    for _, (ax, ay) in threats:
+    pairs = {did: aid for did, aid in (keep or {}).items() if did in free and aid in attackers}
+    for did in pairs:
+        free.pop(did)
+    for aid, (ax, ay) in threats:
+        if aid in pairs.values():
+            continue
         if not free:
             break
-        pid = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
-        free.pop(pid)
-        gx, gy = own_goal_x, PITCH_Y / 2
-        d = math.hypot(gx - ax, gy - ay) or 1.0
-        spots[pid] = (ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M)
-    return spots
+        did = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
+        free.pop(did)
+        pairs[did] = aid
+    return pairs
+
+
+def goal_side(man: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+    """O2: where his marker stands, MARK_GOAL_SIDE_M from him toward the centre of our goal."""
+    ax, ay = man
+    gx, gy = own_goal_x, PITCH_Y / 2
+    d = math.hypot(gx - ax, gy - ay) or 1.0
+    return ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M
+
+
+def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float, pairs: dict[str, str] | None = None) -> dict[str, tuple[float, float]]:
+    """O2: each attacker near our goal is picked up by the nearest free defender (pick_up), who
+    stands goal-side of him. Returns defender id -> spot."""
+    pairs = pick_up(defenders, attackers, own_goal_x) if pairs is None else pairs
+    return {pid: goal_side(attackers[aid], own_goal_x) for pid, aid in pairs.items()}
+
+
+def zone_man(slot: tuple[float, float], attackers: dict[str, tuple[float, float]],
+             current: str | None = None) -> str | None:
+    """O2 beyond the box: whom a defender in the block tracks: the attacker nearest his place in the
+    block, if one is inside his zone (ZONE_RADIUS_M); the one he tracks already, while still inside."""
+    inside = {k: v for k, v in attackers.items()
+              if math.hypot(v[0] - slot[0], v[1] - slot[1]) <= ZONE_RADIUS_M}
+    if current in inside:
+        return current
+    return min(inside, key=lambda k: math.hypot(inside[k][0] - slot[0], inside[k][1] - slot[1]), default=None)
+
+
+def zone_spot(slot: tuple[float, float], man: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+    """O2 beyond the box: a defender in the block with an attacker in his zone stands goal-side of him,
+    as a marker does (MARK_GOAL_SIDE_M), but never further than ZONE_RADIUS_M from his place, so the
+    block keeps its shape (R8). Tracking runners is a large part of what defenders do out of possession
+    (Ade, Fitzpatrick and Bradley 2016, *J Sports Sci* 34: 2205-2214)."""
+    x, y = goal_side(man, own_goal_x)
+    sx, sy = slot
+    off = math.hypot(x - sx, y - sy)
+    if off > ZONE_RADIUS_M:
+        x, y = sx + (x - sx) * ZONE_RADIUS_M / off, sy + (y - sy) * ZONE_RADIUS_M / off
+    return x, y
 
 
 def support_spot(player: tuple[float, float], ball: tuple[float, float], goal_x: float,
@@ -217,10 +265,22 @@ STAYS_WIDE_M = 4.0  # design: stays_wide, further toward the touchline his role 
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
+# Lesson 202: at a corner the box runners wait no nearer goal than the penalty mark (Law 1: 11 m from
+# the goal line; design: where they start) and make their runs as the taker runs up. A dynamic attack
+# went with more shots from corners than a static one (Casal et al. 2015, Int J Perf Anal Sport
+# 15:430-451, 1,139 corners in elite football; verify: read from the abstract).
+BOX_RUN_START_M = 11.0
+# Lesson 202: at a free kick to them in the final third, the forwards stand on the opponents' line no
+# wider of the goal's centre than the goal area (Law 1: 5.5 m beside each post), attacking the box for
+# the kick or the rebound (design: where they stand; ENGINE.md: box occupation at set pieces). Held at
+# their open-play width the wingers stood outside the box: no attacker was in it at 6 of 16 free kicks
+# within 35 m over 20 matches on main.
+SET_PIECE_HALF_WIDTH_M = GOAL_HALF_WIDTH + 5.5
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
-                   last_line_x: float, wide_m: float = 0.0) -> tuple[float, float] | None:
+                   last_line_x: float, wide_m: float = 0.0,
+                   waiting: bool = False, set_piece: bool = False) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
@@ -228,7 +288,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     The team is at most LENGTH_MAX_M long (R8): when the ball is so deep that the roles behind it
     would stand further than that behind the forwards, those roles move up together, keeping their
     spacing, until the back line is LENGTH_MAX_M behind the forwards or level with the ball; the
-    forwards then hold no more than LENGTH_MAX_M ahead of the back line."""
+    forwards then hold no more than LENGTH_MAX_M ahead of the back line. `waiting`: a corner not yet
+    being run up to, so every role whose spot is nearer the goal waits at BOX_RUN_START_M from it and
+    makes his run as the taker runs up (lesson 202). `set_piece`: a free kick to this side, so in
+    the final third the forwards attack the box (SET_PIECE_HALF_WIDTH_M)."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -244,6 +307,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
         if key in BOX_RUNS:
             u, side = BOX_RUNS[key]
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
+            if waiting:
+                u = min(u, PITCH_X - BOX_RUN_START_M)
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
     deepest = max(b for b, _ in SHAPE_IN_POSSESSION.values() if b is not None)
@@ -256,9 +321,13 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     else:
         u = ball_u - behind + up
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
+    if waiting:  # lesson 202: everyone the box is attacked by starts his run from the penalty mark
+        u = min(u, PITCH_X - BOX_RUN_START_M)
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     if wide_m and width:
         y += math.copysign(wide_m, across * width)  # his side of the pitch, further out
+    if set_piece and behind is None and ball_u > FINAL_THIRD_M:
+        y = min(PITCH_Y / 2 + SET_PIECE_HALF_WIDTH_M, max(PITCH_Y / 2 - SET_PIECE_HALF_WIDTH_M, y))
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
 
 

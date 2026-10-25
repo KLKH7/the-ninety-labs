@@ -73,9 +73,10 @@ class Watch(Engine):
             last["z"] = cz  # the height where the body met it, which touched() is not given
         return super().deflect(p, cx, cy, cz, keep, at)
 
-    def pass_to(self, carrier, tx, ty, lofted, throw=False, pace=decisions.ARRIVE_MPS, receiver=None):
+    def pass_to(self, carrier, tx, ty, lofted, throw=False, pace=decisions.ARRIVE_MPS, receiver=None,
+                hands=False):
         before = len(self.match.events)
-        out = super().pass_to(carrier, tx, ty, lofted, throw, pace, receiver)
+        out = super().pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands=hands)
         new = self.match.events[before:]
         if throw and new and new[-1]["type"] == "pass":  # thrown now, not still turning to throw
             self.throw_log.append({"frame": self.frame, "team": carrier.team, "taker": carrier.id})

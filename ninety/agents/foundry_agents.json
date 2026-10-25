@@ -11,6 +11,14 @@
     "definition_sha": "de3461b01cfc1bf1",
     "version": "1"
   },
+  "ninety-companion-match": {
+    "definition_sha": "b06b66dd6637d0b5",
+    "version": "4"
+  },
+  "ninety-describer": {
+    "definition_sha": "064da096ff49c4f1",
+    "version": "1"
+  },
   "ninety-judge": {
     "definition_sha": "2b04c8ad1ac3c950",
     "version": "4"
@@ -20,7 +28,11 @@
     "version": "1"
   },
   "ninety-personalizer": {
-    "definition_sha": "6ea7cb9fb8d81c74",
+    "definition_sha": "14cda33892950116",
+    "version": "2"
+  },
+  "ninety-referee": {
+    "definition_sha": "500b90a60e681dd0",
     "version": "1"
   },
   "ninety-tactician": {

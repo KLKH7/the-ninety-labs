@@ -1,11 +1,18 @@
-# Azure Developer CLI project. `azd provision` creates infra/main.bicep in the existing resource
-# group; `azd deploy api` builds the Dockerfile, pushes it to our registry and rolls a new revision.
-# Setup and the provision/deploy split: infra/README.md.
+# Azure Developer CLI project. `azd up` (or `azd provision` then `azd deploy api`) creates
+# infra/main.bicep in the existing resource group, builds the Dockerfile locally (this subscription
+# does not allow ACR Tasks), pushes it to our registry and rolls a new revision: one container app
+# serving the viewer, the Replay bundle, the API and the match MCP server.
+# Setup, deploy steps and costs: infra/README.md.
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 name: the-ninety-labs
 infra:
   provider: bicep
   path: infra
+hooks:
+  # Refuses a provision that would leave the API without its Key Vault secrets or the budget alert.
+  preprovision:
+    shell: sh
+    run: infra/preprovision.sh
 services:
   api:
     project: .
@@ -14,5 +21,6 @@ services:
     docker:
       path: ./Dockerfile
       context: .
+      remoteBuild: false
       buildArgs:
         - NINETY_COMMIT=${NINETY_COMMIT}

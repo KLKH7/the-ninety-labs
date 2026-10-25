@@ -140,16 +140,75 @@ def mock_pair(browser, site, *, play=True, minimap_body=None):
     return laptop, phone, errors, requests
 
 
+def turn_on_read_aloud(page):
+    """Read-aloud is a switch in the settings sheet (the ⋯ button), off until a fan turns it on."""
+    page.click(".settings-open >> nth=0")
+    page.locator("#settings-sheet .speak").click()
+    page.click("#close-settings")
+    page.wait_for_function("!document.querySelector('#settings-sheet').classList.contains('show-modal')")
+
+
+def open_roster(page):
+    """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
+    page.focus("#lt-players")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#roster .who")
+
+
+def pick(page, name: str):
+    """Pick a player from the list by keyboard: focus his button, press Enter."""
+    open_roster(page)
+    page.get_by_role("button", name=name, exact=True).focus()
+    page.keyboard.press("Enter")
+
+
+def sheet_closed(page):
+    """Wait until the player sheet (an ion-modal) has finished closing: until then it covers the page."""
+    page.wait_for_function("!document.querySelector('#player-sheet').classList.contains('show-modal')")
+
+
+def fresh(page):
+    """Wait until the page has drawn a new frame. A screen's clock is written to the DOM each time it
+    draws (the phone's #map, the viewer's #overlay), so on a loaded machine the attribute can be a
+    frame half a second old; a read after a fresh frame is the clock the screen shows now."""
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
 def phone_t(phone) -> float:
+    fresh(phone)
     return float(phone.get_attribute("#map", "data-t"))
 
 
+# The big screen sends its clock every second (web/viewer/src/companion.ts, EVERY_MS) and the
+# phone re-anchors on each.
+SETTLE_S = 1.0
+STEPS, STEP_MS = 2, 200  # once settled, two more samples in step, 0.2 s apart
+
+
 def assert_in_step(sample_laptop, phone):
-    """The phone's time sits between two laptop readings taken around it, give or take TOLERANCE_S."""
-    before = sample_laptop()
-    shown = phone_t(phone)
-    after = sample_laptop()
-    assert before - TOLERANCE_S <= shown <= after + TOLERANCE_S, (before, shown, after)
+    """The phone's time sits between two laptop readings taken around it, give or take TOLERANCE_S,
+    once settled: on a loaded machine one clock message can arrive late and leave the phone behind
+    until the next (at most SETTLE_S later), so the samples are retaken for up to SETTLE_S. The bar
+    stays TOLERANCE_S; a phone that never comes within it fails, with every sample."""
+    samples = []
+    deadline = time.monotonic() + SETTLE_S
+
+    def sample() -> bool:
+        before = sample_laptop()
+        shown = phone_t(phone)
+        after = sample_laptop()
+        samples.append((before, shown, after))
+        return before - TOLERANCE_S <= shown <= after + TOLERANCE_S
+
+    while not sample():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"not within {TOLERANCE_S} s after {SETTLE_S} s: {samples}")
+        phone.wait_for_timeout(100)
+    # Once in step, it stays in step: STEPS more samples STEP_MS apart, each within the bar, so a
+    # phone whose own clock stopped (but was right once) fails too.
+    for _ in range(STEPS):
+        phone.wait_for_timeout(STEP_MS)
+        assert sample(), f"fell out of step after settling: {samples}"
 
 
 def seen(phone) -> list[dict]:
@@ -165,6 +224,19 @@ def validate_seen(payloads: list[dict], mock: bool = False):
         if "source" in p and p.get("type") != "answer":  # an answer's source is its author, code or model
             assert (p["source"] == "mock") == mock, p.get("type", "minimap")
             p = {**p, "source": "truth"} if mock else p
+        if p.get("type") == "answer" and "visual" in p["answer"]:
+            # An answer's picture is the agents' visual (schemas/insight_card.schema.json, PR #259);
+            # checked there when that schema is in this checkout, the rest of the answer here.
+            visual = p["answer"]["visual"]
+            card_schema = ROOT / "schemas" / "insight_card.schema.json"
+            if visual is not None and card_schema.exists():
+                card_id = json.loads(card_schema.read_text())["$id"]
+                ref = {"$ref": f"{card_id}#/$defs/visual"}
+                of_visual = schema_validator("insight_card").evolve(schema=ref)
+                of_visual.validate(visual)
+            answer_schema = json.loads((ROOT / "schemas" / "viewer_answer.schema.json").read_text())
+            if "visual" not in answer_schema["properties"]:
+                p = {**p, "answer": {k: v for k, v in p["answer"].items() if k != "visual"}}
         (MINIMAP if "frames" in p else MESSAGE).validate(p)
 
 
@@ -175,17 +247,19 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     ctx = browser.new_context(viewport=PHONE_SIZE)
     laptop = ctx.new_page()
     laptop.goto(f"{mock_site}mock-laptop.html?code={MOCK_CODE}")
+    laptop.wait_for_function("window.ninetyLaptop")  # the laptop answers before the phone asks
     phone = ctx.new_page()
     errors = watch(phone)
     phone.goto(f"{mock_site}?mock=1&clip=mock")
-    assert phone.is_visible("#mockbar")  # the mock says so on every screen
+    # The page imports the mock feed before it shows the bar (main.ts: `await import("./mock")`):
+    # wait for the bar itself, the sign the mock is ready, never a read the moment the page loads.
+    phone.wait_for_selector("#mockbar", state="visible")  # the mock says so on every screen
 
     phone.fill("#code", "12")
-    phone.click("#connect")
-    assert "6 letters and digits" in phone.inner_text("#pair-error")
+    assert phone.is_disabled("#connect")  # a TV-code form: Connect is on only once a code could work
     phone.fill("#code", "zzzzzz")  # well formed, but no laptop shows it
     phone.click("#connect")
-    phone.wait_for_function("document.querySelector('#pair-error').textContent.includes('No laptop')")
+    phone.wait_for_function("document.querySelector('#pair-error').textContent.includes('No screen')")
     assert phone.get_attribute("body", "data-state") == "pair"
 
     phone.fill("#code", MOCK_CODE.lower())  # typed in lower case on a phone keyboard
@@ -193,7 +267,10 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone.wait_for_selector("body[data-state=live]")
     phone.wait_for_function("document.querySelector('#map').dataset.dots === '22'")
     assert phone.get_attribute("#map", "data-source") == "mock"
-    assert phone.inner_text("#status") in ("Paused", "Synced")
+    # The status settles once the laptop's clock has come through (it says "Waiting" until then):
+    # wait for that state, then read its words, rather than reading whatever the first frame showed.
+    phone.wait_for_function("['paused', 'synced'].includes(document.querySelector('#status').dataset.state)")
+    assert phone.text_content("#status") in ("Paused", "Synced")  # in words, though only trouble shows
     assert not errors
 
 
@@ -223,61 +300,67 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     phone.wait_for_function("document.querySelector('#status').textContent === 'Paused'")
     box = phone.locator("#map").bounding_box()
     player, x, y = phone.evaluate("window.ninetyPhone.positions().players.find(p => p[0] === 'a7')")
-    phone.touchscreen.tap(box["x"] + x / 105 * box["width"], box["y"] + y / 68 * box["height"])
+    # Where the radar draws a7, through its own projection: y = 0 at the bottom, as on the TV.
+    sx, sy = phone.evaluate(f"window.ninetyPhone.screenOf({x}, {y})")
+    assert sy > box["height"] / 2 if y < 34 else sy < box["height"] / 2
+    phone.touchscreen.tap(box["x"] + sx, box["y"] + sy)
     if phone.is_visible("#which"):  # another dot under the thumb: the phone asks which
-        phone.locator("#which").get_by_role("button", name="Away 7").click()
+        phone.locator("#which").get_by_role("button", name="Lisbon 7").click()
     phone.wait_for_selector("#player:not([hidden])")
     # A screen reader lands on the card.
     phone.wait_for_function("document.activeElement.id === 'player-title'")
-    assert phone.inner_text("#player-title") == "Away 7"
+    assert phone.inner_text("#player-title") == "Lisbon 7"
     phone.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert float(phone.inner_text("#speed")) >= 0
     assert float(phone.inner_text("#peak")) >= float(phone.inner_text("#speed"))
-    assert "Heat map of Away 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
+    assert "Heat map of Lisbon 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
     assert phone.inner_text("#heat-span").startswith("Covering ")
     # The same choice without the map, for a screen reader: the roster's buttons.
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Home 4", exact=True).click()
-    assert phone.inner_text("#player-title") == "Home 4"
+    phone.click("#close-player")
+    sheet_closed(phone)
+    pick(phone, "London 4")
+    assert phone.inner_text("#player-title") == "London 4"
     assert phone.get_attribute("#roster [data-player=h4]", "aria-pressed") == "true"
     assert not errors
 
 
 def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Away 7", exact=True).click()
-    phone.get_by_role("button", name="What is Away 7's top speed?").click()
-    answer = phone.locator("#answers .answer").first
+    pick(phone, "Lisbon 7")
+    phone.get_by_role("button", name="What is Lisbon 7's top speed?").click()  # on the player card
+    sheet_closed(phone)  # the sheet closes for the Ask tab
+    assert phone.get_attribute("#tab-button-ask", "aria-selected") == "true"  # the answer is on the Ask tab
+    answer = phone.locator("#answers .answer").last
     answer.wait_for()
     assert answer.get_attribute("data-status") == "verified"
     # A code answer: the cited fact in a fixed sentence. "Fact-checked" is only for the Judge's.
     assert answer.locator(".badge").text_content() == "Computed from mock positions"
-    toggle = answer.locator(".evidence-toggle")
-    evidence = answer.locator(".evidence-wrap")
-    assert toggle.text_content() == "Show the evidence" and evidence.is_hidden()
-    toggle.click()  # one tap
-    assert toggle.get_attribute("aria-expanded") == "true" and toggle.text_content() == "Hide the evidence"
-    assert evidence.is_visible()
-    assert "Away 7's top speed" in evidence.inner_text() and "no AI wrote it" in evidence.inner_text()
-    answer.get_by_text("Technical detail").click()
+    how = answer.locator(".how")
+    assert how.text_content() == "How we know"  # a small chip at the end of the sentence
+    how.click()  # one tap opens the sheet with the evidence
+    evidence = phone.locator("#how-body")
+    evidence.locator(".evidence").wait_for()
+    assert "Lisbon 7's top speed" in evidence.inner_text()
+    assert "Checked by code before it was shown" in evidence.inner_text()
+    evidence.get_by_text("Facts cited").click()
     assert re.search(r"peak_speed:player_a7_window_0\.00-\d+\.\d\d", evidence.inner_text())
-    assert "Away 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
+    assert "Lisbon 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
     assert not errors
 
 
 def test_an_injected_question_is_refused_and_shown_only_as_text(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Away 7", exact=True).click()
+    pick(phone, "Lisbon 7")
+    phone.click("#ask-about")
+    sheet_closed(phone)
     phone.fill("#question", INJECTION)
     phone.click("#ask-button")
-    answer = phone.locator("#answers .answer").first
+    answer = phone.locator("#answers .answer").last
     answer.wait_for()
     assert answer.get_attribute("data-status") == "unanswerable"
     assert answer.locator(".badge").text_content() == "Can't answer that"
     assert answer.locator(".figure").count() == 0  # no number aired
-    assert answer.locator(".evidence-toggle").count() == 0
+    assert answer.locator(".how").count() == 0  # nothing to open: no fact was cited
     assert "cheated" in answer.locator(".asked").inner_text()  # the question, quoted as text...
     assert "cheated" not in answer.locator(".said").inner_text()  # ...and never in the answer
     assert answer.locator("img").count() == 0 and phone.evaluate("window.pwned") is None
@@ -288,9 +371,11 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     said = phone.locator("#now-said")
     assert said.get_attribute("aria-live") == "polite"
-    phone.check("#now-live")  # describe as it happens
+    turn_on_read_aloud(phone)  # read-aloud on: the play is described as it happens
+    assert phone.is_checked("#now-live")
     phone.wait_for_function("document.querySelector('#now-said').textContent.startsWith('At ')")
-    assert re.search(r"The ball is .+\. (Home|Away) \d+ is nearest it, in (Home|Away)'s", said.inner_text())
+    club = "(London|Lisbon)"
+    assert re.search(rf"The ball is .+\. {club} \d+ is nearest it, in {club}'s", said.inner_text())
     phone.wait_for_function("document.querySelector('#now-age').textContent.includes('s ago')")
     assert not errors
 
@@ -298,11 +383,12 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
 def test_every_payload_the_phone_receives_matches_its_schema(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     laptop.select_option("#focus", "h9")  # the laptop's focus: the phone follows it
-    phone.wait_for_function("document.querySelector('#player-title').textContent.startsWith('Home 9')")
-    phone.get_by_role("button", name="How far has Home 9 run?").click()
-    phone.locator("#answers .answer").first.wait_for()
-    phone.click("#wind-toggle")
-    phone.wait_for_function("document.querySelector('#wind').dataset.t")
+    phone.wait_for_function("document.querySelector('#player-title').textContent.startsWith('London 9')")
+    phone.get_by_role("button", name="How far has London 9 run?").click()
+    sheet_closed(phone)
+    phone.locator("#answers .answer").last.wait_for()
+    ask_wind(phone, laptop)  # the wind map's two flows
+    phone.wait_for_function("window.ninetyPhone.seen.filter(p => p.type === 'flow').length === 2")
     payloads = seen(phone)
     validate_seen(payloads, mock=True)
     kinds = {p.get("type", "minimap") for p in payloads}
@@ -310,16 +396,29 @@ def test_every_payload_the_phone_receives_matches_its_schema(browser, mock_site)
     assert not errors
 
 
-def test_the_wind_map_loads_only_when_turned_on_and_describes_both_teams(browser, mock_site):
+def ask_wind(phone, laptop=None):
+    """Ask how the teams are moving: the answer's picture is the wind map, fetched as two flows. The
+    mock laptop is moved a minute in first, so the 30 s window has play in it."""
+    if laptop is not None:
+        laptop.fill("#seek", "60")
+        phone.wait_for_function("window.ninetyPhone.laptop.time() > 59")
+    phone.click("#tab-button-ask")
+    phone.fill("#question", "How are the teams moving?")
+    phone.click("#ask-button")
+    phone.locator("#answers .answer:not(.pending)").last.wait_for()
+
+
+def test_the_wind_map_loads_only_when_asked_for_and_describes_both_teams(browser, mock_site):
     laptop, phone, errors, requests = mock_pair(browser, mock_site)
     phone.wait_for_function("document.querySelector('#map').dataset.dots === '22'")
     assert not [u for u in requests if "/wind-" in u]  # separable: not even downloaded until asked for
-    phone.click("#wind-toggle")
-    assert phone.get_attribute("#wind-toggle", "aria-pressed") == "true"
-    phone.wait_for_function("document.querySelector('#wind').dataset.t")
+    ask_wind(phone, laptop)
+    wind = "[...document.querySelectorAll('#answers figure canvas')].at(-1)"
+    drawn = f"{wind}?.dataset.wind === '1' && {wind}.getAttribute('aria-label').includes('Lisbon:')"
+    phone.wait_for_function(drawn)
     assert [u for u in requests if "/wind-" in u]
-    words = phone.inner_text("#wind-words")
-    assert "Home:" in words and "Away:" in words
+    words = phone.evaluate(f"{wind}.getAttribute('aria-label')")
+    assert "London:" in words and "Lisbon:" in words
     assert not errors
 
 
@@ -475,10 +574,13 @@ def pair_through_viewer(browser, url):
 def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, api_site):
     url = api_site
     viewer, phone, errors, _, _ = pair_through_viewer(browser, url)
-    lap = lambda: float(viewer.get_attribute("#overlay", "data-t"))  # noqa: E731
+    def lap() -> float:  # the big screen's clock as it shows it now (a fresh frame, then its data-t)
+        fresh(viewer)
+        return float(viewer.get_attribute("#overlay", "data-t"))
+
     phone.wait_for_selector("#refused:not([hidden])", timeout=10_000)  # the truth minimap, refused
     phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
-    assert abs(phone_t(phone) - lap()) <= TOLERANCE_S
+    assert_in_step(lap, phone)
     # The API's stand-ins are ground truth, so the phone shows the clock alone, and says so (the
     # status is redrawn each animation frame, so it follows the refusal by a frame: wait for it).
     phone.wait_for_function("document.querySelector('#status').textContent === 'Clock only'", timeout=5_000)
@@ -522,7 +624,7 @@ def test_an_unknown_code_is_refused_by_the_api(browser, api_site):
     page.goto(f"{url}phone/?clip=seed7")
     page.fill("#code", "QQQQQQ")
     page.click("#connect")
-    page.wait_for_function("/no laptop/i.test(document.querySelector('#pair-error').textContent)")
+    page.wait_for_function("/no screen/i.test(document.querySelector('#pair-error').textContent)")
     assert page.get_attribute("body", "data-state") == "pair"
     assert not errors
 
@@ -578,11 +680,12 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.wait_for_selector("body[data-state=live]")
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"
-        assert page.is_visible("#seen-note")
-        page.click("#roster-box summary")
-        page.locator("#roster .who").first.click()
+        assert page.text_content("#roster-summary") == "Players"
+        open_roster(page)
+        page.locator("#roster .who").first.focus()
+        page.keyboard.press("Enter")
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
-        assert re.fullmatch(r"(Home|Away) player · track \d+", page.inner_text("#player-title"))
+        assert re.fullmatch(r"(London|Lisbon) player \d+", page.inner_text("#player-title"))
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors
@@ -646,8 +749,7 @@ FLOW = {"type": "flow", "team": "home", "t_from": 0.0, "t_to": 30.0, "nx": 2, "n
 
 def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
     page, errors, requests = fake_api(browser, prod_site, card=CARD)
-    page.click("#roster-box summary")
-    page.get_by_role("button", name="Away 7", exact=True).click()
+    pick(page, "Lisbon 7")
     page.wait_for_function("performance.getEntriesByType('resource').some(e => e.name.includes('api/card/'))")
     page.wait_for_timeout(500)
     assert page.locator("#player").is_hidden()
@@ -656,19 +758,27 @@ def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
 
 
 def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
-    page, errors, requests = fake_api(browser, prod_site, flow={**FLOW})
-    page.click("#wind-toggle")
-    page.wait_for_function("document.querySelector('#wind-words').textContent.includes('ground-truth')")
-    assert page.get_attribute("#wind", "data-t") is None  # no field was set, so nothing drawn
+    wind = {**VERIFIED, "metric": "wind_map", "value": None, "unit": None, "text": "Both teams' movement.",
+            "visual": {"kind": "wind_map", "fact": "w1", "t": 30.0, "team": "home", "club": None,
+                       "geometry": {"t_from": 0.0, "t_to": 30.0}}}
+    message = {"type": "answer", "source": "code", "answer": wind}
+    page, errors, requests = fake_api(browser, prod_site, flow={**FLOW}, answer=message)
+    page.click("#tab-button-ask")
+    page.fill("#question", "How are the teams moving?")
+    page.click("#ask-button")
+    canvas = "[...document.querySelectorAll('#answers figure canvas')].at(-1)"
+    page.wait_for_function(f"({canvas}?.getAttribute('aria-label') || '').includes('ground-truth')")
+    assert "No picture" in page.evaluate(f"{canvas}.getAttribute('aria-label')")  # refused, so not drawn
     assert not errors
 
 
 def answered(page, text: str):
-    page.click("#roster-box summary")
-    page.get_by_role("button", name="Away 7", exact=True).click()
+    pick(page, "Lisbon 7")
+    page.click("#ask-about")  # from his sheet: the question is about him
+    sheet_closed(page)
     page.fill("#question", text)
     page.click("#ask-button")
-    answer = page.locator("#answers .answer:not(.pending)").first
+    answer = page.locator("#answers .answer:not(.pending)").last
     answer.wait_for(timeout=10_000)
     return answer
 
@@ -689,9 +799,10 @@ def test_an_answer_says_fact_checked_only_when_the_judge_saw_it(browser, prod_si
     page, errors, _ = fake_api(browser, prod_site, answer=message)
     answer = answered(page, "How fast is Away 7 now?")
     assert answer.locator(".badge").text_content() == badge
-    answer.locator(".evidence-toggle").click()
-    said = answer.locator(".evidence-wrap").inner_text()
-    assert ("the fact-checking agent" in said) == (source == "model")
+    answer.locator(".how").click()
+    page.locator("#how-body .evidence").wait_for()
+    said = page.locator("#how-body").inner_text()
+    assert ("checked by code and the Judge" in said) == (source == "model")
     assert not errors
 
 

@@ -9,7 +9,7 @@
   <body>
     <a class="skip" href="#trace">Skip to the agent trace</a>
     <header class="bar">
-      <h1>The Ninety <span>Labs</span></h1>
+      <h1>The Ninety Labs</h1>
       <div class="persona" role="radiogroup" aria-label="Persona" id="persona">
         <button type="button" role="radio" data-persona="casual" aria-checked="true">Casual <kbd>1</kbd></button>
         <button type="button" role="radio" data-persona="analyst" aria-checked="false">Analyst <kbd>2</kbd></button>
@@ -20,32 +20,108 @@
 
     <main class="layout">
       <section class="player" aria-label="Match clip">
+        <div class="match" id="match" hidden>
+          <div class="match-top">
+            <span class="match-tag">Condensed match</span>
+            <span class="score-crest" id="score-crest-home" aria-hidden="true"></span>
+            <output class="score" id="score">Home 0 – 0 Away</output>
+            <span class="score-crest" id="score-crest-away" aria-hidden="true"></span>
+            <span class="chapter-now" id="chapter-now"></span>
+          </div>
+          <p class="match-honest" id="match-honest"></p>
+          <p class="sr-only" id="match-live" aria-live="polite"></p>
+        </div>
         <div class="stage" id="stage">
+          <div class="time-skip" id="time-skip" hidden></div>
           <video id="video" muted playsinline preload="auto" aria-hidden="true"></video>
           <canvas id="frames" aria-hidden="true" hidden></canvas>
           <canvas id="overlay" tabindex="0" role="img" aria-label="On-screen graphics"></canvas>
+          <!-- The big screen's pairing card: bottom right, clear of the graphics' lower-third, up briefly at kick-off and at each chapter. -->
+          <div class="pair-card" id="pair-card" role="group" aria-label="Follow on your phone" hidden>
+            <div class="pair-qr" id="pair-qr" role="img" aria-label="QR code that opens the phone companion"></div>
+            <div class="pair-text">
+              <span class="pair-line">On your phone: <b id="pair-url"></b> · code <b class="pair-code" id="pair-code"></b></span>
+            </div>
+          </div>
+          <p class="captions" id="captions" hidden></p>
+          <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->
+          <div class="hud" id="hud">
+            <div class="hud-scrub" id="hud-scrub"><div class="ticks" id="ticks" aria-hidden="true"></div></div>
+            <div class="hud-row">
+              <div class="hud-left" id="hud-left"></div>
+              <div class="hud-right">
+                <button type="button" class="icon" id="hud-audio" aria-label="Audio and subtitles" aria-expanded="false" aria-controls="audio-menu" hidden></button>
+                <button type="button" class="icon" id="hud-volume" hidden></button>
+                <button type="button" class="icon" id="hud-qr" aria-label="Follow on your phone" aria-expanded="false" aria-controls="pair-card"></button>
+                <button type="button" class="icon" id="hud-full" aria-label="Full screen"></button>
+              </div>
+            </div>
+          </div>
+          <!-- The audio menu (src/commentary.ts), as a streaming app's audio and subtitles menu. -->
+          <div class="audio-menu" id="audio-menu" role="group" aria-label="Audio and subtitles" hidden>
+            <fieldset>
+              <legend>Audio</legend>
+              <label><input type="radio" name="track" value="stadium" checked /> Stadium</label>
+              <label id="track-commentary"><input type="radio" name="track" value="commentary" /> Commentary</label>
+              <label id="track-described" hidden><input type="radio" name="track" value="described" /> Audio description</label>
+            </fieldset>
+            <fieldset>
+              <legend>Subtitles</legend>
+              <label><input type="radio" name="subs" value="off" checked /> Off</label>
+              <label><input type="radio" name="subs" value="on" /> Commentary</label>
+            </fieldset>
+          </div>
         </div>
         <div class="controls">
           <button type="button" id="play" aria-label="Play">Play</button>
           <input type="range" id="scrub" min="0" max="1" step="0.04" value="0" aria-label="Position in the clip" />
           <output id="clock" aria-live="off">00:00</output>
-          <label class="toggle"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+          <label class="toggle dev-only"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+          <label class="toggle dev-only"><input type="checkbox" id="show-radar" checked /> Radar <kbd>M</kbd></label>
           <label class="toggle" id="voice-toggle" hidden><input type="checkbox" id="voice" checked /> Voice <kbd>V</kbd></label>
         </div>
+        <nav class="chapter-bar" aria-label="Chapters">
+          <ol id="chapters"></ol>
+          <div class="playhead" id="playhead" aria-hidden="true"></div>
+        </nav>
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
-          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona<span class="dev-only"> · <kbd>D</kbd> detections · <kbd>M</kbd> radar</span>
+          <span class="match-keys">· <kbd>[</kbd> <kbd>]</kbd> chapter</span>
           <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
         <p class="audio-note" id="audio-note" hidden></p>
-        <dl class="pipeline" id="pipeline"></dl>
       </section>
+      <dl class="pipeline" id="pipeline" aria-label="What ran"></dl>
 
       <div class="side">
+      <section class="radar-panel" id="radar-section" aria-labelledby="radar-title">
+        <div class="radar-head">
+          <h2 id="radar-title">Radar</h2>
+          <span class="radar-source">from the video's tracking</span>
+        </div>
+        <div id="radar-panel">
+          <canvas id="radar" tabindex="0" role="img" aria-label="Radar"></canvas>
+          <ul class="radar-legend" id="radar-legend">
+            <li><span class="key home"></span><span id="radar-home">London</span> <span class="dir">attacks →</span></li>
+            <li><span class="key away"></span><span id="radar-away">Lisbon</span></li>
+            <li><span class="key guess"></span>Estimated</li>
+            <li><span class="key view"></span>TV camera</li>
+          </ul>
+        </div>
+        <p class="radar-note" id="radar-note"></p>
+      </section>
+      <section class="stats-panel" id="match-stats" aria-labelledby="stats-title" hidden>
+        <div class="radar-head">
+          <h2 id="stats-title">Team stats</h2>
+          <span class="radar-source">from the footage shown, so far</span>
+        </div>
+        <table class="stats" id="stats-table"></table>
+      </section>
       <section class="phone-panel" id="phone-panel" aria-labelledby="phone-title">
-        <h2 id="phone-title">Connect your phone</h2>
-        <p class="hint">A minimap in step with this video, each player's speed and heat map, and fact-checked answers to your questions.</p>
+        <h2 id="phone-title">Follow on your phone</h2>
+        <p class="hint">A live radar of all 22 players in step with this video, the hidden stats, and fact-checked answers to your questions.</p>
         <button type="button" id="phone-pair">Show a pairing code</button>
         <div id="phone-pairing" hidden>
           <div class="phone-qr" id="phone-qr" role="img" aria-label="QR code that opens the phone companion with this code"></div>

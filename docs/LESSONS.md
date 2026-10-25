@@ -289,6 +289,9 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+- **Again (Oct 23):** `uv run ruff check . | tail -1 && git commit ... && git push` committed and
+  pushed a branch with 2 lint errors: `tail` succeeded, so `&&` went on. Gate on the command itself
+  (`uv run ruff check . && ...`), never on a pipe that trims its output.
 
 ### 30. Run the commands you document
 - **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
@@ -500,7 +503,6 @@ short and actionable. This file is public: no research sources, product names or
   written before reading any model output; test generalisation on words the prompt never uses.
 - **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
   or a tone claim is built on an event outside its condition.
-
 
 ### 35. A graphic's words must follow the outcome, not just its numbers
 - **What happened:** the first template graphics wrote "h10 finds h6" for every pass with a
@@ -1258,7 +1260,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-
 ### 129. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
@@ -1451,6 +1452,37 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
 
+### 148. A trust test that checks what the fit minimised trusts a wrong fit
+- **What happened:** the camera fit minimises how far the image's white marking pixels lie from
+  the projected pitch lines, and a frame was trusted when half of them lay within 1.5 px. A fit
+  that settles on the wrong camera also lines its markings up, so the test passed it. On
+  validation it trusted 198 frames whose ground was more than 1 m wrong: seed 109's by about
+  125 m, all of seed 108's by about 2 m. It also rejected 11% of good frames.
+- **Rule:** judge a fit by something it did not optimise. A consequence it must get right is
+  enough, here that players come out the height people are. Measure the test against the truth
+  on validation clips before trusting it.
+- **Check:** `tests/test_vision_observe.py` (players made too tall or too short by the camera are
+  not trusted, whatever the markings say); `docs/eval/detector-derive.md` (each gate's bad frames
+  trusted and good frames kept).
+
+### 149. A rule that counts errors cannot see how large they are, and a detector built on its only clip is tuned to it
+- **What happened:** the M1 event detector was built while test seed 900001 was its only clip, so
+  its published numbers were partly tuned to the test set. Re-deriving it on validation clips, the
+  new camera trust test was chosen by a rule fixed in advance: the most bad frames rejected,
+  keeping 90% of good ones. It won on counts (175 bad frames trusted against 198). But it trusts a
+  few frames on clips the old test rejected entirely, some 47 to 80 m wrong, where the
+  alternative's worst was 6.6 m. On the test set it trusts 1 and 7 such frames on the two clips
+  with camera cuts.
+- **Rule:** a detector is developed on validation clips from the start, and the test set is scored
+  once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
+  lets through (the worst, or a high percentile), not only their number, stated before choosing.
+- **Since, on validation:** a neighbour check added afterwards (docs/eval/camera-bound-plan.md,
+  lesson 159) brings the worst trusted frame there to 8.2 m (observed), under 8.5 m set before
+  measuring. It is not a bound (lesson 159), and on the test set 4 frames about 46 m wrong are still
+  trusted.
+- **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
+  order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
+  `tests/test_vision_observe.py::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted`.
 ### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
@@ -1482,6 +1514,34 @@ short and actionable. This file is public: no research sources, product names or
   (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
+
+### 142. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 143. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
 
 ### 150. Build a media branch from an empty tree, and look at what it holds before pushing
 - **What happened:** review clips for the camera pull request went on a new orphan branch made by
@@ -1518,6 +1578,38 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
 
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
+### 154. A check that measures a defect also stops it where it airs
+- **What happened:** #182 taught the failure table to fail a baseline whose Spanish profile read as
+  English, but the on-air gate (`personalizer/cues.verify`) still held only text byte-identical to
+  the verified English. A live Personalizer writing English with one word changed would have aired,
+  marked verified, to a Spanish viewer, and only the evaluation would have noticed. The
+  first version of the gate also passed the mock translator's English: its `[es]` label counted as
+  the Spanish word "es".
+- **Rule:** when an evaluation learns to catch a defect, the same check guards the live path, and
+  the evaluation keeps measuring independently of the gate. An exemption names both the mode and
+  the mark: the mock airs only in a run that asked for it (`NINETY_TRANSLATOR=mock`) and only with
+  its label on screen, so a model cannot exempt itself by writing the label. Labels and quotes are
+  not words of the text.
+- **Check:** `tests/test_personalizer_live.py::test_english_for_a_spanish_profile_never_airs`,
+  `::test_the_labelled_mock_airs_only_in_mock_mode`,
+  `::test_spanish_with_an_english_name_or_quote_still_airs`; and
+  `tests/test_workflow_failures.py::test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed`
+  shows the table still catches it with the gate removed.
+
 ### 155. A test of a library's message shape goes through the library's own parser
 - **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
   the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
@@ -1548,16 +1640,1401 @@ short and actionable. This file is public: no research sources, product names or
   `test_every_check_the_validator_reports_has_a_planted_defect`;
   `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
 
-### 153. A light module imports only light modules
-- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
-  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
-  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
-  `ninety.agents.contracts`, which only declares types, imported three short names from
-  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
-  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
-- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
-  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
-  SDK that only a live call needs is imported inside that call.
-- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
-  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
-  shows the check can go red.
+### 157. Measure an asset before scaling by it, and drive feet by place, not by pose
+- **What happened:** two defects in how the skinned players were drawn, both since the mesh
+  (a3d228e), both invisible to every test because each test measured the code against itself.
+  The body asset is 1.684 m to the top of its skull, but every scale treated it as 1.84 m, so each
+  player was drawn at 91.5% of his height: short and stocky next to the goal and the capsules he
+  replaced. And the stride swung each leg between two stored poses, which moves a foot back and
+  forth along one path: there is no low stance and high swing, so a walking foot skimmed along the
+  grass and a landing foot was blended onto its plant: a quarter of the frames a foot was on the
+  grass it slid more than 2 cm, up to 23 cm.
+- **Rule:** a constant taken from an asset is measured from the asset and tested against it. A
+  drawn body is checked against the world, not against its own constants: as tall as the player,
+  joints where a man's are (a cited table). Feet are placed: fixed where they land, carried on an
+  arc to where they will land, and judged frame by frame on the skinned markers.
+- **Check:** `tests/test_render_mesh.py::test_a_player_is_drawn_as_tall_as_he_is` and
+  `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
+  fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
+  the scale to the asset and its joints to the table.
+
+### 158. A point one rule puts exactly on a boundary is on it for every other rule
+- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
+  and the wall stands on that edge. A second rule sends a player round the circle while his
+  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
+  the closest point of that way is the place itself, and rounding put it a hair inside: the player
+  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
+  from the wall through the whole stoppage. No test placed a target exactly on the edge.
+- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
+  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
+- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
+  tolerance set to 0.
+
+### 159. A check of one frame against another cannot see an error the frames share
+- **What happened:** the camera trust test (players' heights) let through frames up to 55 m wrong on
+  validation. A check that each trusted frame's camera agrees with a trusted neighbour's (image
+  centre within 2 m, within 5 frames) brought the worst down to 8.2 m there, under a bound set
+  beforehand. On the test set it removed 4 of the 8 far-wrong frames on the two clips with camera
+  cuts. The other 4, on seed 900003, are about 46 m wrong but agree with each other: a run of
+  frames the fit got wrong the same way. Validation's seed 108 is the same failure, milder: a whole
+  clip offset 2 to 8 m.
+- **Rule:** before adopting a consistency check, say which errors it can see. Comparing frames
+  catches an isolated error, never one that frames share: two adjacent frames wrong the same way
+  pass together, and a wrong frame can make its good neighbour fail. So its worst on validation is
+  an observation, not a bound. A shared error needs an
+  absolute reference: the pitch markings, a known landmark, or a source independent of the fit.
+  Report what the check leaves, by the size of what it lets through, on the clips it is scored on.
+- **Check:** `tests/test_vision_observe.py`:
+  - `::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted` passes;
+  - `::test_a_whole_clip_in_the_wrong_place_is_not_trusted` is a strict expected failure, the
+    shared-error case;
+  - `docs/eval/camera-bound-plan.md`, Outcome, has the test set's frames left per clip.
+### 160. A pass or shot ends at the next thing that happens to the ball, however long it stays open
+- **What happened:** the engine keeps a shot open after a block, so a deflected shot can still count
+  as the shooter's goal, and closed it only when someone controlled the ball, at a foul, an offside,
+  or when it went out. On seed 21, the demo window, a10's shot at 4:37 was blocked; he got back to
+  the ball and h4 poked it loose at 4:39 (a tackle). The shot stayed open until h8 controlled the
+  ball at 4:41 and its end point was written there, after the tackle, so the data contract's C7
+  (the ball reaches the end point before anything else happens to it) failed.
+- **Rule:** keeping an event open for one purpose (crediting a goal) never lets it outlive the next
+  on-ball event. A touch ends it (`touched`); every other path that records an on-ball event while a
+  kick may be open ends it first, where the ball is (`Engine.end_kick`: a tackle's poke, a foul, an
+  offside), judged on the ball's own flight before anything changes it.
+- **Check:** `tests/test_shot_end.py`: seed 21's case, asserted to occur (lesson 41), with C7 and
+  "no carrier strikes with a kick still open" checked on the real match; a poke on an open shot; and
+  an untouched shot judged on its own flight, not the tackle's push.
+
+### 161. A claim about how players move is checked on the paths they walk
+- **What happened:** the free-kick wall's players shared out its places by the least total of
+  straight lines from where they stood, and GROUNDING, the report and a docstring said that no two
+  runs to the wall cross; the test checked the straight lines. A focused audit followed the runs
+  frame by frame: players go round the 9.65 m keep-off circle at their own distance from the ball
+  and come in behind the wall, and two runs crossed within a second of each other in 22 of 72
+  planted kicks. The fix estimated each walk the way it goes, round the circle at the walker's own
+  distance from the ball: that changed who stands in the wall and how fast they walk there, but not
+  the crossings (that walk is not the shortest way, so the uncrossing argument does not hold for it,
+  and two coming round the same side share the way behind the wall). And it repeated the mistake:
+  its docs said the estimate followed `keep_off`, and a second audit, frame by frame, found the
+  walked paths round the circle 6 to 24% shorter, because `keep_off`'s aiming walks a spiral in
+  toward the circle. It is now stated, and tested, as an estimate from above.
+- **Rule:** a claim about movement (no crossing, no contact, in place in time) is measured on the
+  walked paths, frame by frame, before it is written down; a property of the plan is stated as one.
+- **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
+  each kick; `uv run pytest tests/test_restarts.py -k estimated_from_above` follows the walks frame by
+  frame against their estimate.
+
+### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
+- **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
+  pose, arms over the head, from the frame the engine named the thrower, while the engine's ball
+  was still at his feet; the ball then rose into empty hands and left with no throw. The jog was
+  a march: the stride's stance share was a guess, and the swing peaked under the hips. A
+  stride's swing read its progress straight off the shared phase, so a change of pace moved a
+  foot in a frame. And the push-off toe slid up to 17 cm a frame because the stance was allowed
+  0.45 m behind the hips, a limit commented "measured" that the asset's leg reaches only to 0.30.
+  Two old tests also held design as truth ("walking at 3 m/s, a foot is always on the grass").
+  The first fix passed every steady-speed test, and a blind critic still preferred 0.5.3: speeding
+  up, slowing and drifting, its players hopped with both feet tucked, because a foot lifted early
+  for reach started its swing count from zero, both feet left the grass together setting off, and
+  a pose flickering between walk and stand restarted a stride that never landed. The next draft
+  drew the runners' knee fold whole (to 109 degrees at 3.5 m/s, Fukuchi 2017): true to the
+  source, and a third blind critic still preferred 0.5.3 on the jog clip, because at broadcast
+  size a heel at the seat with a level pelvis and no bob reads as prancing. Only the timing went
+  in (highest a third of the way through the swing, behind him); the height stayed 0.5.3's.
+- **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
+  engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
+  cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
+  never where it is. A constant marked measured carries the measurement (what, how, the number)
+  and is re-measured when a defect points at it; a test's premise that a source contradicts is
+  rewritten to what it was protecting. A gait change is judged blind on clips where players
+  change pace, not only on steady-speed tests, and a sourced angle is drawn only as far as the
+  rest of the body (pelvis, bob) can carry it.
+- **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
+  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_running_foot_is_highest_early_in_its_swing`,
+  `test_the_push_off_toe_does_not_slide_before_it_lifts` and
+  `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
+  with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
+  `test_setting_off_from_standing_lifts_one_foot_at_a_time` and
+  `test_setting_off_the_feet_do_not_leave_the_grass_together` fail with each hop's cause put back.
+
+### 166. A wait for something to happen ends when it can no longer happen
+- **What happened:** a throw-in released behind the touchline counts as still coming in while it
+  moves toward the field, judged by the sign of its speed across the line alone. In the wall's
+  16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a
+  second inward: it stayed in play past the end of the touchline and over the end boards, which only
+  a dead ball meets, rolled on 14 m beyond them, and when it stopped the retake snapped it back to
+  the boards, a 14.6 m jump in one frame. The restart sweep then counted the retakes as free kicks
+  taken from the touchline with opponents inside 9.15 m, and the retaken throw as the taker's second
+  touch.
+- **Rule:** a state that waits for an event (coming in, arriving, landing) also ends when the event
+  can no longer happen where it is allowed to (here, past the end of the touchline); a measurement
+  counts a restart taken again as the same restart.
+- **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
+  before it, the ball runs on to 127 m and jumps 18 m in a frame.
+
+### 172. A score called a confidence is measured before a gate is built on it
+- **What happened:** the phone's possession layer was designed to show a team only above a
+  confidence: the detector's side confidence times an age factor. Measured on 13 validation clips
+  before any UI was built, team agreement fell as the cut-off rose (65 % at 0.2, 30 % at 0.7, 0 %
+  at 0.9), because the side is decided once per clip, and a flipped clip is wrong throughout, one
+  of them at 0.88 to 0.97. `Track.side_confidence` says it is "a score, not a probability"; the
+  design treated it as one.
+- **Rule:** before a confidence gates what a viewer sees, measure agreement against it on
+  validation data: the curve by cut-off, and per clip, since errors that share a cause share a
+  clip. If no cut-off reaches the target, the gate stays shut and the feature stays off; never
+  move the target to open it. Build the screen only after the gate can open.
+- **Check:** `tests/test_possession.py::test_while_the_gate_is_unset_the_layer_shows_nothing` and
+  `::test_the_committed_calibration_states_its_targets_and_its_evidence`;
+  docs/eval/possession-calibration.md.
+
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
+
+### 174. A player with time to spare walks there and waits, rather than creeping in just in time
+- **What happened:** at restarts the engine paced every player to reach his place just as the
+  kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
+  the players crept in below a walk for most of the wait: 72% of the outfielders' time after the
+  ball was fetched was at 0.2 to 1.2 m/s, over 25 corners in 20 matches. The corner's length
+  matched Opta's, but twenty players drifting slowly for 20 s read as "a long time to take a
+  corner". The first fix, a walking floor on every move through the wait, made them shuffle
+  instead: the audit counted 10.4 direction reversals per outfielder-minute against main's 0.7.
+  The creep had hidden four loops, each between two rules: every small shift of a place that
+  moves (a man marked, a slot) walked to and back; keep_off sending a player who had stopped a
+  hair short of his place on the keep-off circle's edge back out past it, every half second; the
+  floor holding a player going round another who stood on his place, so he circled him at a walk,
+  0.2 m off, for half a minute; and the defending side's brain naming its presser and cover again
+  at every look, by an order that the two roles' own walks changed, so two players swapped roles
+  twice a second through the whole wait. Two of those fixes then put opponents inside 9.15 m at the
+  kick, in 7 and then 10 restarts of 20 matches against none on main: the roles were kept only while
+  the restart waited, and the cover's spot was worked out as in play, so as the taker stood over the
+  ball the cover was sent in from 11 m; and the straight way through keep_off's 0.5 m margin let
+  players walk in the margin that takes up a bend or a step too far. The second audit still counted
+  twice main's to-and-fro (1.43 reversals a minute against 0.70): the floor walked every jump of a
+  place by more than a stride, and at a dead ball places jump with what players see and whom they
+  mark, so the kicking side's back line, following an onside line read from noisy sightings, stepped
+  1 to 3.5 m back and forth every second or two through free kicks. And kept roles kept a clash that
+  asking again had moved from player to player: at a free kick with a wall, the presser's place is
+  where the wall stands, and the same presser was pushed in and out of 9.15 m by the wall's players
+  for the whole wait, 6 cm inside it at the kick. And near a line, the way round the keep-off circle,
+  aimed off the pitch and kept on it, fell inside the circle: a defect main has at a creep, walked
+  into 9.15 m more often (10 entries near a line in 20 matches, against 4), once at the kick. The
+  third audit found settling had brought the creep back: 42 of 144 free kicks had a player creeping
+  more than 10 m in one spell (the version before settling had none). "The ball set" was checked as
+  the ball within a foot's reach of its spot, true at the whistle with the ball still rolling and
+  before the fetch; a settled player then followed every later shift of his place at his own pace,
+  however far (up to 42 m, as the restart's shape formed); and settling was judged on keep_off's
+  first step out of the circle, not on his place, so one settled 18 m from it. The hold near a line
+  that fixed the cut-through stranded players 20 to 52 m from their places for up to 41 s, and one
+  between the ball and the line inside the circle for the whole wait. And going round the circle,
+  each chord's dip into the 0.5 m margin sent the player straight out, so he stopped short every
+  few strides and went round at about 1.1 m/s: below a walk, on every version since the margin.
+  Walking a big shift again then showed one more loop the creep had hidden: the defending side
+  picked up the attackers near its goal afresh at every look, so men changed markers from look to
+  look, and three defenders walked out and back up to 19 times through one free kick's wait; the
+  taker's marker was placed where the wall stands. And a settled presser at a goal kick, bent off
+  his place by a team-mate beside it, went back at his pressing pace and sprang back and forth,
+  28 times in one wait.
+- **Rule:** "just in time" is a pace for play, where arriving early costs something; with time to
+  spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there; once
+  there with the ball still on its spot, he has settled, and he follows a small shift of his place
+  (what he sees, whom he marks) at his own pace, but walks a big one. A state that turns a rule off
+  ("settled") names the condition that ends it as well as the one that starts it, and each is
+  checked as the code checks it ("set" is still, on the spot, at nobody's feet but the taker's).
+  A rule about where a player stands is judged on where he stands, not on a waypoint on the way.
+  A head is measured, rendered and published only once `uv run pytest` passes on it: two heads
+  here were measured before it did (one called the C library's acos, one let a presser leave the
+  area late at a goal kick), and their numbers had to be measured again.
+  A realism complaint is measured in parts (fetch, arrivals,
+  wait, speeds) before the total is blamed. A change that makes players move faster is also
+  measured for to-and-fro (reversals, the distance walked to and fro, waits with three or more
+  reversals) and for creep spells (a player at 0.2 to 1.2 m/s for more than 5 or 10 m in one
+  go): a slow pace hides a target that flips, and a rule that turns the floor off can bring the
+  creep back. A loop between two rules is fixed where they meet, not by slowing the player down.
+  And a change to how players move near the ball goes through the restart sweep (the Laws'
+  distance at the kick) after every fix, not only the first.
+- **Check:** `uv run pytest tests/test_restarts.py -k "walk_to_their_places or fetching_a_dead_ball_keeps
+  or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
+  or he_settles or settles_only_at or nobody_else_is_named or never_cuts_inside or by_a_line
+  or short_way_is_open or keeps_his_man or kept_man_stays or does_not_settle_while
+  or spring_about or judged_on_his_place_not or aim_is_off_the_pitch"`; each fails on the engine
+  before its fix (`brought_onto_it` is a guard).
+  `scripts/defect_sweep/creep_spells.py` counts creep spells through the waits.
+  `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
+  outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and
+  `scripts/defect_sweep/restarts.py` the Laws' distance at the kick (nobody inside, as on main).
+
+### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
+- **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
+  at 98%. With #179's engine, seed 3's window held three corners and two balls run to the byline,
+  and it fell to 58%. Two causes:
+  - The test simulated only 2 minutes, so a dead ball at the window's end counted as live (lesson
+    140, applied to the clip but not to the test).
+  - The camera had real misses that main's seed 3 never showed:
+    - the restart's close-up zoomed out on a spring that took 3 s and more, so a corner was played
+      through the close-up;
+    - the aim stopped 8 m short of each goal line;
+    - nothing kept the pitch filling the picture when aimed into a corner.
+- **Rule:**
+  - A camera rule gets a test for each situation it must handle, built on purpose (a restart taken
+    early, a ball run to the byline, play at a corner flag), not left to whatever a held-out seed
+    happens to contain.
+  - A test's simulation runs past its window as the render's does.
+  - The held-out number is reported, never tuned toward.
+- **Check:** `tests/test_render_camera.py`:
+  - `test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot`,
+    `test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture` and
+    `test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture`, each of which fails
+    on the 0.5.3 camera;
+  - `_match` simulates SIM_MARGIN_S past the window.
+
+### 176. A bound that held by 7 mm in one scenario is not a bound
+- **What happened:** a test from #183 claimed that no wall player walks further than
+  walk_to_wall's estimate of his walk, followed frame by frame in two scenarios that come out of a
+  minute of play. It held by 7 mm in one of them. Lesson 174's change altered that minute (lesson
+  90), and in the new scenario a wall player walked 15.24 m against an estimate of 15.11 m. All of
+  the 0.22 m extra was bending round others who stood in his way (avoid), which the estimate never
+  modelled: without his own bending he walked 15.02 m. Measured, as it should have been first, over
+  60 walks in 15 scenarios with that bending left out: on main all 60 were within the estimate, the
+  closest by 2 cm; on lesson 174's branch at `b090877`, 58, and two over it, by up to 0.18 m in
+  15.4 m. Those two are walks main's engine walks the same from the same start: a walker still
+  moving at the whistle, whose stopping distance the estimate has no term for, and one going round
+  the keep-off circle who stepped out past it and spiralled back in, which its spiral leaves out.
+  At `00d5c41`, where going round from the circle's margin heads out as well as round, 59 are
+  within it and one over, by 1.04 m in 28.3 m: a walker running at 3.2 m/s at the whistle, who
+  spent his first second turning (1.5 m walked, 0.5 m gained). At `304fffe`, 58, and two over by
+  up to 0.27 m in 36.6 m, both moving at the whistle; at `ba23065`, all 60 within it. Without such
+  a start the estimate is within about 1% of the walk, not a strict bound.
+- **Rule:** a bound measured on a few scenarios is reported with its margin and with what it
+  covers, and a check that passes by a hair in a chaotic scenario is measured over more scenarios
+  before it is called a bound. When a check fails because its claim was too broad, the claim is
+  corrected where it is written and the check narrowed to it, openly; it is never re-seeded or
+  loosened until it passes.
+- **Check:** `uv run pytest tests/test_restarts.py -k estimated_from_above` pins the estimate on
+  his own route (the wall players' bending switched off) in its two scenarios, not a bound;
+  `uv run python scripts/defect_sweep/wall_walks.py` measures the 60-walk margins
+  (docs/eval/restarts.md, "Walking to restart positions"). No test sees a wall player bending round
+  others on his way in: a gap.
+
+### 177. A coarse search proves a case unframeable only where it searched
+- **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
+  - A corner rule (framed from the taker inward, its shot held against pumping) fixed what the blind
+    critic saw: near corners went from 26% to 34% pitch, far corners to 79%.
+  - It did not move seed 3's score. I reported its misses as live play near the near flag that no
+    gantry shot could frame. That claim rested on a coarse search (3 m aims, a few lenses) that had
+    shown only the corner flag itself to be unframeable; I extended it to points it never covered.
+  - The oracle the Reviewer asked for (the gantry camera itself, 1 m aims, every lens in 1-degree
+    steps) found 1 of seed 3's 201 live frames unframeable. The rest were the director's misses.
+- **Rule:**
+  - A claim that something cannot be done is checked by a search at the resolution of the claim,
+    on the system's own model, before it is reported.
+  - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
+    tried and dropped, excluded 1 of 201 frames).
+  - The Reviewer then found the corner rule's own hold made the delivery worse than no rule (a
+    long cross 0 of 88 frames well framed against 41) and its ball-position trigger caught open
+    play on the goal line. The rule now runs only from the engine's corner set piece to the kick.
+- **Check:** `tests/test_render_camera.py::test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule`
+  (red on af7e439), `::test_a_corner_is_framed_from_the_taker_inward`,
+  `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
+  `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
+
+### 180. A motion keyed to the stride's clock is checked against the contacts it is drawn over
+- **What happened:** #197 left the runner's hips level, so a jog read as a power-walk. The bob
+  went in from a sourced table by speed, keyed to the stride's phase.
+  - Three existing tests failed, and each failure was a real defect the phase hid.
+  - Where the phase said flight, the drawn push-off foot was still on the grass: the hips rose,
+    the leg could not reach it, and the toe hung 3 cm up and slid.
+  - The flight's free fall counted from a swing's first frame, which still draws the foot on the
+    grass, so the hips jumped 4 cm across the push-off at 2.5 m/s.
+  - That first frame was itself the sprint's flicker a blind critic saw (round 4): drawn where it
+    lifted, a sprinter's foot hung 40 to 56 cm behind the hips, beyond the leg, for a frame. Both
+    feet were seen off the grass in one frame a step.
+  - The bob's dip let a walking leg reach its swing target. A foot 1 cm up in its landing frame
+    then counted as "on the grass" in the slide test, which had been passing only because the
+    stretched leg held it higher.
+  - The lean with acceleration took the engine's speed, eased over 5 frames. At a steady jog the
+    engine's speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s), so the
+    blind critic saw the trunk nod every step, plus a stoop and a sideways topple turning on the
+    spot. The lean now takes the change between two 8-frame mean velocities, along the way he faces.
+  - Blind critic round 2 found the bob, sent in the body's lift, tripped the lunge's rule (a
+    lowered body reaches for an out-of-reach plant above the grass): braking to a stop, a planted
+    foot was drawn 25 to 38 cm up for 8 frames, a freeze. The round 1 critic had missed it in the
+    same code. The bob is its own pose field now. The lean from boxes behind him came 5 frames
+    late, pitched forward while braking; it now looks 8 frames ahead, as the hips' lead already did.
+  - The independent audit found a sprint swing height (0.45 at 7 m/s) with no source that only
+    kept an old test green, and tests that read their bounds from the code's own tables: with the
+    tables zeroed they passed, 0 within 0.
+- **Rule:**
+  - A body motion keyed to a clock (the stride's phase) rises or falls only where the drawn
+    contacts allow it: the free fall runs from the frame both drawn feet are off the grass to the
+    frame the swing's own count lands one.
+  - A foot that leaves the grass between two frames is drawn a frame into its swing.
+  - A sourced angle (Fukuchi's knee fold) goes in only with the rest of the body that carries it
+    (the bob), measured on the drawn mesh, and as far as the drawn leg reaches (111 degrees, not
+    119).
+  - A test's selection that a better drawing newly meets (a landing foot inside the slide test's
+    2 cm) is narrowed to what it protects, with the reason in its docstring, and the bound stays.
+  - A renderer reading the engine's motion reads its trend over a stride, not its per-frame
+    controller steps, and centred on the frame it draws, never only behind it.
+  - A new quantity is sent in its own field, never folded into one whose value already means
+    something to a rule (a negative lift means a lunge).
+  - The same held for a keeper's dive (demo v1, Kian: "keeps diving"): drawn as the engine's
+    per-frame pose, a dive the engine turned on the grass spun and dived again to the other side,
+    and one that began at full stretch popped in and out. A one-off action is drawn once, from
+    its start to its end, its side and facing held, and fades into what follows.
+  - A test's expected value is the source's number written in the test, never the code's table.
+- **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
+  the new names shimmed in):
+  - `test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air`;
+  - `test_a_walkers_hips_are_highest_over_the_standing_leg`;
+  - `test_a_running_knee_folds_as_far_as_a_runners`;
+  - `test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking`;
+  - `test_the_arms_swing_wider_toward_a_sprint`;
+  - `test_a_sprints_flight_is_seen_over_two_frames_or_more`.
+  - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
+    phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
+    fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - `test_a_keepers_dive_is_drawn_once_to_one_side` and
+    `test_a_dive_that_starts_at_full_stretch_grows_and_gets_up` (demo v1's keeper) fail on 0.5.12.
+  - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
+    swing, the lean, the speed lean, the arm pump), and its test fails.
+
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
+
+### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
+- **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
+  one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
+  The blind critic scored it 2/10 and ranked empty stands and bare ground at severity 4. The look
+  was built for the detector, where a crowd is only clutter that could change what a dataset
+  measures, so nothing ever dressed the footage a person watches.
+- **Rule:**
+  - Dressing for viewers sits behind a knob that no seed draws (`stadium=broadcast`, like
+    `kit_contrast=broadcast`): training, validation and test renders stay byte-identical.
+  - Dressing is scenery: never labelled, and in the id pass it hides what is behind it exactly as
+    the picture does. The fans are drawn there with the same billboards, cut-outs and motion code.
+    A first version left the crowd out of the id pass, which labelled a ball among the fans as
+    visible while the picture hid it (lesson 84; the Reviewer caught it).
+  - A test proves both sides with a case where they matter: a ball in the stands behind fans.
+- **Check:**
+  - `uv run pytest tests/test_render_stadium.py -k crowd`. It fails with the fans left out of the
+    id pass (the ball among them stays visible). It also fails with their picture colours drawn
+    into it, where the fans' pixels counted as 52,436 visible pixels of one player.
+  - `tests/test_render_params.py::test_only_footage_asks_for_a_broadcast_stadium`.
+  - Plain stills from main and from the change are byte-identical under software GL.
+
+### 187. A shot built to pass a framing metric can still be dead air to a viewer
+- **What happened:** the restart close-up (#198, lesson 175) passed every framing test: the ball
+  central, the pitch filling the picture after the ease out. On demo v1, a blind critic watching as a
+  viewer found it the worst part of the edit. For 4.4 s before each restart, one player stood still
+  beside the ball, then the camera pulled out. After the goal, a fixed low shot beside the net showed
+  the keeper fetching the ball, never the scorer. The clock also jumped at every cut with nothing on
+  screen to explain it. Each shot met its rule, and the sequence was dead air.
+- **Rule:** an edit or camera rule is judged on what a viewer sees across the cut, not only on the
+  framing of each frame:
+  - who is in the shot (the scorer, not the keeper);
+  - whether anything moves;
+  - whether a jump in time is marked (a stinger).
+
+  A rule's bounds come from the critic's complaint and are written as tests before the change.
+- **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
+  celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
+  before demo v2.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.
+
+### 189. A sentence beside a number is not its mark
+- **What happened:** the goal-net change merged while its review check was skipped, so the
+  hard-coding audit (lesson 21) ran after the merge. Two new factors had a sentence beside them
+  and were still neither. The net-touch slack is two roundings of a written millimetre, and the
+  comment said "measurement precision", but the grounding row's source cell said only "physics".
+  A step through a corner of the net meets the side and the back, and the comment said so, with
+  no *design* on the count of two.
+- **Rule:** the mark sits on the constant. A margin from how positions are written names
+  measurement precision in the grounding source cell, with the derivation beside the value
+  (lesson 10). A choice carries the word *design* on its own line. A sentence that only describes
+  the number is neither. The audit runs before the merge.
+- **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
+  change the value.
+
+### 188. Two scorers of one group share one cut-off and one comparison
+- **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
+  pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
+  `z < 0.5` for the ground, so a ball at exactly 0.5 m was on the ground in one report and in the
+  air in the other. Both had the same constant; nothing checked the comparison, and no test put a
+  ball exactly on the cut-off in the position scorer.
+- **Rule:** a difficulty group's cut-off and its comparison are defined once (`IN_AIR_Z`,
+  `height_group`, `BLUR_PX`, `blur_group` in `ninety/eval/vision_score.py`) and imported
+  everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
+- **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
+  tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
+
+### 200. A surface is solid from both sides, and only where the ball is not going through its opening
+- **What happened:** the goal-net change (lesson 184) gave the net an inside only. Over 20 matches
+  of 20 minutes on main (`0f101db`) the ball went into a goal through its net twice: a high shot
+  over the bar dropped through the roof and out through the side netting (seed 115 at 15:51), and a
+  dead ball behind the goal was knocked to the goal-kick spot straight through the back of the net
+  and the goal (seed 102 at 5:17). Two of the net tests could not fail: nobody's way to the ball
+  after the planted goals crossed a net, and the goal test stopped on the goal event before the net
+  acted. The first fix stopped every step at the net's outside, and the independent audit found it
+  erased goals: a ball crossing the line between the posts from wide of one, or dropping in under the
+  bar, was held at the outside of the side netting or the roof. Once the net was solid from outside,
+  a ball knocked from behind the goal toward the spot stopped against it and was fetched and knocked
+  into it again. And main's seed 116 failed P2: a keeper going round his goal to the ball behind it
+  aimed at a point on the goal line beside the post, was carried over the line by his run and met the
+  side netting, which stopped him dead (2.2 m/s in a frame). Moving that point in front of the line
+  fixed the case but not the class: the third audit still found 6 of 100 starts behind or beside a
+  goal stopped dead, where a way flipped between a post and a back corner or grazed one.
+- **Rule:** a structure that stops the ball from one side stops it from every side it can be met
+  from, in the engine and in the validator's list of contacts, and never where the ball is going
+  through the structure's opening (a goal is judged first). Whatever plays the ball near the
+  structure (a knock-on, a pass) checks that its way is clear of it. A wall that stops a body is
+  approached no faster than the body can stop before it (the boards' rule, now the nets'), so the stop
+  is never a teleport of velocity (lesson 5). A test of "nobody does X" plants a case whose straight
+  way does X and asserts that it would; a test whose scene is a moment of a seeded match finds that
+  moment by its premises, since any earlier change moves it (lesson 78).
+- **Check:** `uv run pytest tests/test_goal_net.py`: the outside, roof, wide-of-the-post,
+  carried-round and never-turns-away tests fail with `off_the_net` returning its step unchanged,
+  with the goal guard in `Engine.woodwork` removed, or with the knock-on's clear way forced;
+  `flies_on_freely` fails with the ball moved to the back of the net as it goes in;
+  `stopped_dead` and `never_runs_into` fail with the net speed cap in `steer` removed.
+  `scripts/defect_sweep/nets.py` counts balls through a net over a sweep.
+
+### 202. A set piece is a moment players build up to, not a pose held until a timer runs out
+- **What happened:** at a corner the taker stood over the ball and struck it from a standstill
+  (0.27 m covered in the 2 s before the kick, 18 corners over 20 matches on main `0f101db`); the box
+  stood still for the wait and the delivery, the post runners already at the posts; and the defending
+  side matched rather than outnumbered the attackers in its area at 4 of 18 kicks. The causes were in
+  the set-up, not the totals: the presser's cover was sent to the corner flag (goal-side of a presser
+  held 9.15 m off the arc is the goal line by the flag), two free defenders held block slots just
+  outside the area, and the kick was taken at R1's drawn time while team-mates heading "in time" for a
+  pass after it were still walking up, so their markers were named late and sprinted in. Fixing the
+  run-up first left the taker standing over the ball for 3 s after it: holding was still an option.
+- **Rule:** a set piece is set up by the players' own reasons: the taker places, steps back and runs
+  up when his team is in position (never past a bound, so nothing can hang); the attack starts its
+  runs with the run-up; the defence sets up where the delivery comes (a near-post guard, the area
+  defended, no cover where a cover has nothing to cover). A rate (corners, shots from corners, how
+  long a corner takes) is reported as a held-out check, never tuned. A test planted at one kind of
+  restart for a rule shared with others names the kind its premise needs.
+- **Check:** `uv run pytest tests/test_set_pieces.py` (each fails on main);
+  `scripts/defect_sweep/setpieces.py` reports defenders minus attackers in the area, box speeds
+  in the second before and after the kick, and the taker's run-up, over a sweep.
+
+### 207. A restart is played from its spot: set the shape there, and keep everyone off the set ball
+- **What happened:** two leftovers of lesson 174's walking. While a restart waited, every player's
+  place was set from wherever the dead ball was, so as it rolled on to the boards and was carried
+  back, the places moved with it and were walked to and back. And once the ball was set on its spot,
+  only opponents kept off it (the Laws' distance): a team-mate of a free kick's taker walked over it
+  to his place, and a player walking back for a kick-off after a goal walked over the ball on the
+  centre spot (2 walks over the set ball in 20 matches on main `0f101db`, counted after the first
+  second of each stoppage, which is the fouler's own momentum). Setting places from the spot also
+  removed the scene a lesson 174 test was planted in, so its premise search moved to another seed.
+- **Rule:** while a restart waits, play is at its spot; anything a player does "relative to the ball"
+  at a restart is relative to where it will be taken. A set ball is solid for everyone but its taker:
+  a way past it keeps the taker's own clearance.
+- **Check:** `uv run pytest tests/test_restarts.py -k "walks_over_a_set_ball or places_are_set_from"`
+  (each fails on main); `scripts/defect_sweep/crossball.py` counts walks over the set ball over a sweep.
+
+### 213. A match has two halves: build what the Laws require, and say plainly what is still missing
+- **What happened:** the engine played 90 minutes as one long half: no whistle at 45:00, no
+  second-half kick-off. For a demo cut from a full match, a judge would see play run straight through
+  half-time. Switching ends was out of reach for the deadline: the attacking direction is fixed by
+  team in about 60 places in the engine and in at least ten readers of its data (the stats, vision,
+  evaluation, the validator), so it needs a direction field in the contract before the engine can
+  change it. The first version also ended the half between a penalty being taken and its shot
+  being struck, because "in progress" was read from the shot alone.
+- **Rule:** a rule of the game is built as far as can be done right, and the rest is written down as
+  a gap in GROUNDING with its reason, never left to look as if it is there. A direction (or any
+  other per-period fact) that many readers derive from the team is a contract field before it is a
+  variable. A state that extends a time limit ("a penalty in progress") names every phase it covers:
+  awarded, taken, struck, until completed.
+- **Check:** `uv run pytest tests/test_half_time.py` (each fails on main); the 90-minute sweep in
+  the pull request: the half-time whistle in every match, the second-half kick-off by the other
+  team, nothing in play across it, the contract met.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.
+
+### 191. A live output named like an answer-key file looks like a truth read
+- **What happened:** the first draft of the live detection job (`ninety/vision/live_job.py`) wrote
+  its detected events to `events.jsonl`, the name of the answer key's event file. The live-path
+  checks went red: the static one found the name in the code, and the runtime one saw the job open
+  a file by that name. Nothing read ground truth, but a reader of the output folder, or a later
+  packer, could not tell detected events from true ones. Separately, `detect.frame_rows` falls
+  back to the labelled frame file when a clip has no labels-free index, so a job handed a whole
+  rendered clip would have read it.
+- **Rule:** live outputs never take an answer-key file name (detected events are `detected.jsonl`).
+  A job on the live path takes an allow-list of inputs (the index and the images) and refuses
+  anything else before a model loads, rather than trusting a fallback not to run.
+- **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
+  `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
+  (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 192. A seal that matches a file by where it sits misses the same file one folder down
+- **What happened:** the render job sealed the answer key by name and place: `frames.jsonl` and
+  `events.jsonl` went to the private `truth` container only when they sat at the top of the clip
+  folder (`f.parent == clip_dir` in `ninety/render/job.py`). The tactical views write a complete
+  clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
+  with views would have put true positions, boxes and events in the readable `renders` container,
+  next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
+- **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
+- **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
+  on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
+  on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`
+  (`tests/test_truth_sealed.py::test_a_seal_that_matches_only_the_clips_top_level_is_caught`).
+
+### 194. An allow-list of a folder's top level lets anything through one level down
+- **What happened:** the live detection job refused an input folder holding anything but
+  `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
+  it looked only at `*.jpg`. A `frames.jsonl` placed in `images/` passed the check, and so would a
+  whole rendered clip nested there. Found while adding the tactical camera's `views/<name>/`
+  layout, which made the job look one level deeper and asked what else could sit there.
+- **Rule:** an allow-list of inputs is checked over the whole tree, every file and folder at every
+  depth: what is not named is refused. A new level of layout (views, tiles) gets its own planted
+  answer-key files at each depth it adds.
+- **Check:** `tests/test_vision_live_job.py::test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads`
+  (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
+  folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
+
+### 196. A new file is written only to a path nothing holds yet
+- **What happened:** the team-shape tests were written to `tests/test_shape.py`, a name that sounded
+  free. It held the engine's attacking-shape tests (O6, O7), 129 lines, and the write replaced them
+  without a warning: the editor said "updated", not "created". The suite still passed, because a
+  deleted test cannot fail. It was caught only because `git status` showed the file as modified
+  (`M`) where a new one shows `??`.
+- **Rule:** before writing a file meant to be new, check that its path is not tracked
+  (`git ls-files <path>` prints nothing). Name a module's tests after the module's own words
+  (`test_team_shape.py` for `ninety/intel/shape.py`, whose subject is the team's shape), and read
+  `git status --short` before every commit: a file you meant to create must show `??`.
+- **Check:** `git diff --stat origin/main -- tests/test_shape.py` is empty on this branch; the shape
+  tests are in `tests/test_team_shape.py`.
+
+### 203. CI built the image with a stand-in, so the real pin was never tried
+- **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
+  and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
+  green while the Dockerfile still pinned a bundle that had been superseded and never published.
+  Merging would have started a deploy whose build fails on a 404. The same review found the
+  passcode gate checked HTTP requests only: a WebSocket handshake behind it went through unchecked.
+- **Rule:** when CI substitutes an input for speed or isolation, it still checks the real one
+  exists and is what the pin says. A gate covers every kind of connection that can reach what it
+  guards, and its test tries each kind.
+- **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
+  hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
+  WebSocket branch of `RequireKey` removed.
+
+### 205. A spring that trails its target is fed where the target will be, not where it is
+- **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
+  held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
+  of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
+  `pan_lag_s`, about 14 m at 0.83 s. When the ball and where it would be a lag on did not fit one
+  shot, the director aimed at the ball itself, so the picture ran a lag behind it. On seed 53 a free
+  kick scored 0.44 s after it was taken; the goal started the low angle at once, over the hold the
+  edit cut had just set, so the restart's shot lasted 2.4 s.
+- **Rule:** a follow with a known lag is aimed at where the followed thing will be after that lag.
+  An edit cut is a change of shot: no rule, a goal included, starts another within `CUT_HOLD_S`
+  of it.
+- **Check:** `tests/test_render_camera.py::test_a_long_ball_stays_in_the_picture_across_it` and
+  `::test_a_goal_soon_after_the_restart_waits_for_the_edits_hold` both fail on the old camera. The
+  held-out framing (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`) holds
+  on main and with #220 merged.
+
+### 163. A rule every writer follows goes into every writer's instructions
+- **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
+  persona in only 12 of 20 claims. For a claim at 00:03 the model wrote "At 3 seconds" (in Spanish
+  "A los 3 segundos"), turning the clock into plain words as "no jargon" seemed to ask. The re-check
+  dropped every one, as it should, since the claim's clock is a number to keep. The Analyst,
+  Tactician and Challenger all carry the one-clock rule (lesson 33); the Personalizer's
+  instructions never did. On the live path each drop then read "no translation", which pointed at
+  the translator rather than the model.
+- **Rule:** a rule the code checks on every writer's text is stated in every writer's instructions,
+  including a persona's style line ("plain words go around the claim's facts, never in place of
+  them"). A fix to model behaviour is measured on the model before publishing: here, unpublished,
+  6 of 24 variants dropped with the old wording and 0 of 24 with the new. A hold says which check
+  made it.
+- **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
+  `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
+
+### 212. A tolerance converted to pixels for one camera is wrong for the next
+- **What happened:** the feet-in-box check (GROUNDING V6) allows 0.45 m between a player's tracked
+  ground point and the bottom of his box. It converted that to pixels as box height / 1.8, a
+  scale that holds for a camera looking across the pitch. On a touch, the renderer draws the foot
+  at the ball, up to about 0.9 m out. From the broadcast gantry, about 25 degrees down, a reach
+  toward the lens moved the box bottom only about 0.42 m in that scale, so the check never failed.
+  From the tactical lens, 35 to 40 degrees down, the same reach is about 0.65 to 0.75 m. Dataset
+  tactical lost training clips 70 and 79, and possibly test clip 900004, to frames whose drawing
+  was right.
+- **Rule:** a tolerance stated in metres is measured in metres, through the frame's own camera
+  matrix, never with a pixel scale fitted to one camera. An allowance for a real motion is bounded
+  by the drawing's own limit (here the leg's reach), so it cannot excuse a drawing beyond it.
+- **Check:** the V6 high-lens tests in `tests/test_render_checks.py`.
+  - A 1.0 m reach to a touched ball passes, though the side-on slack alone fails it.
+  - These all fail:
+    - the same foot with no touch;
+    - a 2.5 m "reach";
+    - a 0.3 m touch with a 1.0 m box;
+    - a floating body;
+    - a box moved sideways;
+    - a chest or thigh touch;
+    - rows far from the touch, or after an edit cut.
+  - Fourteen mutations each turn a test red; one more is equivalent.
+  - Two independent reviews, both cited in the PR, found holes in the earlier drafts:
+    - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
+    - the second still let a body rise on a touch away from the camera.
+    The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
+
+
+### 217. The demo runs the system the pitch describes
+- **What happened:** the pitch and the challenge map describe a multi-agent graph (an Analyst picks
+  moments, a Tactician explains, a Challenger offers another reading, the fact-checking agent sends
+  wrong claims back), and the ablation measured it. But `ninety-e2e`, which builds the bundle the
+  viewer and the video show, ran the single Analyst -> fact-checker slice. A judge watching the
+  demo would have seen a different system from the one the README claims. The audit found it by
+  reading `ninety/e2e.py`, not the docs. The graph also checked a Challenger's reading after the
+  Tactician's claim was already verified, and rewrote it when it failed: three model calls in the
+  committed recording spent on a claim that could not air.
+- **Rule:** the path that makes the demo is the path the claims describe; a fallback is named in
+  the bundle and the trace whenever it ran. A check whose outcome cannot change what airs is not
+  run.
+- **Check:** `tests/test_e2e.py::test_the_claim_is_about_the_shot_and_carries_its_numbers` asserts
+  the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
+  and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
+
+### 218. A confidence the agents never see protects nothing
+- **What happened:** detected events carried `team_confidence`, how firmly the side was told from
+  the kit, and the evaluation reported it. But `facts.compact`, which shapes every event an agent
+  or the fact-checker reads, dropped it. A claim naming the wrong team passed every check whenever
+  the detector had the side wrong (5 of 16 validation passes), because the evidence agreed with the
+  claim and nothing said how unsure that evidence was. Lesson 146 is the same failure for names.
+- **Rule:** an uncertainty the detector measures travels with the fact to the fact-checker. A claim
+  that rests on it is held below a threshold set from the measured reliability, and the threshold's
+  source and n are written beside it.
+- **Check:** `tests/test_confidence_gate.py::test_the_agents_see_how_firmly_the_side_was_told` and
+  `::test_a_claim_naming_a_team_on_an_unsure_side_is_held_not_rejected` fail if `compact` drops the
+  field or the gate ignores it.
+
+### 208. A script inside YAML is code: parse it before a run is approved
+- **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
+  joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
+  with a YAML parser, so the defect reached a live run: Kian approved it, it signed in to Azure,
+  and then failed on `syntax error near unexpected token ')'` without publishing anything.
+- **Rule:** a change to a workflow's `run:` block is checked as the shell it is, not only as YAML.
+  An approval for a live run is spent only on a script that parses.
+- **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
+  it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 216. Evidence says which agent produced it, or it rots without a sound
+- **What happened:** the agents' committed reports named a published version (`ninety-judge:1`) in
+  their prose, and nothing compared it with the code. The Judge moved to version 4, the
+  Personalizer to version 2, and `fact-checker.md`, `personalizer.md` and the planted-claim set
+  kept describing agents that no longer ran; the nightly that re-measured the Judge wrote only to
+  `runs/eval/`, so its numbers never reached a file anyone reviews. The published 136/136 also
+  counted 9 false claims held back by Judge service errors as catches, and `analyst.md` graded
+  drafts against this commit's match after the Analyst had read the deployed one (lesson 90).
+- **Rule:** every agent report and replay records each agent's version and `definition_sha` as the
+  run wrote it, and CI compares them with the code: a mismatch fails unless the file is listed as
+  stale with why and the run that replaces it, and the list fails when an entry is fresh again.
+  A file from before fingerprints is read through the registry's history, never given an invented
+  fingerprint, and an agent a file names without a definition is unknown, never fresh. A hold the
+  service caused is counted apart from a rejection a check made, and a run the model mostly did
+  not answer writes no report. A nightly lands as a pull request of dated, unedited reports.
+- **Check:** `tests/test_evidence_fresh.py` (a planted fingerprint in a copied report, replay or
+  Markdown line fails; an unknown version fails; a listing without a reason, or for a fresh file,
+  fails, a listing whose stale agents differ fails); `tests/test_live_eval_outage.py` (an
+  all-service-error run writes nothing); `tests/test_nightly.py` (a report without fingerprints
+  is not archived; the workflow's writing job has no Azure sign-in and opens a PR against main).
+  The first version passed a report with an empty definitions line as fresh; review caught it, and
+  23 mutants of the rules are now each killed by a test.
+
+### 193. Score a claimed tie at the answer before adding an input to break it
+- **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
+  symmetric about halfway, so a lens and its mirror across halfway would see the same picture, and
+  made the lens's side a required input to break the tie. The test written to prove the tie
+  failed: the mirror lens sees the picture flipped left to right, which no camera without that
+  flip draws, so the two fit 0.0 px and 68 px apart. The input would have been a needless
+  dependency every caller had to get right. The same fit, freed in all six parameters, stalled a
+  metre from the true camera at 2.6 times its cost; the objective was right (lesson 97), the step
+  was not.
+- **Rule:** a claimed ambiguity is checked by scoring both candidates at the answer, as an
+  objective is (lesson 97), before any interface is built around it. A reflection is not a camera
+  move.
+- **Check:** `tests/test_vision_pitch_fixed.py::test_a_lens_and_its_mirror_across_halfway_do_not_tie`
+  (the true lens fits, its mirror does not, the flipped picture does);
+  `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
+  removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 199. A role named afresh every look is a role nobody holds
+- **What happened:** the team brain named its presser and cover afresh at every look, twice a
+  second, from who could reach the ball soonest, and the cover was simply the second soonest to the
+  ball. Two players about as near swapped the job, and the cover often came from beyond the ball:
+  at shots from 25 to 40 m he had held the job a median 0.7 s and stood a median 9.2 m from
+  his place, 8 m goal-side of the ball. #160 found the same churn in the chase, lesson 174 at
+  restarts.
+- **Rule:** a job answers a piece of play and lasts as long as it does: the presser and cover are
+  held while the same carrier has the ball or the same kick is in flight, and named again when that
+  changes or the man cannot do the job. The cover is whoever reaches the cover's place soonest, not
+  the next man to the ball. When a role keeps changing hands, check how long its holder has held it
+  before tuning where he stands; and check that the measure the fix was for moved: here the cover held his job longer (0.7 to 1.0 s) and stood nearer his place (9.2 to 5.4 m), yet the share of long shots with nobody in the triangle to the posts did not move (84% to 87%), so the churn was real but was not what left shots unscreened.
+- **Check:** `tests/test_press_hold.py`; in the pull request, the cover's tenure and distance from
+  his place at long shots, and the share of shots with nobody in the triangle to the posts, held out
+  against the tracking-data share in GROUNDING D3.
+
+### 201. A rule written for one phase of play leaves the other phase without it
+- **What happened:** the length cap (46 m, deepest outfield player to most advanced) was written for
+  the team on the ball, after it camped in its own box. The team without the ball had no cap, so a
+  high press up to a goal kick stood its forwards at the ball and its line at its block, 49 m apart
+  (77 m with a low line), with the midfield 12 m ahead of the line wherever the ball was, behind
+  the play once the ball came inside the block.
+- **Rule:** when a shape rule is fixed for one phase (in possession, out of possession, restarts),
+  ask whether the other phases need the same rule, and test each phase.
+- **Check:** `tests/test_block_length.py`; in the pull request, the team's length while the
+  opponent waits to take a goal kick.
+
+### 198. An action that commits the body is weighed against the cheaper one, at the moment it must start, and tested on a ball that moves
+- **What happened:** Kian saw the keeper "dive at the completely wrong time". The engine dived as soon
+  as he had reacted to any shot crossing beyond his hands: at balls a few centimetres out that a step
+  would have reached (3 of 11 measured dives travelled 9 cm or less, then he lay down for 0.8 s), and
+  at long shots still up to 1.7 s away, so he landed before the ball arrived. Watching the first clip of
+  the fix then showed a third cause nobody had listed: he dived at a shot heading 12 m wide, because
+  nothing asked whether the ball was going in. The dive tests froze the
+  ball and moved only the clock, so a launch "on reacting" was the only one they could see, and one
+  of them (a high ball needs a longer dive) held only because the frozen ball made his arms look
+  fully stretched at an arrival that, in flight, comes 0.35 s earlier.
+- **Rule:** an action that puts a player on the ground (a dive, a slide) is chosen only when the
+  cheaper movement cannot do the job in the time left, judged by the engine's own reach test
+  (`body.can_get_to`), and it starts no sooner than it must, judged again every frame. A test of when
+  something starts lets the ball fly by its own physics, frame by frame; a test that moves the clock
+  alone measures a ball that never arrives.
+- **Check:** `uv run pytest tests/test_keeper_dive.py`. A ball 0.55 m beyond his hands that his legs
+  get him to, and one 5.4 m wide with two seconds to run, are taken standing; main dived at both, and
+  a keeper who only waits for the last moment, without asking whether his legs will do, dives at the
+  first. A 1.2 m dive with time to spare is launched after he reacts and lands as the ball arrives;
+  main launched it as he reacted. Removing the step test turns the first red, removing the launch
+  timing turns the long-shot and run-up tests red, and removing both turns all four red;
+  `test_he_does_not_dive_at_a_shot_going_wide` is red without the on-target condition, and
+  `test_he_does_not_dive_at_a_shot_going_over_the_bar_within_his_reach` with a check of the posts
+  alone; every shot in these tests that he should dive at, or take standing, is asserted to be going in. A clip of the
+  change is watched before it is called done (lesson 107). The
+  dive tests in `tests/test_engine_rules.py` fly the shot (`_until_he_dives`).
+
+### 197. A rule the renderer has to draw must be in the truth first
+- **What happened:** Kian saw that a keeper never seemed to hold the ball and throw or kick it.
+  The engine settled every caught ball to the keeper's feet, and he played it from there like an
+  outfielder, by a ground pass or a dribble. The renderer could only draw what the truth said: a
+  ball on the grass. Law 12 (six seconds in his hands, no challenge) was only half in the engine:
+  nobody challenged him, but nothing held the ball in his hands.
+- **Rule:** when footage looks wrong, check the engine's truth before the renderer. A caught ball
+  stays at the keeper's chest (L15). He lets it go within Law 12's six seconds: by a throw to a
+  team-mate in range, by a kick from his hands, or by putting it down to play with his feet. He
+  chooses by the same estimate as any pass. The rate of kicks from his hands is a held-out check
+  against a published count, never a target. Leaving the put-down out made him kick from his
+  hands 10.6 times a match against the 0.66 published: when a held-out number is far off, look for
+  an option the Laws allow that the engine lacks. And before changing an option, log what
+  each release was chosen over: every kick from his hands (19 of 19 on three seeds) was the long
+  clear, chosen when every pass he had was valued below zero near his own goal, so the count is
+  set by the shared pass value there, not by the keeper's options. Widening his options (a throw
+  as far as a ball can be thrown, a kick from his hands to any team-mate) left it unchanged.
+- **Check:** `tests/test_keeper_hands.py`. Three of its tests go red when a catch does not put
+  the ball in his hands. Two more are red on the first version: there a lunge already on its way
+  knocked the ball out of his hands, and a drop kick took the ball from his chest to the grass in
+  one frame. The held-out counts then showed the decisions: no throws, holds of about 0.7 s, and
+  kicks from the hands far above the published count. The throw had only the throw-in's lofted
+  way, and he released on the first look. `test_he_waits_out_the_window_while_the_team_sets` is
+  red if he decides before `KEEPER_RELEASE_S`. `test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air`
+  is red if his throw cannot roll or a throw-in can.
+  `test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone` is red without the
+  throw's speed limit, or if a kick from his hands can roll. The 5 s window is the design value
+  written before the measurement; the 30 m split is gone. The kick count stays a check, never a target.
+
+### 206. When two parts split a job, both read the split from one definition
+- **What happened:** the free-kick wall was built to hide the goal from the near post to a third
+  past its centre, its comment saying "the keeper covers the rest". The keeper never read the
+  wall: he set himself on the bisector of the whole goal, as at any other moment, so he stood
+  behind the middle of his own wall and left the open part to nobody. Each half was tested on its
+  own, so nothing failed.
+- **Rule:** when a rule hands part of a job to another (the wall and the keeper, a presser and his
+  cover), the split is one function both call (`Engine.wall_cover`), and a test sets up the shared
+  case and checks the second part takes what the first leaves. A comment that assigns work to
+  another part names the code that does it.
+- **Check:** `uv run pytest tests/test_keeper_setpiece.py`: with the wall up he stands on the
+  bisector of the open part (red on main); his spots at three kicks are written out, so a change
+  to the wall's cover moves them; he keeps the cover while the set ball waits and drops it after
+  the kick; at his own side's free kick nothing changes.
+### 204. A pose that names the action's mechanics, not its kind, draws one action as another
+- **What happened:** #216 gave keepers a throw from the hands: a roll is bowled, the ball brought
+  down in his hands to the grass and released from there. The engine named every wind-up `strike`,
+  so the renderer drew a kicking leg winding up and the ball meeting his boot. Through the 4.7 s
+  he held the ball before it his pose read `stand`, so nothing put his hands on it either. The
+  engine knew both (`windup[3] == "bowl"`, `held_by`) and exported neither.
+- **Rule:** the pose the engine exports names what the body does with the ball, from the engine's
+  own state; the renderer draws that name and never guesses it from where the ball goes next.
+- **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
+  fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
+  renders byte-identical (seed 122 at main, frames, events, meta and images).
+
+### 227. A confidence is compared only with a threshold measured on the same reading
+- **What happened:** active perception re-runs the event detector on another camera, or on a 3 s
+  window, to re-read a side the fact-checker holds. The first version let any look re-read the side.
+  On the M1 clip a 3 s window read the side of v00003, a false detection (a shot read as a pass), at
+  1.0; the whole clip had read it at 0.529. A side vote over a few frames is more one-sided than the
+  clip's, whoever is right, and the 0.96 threshold was measured on whole-clip votes. The look would
+  have aired a team claim on an event that never happened. The evaluation's own fixture test caught
+  it before any number was published. The second version still let a tactical lens's whole-clip vote
+  re-read the side, although 0.96 was measured on the broadcast's (the independent review caught it:
+  wrong sides reach 0.994 on the lenses). Now a look never re-reads a side.
+- **Rule:** a score is compared only with a threshold measured on the same kind of reading. A
+  shorter window, another camera or another model is a new reading, and needs its own measurement
+  before it can open a gate. Until then it may only confirm what does not depend on it (here, that
+  the event was seen).
+- **Check:** `tests/test_perceive.py::test_a_look_never_re_reads_a_side_so_a_team_claim_on_an_unsure_side_stays_held`
+  and `::test_a_real_camera_look_runs_inside_the_workflow`.
+
+### 215. A detector tuned on one look is re-checked on the look the renderer draws now
+- **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
+  set on renders without sensor grain. The renderer later added grain (`params.noise`). On dataset
+  v2's validation clips only 0.39 of the marked pixels then lay on a marking, the fitted gantry
+  sat on its search grid's corners 10 to 20 m away, and no frame passed the markings test.
+  Nothing placed anything, and it read at first as a stale height band. No check ran the fit on a
+  current render: its tests draw clean scenes, and the scored observations were older looks'.
+- **Rule:** when the renderer's look changes, every vision stage tuned on pixels is re-measured on
+  a clip of the new look against its true camera before any number from it is read. A stage's
+  tests plant the look's own noise, at the renderer's own amplitude, not a clean image.
+- **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
+  (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
+  validation clips are in `docs/eval/marking-grain.md`.
+
+### 230. A threshold measured on one look is re-measured when the look changes, by the same rule
+- **What happened:** the camera trust test's height band (0.901 to 1.002) was measured on renderer
+  0.3's validation clips. On today's renders (0.5.x) the players' height ratio through a right
+  camera is 1.00 to 1.11, so the band rejected every correctly fitted frame: nothing was placed on
+  the pitch, and with the grain defect (lesson 215) hiding behind it, the cause looked like one
+  thing when it was two.
+- **Rule:** a threshold derived from rendered data carries the look it was measured on; when the
+  renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
+  before any number that passes through it is read, and the new value cites both.
+- **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
+  `ninety/eval/band_derive.py` re-derives it.
+- **And:** re-derived, the heights alone trusted a clip whose camera was 28 m wrong in every frame on
+  dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
+  broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
+  `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
+
+### 221. A number matched by value and unit alone passes in the wrong role
+- **What happened:** the insight fact-check let a sentence state any number a cited fact held,
+  written with that number's unit. A planted claim "6 players against 1 player" passed when the
+  true count was 5 against 1, because the fact's other number, 5 extra players, was also in
+  players; "won it back 5 seconds after losing it" passed because the fact also held the 5-second
+  counter-press window. Both numbers were on the fact; neither was the number the sentence said.
+- **Rule:** a fact's numbers carry their role: a distinct unit where they measure different things
+  (`extra players`), and a context where one unit serves two (the other side's count after
+  "against", the window after "within" or "next"). A number written in a context may stand only
+  for a number of that context, and a number of a context only where it is written in it. The same holds for a fact's direction: a sentence that says it went the other way (won back or not,
+  lost or kept, to an open teammate or not, nobody open) is checked against the fact's own field, and the
+  evaluation plants each reversal (the merge queue's review found them passing). A list of wrong phrasings fails open (a second review found 27 of 61
+  paraphrases passing it), and so does a list of direction words (a third found 27 of 64 more): the
+  check is closed by construction now. For a fact whose direction matters, the fact's own phrases,
+  numbers, names and a short list of glue words are taken out of the sentence, and any word left
+  holds it. True sentences in other words are held too; that cost is measured, not hidden. The rule
+  covers only the facts it names; any other fact's direction words are left to the Judge, and the
+  docs say so.
+- **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
+  overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
+  the regain, the extra players said as the own count, both rejected).
+
+### 222. A floor on how many there are can make a share impossible to reach
+- **What happened:** the Insight Scout pushed a fact only when it ranked above 90% of its kind so
+  far, among at least 5. Among 5, the best rank is 4 of 5, 80%, so no fact could ever be pushed
+  until there were 10: the floor and the share were each sensible, and together they made the
+  first cards of every match impossible. A test that expected a card found none.
+- **Rule:** when a gate combines a least count and a share, check that the count can reach the
+  share (a share s needs at least 1 / (1 - s) items), and set the floor from the share.
+- **Check:** `ninety/agents/scout.py` `MIN_SO_FAR` is 10 for `NOTABLE` 0.9;
+  `tests/test_companion_match.py::test_scout_cards_are_verified_and_spaced` plants a notable fact
+  and requires its card.
+
+### 223. A rule about who acted, tested on sentences that start with the club, rejects the ones that start with the player
+- **What happened:** the insight fact-check took the first club a sentence named as the side that
+  acted. Every test sentence began with the club. On the stand-in match, every true line break said
+  by name, "Ben Raimble played a pass that took 6 Fenwick players out of the game", was rejected:
+  the first club named was the opponents, who were counted, not acting.
+- **Rule:** a rule that reads roles out of a sentence is tested on every sentence shape the writers
+  produce (lesson 130): a club written straight after a number is what was counted, and the side
+  is the first club named otherwise; for a line break, the counted club must be the other side.
+- **Check:** `tests/test_insight_check.py` (a named passer with the counted opponents passes; the
+  counted club being the passing side is rejected); `insight_claims` reports no true claim stopped.
+
+### 228. A new test file named after a word another module already owns overwrites that module's tests
+- **What happened:** adding tests for the playing-style tool (`ninety/intel/style.py`), a new file
+  was written to `tests/test_style.py`, which already held the engine's team-style tests. The write
+  replaced them; `git status` showed `M` where a new file shows `??`. This is lesson 196 again.
+- **Rule:** before writing a test file, check that its path is free (`git ls-files tests/<name>`),
+  and name a new test file after its own module's full purpose (`test_playing_style.py`), never a
+  word another package also uses.
+- **Check:** `git status --short tests/` after creating test files: every new file shows `??`.
+
+### 229. Prose a number reader will check is tested through that reader
+- **What happened:** the Referee's summary of Law 11 said "being in an offside position is not an
+  offence by itself; it becomes one when he gets involved". The fact-checker reads number words,
+  so "one" was a number no fact held, and every answer that quoted the summary was refused and fell
+  back to a shorter one. A test that the summaries hold no digits passed: it read the text, not what
+  the checker reads.
+- **Rule:** text that the fact-checker will read (code's sentences, the Law summaries) is tested by
+  running it through the checker's own reader (`factcheck.spelled_as_digits`, then `check`), not by
+  a separate look at the characters.
+- **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
+  `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
+- **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
+  heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called
+  creepy, in the one feature built for fans who listen instead of watch. Meanwhile we had an Azure AI
+  Speech resource, and the Describer pinned a neural voice (Ryan) that nothing on the phone used.
+  Nobody had chosen either voice by listening.
+- **Rule:** the voice is picked by ear from samples made in the voices that could ship (Oct 23:
+  all 17 British neural voices and two HD voices; Kian chose en-GB-OllieMultilingualNeural). It is
+  pinned in one place (`ninety/speech/voice.py`), and every path that speaks reads it: the bundle's
+  pre-generated lines, the Live route and the Describer. The phone plays the bundle's audio first,
+  then the Live route, and uses the device's voice only when neither has the line.
+- **Check:** `tests/test_speech.py::test_every_path_that_speaks_reads_the_one_pinned_voice`,
+  `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
+  `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
+  first and the second and third tests fail.
+
+### 224. Every picture of the pitch goes through one projection, and its words follow the engine
+- **What happened:** the phone's minimap drew pitch metres with its own projection, y = 0 at the
+  top, while the TV picture and the viewer's radar put the y = 0 touchline at the bottom, where the
+  broadcast camera stands. The phone showed the match upside down beside the screen it follows,
+  and its heat map and wind map with it. Its "left" and "right" flank words had been written to
+  match that drawing, so they were wrong too: the engine starts a home left-back at 0.85 of the
+  width, which the phone called the right. Its tests tapped dots with the same y-down formula, so
+  they agreed with the bug.
+- **Rule:** every drawing of the pitch on any screen (radar, heat map, wind map, answer pictures)
+  goes through `web/viewer/src/radar.ts`'s `projection`, and taps are hit-tested through it. Words
+  for a place on the pitch are grounded in the engine's own coordinates, not in a drawing. A test
+  that finds a dot asks the page where it drew it, and checks which way up that is.
+- **Check:** `tests/test_phone_companion.py::test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot`
+  (a player 20 m from the near touchline is below halfway); `tests/test_phone.py`'s tap test asks
+  `ninetyPhone.screenOf` and asserts the same.
+
+### 225. A second screen runs on the first screen's clock, cuts included
+- **What happened:** the viewer sent the phone `t_start` plus the video's time, which is the match
+  time only while the clip has no cut; a condensed match is all cuts. Between messages the phone
+  ran its clock on in match time, so even with the right message it slid into the stretch of the
+  match the broadcast skipped, drawing the radar where the video never was for up to a second.
+- **Rule:** one clock for every screen (lesson 33): the big screen sends match time from the same
+  function the graphics use, and the phone reads the bundle's cuts and runs on in video time
+  between messages, as the video does.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut`
+  fails with `t_start + video time`; `tests/test_phone_companion.py::test_the_phone_clock_jumps_the_cut_with_the_video_and_never_shows_the_gap`
+  fails with the cuts dropped from `LaptopClock.time`.
+
+### 236. A late joiner is sent the state as it stands now, not as it was last stored
+- **What happened:** the companion relay stored the big screen's once-a-second clock and replayed
+  it unchanged to a phone that joined late. A phone could start up to a second behind the screen it
+  follows until the next message; the phone clock test failed two runs in three, and the mock relay
+  did the same.
+- **Rule:** state that runs on by itself (a playing clock) is advanced by how long it was held
+  before it is replayed; state that does not (a paused clock, a focus) is replayed as stored. The
+  mock relay asks the laptop for its clock as it stands now, as the server computes it.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_a_playing_clock_as_it_stands_now`
+  (fails with the stored message replayed); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`.
+
+### 237. Tests and screenshot runs never speak aloud
+- **What happened:** browser tests and screenshot scripts turned read-aloud on and the headless
+  browser spoke with the Mac's system voice; Kian heard it from a test run.
+- **Rule:** every voice the screens use goes through one function (`web/viewer/src/speech.ts`,
+  `speakAloud`), which under automation (`navigator.webdriver`) records the line instead of
+  speaking it; recorded audio and tones stay silent too. Read-aloud is off until a fan turns it on.
+- **Check:** `tests/test_phone_companion.py::test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks`
+  (fails if `speakAloud` calls `speechSynthesis` under webdriver).
+
+### 234. A foul that only the data knows about is not a foul on screen
+- **What happened:** Kian watched a test clip with a foul in it and could not tell a foul had
+  happened. The engine had stopped play: within 0.5 s of each whistle on seed 7, at most one of 22
+  players was still running. But the picture showed players drifting to a stop, no whistle and no
+  one reacting. The fall itself (#223) was not in that clip's render yet.
+- **Rule:** an event a viewer must follow gets a cue they can see or hear, drawn from the engine's
+  own record of it (the foul's frame, its fouler and the fouled player, their positions), never by
+  moving anyone. A cue that would contradict a truth field, such as turning a body away from its
+  `heading`, is drawn where the truth says nothing: here the head turns, and the hand goes up.
+- **Check:**
+  - `tests/test_render_fouls.py`: the reactions start at the foul frame, are gone after REACT_S,
+    reach the three nearest team-mates and not the fouled man, and the head turns toward him;
+    nothing happens without a foul.
+  - `tests/test_render_mesh.py`: the page and Python draw the raised hand and the turned head the
+    same way, within 1.5 cm on every marker.
+  - A clip with no foul renders byte-identical to the renderer before this change, given the same
+    two team codes. The rename to LON and LIS changes the scorebug text in every render with
+    graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
+    codes in their params, so re-rendering one differs in the scorebug only.
+
+### 238. A model's reply is read as the first object it writes, and the live eval keeps what it parsed
+- **What happened:** the published match Companion (v2) answered a plan step with the plan and then
+  kept going: an "answer" step of its own, with facts and fact ids it made up, in the same reply. The
+  plan parser took everything from the first `{` to the last `}`, which is not one JSON object, so
+  every such plan failed. In the first live run (40066697726) 22 of 32 plans were unparseable and 27
+  of 32 answers fell back to code's checked answer. The fan saw only verified text, and the stand-in
+  tests passed, because every scripted reply was exactly one object.
+- **Rule:** a model's plan is the first JSON object in its reply (`companion_match.first_object`), and
+  nothing after it is read, so the made-up facts never reach the tools. The eval reads plans through
+  the same function as the service. A scripted reply in a test includes what the live model actually
+  sent, not only the ideal shape.
+- **Check:** `tests/test_companion_match.py::test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only`
+  and `::test_the_eval_reads_a_plan_as_the_service_does` fail when the parse goes back to first `{` to
+  last `}`.
+
+### 239. A sentence template is tested through the checker it must pass, and a fallback row answers only what it is about
+- **What happened:** the team-sheet sentence ("X plays left-back for London Athletic, by the team
+  sheet") had never passed the fact-checker. Its name gate counted only the tracked players the facts
+  were about, not the sheet row being cited. So no "who plays where" question was ever answered, and
+  the router's lineup score (2/4) measured routing to a tool that could not answer. Meanwhile "who is
+  the best player?" routed to the sheet as well, and with no confident leader the first sheet row
+  answered: the goalkeeper. On the phone, the answer's headline was taken from the picture's number
+  ("6 moves") rather than from what the fan asked.
+- **Rule:** every code template is run through `verify` on the stand-in in a test, not only read. A
+  cited sheet row vouches for its own name, position and club, and a name said with another row's
+  position is refused. A sheet row answers only a question that names a position. The answer carries
+  a `headline` computed by code from the question's kind: a name (or the role, or the club) for who,
+  the number with its unit for how many, the place for where; the supporting number stays in the
+  sentence.
+- **Check:** `tests/test_companion_match.py::test_who_plays_a_position_is_answered_from_that_row_of_the_sheet`,
+  `::test_a_sheet_row_says_only_its_own_name_position_and_club`,
+  `::test_who_is_best_is_never_answered_with_a_name_off_the_sheet` and
+  `::test_every_held_out_answer_is_headed_by_what_its_question_asks`. Each fails when its rule is
+  mutated (eleven mutations, all caught).
+
+### 235. Every live_job mode gets an end-to-end test on a real clip of its camera type
+- **What happened:** `observe` gained `fixed=True` for the tactical camera's lenses, but the views
+  mode of `ninety/vision/live_job.py` never passed it. Each lens was searched frame by frame as the
+  broadcast's moving gantry, and the fit failed on every frame: on validation seed108, camera OK on
+  0 of 250 frames and no player placed. Its unit tests passed because they ran on a synthetic clip
+  drawn through a broadcast camera, which the broadcast search fits. A phone fixture built from
+  views runs on main (12–17 players, no events) carried the defect downstream.
+- **Rule:** any live_job mode (broadcast, views, and any added later) has an end-to-end test on a
+  real rendered clip of that camera type, at the renderer's own image quality. The test asserts a
+  non-zero placement rate, not only that the run finished.
+- **Check:** `tests/test_vision_live_job.py::test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not`
+  (the flag), and `test_a_real_tactical_clip_places_players_from_every_view` and
+  `test_a_real_broadcast_clip_places_players` in the same file, on two frames of each camera
+  (`tests/fixtures/tactical-seed108`, `broadcast-seed108`). The tactical test fails without the fix.
+
+### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
+- **What happened:** an audit of the fact-checker's code half found four forms it still let
+  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
+  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
+  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
+  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
+  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
+  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
+  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
+  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
+  to a player named after it, only the first number after a verb was bound, and Spanish idioms
+  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
+- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
+  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
+  speed the sentence gives to one player against that player's own cited events. Words that are no
+  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
+  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
+  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
+  for its player, holds every distance and speed up to the next player or the end of the clause,
+  and says what it does not cover; any other wording falls back to the check against all cited
+  events.
+- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
+  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
+  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
+  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
+  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
+  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
+  `replays/`, `docs/eval/` and the fixtures are unchanged from main's check on the same texts.
+
+### 240. A measurement is re-run on the engine the demo uses, and a fixed sentence in a report becomes a computed one
+- **What happened:** the insight, roles and team-distance evaluations ran on runs/u7, seed11 and
+  c21, simulated on Oct 13–14, before the engine fixes. The u7 run logged 22 of 265 passes from a
+  player to himself; the validator's C8 now rejects these. Re-run on the freeze engine (65247ba3:
+  the demo's seed 8076 and seeds 7, 11 and 21), the fact-checker missed 9 planted false claims and
+  stopped 16 true ones that u7 never produced:
+  - a back line's change and height, both in metres, were not bound to their roles ("pushed up
+    21 m, to 21 m");
+  - one name could be said as both players of a one-two;
+  - a regain that led to a shot was stopped by the counter-press's words, and its reversal
+    ("never won the ball back and had a shot") passed.
+
+  Name precision fell from 0.999 to 0.939–0.975, and with full tracking team distance read
+  0.967–1.204 of the truth, not "within a few percent". A step rule fixed before measuring found no
+  step that tames the error, so the phone now labels the distance with its measured worst over
+  every freeze match graded (±21%, the demo's own match; one held-out match alone gave ±15%, narrower
+  than the demo's, caught in review). Two report texts were fixed strings: the
+  roles report named runs/u7 whatever it ran on, and the team-distance report kept its "few
+  percent". Both stayed true-sounding after the numbers changed.
+- **Rule:** an evaluation quoted in the docs runs on a match simulated at the engine the demo uses,
+  and its report states the runs it read and the range it measured, computed, never typed. When the
+  engine moves, the evaluations are re-run before their numbers are quoted.
+- **Check:** `docs/eval/roles.md`, `team-distance.md` and `insight-claims.md` name their runs (the
+  `f*-65247ba3` folders). `tests/test_insight_check.py::test_a_line_moves_by_its_change_to_its_height_never_the_other_way_round`,
+  `::test_one_name_said_as_both_players_of_a_one_two_is_refused` and
+  `::test_a_regain_that_led_to_a_shot_is_said_in_its_own_words_and_never_reversed` fail when their
+  rule is mutated.
+
+### 241. A name is one player at a time
+- **What happened:** the players ranking listed one starter's name twice: two tracks were both
+  assigned his role and both passed the name gate. The first rule proposed, "if two tracks claim a
+  name, neither gets it", named nobody on the stand-in: the tracker breaks every player into
+  several tracks over a match, so every name had several claimants (742 named tracks became 0).
+- **Rule:** tracks that claim one name and are never on the pitch together are one player in
+  pieces, and keep it; two that are there at the same time lose it and fall back to their role
+  (`roles.one_track_per_name`). The ranking merges one named player's pieces into one row. On the
+  freeze stand-in (gates 0.203) this keeps 612 of 742 names and lifts their precision from 0.930 to
+  0.977; 38 of the 130 names it removes were wrong.
+- **Check:** `tests/test_insights.py::test_a_name_binds_to_one_player_at_a_time` and
+  `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
+  when the overlap test or the merge is mutated.
+
+### 242. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. An id that is a place in an order moves when anything is added before it
+- **What happened:** adding possession changes to the detected events regenerated the M1 clip's
+  fixture, and every event after the first change moved up one id. The failure table pinned its
+  evidence pass as `SIDE = "v00005"`, "a second completed pass in the minute": that id became the
+  out of play, which the agents' view drops, and every CI shard failed with `KeyError: 'v00005'`.
+  The PR's local run covered the vision tests, not the workflow tests that read the same fixture.
+- **Rule:** an event is chosen by what it is (its type, outcome, minute, order among its kind),
+  never by a detected id, which is only its place in the clip. When a fixture is regenerated,
+  every reader of it is found (`grep -rn <fixture name>` and the modules those tests call) and
+  their tests are run in the same change (lesson 91).
+- **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
+  plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
+  the old fixed ids put back, the file fails to collect.
+- **Again, the next day:** `ninety/eval/describe_eval.py` (#268, merged after the fixture changed)
+  read which detections are real from event-report-v2's pairs, whose ids are the older detector's.
+  Its own guard refused them (`v00005 is not the event it matched`), as it should. The fix grades
+  the current detector (`docs/eval/event-report-v3.json`, written by `possession_report` beside its
+  report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
+  where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
+
+### 244. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
+- **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
+  test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's
+  last shot is a reverse angle (a camera in the far stand). Law 1's markings are the same after a
+  half turn about the centre spot, so the near gantry turned that way draws identical lines. The fit
+  found that twin, the markings and the players' heights both passed, and 20 frames were trusted
+  about 44 m wrong. Validation had 5 cuts and no reverse angle, so nothing there could show it.
+  Scoring it also showed main's own baseline had moved: #270's height band, measured on renderer
+  0.5.15, rejects most right frames on the frozen test set (renderer 0.3.2). Main's pass F1 there is
+  0.25, while the docs still said 0.67.
+- **Rule:**
+  - Before a fit is trusted on a new kind of view, list the views its model cannot tell apart (here,
+    any camera and its half turn about the centre spot). Each needs a cue the symmetry changes, or
+    is refused.
+  - Validation for a change must hold every kind of case the change opens up (here, every kind of
+    second angle), not just whichever ones the seeds happened to draw.
+  - A threshold measured on one look is re-measured before it judges clips of another, and a
+    published number is re-run when a change to its pipeline lands (lesson 215).
+- **Check:**
+  - `tests/test_vision_pitch.py::test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`.
+  - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
+    following off by default until it passes its bar.
+
+### 245. A side the voice holds is held on the screens too, or the gate protects only one of them
+- **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
+  out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
+  track id into a club from its first letter (`h-t8` became "a London player"), and that letter is
+  only the tracker's side vote. The offline dry run on two demo segments found it: every side there
+  was told at 0.18, so the voice said "a player" while the screen named a club.
+- **Rule:** the bundle lists the track ids whose side the gate vouches for (`sides_known`: each the
+  actor of an event told surely, and named by no event that did not vouch for him). The viewer and
+  the phone name a club only for those ids; every other tracked player is "a player" ("Player 12"
+  as a title). An event's own side (`team`) is named the same way: the bundle carries the
+  fact-checker's threshold (`min_team_confidence`), and the phone's play-by-play, story colours and
+  shot list name a club only above it ("A player completes a pass"; an unsure shot is in "All"
+  only, listed but not drawn; an unsure goal is "Goal 43′" and in no club's score). A writer that
+  names a side and a screen that names it ask the same rule; what still reads the tracker's vote is
+  listed in EVALUATION.md as a residual, not left unsaid.
+- **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
+  and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
+  fail when the screens ignore the list, and
+  `tests/test_phone_companion.py::test_the_play_by_play_names_a_club_only_for_a_side_told_surely`
+  when the phone reads an event's side without the threshold;
+  `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
+
+### 246. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
+
+### 247. A paid machine's cap runs on the machine, and its results leave it as they are made
+- **What happened:** on Oct 24–25 two rented GPU hosts ran past their hard caps. Each cap was a
+  timer on the maintainer's laptop. The first fired 14 min late with the laptop asleep, hit a DNS
+  failure, and exited. The second retried with the laptop kept awake, but the laptop was offline
+  for about 1 h 40 min, so the host billed about 1.5 h past its 2 h cap. Each time, finished work
+  that had not been copied back was lost when the host was finally deleted: the shot-outcome set's
+  renders and its validation scoring.
+- **Rule:** the cap is enforced on the host itself: the first thing a rented host runs is its own
+  deletion at the cap, started before any other work. The laptop's retrying timer is only a second
+  line. Every finished result (a clip's report, a score, a set list) is copied off the host as it
+  is written, never in a batch at the end.
+- **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
+  deadline the host enforces on itself, and the cadence at which results are copied back (every
+  couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+
+### 248. A place along the pitch is checked against the pitch before it is cut into thirds
+- **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
+  capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
+  depth gives index -1, and `THIRDS[-1]` is "final", so a ball behind one goal counted as the final
+  third for both clubs at once. The merge queue's review caught it (x = 108 gave both 100%); no test
+  had a ball off the pitch.
+- **Rule:** a position is checked against the pitch (0 to 105 m along it) before it is cut into
+  zones. One off the pitch is out of play and in no zone. A capped index is not a clamp: capping
+  the top end still leaves Python's negative indices at the bottom.
+- **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
+  (x = -3, -0.5, 106, 108) fails when the check is removed.
+
+### 249. A phrase that states a direction is bound to the fact's own role, not only approved
+- **What happened:** the closed direction check (lesson 221) approved a sentence when every word
+  was one of the cited fact's own phrases. The phrases were approved as words, though, not as this
+  fact's values. The merge queue's reviews of #321, #323 and #326 got these through:
+  - "Hugo passed to Sami" against Sami-to-Hugo (both names, the same words);
+  - "did not sprint" against a count of 4 (the zero phrase is one of the fact's phrases);
+  - "their final third on the left" against own-third-right (any third matched);
+  - a recap's twelve-moment cap dropping a goal.
+  Numbers already had roles (lesson 221); orders, zeros and places did not.
+- **Rule:** wherever a phrase carries a fact's value, the check binds it to that value:
+  - a pair is said passer-to-receiver;
+  - a zero phrase only of a zero;
+  - a zone only as the fact's own third and channel.
+  A cap on a list never drops the kind the list exists for (goals in a recap). A review probe that
+  differs from the fact only in who, where or whether is a test.
+- **Check:** `tests/test_passing_network.py::test_a_pair_is_said_in_its_order_and_with_its_caveat`,
+  `tests/test_player_running.py::test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it` and
+  `tests/test_halves_and_moments.py::test_a_recap_never_drops_a_goal_however_many_moments_follow`
+  fail when their binding is removed.
+
+
+### 250. A guard on what a fan asked is a list of words, so every phrasing it misses gets an answer
+
+- **What happened:** while a named player's running figures were held, the physical tool still
+  said the zone each player was in most (#323). A guard (`held_ask`) matched "distance", "fastest",
+  "sprint" and a few more, and refused those questions. Every other phrasing got the first zone
+  fact, verified, with a player's name as the headline: "Who looks most tired?", "Who ran the
+  furthest?", "How many km has Kai done?". Then "who is on the left?" got the zone of someone who
+  played on the right, and "Where does Alex play?" got one of three Alexes. Three reviews found
+  more phrasings each time. The fact-check never sees the question, so a true sentence that does
+  not answer the question passes it.
+- **Rule:** gate on the kind of answer the question asks for, and refuse anything else:
+  - a figure, at its highest, or of the one player the question names;
+  - the zone, only for a question of where, about one named player.
+  
+  Several players fitting are named back to the fan, never picked for him. A side or a third alone is not
+  a question of where. The model path is held to the same target: an answer about another player,
+  or not the figure asked, falls back to code.
+- **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
+  and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
+  phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 252. A test waits on the state it checks; one read of a screen is a race
+- **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
+  `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
+  top-level `await import('./mock')`. The other read each screen's clock once, from a DOM attribute
+  written each time a frame is drawn: on a loaded runner the phone read 0.5 s behind the big
+  screen (61.77 / 61.27 / 61.93). The clock check also had a gap: it passed a phone whose clock
+  did not advance between the big screen's once-a-second messages, so it read right once a
+  second.
+- **Rule:**
+  - A browser test waits for the state it checks (an element visible, a ready flag, a status's
+    state), never a single read after an action, and never a longer timeout in its place.
+  - A value a screen writes per frame is read after a fresh frame.
+  - A sync check settles for at most one sync period (the sender's own interval, cited), keeps the
+    product's bar, then requires the next samples to stay in step. A phone constantly off, or one
+    whose clock stops between messages, still fails.
+- **Check:** `tests/test_phone.py::test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap`
+  waits for `#mockbar`. `assert_in_step` (fresh frames, `SETTLE_S`, then `STEPS` more samples)
+  fails `test_the_phone_clock_stays_within_tolerance_of_the_laptop` and
+  `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
+  shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
+  messages (mutant runs, #341 and its follow-up).
+
+### 253. A rule that walks back through events must stop at a cut
+- **What happened:** the highlights reel's `origin` rule (#324) walked back from a shot through the
+  detected events to find how the attack began. A development run on the demo match found a wrong
+  origin: a throw-in seen before a broadcast cut was read as the free kick after it, because the
+  condensed match's cut had skipped minutes and a foul in between. The run had also given every
+  origin as null before, because the rule stopped at event types it did not know.
+- **Rule:** an event before a cut says nothing about what followed it. A rule that reads backwards
+  through events stops at a cut (a restart after the cut is the restart detector's to see), and the
+  list of event types it understands is checked against the types the source writes, so "null for
+  everything" is noticed.
+- **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
+  fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.

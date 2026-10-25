@@ -10,8 +10,10 @@ evaluations use the same one.
 
 Known exceptions, each with a reason: ninety/agents/foundry_evals.py and foundry.publish talk to the
 sync AIProjectClient, which takes a sync credential (no event loop to block); ninety/speech/tts.py
-asks for one Speech token per synthesis, synchronously, outside the agents' loop. The Personalizer's
-service and evaluation sign in through ninety/personalizer/core.py published_ask, which uses this.
+`synthesize_ssml` asks for one Speech token per synthesis, synchronously, at build time, outside any
+loop (the API's Live route uses `asynthesize_ssml` with this credential, ninety/api/speak.py). The
+Personalizer's service and evaluation sign in through ninety/personalizer/core.py published_ask,
+which uses this.
 """
 
 from __future__ import annotations

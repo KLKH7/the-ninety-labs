@@ -38,4 +38,52 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.2: a broadcast clip cuts only a dead ball whose stoppage and restart it shows, holds each side
 # of the cut at least 4 s, and comes back on the gantry closed up on the restart, easing out to the
 # wide shot before the kick; cuts are off by default, so datasets and the test sets show every frame.
-RENDERER_VERSION = "0.5.2"
+# 0.5.3: players are drawn at their own height (the body mesh stands 1.684 m, not 1.84 m, so every
+# player was 91.5% of his height), with proportions measured against Drillis and Contini; walking
+# and running, a foot is planted for its stance and carried on an arc through its swing, never
+# dragged along the grass; the stride lengthens and the swing lifts with speed.
+# 0.5.5: the broadcast camera watches restarts wide, follows a ball run to the byline and closes in
+# at a corner (#198); 0.5.6 to 0.5.8: a corner framed from the taker inward, held against
+# pumping (#201, #206).
+# 0.5.9: a throw-in taker bends to the ball, holds it in both hands as the engine lifts it over his
+# head and follows through after it leaves them (no pose switches in a frame); a run has a sourced
+# stance share with a flight phase above the walk-to-run speed, and a running foot is highest early
+# in its swing, behind him, coming through low to land; a swing keeps its own progress, so a
+# change of pace never moves a foot in a jump; a foot lifts before the leg runs out of reach behind
+# it, so the push-off toe no longer slides.
+# 0.5.10 (demo v2's camera and edit, demo v1's critic): the picture comes back 2 s before a restart
+# on the wide shot, with no frozen close-up and no pull-out; a goal is held 8 s, the scorer's
+# celebration followed by a second camera; a stinger graphic covers each cut; the GOAL tag's word
+# comes up once its panel is open.
+# 0.5.11: `stadium=broadcast`, footage only (no seed draws it): a crowd in the stands, the board ring
+# closed with varied made-up adverts, walls and LED ribbons under the stands, grass behind the boards,
+# softer mowing. A plain stadium renders the same pixels as 0.5.10; the crowd is never labelled and
+# hides only what is behind it, as the picture does.
+# 0.5.12: the runner's hips bob (sourced by speed: highest over the standing leg walking, lowest at
+# mid-stance and in free fall in the air running), the swinging knee folds to a runner's, the trunk
+# leans into a change of pace by atan(a / g) and with speed, the arms swing wider toward a sprint,
+# and a sprinter's foot leaves the grass between frames, so his flight is seen over 3 frames.
+# 0.5.13: a keeper's dive is drawn once: it grows at the engine's own rate, keeps its side and his
+# facing until he is up (no spin on the grass, no second dive the other way), and fades into what he
+# does next over a second; his feet stay planted through it.
+# 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
+# the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
+# 0.5.15: `views=tactical` also writes two fixed whole-pitch tactical lenses (camera.tactical_views)
+# under views/tac-l and views/tac-r, 1920x1080 without graphics, from the same scene frame for frame.
+# The broadcast's images and labels are byte-identical to 0.5.14's for every seed.
+# 0.5.16 (after #231's 0.5.15): a long ball the gantry cannot frame together with where it will be a
+# lag on is aimed at the latter, so the trailing pan lands on the ball rather than a lag behind it;
+# a goal soon after an edit cut waits for the restart's hold before the low angle (lesson 205).
+# 0.5.17 (after #231's 0.5.15 and #235's 0.5.16): a keeper's bowl (the engine's own wind-up, action
+# "bowl") is drawn as the hold it is, both hands bringing the ball down to the grass, never a kicking
+# leg. No engine before #216 names one, so every earlier clip renders byte-identical (lesson 204).
+# 0.5.18: a foul is legible (lesson 234). The fouler raises a hand and the fouled side's three nearest
+# turn their heads to the man down, for 2 s from the engine's foul frame, drawn from its event and
+# positions (bodies still face the engine's heading). The mp4 carries a synthesised whistle at each
+# foul the picture shows. Every clip shows London Athletic (LON) against Lisbon Esportes (LIS) on the
+# score bug (Kian, Oct 24); the seed's other draws are unchanged. A clip with no foul renders the same
+# pixels as 0.5.17 given those two codes.
+# 0.5.19: broadcast kits are told apart as seen (lesson 246): the shirt's colour mixed with its
+# pattern's by area. A broadcast seed whose kits looked alike (8080) has them redrawn from their own
+# stream; every other seed, and every training or test kit (normal, low), is drawn as before.
+RENDERER_VERSION = "0.5.19"

@@ -36,7 +36,16 @@ COMMAND = ("uv run python -m ninety.eval.attribution_derive --clips <render run 
 
 
 def test_seeds() -> set[int]:
-    return set(json.loads(TEST_SET.read_text())["seeds"])
+    """Every seed kept for evaluation: the frozen test sets' and all of TEST_SEEDS (900001 to
+    900030, ninety/render/splits.py), and anything else at or above RESERVED_FROM."""
+    from ninety.render.splits import TEST_SEEDS
+    return set(json.loads(TEST_SET.read_text())["seeds"]) | set(TEST_SEEDS)
+
+
+def refused(seed: int) -> bool:
+    """Whether a seed may not be used to derive anything (a test or reserved seed)."""
+    from ninety.render.splits import RESERVED_FROM
+    return seed in test_seeds() or seed >= RESERVED_FROM
 
 
 def self_passes(rows: list[dict], frames: dict[int, dict], join_breaks: bool) -> dict:
@@ -90,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--check", action="store_true", help="fail unless the committed report is up to date")
     a = ap.parse_args(argv)
     seeds = [int(s) for s in a.seeds.split(",")]
-    if banned := sorted(set(seeds) & test_seeds()):
+    if banned := sorted(s for s in seeds if refused(s)):
         raise SystemExit(f"test seeds {banned}: the test clips are for the final score only")
     # A clip the camera fit could not place (observe fails: too few markings in any frame) has no
     # observations: it is listed, never silently dropped, and has nothing to measure.

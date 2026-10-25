@@ -1,16 +1,28 @@
 # web/phone: the phone companion
 
-The second screen ([ARCHITECTURE.md](../../docs/ARCHITECTURE.md), stage Personalize). The phone
-pairs with the laptop's broadcast, then shows:
+The second screen ([ARCHITECTURE.md](../../docs/ARCHITECTURE.md), stage Personalize), and the
+product's main surface: the big screen shows only the broadcast, its graphics, the score and a QR
+code; everything else is here. The phone pairs with the big screen, then has three tabs:
 
-- a **minimap** in step with the laptop's clock (within 0.2 s, one frame of the 5 fps feed;
-  `src/clock.ts`), with the dots gliding between frames;
-- a **player card** for the player tapped (or picked from the list, for a screen reader): speed
-  now, top speed, distance and a heat map, each computed by code (`ninety/intel/window.py`);
-- a **wind map**: particles drifting through each team's mean velocity over the last 30 s
-  (`src/wind.ts`). It is first in the cut order, so it loads only when turned on and stands alone;
-- **questions**, suggested or typed, answered by the API (`POST /api/ask`): the question goes as
-  data, every number is a cited fact, and each answer's evidence is one tap away.
+- **Radar**: the viewer's own radar (`web/viewer/src/radar.ts`): every tracked player, the ball,
+  the TV camera's footprint, estimated positions hollow, drawn the way up the TV shows it, within
+  0.2 s of the big screen's clock (`src/clock.ts`) and across its cuts (it reads the bundle's
+  segments, named by the QR code). Tap a player for a **player card**: speed now, top speed,
+  distance and a heat map, each computed by code (`ninety/intel/window.py`). The **wind map**
+  (`src/wind.ts`) is first in the cut order, so it loads only when turned on and stands alone;
+- **Ask**: questions, suggested or typed, answered by the API (`POST /api/ask`): the question goes
+  as data, every number is a cited fact, the evidence is one tap away, and an answer with a
+  `visual` draws its picture (`src/visual.ts`): an overload, a line-breaking pass, pass options,
+  a team's shape or the wind map, from the visual's own positions and numbers, or nothing when one
+  is missing;
+- **Insights**: the Insight Scout's hidden-stat cards (`cards.json` in the bundle, written by
+  `ninety-e2e --cards`; schemas/insight_card.schema.json) up to the big screen's clock, newest first,
+  each with its picture. "Why?" opens the card's precomputed, fact-checked answer in place: no
+  model call. Pictures arrive in the agents' shape (`$defs/visual`) and `visual.ts`'s `fromScout`
+  turns them into what the phone draws; anything missing draws nothing.
+
+Clubs are named from the codes on the clip's scorebug (`web/viewer/src/teams.ts`); a player by the
+name or role an answer carries, otherwise by club and shirt or track ("a Lisbon player" in a sentence, "Lisbon player 12" as a title).
 
 The laptop side is the viewer's "Connect your phone" panel (`web/viewer/src/companion.ts`): it asks
 the API for a 6-character code, shows it with a QR code of `phone/?code=…&clip=…`, and sends its
@@ -30,7 +42,7 @@ The phone's real data is the video's own: `tests/fixtures/tracked-seed900001.jso
 the M1 clip's observations by `ninety/vision/tracked_frames.py` (tracks, teams, a one-second line
 fit against the camera fit's jitter), with no answer key. Graded offline in
 [companion-tracked.md](../../docs/eval/companion-tracked.md): speed now within 0.6 km/h (median),
-top speed within 1.9 km/h. The tracker reads no shirt numbers, so tracked players are `h-t12`,
+top speed within 1.5 km/h. The tracker reads no shirt numbers, so tracked players are `h-t12`,
 shown as "Home player · track 12". The API serves this file once #145 accepts those ids.
 
 ## Run it
@@ -52,4 +64,4 @@ NINETY_COMPANION=standin uv run uvicorn ninety.api.app:app --port 8000
 ```
 
 Tests: `npm run build --prefix web/phone && npm run build:mock --prefix web/phone && npm run build --prefix web/viewer`, then
-`NINETY_REQUIRE_PHONE=1 uv run pytest tests/test_phone.py`.
+`NINETY_REQUIRE_PHONE=1 uv run pytest tests/test_phone.py tests/test_phone_companion.py`.
