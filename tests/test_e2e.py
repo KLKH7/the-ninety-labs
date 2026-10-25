@@ -452,3 +452,19 @@ def test_the_bundle_lists_the_tracks_it_vouches_for(tmp_path):
     sure = {**EVENTS[0], "player": "h-t4", "receiver": "h-t8", "intended": "h-t8", "team_confidence": 0.99}
     out, manifest = run(tmp_path, events=[sure])
     assert manifest["sides_known"] == ["h-t4"]
+
+
+def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
+    # The 8080 demo's vision read passes at 251 and 919 km/h; the fastest shots on record are about
+    # 40 m/s (GROUNDING P3). The event stays; its speed is dropped, so no graphic, line or claim says it.
+    from ninety.match import detected
+
+    fast = {**EVENTS[0], "ball_speed_kmh": 251.3}
+    path = tmp_path / "detected-fast.jsonl"
+    path.write_text(json.dumps(fast) + "\n")
+    (loaded,) = detected.load(path)
+    assert loaded["ball_speed_kmh"] is None and loaded["id"] == fast["id"]
+    assert detected.credible({**fast, "ball_speed_kmh": 144.0})["ball_speed_kmh"] == 144.0  # at the bound
+    out, _ = run(tmp_path, events=[fast])
+    said = "".join((out / f).read_text() for f in ("cues.jsonl", "audio.json", "commentary.json"))
+    assert "251" not in said
