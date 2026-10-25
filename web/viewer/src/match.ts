@@ -4,6 +4,7 @@
 // it is match.json (ninety/condensed.py); this only shows it at the right moment.
 
 import { type Bundle, type Manifest, clock } from "./bundle";
+import { crestOf } from "./crests";
 import type { TeamNames } from "./teams";
 
 export type Kind = "goal" | "save" | "shot" | "set_piece" | "build_up";
@@ -146,6 +147,10 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
   const head = $("playhead");
 
   const score = $("score");
+  for (const side of ["home", "away"] as const) {
+    const crest = document.getElementById(`score-crest-${side}`);
+    if (crest) crest.innerHTML = crestOf(teams[side]) ?? "";
+  }
   const chapterNow = $("chapter-now");
   const skip = $("time-skip");
   const announce = $("match-live");

@@ -312,3 +312,21 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     last = [m for m in sent if m["type"] == "clock"][-1]
     assert last["t"] == pytest.approx((1550 + 0.5) / FPS, abs=0.03)  # mutation: t_start + video time -> 61.62
     ctx.close()
+
+
+def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    assert page.locator("#score-crest-home svg").count() == 0  # Crowmere has no crest: nothing drawn
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def demo_clubs(route):
+        body = route.fetch().json()
+        route.fulfill(json={**body, "teams": {"home": "LON", "away": "LIS"}})
+
+    ctx.route("**/match/manifest.json", demo_clubs)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("#score-crest-away svg")
+    assert page.locator("#score-crest-home svg").count() == 1
+    assert page.inner_text("#score").startswith("London 0 – 0 Lisbon")
+    assert not errors

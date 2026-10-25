@@ -18,9 +18,9 @@ const KIND_LABEL: Record<string, string> = {
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const INK = "#ffffff";
-const PANEL = "rgba(10, 16, 28, 0.86)";
-const ACCENT = "#36d39a"; // verified
-const TAG = "#f2c14e";
+const PANEL = "rgba(0, 0, 0, 0.82)";
+const ACCENT = "#ffffff"; // verified: strict Apple, no accent colour (the words say which)
+const TAG = "rgba(235, 235, 245, 0.6)"; // unverified, and the kind label's pill
 
 export interface DrawOptions {
   t: number;
@@ -90,11 +90,11 @@ function drawLowerThird(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: n
   const lw = ctx.measureText(label).width + pad * 2;
   ctx.font = `600 28px ${FONT}`;
   const tw = Math.min(ctx.measureText(cue.text).width, W - x - lw - 120) + pad * 2;
-  ctx.fillStyle = TAG;
+  ctx.fillStyle = INK; // the kind's label: a white pill, black type
   roundRect(ctx, x, y, lw, h, 6);
   ctx.fillStyle = PANEL;
   roundRect(ctx, x + lw, y, tw, h, 6);
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "#000";
   ctx.font = `700 18px ${FONT}`;
   ctx.textBaseline = "middle";
   ctx.fillText(label, x + pad, y + h / 2);
