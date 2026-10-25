@@ -185,3 +185,11 @@ before (the Laws are not contradicted). This applies everywhere a kick-off is ev
 kick-off evidence, amendment 2's restart rule and amendment 4. Known cost, reported not tuned: a
 taker whose kit side is read wrong turns a true goal's kick-off away (the broadcast's side accuracy is
 about 0.58 on validation; the tactical views' players are used when given, rule 4).
+
+## How the test split is scored if only part of it is run (Oct 25, before any test clip is rendered)
+
+The test clips are rendered and run on a pod with a fixed stop time; the live path runs without the
+answer key (`NO_SCORE=1`), and only each clip's observations and detected events come back. The test
+score is computed once, on the Mac, at the frozen commit, from those observations, over **every** test
+clip whose observations came back and no other; the clips that did not are listed by name with the
+count, and the result is reported as a score on that subset, never as the whole split's.
