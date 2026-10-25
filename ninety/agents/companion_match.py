@@ -54,8 +54,12 @@ MATCH_TOOLS = (
     "possession",
     "territory",
     "shots",
+    "passing",
 )
 TOOL_HELP = {
+    "passing": "what the passes did: progressive passes, passes into the final third, long balls and "
+    "passes intercepted, each club's count (unsure while the video could not tell whose some were) and "
+    "the total; and the pairs of named players who passed to each other most",
     "shots": "the shot map: each shot's spot, metres from goal and the angle the posts make there, "
     "nearest first; each club's shots and those from inside the penalty area. How a shot ended is not "
     "known yet",
@@ -125,6 +129,11 @@ TOOL_WORDS = (
         "team_shape",
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
+    ),
+    (
+        "passing",
+        r"\b(?:progressive|into the final third|final[- ]third entr\w*|intercept\w*|pass network"
+        r"|who passes to whom|link(?:ing)? up|combin\w*|partnership|passed to each other)\b",
     ),
     ("shots", r"\b(?:shots?|shooting|shoot|efforts? on goal|chances?|attempts?)\b"),
     (
@@ -362,6 +371,11 @@ FOLLOW_UPS = {
     "team_shape": (
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
+        "How are {club} playing?",
+    ),
+    "passing": (
+        "Which passes cut through?",
+        "How many shots have there been?",
         "How are {club} playing?",
     ),
     "shots": (
@@ -630,6 +644,16 @@ def _plural(n, word: str) -> str:
     return f"{_num(n)} {word}" + ("" if n == 1 else "es" if word.endswith("s") else "s")
 
 
+# What a pass kind is called, and the verb for a club's count (ninety/intel/passing.py).
+PASS_WORDS = {
+    "progressive": ("progressive passes", "completed"),
+    "final_third_entry": ("passes into the final third", "completed"),
+    "long": ("long passes", "played"),
+    "intercepted": ("passes intercepted", "had"),
+}
+PASS_WORDS.update({f"{k}_all": v for k, v in list(PASS_WORDS.items())})
+
+
 def code_texts(fact: dict) -> list[str]:
     """What code says about one fact or summary, in a fan's words. Empty when there is nothing it
     may say (an unsure fact, or a summary with nothing in it)."""
@@ -747,6 +771,18 @@ def code_texts(fact: dict) -> list[str]:
             return [f"{lead}."]
         who = "players took" if metric == "shots_all" else "took"
         return [f"{lead}, and {who} {_plural(k, 'shot')} from inside the penalty area."]
+    if metric in PASS_WORDS:
+        n = fact["value"]
+        what, verb = PASS_WORDS[metric]
+        noun = what.replace("passes", "pass") if n == 1 else what
+        if fact.get("team") is None:
+            return [f"There {'was' if n == 1 else 'were'} {n} {noun} {span}."]
+        return [f"{club} {verb} {n} {noun} {span}."]
+    if metric == "pair_passes":
+        return [
+            f"{fact['passer_is']} passed to {fact['receiver_is']} {_plural(fact['value'], 'time')} {span}, "
+            "of the passes the video could name both players of."
+        ]
     if metric == "possession_share":
         if fact.get("value") is None:
             return []

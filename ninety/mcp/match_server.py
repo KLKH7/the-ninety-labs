@@ -47,7 +47,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "referee", "lineup", "possession", "territory", "shots",
+    "referee", "lineup", "possession", "territory", "shots", "passing",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -237,6 +237,15 @@ def territory(match: str, minute_from: int, minute_to: int, club: str | None = N
     return _insight(match, "territory", minute_from, minute_to, club)
 
 
+def passing(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """What the passes did between two match minutes: progressive passes (Wyscout's definition),
+    passes into the final third, long passes (32 m or more) and passes intercepted, each club's count
+    with bounds while the video could not tell whose some were, and the totals; and the pairs of
+    named players who passed to each other most (only passes the video could name both players of).
+    Cite by id."""
+    return _insight(match, "passing", minute_from, minute_to, club)
+
+
 def shots(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
     """The shot map between two match minutes: each detected shot's spot, its distance from the
     goal its club attacks (m) and the angle the posts make there (degrees), nearest first; and each
@@ -330,7 +339,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
-        possession, territory, shots,
+        possession, territory, shots, passing,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

@@ -6,10 +6,12 @@ Caveat: the same author wrote the claim templates, the plants and the checker. T
 
 | Players missing a frame | True claims | Wrongly stopped | Planted false | Caught | Unsure claims | Held |
 |---|---|---|---|---|---|---|
-| 0% | 615 | 0 | 4466 | 4466 | 191 | 191 |
-| 5% | 559 | 0 | 3908 | 3908 | 282 | 282 |
+| 0% | 619 | 0 | 4487 | 4487 | 211 | 211 |
+| 5% | 563 | 0 | 3929 | 3929 | 302 | 302 |
 
 Caught by kind of plant:
 
-- 0% missing: club 379, id 114, kind 615, minute 615, name 97, number 1350, polarity 73, spelled 246, team word 362, uncited 615; missed: none; check p50 0.214 ms, p95 0.406 ms
-- 5% missing: club 338, id 97, kind 559, minute 559, name 84, number 1171, polarity 23, spelled 189, team word 329, uncited 559; missed: none; check p50 0.224 ms, p95 0.409 ms
+- 0% missing: club 379, id 114, kind 619, minute 619, name 97, number 1358, polarity 73, spelled 247, team word 362, uncited 619; missed: none; check p50 0.215 ms, p95 0.403 ms
+- 5% missing: club 338, id 97, kind 563, minute 563, name 84, number 1179, polarity 23, spelled 190, team word 329, uncited 563; missed: none; check p50 0.22 ms, p95 0.393 ms
+
+No pass pair was named in both directions in this stand-in, so the pair-count plant had nothing to trade; tests/test_passing_network.py plants it on a built pair.

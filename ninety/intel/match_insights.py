@@ -27,6 +27,7 @@ from ninety.intel import (
     offside,
     overloads,
     pass_options,
+    passing,
     roles,
     shape,
     shot_map,
@@ -109,6 +110,7 @@ class MatchInsights:
         facts["possession"] = ball_share.possession_rows(events)
         facts["territory"] = ball_share.territory_rows(f.frames)
         facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
+        facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = [
             {
@@ -317,6 +319,25 @@ class MatchInsights:
             {**r, "club": clubs.get(t)} for t, r in got.items() if t == "all" or team in (None, t)
         ]
         return {"facts": top, "summary": summary}
+
+    def passing(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """What the passes did over the minutes (progressive, into the final third, long,
+        intercepted), each club's count and the total; and the pairs of named players who passed to
+        each other most."""
+        team = self.team(club)
+        rows = self.facts.get("pass_type", ())
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in passing.summary(rows, minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        pairs = [
+            {**r, "club": clubs[r["team"]]}
+            for r in passing.network(rows, self.people, minute_from, minute_to)
+            if team in (None, r["team"])
+        ]
+        return {"facts": pairs, "summary": summary}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)

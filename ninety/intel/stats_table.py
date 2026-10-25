@@ -142,6 +142,15 @@ def stats_table(mi) -> dict:
         ),
         # The lower bound: the seconds with the ball near a third's line may add to it (GROUNDING I18).
         ("Attack", "territory", "Ball in the attacking third, at least", "%", _territory(mi)),
+        *[
+            ("Passing", key, label, "passes", _summary(mi.passing, key))
+            for key, label in (
+                ("progressive", "Progressive passes"),
+                ("final_third_entry", "Passes into the final third"),
+                ("long", "Long passes (32 m or more)"),
+                ("intercepted", "Passes intercepted"),
+            )
+        ],
         (
             "Attack",
             "shots_inside",
