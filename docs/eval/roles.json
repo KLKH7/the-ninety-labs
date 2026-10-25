@@ -1,0 +1,325 @@
+{
+ "targets": {
+  "name": 0.95,
+  "role": 0.9,
+  "line": 0.95
+ },
+ "min_tracks": 50,
+ "missing": 0.05,
+ "sigma_m": 0.587,
+ "window_min": 15,
+ "dev": [
+  "runs/f7-65247ba3",
+  "runs/f11-65247ba3"
+ ],
+ "held_out": [
+  "runs/f21-65247ba3"
+ ],
+ "by_fragment": {
+  "30.0": {
+   "dev": {
+    "tracks": 6898,
+    "role_ok": 6587,
+    "line_ok": 6687,
+    "name": {
+     "gate": 0.203,
+     "said": 6898,
+     "right": 6587,
+     "precision": 0.955
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 6898,
+     "right": 6587,
+     "precision": 0.955
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 6898,
+     "right": 6687,
+     "precision": 0.969
+    },
+    "confusions": [
+     [
+      "LCM->LB",
+      24
+     ],
+     [
+      "LB->LCM",
+      22
+     ],
+     [
+      "RCM->CM",
+      18
+     ],
+     [
+      "RB->RCM",
+      18
+     ],
+     [
+      "RCM->RB",
+      16
+     ],
+     [
+      "CM->LCM",
+      11
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 3457,
+    "role_ok": 3370,
+    "line_ok": 3391,
+    "name": {
+     "gate": 0.203,
+     "said": 3457,
+     "right": 3370,
+     "precision": 0.975
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 3457,
+     "right": 3370,
+     "precision": 0.975
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 3457,
+     "right": 3391,
+     "precision": 0.981
+    },
+    "confusions": [
+     [
+      "RW->RCM",
+      7
+     ],
+     [
+      "RCM->RB",
+      6
+     ],
+     [
+      "CM->LCM",
+      5
+     ],
+     [
+      "LB->LCM",
+      5
+     ],
+     [
+      "LCM->LCB",
+      4
+     ],
+     [
+      "RB->RCM",
+      4
+     ]
+    ]
+   }
+  },
+  "10.0": {
+   "dev": {
+    "tracks": 14285,
+    "role_ok": 13416,
+    "line_ok": 13665,
+    "name": {
+     "gate": 0.203,
+     "said": 14285,
+     "right": 13416,
+     "precision": 0.939
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 14285,
+     "right": 13416,
+     "precision": 0.939
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 14285,
+     "right": 13665,
+     "precision": 0.957
+    },
+    "confusions": [
+     [
+      "LCM->LB",
+      66
+     ],
+     [
+      "LB->LCM",
+      60
+     ],
+     [
+      "RB->RCM",
+      53
+     ],
+     [
+      "RCM->RB",
+      50
+     ],
+     [
+      "RCM->CM",
+      45
+     ],
+     [
+      "RW->RCM",
+      34
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 7233,
+    "role_ok": 6998,
+    "line_ok": 7061,
+    "name": {
+     "gate": 0.203,
+     "said": 7233,
+     "right": 6998,
+     "precision": 0.968
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 7233,
+     "right": 6998,
+     "precision": 0.968
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 7233,
+     "right": 7061,
+     "precision": 0.976
+    },
+    "confusions": [
+     [
+      "RCM->CM",
+      13
+     ],
+     [
+      "LW->LCM",
+      12
+     ],
+     [
+      "RB->RCM",
+      11
+     ],
+     [
+      "LCB->LCM",
+      11
+     ],
+     [
+      "RCM->ST",
+      10
+     ],
+     [
+      "RCM->RB",
+      10
+     ]
+    ]
+   }
+  },
+  "120.0": {
+   "dev": {
+    "tracks": 2233,
+    "role_ok": 2123,
+    "line_ok": 2155,
+    "name": {
+     "gate": 0.203,
+     "said": 2233,
+     "right": 2123,
+     "precision": 0.951
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 2233,
+     "right": 2123,
+     "precision": 0.951
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 2233,
+     "right": 2155,
+     "precision": 0.965
+    },
+    "confusions": [
+     [
+      "RB->RCM",
+      8
+     ],
+     [
+      "LB->LCM",
+      6
+     ],
+     [
+      "RCM->RB",
+      6
+     ],
+     [
+      "RCM->RW",
+      6
+     ],
+     [
+      "LB->LCB",
+      5
+     ],
+     [
+      "LCB->LCM",
+      4
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 1082,
+    "role_ok": 1049,
+    "line_ok": 1059,
+    "name": {
+     "gate": 0.203,
+     "said": 1082,
+     "right": 1049,
+     "precision": 0.97
+    },
+    "role": {
+     "gate": 0.203,
+     "said": 1082,
+     "right": 1049,
+     "precision": 0.97
+    },
+    "line": {
+     "gate": 0.203,
+     "said": 1082,
+     "right": 1059,
+     "precision": 0.979
+    },
+    "confusions": [
+     [
+      "LCM->LB",
+      5
+     ],
+     [
+      "LB->LW",
+      2
+     ],
+     [
+      "RB->RW",
+      2
+     ],
+     [
+      "LCB->RCB",
+      2
+     ],
+     [
+      "RCM->CM",
+      2
+     ],
+     [
+      "LB->LCB",
+      2
+     ]
+    ]
+   }
+  }
+ },
+ "gates": {
+  "name": 0.203,
+  "role": 0.203,
+  "line": 0.203
+ }
+}

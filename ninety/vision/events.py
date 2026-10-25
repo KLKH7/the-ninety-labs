@@ -1,4 +1,4 @@
-"""Automatic event detection: tracks -> possession -> passes, shots and out of play.
+"""Automatic event detection: tracks -> possession -> passes, shots, out of play and possession changes.
 
     uv run python -m ninety.vision.events <observations.jsonl> --out detected.jsonl
 
@@ -18,7 +18,12 @@ Events, from one spell to the next:
 - the same, but the ball's path after the strike heads between the posts of the goal the team
   attacks: a shot instead;
 - the ball's centre goes beyond a line by more than its radius (Law 9: the whole ball over the
-  line): out of play, for the team that had it last; a pass that went out first is `fail`.
+  line): out of play, for the team that had it last; a pass that went out first is `fail`;
+- a spell of the other side from the last spell with a side, the ball in play between them: a
+  possession change, at the new spell's first frame (`possession_changes`). A restart's is not
+  told: after the ball went out, or across a cut, the next spell may be the taker's walk to it.
+  No `interception` is written: the answer key's needs the pass's aim, which the picture does not
+  show (docs/eval/possession-change-plan.md); a failed pass names its `interceptor`.
 
 A broadcast cuts away from a long dead ball to its restart (ninety/render/edit.py): the frame
 numbers jump there. Nothing seen before a cut is linked to anything after it: a spell before it and
@@ -309,6 +314,27 @@ def _credit_shot(events: list[dict], spell: Spell, team: str, who, p: BallPoint,
           outcome="goal")
 
 
+def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int],
+                       join_breaks: bool = True) -> list[tuple[Spell, Spell]]:
+    """(before, after) for each spell `after` whose side is not that of the last spell with a side
+    before it, with the ball in play between them as far as the picture shows: no detected out of
+    play and no cut between the two (docs/eval/possession-change-plan.md). With `join_breaks`, none
+    where `after` may be `before`'s player in a new track (`may_continue`)."""
+    out, last = [], None
+    for s in sp:
+        if s.track.team is None:
+            continue
+        a, last = last, s
+        if a is None or s.track.team == a.track.team:
+            continue
+        if any(a.last < f < s.first for f in out_frames) or any(a.last <= c < s.first for c in cut_at):
+            continue  # the ball was dead, or out of sight, between them: a restart is not told
+        if join_breaks and may_continue(a.track, s.track):
+            continue  # perhaps one player whose kit was read two ways
+        out.append((a, s))
+    return out
+
+
 def detect(rows: list[dict], join_breaks: bool = True,
            context_rows: list[dict] | None = None) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
@@ -405,6 +431,11 @@ def detect(rows: list[dict], join_breaks: bool = True,
               outcome="success" if mate else "fail", player=who,
               receiver=next_who if mate else None, interceptor=None if mate else next_who,
               end_x=_clip(path[j].x, PITCH_X), end_y=_clip(path[j].y, PITCH_Y))
+    for _, b in possession_changes(sp, out_frames, cut_at, join_breaks):
+        j = index[b.first]
+        event("possession_change", b.first, b.track.team, path[j].x, path[j].y,
+              path[j].score * min(1.0, b.frames / (2 * MIN_SPELL_FRAMES)), b.track.side_confidence,
+              player=attribute(b.track, path[j], tracks))
     for i in outs:
         f = path[i].frame
         if any(s < f < e and outcomes.behind(path[i], t) > 0 for s, e, t in goals):
@@ -459,7 +490,7 @@ def detect(rows: list[dict], join_breaks: bool = True,
         "teams": teams,
         "spells": len(sp),
         "events": {k: sum(1 for e in events if e["type"] == k)
-                   for k in ("pass", "shot", "goal", "out_of_play")},
+                   for k in ("pass", "shot", "goal", "out_of_play", "possession_change")},
         "shot_outcomes": {str(k): sum(1 for e in events if e["type"] == "shot" and e["outcome"] == k)
                           for k in (None, "goal", "on_target", "blocked", "off_target")},
         "named": {k: sum(1 for e in events if e.get(k)) for k in ("player", "receiver", "interceptor")},
@@ -468,7 +499,7 @@ def detect(rows: list[dict], join_breaks: bool = True,
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description="Detect passes, shots and out of play from observations.")
+    ap = argparse.ArgumentParser(description="Detect passes, shots, out of play and possession changes.")
     ap.add_argument("observations", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--summary", type=Path, default=None, help="how the events were found, as JSON")

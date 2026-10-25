@@ -97,7 +97,8 @@ def test_a_pass_to_a_team_mate_is_one_successful_pass_struck_where_the_ball_left
 
 def test_a_pass_won_by_an_opponent_fails():
     events, _ = ev.detect(pass_scene(RED))
-    assert [(e["type"], e["team"], e["outcome"]) for e in events] == [("pass", "home", "fail")]
+    assert [(e["type"], e["team"], e["outcome"]) for e in events] == [
+        ("pass", "home", "fail"), ("possession_change", "away", None)]
 
 
 def test_a_completed_pass_names_its_passer_and_receiver_by_side_and_track():
@@ -321,7 +322,7 @@ def test_the_committed_fixture_is_what_the_code_detects_from_the_committed_obser
     lines = (FIXTURES / "detected-seed900001.jsonl").read_text().splitlines()
     committed = [json.loads(x) for x in lines if x]
     assert ev.detect(rows)[0] == committed
-    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play"}
+    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play", "possession_change"}
 
 
 def test_one_kit_in_sun_and_in_shadow_is_one_side():
@@ -400,3 +401,122 @@ def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
     passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
     assert passes == [("pass", "home", "fail")]
     assert any(e["type"] == "out_of_play" for e in events)
+
+
+# Possession changes (docs/eval/possession-change-plan.md): a spell of the other side, the ball in
+# play between the two as far as the picture shows.
+
+
+def changes(rows, **kw):
+    return [e for e in ev.detect(rows, **kw)[0] if e["type"] == "possession_change"]
+
+
+def test_a_pass_the_other_side_takes_is_a_possession_change_where_and_when_he_has_it():
+    rows = pass_scene(RED)
+    (c,) = changes(rows)
+    (spell,) = [s for s in ev.spells(tr.ball_path(rows), tr.track_players(rows)) if s.first > 20]
+    assert (c["team"], c["player"], c["frame"]) == ("away", "a-t10", spell.first)
+    ball = next(r["ball"][0] for r in rows if r["frame"] == spell.first)
+    assert (c["x"], c["y"]) == (round(ball["x"], 2), round(ball["y"], 2))
+    assert c["confidence"] == 0.8  # the ball's score, his spell long enough to count in full
+    assert c["source"] == "vision" and c["outcome"] is None
+
+
+def test_a_pass_to_a_team_mate_is_no_possession_change():
+    assert changes(pass_scene(BLUE)) == []
+
+
+def restart_scene(goes_out: bool):
+    """A blue player near the touchline plays the ball toward it at frame 12. With `goes_out` it
+    lies over the line (y 69) for frames 20 to 27; then a red player stands with it at his feet on
+    the line, as a throw-in's taker. Without, it stops short of the line, where the red player is."""
+    rows = []
+    for f in range(60):
+        if f < 12:
+            ball, blue = (50.2, 66.0), (50.0, 66.2)
+        elif f < 20 or not goes_out:
+            ball, blue = (50.0, min(66.0 + 0.4 * (f - 11), 67.9)), (50.0, 60.0)
+        elif f < 28:
+            ball, blue = (50.0, 69.0), (50.0, 60.0)
+        else:
+            ball, blue = (50.0, 67.9), (50.0, 60.0)
+        red = (50.0, 68.0) if f >= 28 or not goes_out else (45.0, 66.0)
+        rows.append(row(f, crowd(f) + [(*blue, BLUE), (*red, RED)], ball))
+    return rows
+
+
+def test_after_the_ball_went_out_the_taker_of_the_restart_is_no_possession_change():
+    events, _ = ev.detect(restart_scene(goes_out=True))
+    assert any(e["type"] == "out_of_play" for e in events)  # the premise: the scene's ball went out
+    assert changes(restart_scene(goes_out=True)) == []
+
+
+def test_the_same_ball_won_in_play_is_one():
+    events, _ = ev.detect(restart_scene(goes_out=False))
+    assert not any(e["type"] == "out_of_play" for e in events)
+    assert [c["team"] for c in changes(restart_scene(goes_out=False))] == ["away"]
+
+
+def two_sides_scene(gap: int):
+    """A blue player holds the ball at (50, 34) for 30 frames; `gap` frames later (a broadcast cut
+    when gap > 1) a red player has it at his feet at (40, 10) for 30 frames."""
+    rows = [row(f, crowd(f) + [(50.0, 34.0, BLUE)], (50.3, 34.0)) for f in range(30)]
+    start = 29 + gap
+    rows += [row(f, crowd(f) + [(40.0, 10.0, RED)], (40.3, 10.0)) for f in range(start, start + 30)]
+    return rows
+
+
+def test_across_a_broadcast_cut_a_change_of_side_is_not_told():
+    assert changes(two_sides_scene(gap=500)) == []
+
+
+def test_without_the_cut_the_same_change_of_side_is():
+    assert [c["team"] for c in changes(two_sides_scene(gap=1))] == ["away"]
+
+
+def misread_scene():
+    """The dribbler of test_a_dribbler_the_tracker_loses...: on frame 30 his detection jumps 1.5 m
+    sideways and from then on his kit is read red. One player, two tracks, two sides."""
+    rows = []
+    for f in range(60):
+        x, y = 40.0 + 5.0 * f / FPS, 34.0 + (1.5 if f >= 30 else 0.0)
+        rows.append(row(f, crowd(f) + [(x, y, BLUE if f < 30 else RED)], (x + 0.3, y)))
+    return rows
+
+
+def test_one_player_whose_kit_is_read_two_ways_in_two_tracks_is_no_possession_change():
+    tracks = tr.track_players(misread_scene())
+    tr.assign_teams(tracks)
+    assert {t.team for t in tracks if t.xy[0][1] < 50} == {"home", "away"}  # the premise
+    assert changes(misread_scene()) == []
+
+
+def test_measured_without_the_rule_it_would_be_one():
+    assert [c["team"] for c in changes(misread_scene(), join_breaks=False)] == ["away"]
+
+
+def test_a_spell_of_a_track_with_no_side_is_passed_over():
+    # Blue passes to a player of a third colour in midfield (no side: not a keeper in his box), who
+    # passes on to blue. Possession never left blue's side; a sideless spell must not reset it.
+    rows, bx = [], 50.3
+    for f in range(100):
+        if 20 < f <= 45:
+            bx = min(bx + 12.0 / FPS, 61.7)
+        elif f > 60:
+            bx = min(bx + 12.0 / FPS, 73.7)
+        line = [(50.0, 34.0, BLUE), (62.0, 34.0, GREEN_KEEPER), (74.0, 34.0, BLUE)]
+        rows.append(row(f, crowd(f) + line, (bx, 34.0)))
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    middle = next(t for t in tracks if t.xy[0] == (62.0, 34.0))
+    assert middle.team is None  # the premise
+    assert len([s for s in ev.spells(tr.ball_path(rows), tracks) if s.track is middle]) == 1
+    assert changes(rows) == []
+
+
+def test_a_change_seen_on_a_short_spell_is_less_sure():
+    rows = pass_scene(RED, frames=48)  # the clip ends a few frames after the red player has it
+    (spell,) = [s for s in ev.spells(tr.ball_path(rows), tr.track_players(rows)) if s.first > 20]
+    assert spell.frames < 2 * ev.MIN_SPELL_FRAMES  # the premise: a spell too short to count in full
+    (c,) = changes(rows)
+    assert c["confidence"] == round(0.8 * spell.frames / (2 * ev.MIN_SPELL_FRAMES), 3)

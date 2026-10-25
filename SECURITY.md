@@ -29,6 +29,10 @@ Please do not open a public issue. Use GitHub's
 - **Rate limits** on every API route, by IP and by session.
 - **Strict CORS and input validation.** Every request body is validated against a schema; unknown
   fields are rejected.
+- **Same-origin pages.** Every page is served with `default-src 'self'` (no inline or third-party
+  script anywhere, no framing). The phone's pages alone add `style-src 'self' 'unsafe-inline'`,
+  because its Ionic components write their own `<style>` elements; it never writes viewer text as
+  markup (`ninety/api/app.py`, tested in `tests/test_api_site.py`).
 
 ### The agents (prompt injection)
 - **Agents read typed facts, not free text.** Events, stats and viewer preferences reach a model

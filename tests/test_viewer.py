@@ -6,6 +6,7 @@ it, so the test can never silently stop running there).
 """
 
 import functools
+import json
 import os
 import shutil
 import threading
@@ -47,16 +48,22 @@ def browser():
 @pytest.fixture(scope="module")
 def site(browser, tmp_path_factory):
     """dist/ with a bundle at bundle/, served over HTTP the way a static host would."""
+    yield from serve_site(browser, tmp_path_factory, "--plant")
+
+
+def serve_site(browser, tmp_path_factory, *extra, events: list[dict] | None = None):
     root = tmp_path_factory.mktemp("site")
     page = browser.new_page(viewport={"width": W, "height": H})
     page.set_content('<body style="margin:0;background:#2e7d32"></body>')
     jpeg = page.screenshot(type="jpeg")
     page.close()
-    clip, detections, events = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    clip, detections, events_file = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    if events is not None:
+        events_file.write_text("".join(json.dumps(e) + "\n" for e in events))
     www = root / "www"
     shutil.copytree(DIST, www)
-    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", "--plant",
-            "--events-file", str(events)]
+    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", *extra,
+            "--events-file", str(events_file)]
     # Playwright's sync API holds this thread's event loop; ninety-e2e runs its own in another.
     worker = threading.Thread(target=e2e.main, args=(args,))
     worker.start()
@@ -93,7 +100,7 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     claim = page.locator("#claims .claim")
     assert claim.count() == 1
     assert claim.locator(".chip").text_content() == "Accepted"
-    assert "h8 shot, on target, 101 km/h." in claim.inner_text()
+    assert "h8 shoots at 101 km/h, on target." in claim.inner_text()
     assert claim.locator(".step.reject").count() == 1
     assert "143" in claim.locator(".step.reject").inner_text()
     assert "Events" in page.locator("#pipeline").inner_text()
@@ -105,15 +112,16 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (ninety/agents/live.py)
+    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-e2" in on_air(page):
+        if "insight-m-e2" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    assert set(on_air(page)) == {"insight-e2", "cue-e2-analyst"}
-    assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
+    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
+    assert set(on_air(page)) == {"insight-m-e2"}
+    assert "Crowmere 8 shoots at 101 km/h, on target" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
     page.keyboard.press("1")
@@ -179,8 +187,8 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     page.keyboard.press("3")
     play_to(page, 62.85)
     # mutation: say every line whose start is behind the clock (no SEEK_S guard) -> ad-e1 is said late
-    assert narrator(page)["spoken"] == ["ad-insight-e2"]
-    assert "ad-insight-e2" in on_air(page)
+    assert narrator(page)["spoken"] == ["ad-insight-m-e2"]
+    assert "ad-insight-m-e2" in on_air(page)
     assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
     assert not errors
 
@@ -223,4 +231,40 @@ def test_a_fallback_cue_says_so_on_screen_and_to_a_screen_reader(browser, site):
             break
         page.keyboard.press(".")
     assert "(fallback: held: timeout)" in page.inner_text("#on-air")
+    assert not errors
+
+
+# Tracked players (dry run of the demo, Oct 24): h-t4's side was told surely, a-t9's was not, and
+# h-t8 is only the receiver, whose side that pass did not measure.
+TRACKED = [
+    {"id": "e1", "t": 60.4, "frame": 1510, "type": "pass", "team": "home", "team_confidence": 0.99,
+     "player": "h-t4", "receiver": "h-t8", "intended": "h-t8", "interceptor": None, "deflected_by": None,
+     "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 35.0, "outcome": "success", "ball_speed_kmh": 48.0,
+     "source": "vision", "confidence": 0.9},
+    {"id": "e2", "t": 61.2, "frame": 1530, "type": "shot", "team": "away", "team_confidence": 0.3,
+     "player": "a-t9", "receiver": None, "x": 80.0, "y": 34.0, "end_x": 104.0, "end_y": 33.0,
+     "outcome": "on_target", "ball_speed_kmh": 101.4, "source": "vision", "confidence": 0.9},
+]
+
+
+@pytest.fixture(scope="module")
+def tracked_site(browser, tmp_path_factory):
+    yield from serve_site(browser, tmp_path_factory, events=TRACKED)
+
+
+def test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen(browser, tracked_site):
+    # A track id's letter is the tracker's side vote. The screen names the club only for a side the
+    # fact-checker vouches for (the bundle's sides_known); every other tracked player is "a player".
+    page, errors = open_viewer(browser, tracked_site)
+    page.get_by_role("button", name="Watch it").click()
+    page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.3")
+    page.keyboard.press("1")  # casual: the templates' sentences
+    seen = set()
+    for _ in range(40):
+        seen.add(page.locator("#on-air").inner_text().strip())
+        page.keyboard.press(".")
+    text = " | ".join(t for t in seen if t)
+    assert "Crowmere player" in text, text  # h-t4: a side told surely
+    assert "Dunhollow" not in text, text  # a-t9: the tracker's vote alone never names a club
+    assert "a player" in text or "A player" in text, text
     assert not errors

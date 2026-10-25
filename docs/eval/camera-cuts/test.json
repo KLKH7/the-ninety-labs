@@ -1,0 +1,321 @@
+{
+  "max_trusted_m": 8.5,
+  "good_m": 1.0,
+  "clips": {
+    "900001": {
+      "before": {
+        "frames": 250,
+        "trusted": 115,
+        "good": 61,
+        "bad": 54,
+        "unmeasured": 0,
+        "worst_m": 1.768,
+        "bad_frames": [
+          1678,
+          1679,
+          1680,
+          1681,
+          1682,
+          1683,
+          1684,
+          1685,
+          1686,
+          1687,
+          1688,
+          1689,
+          1690,
+          1691,
+          1692,
+          1693,
+          1694,
+          1695,
+          1696,
+          1697,
+          1698,
+          1699,
+          1700,
+          1701,
+          1702,
+          1703,
+          1704,
+          1705,
+          1706,
+          1707,
+          1708,
+          1709,
+          1710,
+          1711,
+          1712,
+          1713,
+          1714,
+          1715,
+          1716,
+          1717,
+          1718,
+          1719,
+          1720,
+          1721,
+          1722,
+          1723,
+          1724,
+          1725,
+          1726,
+          1727,
+          1728,
+          1729,
+          1730,
+          1731
+        ],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      },
+      "after": {
+        "frames": 250,
+        "trusted": 115,
+        "good": 61,
+        "bad": 54,
+        "unmeasured": 0,
+        "worst_m": 1.768,
+        "bad_frames": [
+          1678,
+          1679,
+          1680,
+          1681,
+          1682,
+          1683,
+          1684,
+          1685,
+          1686,
+          1687,
+          1688,
+          1689,
+          1690,
+          1691,
+          1692,
+          1693,
+          1694,
+          1695,
+          1696,
+          1697,
+          1698,
+          1699,
+          1700,
+          1701,
+          1702,
+          1703,
+          1704,
+          1705,
+          1706,
+          1707,
+          1708,
+          1709,
+          1710,
+          1711,
+          1712,
+          1713,
+          1714,
+          1715,
+          1716,
+          1717,
+          1718,
+          1719,
+          1720,
+          1721,
+          1722,
+          1723,
+          1724,
+          1725,
+          1726,
+          1727,
+          1728,
+          1729,
+          1730,
+          1731
+        ],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      }
+    },
+    "900002": {
+      "before": {
+        "frames": 250,
+        "trusted": 0,
+        "good": 0,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": null,
+        "bad_frames": [],
+        "true_cuts": [
+          5326,
+          5427
+        ],
+        "found_cuts": [],
+        "missed": [
+          5326,
+          5427
+        ],
+        "false": []
+      },
+      "after": {
+        "frames": 250,
+        "trusted": 9,
+        "good": 9,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": 0.271,
+        "bad_frames": [],
+        "true_cuts": [
+          5326,
+          5427
+        ],
+        "found_cuts": [
+          5326,
+          5427
+        ],
+        "missed": [],
+        "false": []
+      }
+    },
+    "900003": {
+      "before": {
+        "frames": 250,
+        "trusted": 0,
+        "good": 0,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": null,
+        "bad_frames": [],
+        "true_cuts": [
+          5911,
+          6012
+        ],
+        "found_cuts": [],
+        "missed": [
+          5911,
+          6012
+        ],
+        "false": []
+      },
+      "after": {
+        "frames": 250,
+        "trusted": 20,
+        "good": 0,
+        "bad": 20,
+        "unmeasured": 0,
+        "worst_m": 44.803,
+        "bad_frames": [
+          6012,
+          6013,
+          6014,
+          6016,
+          6025,
+          6026,
+          6028,
+          6029,
+          6030,
+          6031,
+          6032,
+          6033,
+          6034,
+          6035,
+          6036,
+          6037,
+          6038,
+          6039,
+          6040,
+          6044
+        ],
+        "true_cuts": [
+          5911,
+          6012
+        ],
+        "found_cuts": [
+          5911,
+          6012
+        ],
+        "missed": [],
+        "false": []
+      }
+    },
+    "900004": {
+      "before": {
+        "frames": 250,
+        "trusted": 30,
+        "good": 30,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": 0.835,
+        "bad_frames": [],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      },
+      "after": {
+        "frames": 250,
+        "trusted": 30,
+        "good": 30,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": 0.835,
+        "bad_frames": [],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      }
+    },
+    "900005": {
+      "before": {
+        "frames": 250,
+        "trusted": 9,
+        "good": 9,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": 0.213,
+        "bad_frames": [],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      },
+      "after": {
+        "frames": 250,
+        "trusted": 9,
+        "good": 9,
+        "bad": 0,
+        "unmeasured": 0,
+        "worst_m": 0.213,
+        "bad_frames": [],
+        "true_cuts": [],
+        "found_cuts": [],
+        "missed": [],
+        "false": []
+      }
+    }
+  },
+  "totals": {
+    "before": {
+      "trusted": 154,
+      "good": 100,
+      "bad": 54,
+      "unmeasured": 0,
+      "worst_m": 1.768,
+      "missed": 4,
+      "false": 0
+    },
+    "after": {
+      "trusted": 183,
+      "good": 109,
+      "bad": 74,
+      "unmeasured": 0,
+      "worst_m": 44.803,
+      "missed": 0,
+      "false": 0
+    }
+  }
+}
