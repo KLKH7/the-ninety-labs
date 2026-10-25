@@ -2843,7 +2843,18 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
   when the overlap test or the merge is mutated.
 
-### 242. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
+### 242. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
 - **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
   test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's
   last shot is a reverse angle (a camera in the far stand). Law 1's markings are the same after a

@@ -273,7 +273,7 @@ def test_a_clip_without_a_cut_is_fitted_exactly_as_before(monkeypatch):
 
 
 def test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot():
-    # Why test seed 900003's reverse angle is fitted 44 m wrong (lesson 242): Law 1's markings are
+    # Why test seed 900003's reverse angle is fitted 44 m wrong (lesson 243): Law 1's markings are
     # the same after a half turn about the centre spot, so a camera in the far stand and its twin on
     # the near gantry, turned the same way, see identical lines. Nothing in the markings, and so in
     # this fit, can tell them apart; that needs a cue the half turn changes (the stands, the boards).

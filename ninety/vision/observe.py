@@ -18,7 +18,7 @@ also cuts between cameras. With `--cuts`, a cut is found where the picture chang
 (pitch.shot_starts) and each shot is fitted on its own (pitch.fit_shots), its index written as
 `camera.shot`. It is off by default: on validation it trusted a tight lens's frames 1 to 1.3 m
 wrong, and on the test set a reverse angle 44 m wrong, the mirror of the main camera through the
-centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 242). A
+centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 243). A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
 through that one camera.
