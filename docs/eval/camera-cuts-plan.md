@@ -204,7 +204,7 @@ before and after judged by merged main's trust test. Cuts: 4 of 4 found, none fa
   shot is the **reverse angle** (a camera in the far stand), and it is fitted as the main gantry
   turned half a turn about the centre spot: Law 1's markings are the same after that turn, so the
   markings and the heights both pass, and 20 frames are trusted about 44 m wrong. No check in the
-  fit can see it (lesson 242; `test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`).
+  fit can see it (lesson 244; `test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`).
 - **Events** ([camera-cuts/event-report-after.json](camera-cuts/event-report-after.json)): passes
   strict, all five clips, **2 of 13 found, 1 false, F1 0.25, before and after alike**. Neither cut
   clip makes an event. That is far below event-report-v2's 7 of 13, F1 0.67, and the cause is the

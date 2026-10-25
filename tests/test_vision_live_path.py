@@ -21,7 +21,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE = ["ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
+LIVE = ["ninety/vision/flight.py",
+        "ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
         "ninety/vision/events.py", "ninety/vision/tracked_frames.py", "ninety/vision/live_job.py",
         "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/join.py",
         "ninety/vision/restarts.py"]

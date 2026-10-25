@@ -2899,3 +2899,52 @@ short and actionable. This file is public: no research sources, product names or
   - `tests/test_vision_pitch.py::test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`.
   - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
     following off by default until it passes its bar.
+
+### 245. A side the voice holds is held on the screens too, or the gate protects only one of them
+- **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
+  out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
+  track id into a club from its first letter (`h-t8` became "a London player"), and that letter is
+  only the tracker's side vote. The offline dry run on two demo segments found it: every side there
+  was told at 0.18, so the voice said "a player" while the screen named a club.
+- **Rule:** the bundle lists the track ids whose side the gate vouches for (`sides_known`: each the
+  actor of an event told surely, and named by no event that did not vouch for him). The viewer and
+  the phone name a club only for those ids; every other tracked player is "a player" ("Player 12"
+  as a title). An event's own side (`team`) is named the same way: the bundle carries the
+  fact-checker's threshold (`min_team_confidence`), and the phone's play-by-play, story colours and
+  shot list name a club only above it ("A player completes a pass"; an unsure shot is in "All"
+  only, listed but not drawn; an unsure goal is "Goal 43′" and in no club's score). A writer that
+  names a side and a screen that names it ask the same rule; what still reads the tracker's vote is
+  listed in EVALUATION.md as a residual, not left unsaid.
+- **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
+  and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
+  fail when the screens ignore the list, and
+  `tests/test_phone_companion.py::test_the_play_by_play_names_a_club_only_for_a_side_told_surely`
+  when the phone reads an event's side without the threshold;
+  `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
+
+### 248. A place along the pitch is checked against the pitch before it is cut into thirds
+- **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
+  capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
+  depth gives index -1, and `THIRDS[-1]` is "final", so a ball behind one goal counted as the final
+  third for both clubs at once. The merge queue's review caught it (x = 108 gave both 100%); no test
+  had a ball off the pitch.
+- **Rule:** a position is checked against the pitch (0 to 105 m along it) before it is cut into
+  zones. One off the pitch is out of play and in no zone. A capped index is not a clamp: capping
+  the top end still leaves Python's negative indices at the bottom.
+- **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
+  (x = -3, -0.5, 106, 108) fails when the check is removed.
+
+### 249. A 90th-percentile tolerance bounds nine points in ten, not every point
+- **What happened:** the set-piece detector called a ball set when every position of a 10-frame run
+  lay within `BALL_TOL_M` of the run's median, and `BALL_TOL_M` was measured as the 90th percentile
+  of the ball's position error. By that definition about one point in ten lies outside it, so a still
+  ball passed about a third of the time; and a point is compared with the median, which carries its
+  own error. On validation the kick-off on the centre spot was missed on both readings, its run
+  broken by the ball box's pixel jitter.
+- **Rule:** a tolerance is used for what its statistic says. A percentile bounds that share of the
+  points, so a test over many points allows the rest; and a distance between two estimates allows
+  both their errors. The rule is derived from the definition, never fitted to the clip that showed it.
+- **Check:** `tests/test_vision_restarts.py::test_a_set_ball_whose_place_jitters_within_its_error_is_still_set`
+  fails with every point required inside, with one tolerance from the median, or with the share
+  rounded down; `docs/eval/set-piece-detection-plan.md`, amendment 3.
+

@@ -47,7 +47,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "referee", "lineup",
+    "referee", "lineup", "possession", "territory",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -223,6 +223,20 @@ def referee(match: str, minute_from: int, minute_to: int, club: str | None = Non
     return _insight(match, "referee", minute_from, minute_to, club)
 
 
+def possession(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Each club's share of the passes between two match minutes, the pass ratio Opta publishes as
+    possession (not time on the ball), with bounds: a pass whose side the video could not tell could be
+    either's, and the share is stated only when no pass is in doubt. Cite by id."""
+    return _insight(match, "possession", minute_from, minute_to, club)
+
+
+def territory(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Where the ball was between two match minutes: each club's share of the footage shown with the
+    ball in its attacking third, as a range (lo to hi: the ball near a third's line could be on either
+    side), and the share in each third. Cite by id; say the range as given."""
+    return _insight(match, "territory", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -308,6 +322,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
+        possession, territory,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)
