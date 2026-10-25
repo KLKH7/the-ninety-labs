@@ -142,6 +142,8 @@ Four changes, none a fitted threshold:
    `SHOT_MAX_M`, and the move ends with a keeper's spell (`Track.keeper`) inside that goal's penalty
    area (16.5 m, Law 1), or with the ball over that goal line. The end of a move is on the ground or
    in the keeper's hands, so a lofted ball's height bends it far less than the strike's first 0.3 s.
+   The same line counts for rule 5's "on target": a shot is on target when either line (the first
+   0.3 s carried on, or the strike to the move's end) meets the goal line within the posts by `E_Y`.
 4. **A goal's line evidence is the mean ball score over the in-net frames**, without the two halvings
    (they were design weights, and the reliability above shows they put every goal under the gate);
    a goal's confidence stays `1 - (1 - line)(1 - kickoff)`, the gate stays 0.5.
