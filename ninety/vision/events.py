@@ -21,9 +21,14 @@ Events, from one spell to the next:
   line): out of play, for the team that had it last; a pass that went out first is `fail`;
 - a spell of the other side from the last spell with a side, the ball in play between them: a
   possession change, at the new spell's first frame (`possession_changes`). A restart's is not
-  told: after the ball went out, or across a cut, the next spell may be the taker's walk to it.
-  No `interception` is written: the answer key's needs the pass's aim, which the picture does not
-  show (docs/eval/possession-change-plan.md); a failed pass names its `interceptor`.
+  told: after the ball went out, or across a cut, the next spell may be the taker's walk to it;
+- a failed pass the other side takes short of where it was going: an interception, at the
+  possession change. The pass's aim is not in the picture, so a stand-in target stands for it:
+  where the ball, struck at the speed seen, slows to TARGET_PACE (docs/eval/interception-plan.md);
+- the nearest opponent closer than PRESSURE_M to the player on the ball: pressure, at the presser,
+  once in PRESSURE_REPEAT_S for each side, as the engine writes it (docs/eval/pressure-plan.md);
+- a spell that ends with the ball leaving slower than any pass and an opponent at it: a tackle,
+  won or lost by the side of the next spell (docs/eval/tackle-plan.md).
 
 A broadcast cuts away from a long dead ball to its restart (ninety/render/edit.py): the frame
 numbers jump there. Nothing seen before a cut is linked to anything after it: a spell before it and
@@ -107,6 +112,35 @@ RIVAL_M = 1.26
 # R6), so no player covers more. The rule's form was chosen on test seed 900004 (two self-passes
 # there); it is kept or dropped on validation clips only (docs/eval/attribution-plan.md).
 REACH_MPS = 10.0
+# Interceptions (docs/eval/interception-plan.md), the engine's own definition with a stand-in for the
+# pass's target, which the picture does not show. Each engine value is copied, not imported (the live
+# path imports no engine); tests/test_vision_events.py holds every copy to the engine's.
+# A pass taken short of this share of the way to its target is intercepted (engine, design).
+INTERCEPT_SHARE = 0.85
+# The ground ball's slowing (ninety/sim/ball.py, GROUNDING P5, P8): air drag of DRAG_K x speed² and
+# rolling resistance ROLL_DECEL, in m/s².
+DRAG_K = 0.5 * 1.2 * 0.25 * math.pi * 0.11 * 0.11 / 0.43
+ROLL_DECEL = 1.2
+# The pace the target stands in at: where a ground ball struck at the measured speed has slowed to it
+# (the engine strikes a ground pass to arrive at 6, 10 or 14 m/s, decisions.PASS_PACES; 0 is where it
+# stops). Chosen among those on validation truth by the plan's rule, set before any test number.
+STAND_INS = {"pace14": 14.0, "pace10": 10.0, "pace6": 6.0, "rest": 0.0}
+TARGET_PACE = STAND_INS["pace14"]  # placeholder until the plan's M0 choice is made
+# Pressure (docs/eval/pressure-plan.md): the engine writes one when the nearest opponent of the player
+# on the ball is closer than PRESSURE_M, at most once in PRESSURE_REPEAT_S for each pressing side.
+# Both are the engine's literals (design, no GROUNDING row), copied unchanged.
+PRESSURE_M = 2.0
+PRESSURE_REPEAT_S = 8.0
+# Tackles (docs/eval/tackle-plan.md). The engine strikes every ground pass to still move at
+# ARRIVE_MPS or more where it arrives (decisions.ARRIVE_MPS, design), so a ball leaving a player
+# slower than that is no pass of his: it was knocked off him.
+ARRIVE_MPS = 6.0
+# A score at most this is held by the fact-checker (factcheck.MIN_CONFIDENCE is 0.5): a tackle whose
+# two players the tracker did not keep through the contact is held there.
+HELD = 0.49
+# The new kinds `detect` writes by default; each plan's bar decides whether its kind is in.
+TURNOVERS = ("interception", "pressure", "tackle")
+WRITTEN = TURNOVERS
 
 
 @dataclass(frozen=True)
@@ -260,6 +294,115 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     return round(steps[len(steps) // 2] * 3.6, 1)
 
 
+def _direction(path: list[BallPoint], i: int) -> tuple[float, float] | None:
+    """The unit direction the ball travels from path[i] over SHOT_LOOK_S (heads_for_goal's line)."""
+    p = path[i]
+    later = [q for q in path[i + 1:] if q.frame - p.frame <= SHOT_LOOK_S * FPS]
+    if len(later) < 2:
+        return None
+    dx, dy = later[-1].x - p.x, later[-1].y - p.y
+    n = math.hypot(dx, dy)
+    return (dx / n, dy / n) if n > 0 else None
+
+
+def roll_distance(v0: float, pace: float) -> float:
+    """How far a ground ball struck at v0 m/s rolls before its speed is down to `pace` (0: until it
+    stops), stepped as the engine steps it (ball.step on the ground, one frame at a time)."""
+    dt, d, v = 1.0 / FPS, 0.0, v0
+    for _ in range(60 * FPS):  # a bound: no ball rolls for a minute
+        if v <= pace or v <= 0.0:
+            break
+        v *= 1.0 - DRAG_K * v * dt
+        v = 0.0 if v <= ROLL_DECEL * dt else v - ROLL_DECEL * dt
+        d += v * dt
+    return d
+
+
+def in_the_lane(start: tuple[float, float], u: tuple[float, float], speed_mps: float,
+                taken: tuple[float, float], pace: float = TARGET_PACE) -> bool:
+    """engine.in_the_lane with the stand-in target: the ball taken at `taken` short of INTERCEPT_SHARE
+    of the way to where a ball struck from `start` along u at speed_mps slows to `pace`. A target at
+    the kick's own spot (the ball already that slow) counts as in the lane, as the engine's does."""
+    length = roll_distance(speed_mps, pace)
+    if length < 1e-6:
+        return True
+    along = (taken[0] - start[0]) * u[0] + (taken[1] - start[1]) * u[1]
+    return along < INTERCEPT_SHARE * length
+
+
+def pressures(path: list[BallPoint], sp: list[Spell], tracks: list[Track],
+              t_of: dict[int, float]) -> list[tuple[int, Track, Track, float, Spell]]:
+    """(path index, presser, holder, distance, spell) for each pressure (docs/eval/pressure-plan.md):
+    in a frame of a spell with a side, the nearest track of the other side closer than PRESSURE_M to
+    the holder, when that side has had none in the PRESSURE_REPEAT_S before (the engine's rule)."""
+    out, last = [], {}
+    index = {p.frame: i for i, p in enumerate(path)}
+    for s in sp:
+        if s.track.team is None:
+            continue
+        side = "away" if s.track.team == "home" else "home"
+        for f in range(s.first, s.last + 1):
+            here = s.track.at(f)
+            if f not in index or here is None:
+                continue
+            near = [(math.dist(q, here), o) for o in tracks if o.team == side and (q := o.at(f)) is not None]
+            if not near:
+                continue
+            d, o = min(near, key=lambda n: n[0])
+            if d < PRESSURE_M and (side not in last or t_of[f] - last[side] > PRESSURE_REPEAT_S):
+                last[side] = t_of[f]
+                out.append((index[f], o, s.track, d, s))
+    return out
+
+
+def presser_id(o: Track, holder: Track, frame: int, tracks: list[Track]) -> str | None:
+    """The presser's id when it plainly is him: a track the companion draws, with no other track of
+    his side within RIVAL_M of his own distance from the holder."""
+    if o.team is None or len(o.frames) < MIN_TRACK_FRAMES:
+        return None
+    h, q = holder.at(frame), o.at(frame)
+    d = math.dist(q, h)
+    for r in tracks:
+        p = r.at(frame) if r is not o and r.team == o.team else None
+        if p is not None and math.dist(p, h) < d + RIVAL_M:
+            return None
+    return player_id(o)
+
+
+def tackles(path: list[BallPoint], sp: list[Spell], tracks: list[Track], out_frames: list[int],
+            cut_at: list[int]) -> list[tuple[Spell, Track, str | None, bool]]:
+    """(spell, tackler, outcome, kept) for each tackle (docs/eval/tackle-plan.md): a spell with a side
+    ends with the ball leaving slower than ARRIVE_MPS (no pass) and a track of the other side within
+    CONTROL_M of it. The outcome is the side of the next spell with a side, the ball in play between
+    (`success` for the tackler's, `fail` for the holder's, else None); `kept` is whether the tracker
+    saw both players again within SPELL_GAP_FRAMES of the contact."""
+    index = {p.frame: i for i, p in enumerate(path)}
+    out = []
+    for n, a in enumerate(sp):
+        if a.track.team is None:
+            continue
+        i = index[a.last]
+        speed = _speed_kmh(path, i)
+        if speed is None or speed / 3.6 >= ARRIVE_MPS:
+            continue
+        p = path[i]
+        near = [(math.hypot(q[0] - p.x, q[1] - p.y), o) for o in tracks
+                if o.team not in (None, a.track.team) and (q := o.at(a.last)) is not None]
+        near = [x for x in near if x[0] <= CONTROL_M]
+        if not near:
+            continue
+        o = min(near, key=lambda x: x[0])[1]
+        b = next((s for s in sp[n + 1:] if s.track.team is not None), None)
+        outcome = None
+        if b is not None and not any(a.last < f < b.first for f in out_frames) \
+                and not any(a.last <= c < b.first for c in cut_at):
+            outcome = "success" if b.track.team == o.team else "fail"
+        later = range(a.last + 1, a.last + SPELL_GAP_FRAMES + 1)
+        kept = all(any(t.at(k) is not None for k in later) for t in (o, a.track))
+        out.append((a, o, outcome, kept))
+    return out
+
+
 def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int],
                        join_breaks: bool = True) -> list[tuple[Spell, Spell]]:
     """(before, after) for each spell `after` whose side is not that of the last spell with a side
@@ -281,10 +424,14 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
-def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict]:
+def detect(rows: list[dict], join_breaks: bool = True, kinds: tuple[str, ...] = WRITTEN,
+           pace: float | None = None) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
     `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
-    what it does (ninety/eval/attribution_derive.py); the live path always runs with it."""
+    what it does (ninety/eval/attribution_derive.py); the live path always runs with it. `kinds` are
+    the TURNOVERS written (WRITTEN by default) and `pace` the interception stand-in's (TARGET_PACE),
+    for measuring every kind and candidate on validation."""
+    pace = TARGET_PACE if pace is None else pace
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
     teams = assign_teams(tracks)
@@ -342,11 +489,36 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
               outcome="success" if mate else "fail", player=who,
               receiver=next_who if mate else None, interceptor=None if mate else next_who,
               end_x=_clip(path[j].x, PITCH_X), end_y=_clip(path[j].y, PITCH_Y))
+        u = _direction(path, i)
+        if ("interception" in kinds and not mate and b.track.team is not None and u is not None
+                and speed is not None
+                and in_the_lane((path[i].x, path[i].y), u, speed / 3.6, (path[j].x, path[j].y), pace)):
+            # Taken short of where the pass was going (the stand-in target): the control is one
+            # moment, so it has the possession change's place, time and score.
+            event("interception", b.first, b.track.team, path[j].x, path[j].y,
+                  path[j].score * min(1.0, b.frames / (2 * MIN_SPELL_FRAMES)), b.track.side_confidence,
+                  player=next_who)
     for _, b in possession_changes(sp, out_frames, cut_at, join_breaks):
         j = index[b.first]
         event("possession_change", b.first, b.track.team, path[j].x, path[j].y,
               path[j].score * min(1.0, b.frames / (2 * MIN_SPELL_FRAMES)), b.track.side_confidence,
               player=attribute(b.track, path[j], tracks))
+    if "pressure" in kinds:
+        for i, o, h, d, s in pressures(path, sp, tracks, t_of):
+            f = path[i].frame
+            conf = path[i].score * min(1.0, s.frames / (2 * MIN_SPELL_FRAMES))
+            if d > PRESSURE_M - RIVAL_M:
+                conf /= 2  # within the position error of the line: either side of it
+            x, y = o.at(f)
+            event("pressure", f, o.team, x, y, conf, o.side_confidence,
+                  player=presser_id(o, h, f, tracks), receiver=attribute(h, path[i], tracks))
+    if "tackle" in kinds:
+        for a, o, outcome, kept in tackles(path, sp, tracks, out_frames, cut_at):
+            i = index[a.last]
+            conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
+            event("tackle", a.last, o.team, path[i].x, path[i].y, conf if kept else min(conf, HELD),
+                  o.side_confidence, outcome=outcome, player=attribute(o, path[i], tracks),
+                  receiver=attribute(a.track, path[i], tracks))
     for i in outs:
         f = path[i].frame
         last = [s for s in sp if s.last < f and s.track.team]
@@ -365,7 +537,7 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         "teams": teams,
         "spells": len(sp),
         "events": {k: sum(1 for e in events if e["type"] == k)
-                   for k in ("pass", "shot", "out_of_play", "possession_change")},
+                   for k in ("pass", "shot", "out_of_play", "possession_change", *kinds)},
         "named": {k: sum(1 for e in events if e.get(k)) for k in ("player", "receiver", "interceptor")},
     }
     return events, summary

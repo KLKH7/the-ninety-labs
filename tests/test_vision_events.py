@@ -96,7 +96,7 @@ def test_a_pass_to_a_team_mate_is_one_successful_pass_struck_where_the_ball_left
 
 
 def test_a_pass_won_by_an_opponent_fails():
-    events, _ = ev.detect(pass_scene(RED))
+    events, _ = ev.detect(pass_scene(RED), kinds=())  # the interception it also is: below
     assert [(e["type"], e["team"], e["outcome"]) for e in events] == [
         ("pass", "home", "fail"), ("possession_change", "away", None)]
 
@@ -316,7 +316,7 @@ def test_the_committed_fixture_is_what_the_code_detects_from_the_committed_obser
     lines = (FIXTURES / "detected-seed900001.jsonl").read_text().splitlines()
     committed = [json.loads(x) for x in lines if x]
     assert ev.detect(rows)[0] == committed
-    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play", "possession_change"}
+    assert {e["type"] for e in committed} <= {"pass", "shot", "out_of_play", "possession_change", *ev.WRITTEN}
 
 
 def test_one_kit_in_sun_and_in_shadow_is_one_side():
@@ -514,3 +514,247 @@ def test_a_change_seen_on_a_short_spell_is_less_sure():
     assert spell.frames < 2 * ev.MIN_SPELL_FRAMES  # the premise: a spell too short to count in full
     (c,) = changes(rows)
     assert c["confidence"] == round(0.8 * spell.frames / (2 * ev.MIN_SPELL_FRAMES), 3)
+
+
+# The engine's definitions, copied into the live path (which imports no engine): each copy is held to
+# the engine's own value here (docs/eval/interception-plan.md, pressure-plan.md, tackle-plan.md).
+
+
+def test_every_copied_engine_value_is_the_engines():
+    import inspect
+
+    from ninety.agents import factcheck
+    from ninety.sim import ball, decisions, engine
+
+    assert ev.INTERCEPT_SHARE == engine.INTERCEPT_SHARE
+    assert ev.DRAG_K == ball.DRAG_K and ev.ROLL_DECEL == ball.ROLL_DECEL
+    assert ev.ARRIVE_MPS == decisions.ARRIVE_MPS
+    assert sorted(ev.STAND_INS.values()) == sorted((0.0, *decisions.PASS_PACES))
+    assert ev.TARGET_PACE in ev.STAND_INS.values()
+    # The pressure emit is written with literals: read them from the engine's own line.
+    src = inspect.getsource(engine.Engine)
+    line = f"if gap < {ev.PRESSURE_M} and self.t - self.pressed.get(opp, -99) > {ev.PRESSURE_REPEAT_S:g}:"
+    assert line in src
+    assert ev.HELD < factcheck.MIN_CONFIDENCE and round(factcheck.MIN_CONFIDENCE - ev.HELD, 6) == 0.01
+
+
+def test_the_roll_is_the_engines_a_ground_pass_struck_for_a_pace_reaches_its_target_at_it():
+    from ninety.sim import ball, decisions
+
+    for distance, pace in ((12.0, 6.0), (25.0, 10.0), (35.0, 14.0)):
+        v0 = ball.ground_pass(distance, pace, decisions.DT)
+        # One frame of the ball's travel at most: the engine's own step size.
+        assert abs(ev.roll_distance(v0, pace) - distance) <= v0 / tr.FPS
+    assert ev.roll_distance(5.0, 6.0) == 0.0  # struck slower than the pace: no way to go
+
+
+# Interceptions: a failed pass taken short of INTERCEPT_SHARE of the way to the stand-in target.
+
+
+def lane_scene(share, speed=None, frames=90, kick=20, colour=RED, metres=None):
+    """pass_scene's strike from (50.3, 34) toward +x at `speed` (TARGET_PACE + 6 m/s by default),
+    taken by a player of `colour` where the ball stops: `share` of the stand-in target's distance,
+    or `metres` from the strike."""
+    speed = ev.TARGET_PACE + 6.0 if speed is None else speed
+    stop = 50.3 + (metres if metres is not None else share * ev.roll_distance(speed, ev.TARGET_PACE))
+    rows, bx = [], 50.3
+    for f in range(frames):
+        if f > kick:
+            bx = min(bx + speed / FPS, stop)
+        rows.append(row(f, crowd(f) + [(50.0, 34.0, BLUE), (stop + 0.3, 34.0, colour)], (bx, 34.0)))
+    return rows
+
+
+def kinds_of(rows, kind, **kw):
+    return [e for e in ev.detect(rows, kinds=ev.TURNOVERS, **kw)[0] if e["type"] == kind]
+
+
+def test_a_pass_cut_out_short_of_where_it_was_going_is_an_interception_at_the_possession_change():
+    rows = lane_scene(ev.INTERCEPT_SHARE - 0.05)
+    (i,) = kinds_of(rows, "interception")
+    (c,) = kinds_of(rows, "possession_change")
+    (p,) = kinds_of(rows, "pass")
+    assert (i["team"], i["frame"], i["x"], i["y"]) == (c["team"], c["frame"], c["x"], c["y"])
+    assert i["player"] == p["interceptor"] == "a-t10" and i["confidence"] == c["confidence"]
+
+
+def test_an_interception_is_as_sure_as_the_control_not_the_pass():
+    rows = lane_scene(ev.INTERCEPT_SHARE - 0.05)
+    for r in rows[:17]:
+        r["ball"] = []  # the passer seen with the ball for only a few frames before he strikes it
+    (p,) = kinds_of(rows, "pass")
+    (i,) = kinds_of(rows, "interception")
+    assert p["confidence"] < i["confidence"] == kinds_of(rows, "possession_change")[0]["confidence"]
+
+
+def test_the_same_pass_collected_beyond_the_share_is_a_recovery_only():
+    rows = lane_scene(ev.INTERCEPT_SHARE + 0.05)
+    assert kinds_of(rows, "interception") == []
+    assert [c["team"] for c in kinds_of(rows, "possession_change")] == ["away"]
+
+
+def test_a_pass_to_a_team_mate_short_of_the_target_is_no_interception():
+    assert kinds_of(lane_scene(0.5, colour=BLUE), "interception") == []
+
+
+def test_a_ball_struck_no_faster_than_the_pace_has_its_target_at_the_kick_so_any_take_is_in_the_lane():
+    # The engine's in_the_lane: a target at the kick's own spot counts as in the lane.
+    # With the stopping point as the target (pace 0) no ball is that slow, so there is no such case.
+    slow = ev.TARGET_PACE - 0.5
+    if slow > 0:
+        assert ev.roll_distance(slow, ev.TARGET_PACE) == 0.0  # the premise
+        rows = lane_scene(None, speed=slow, metres=8.0)
+        assert [i["team"] for i in kinds_of(rows, "interception")] == ["away"]
+
+
+def test_with_the_ball_unseen_after_the_strike_no_interception_is_told():
+    rows = lane_scene(ev.INTERCEPT_SHARE - 0.05)
+    (p,) = kinds_of(rows, "pass")
+    for r in rows:
+        if p["frame"] < r["frame"] <= p["frame"] + ev.SHOT_LOOK_S * FPS:
+            r["ball"] = []  # hidden for the strike's first SHOT_LOOK_S: no speed, no direction
+    assert [(e["type"], e["outcome"]) for e in kinds_of(rows, "pass")] == [("pass", "fail")]  # the premise
+    assert kinds_of(rows, "possession_change") and kinds_of(rows, "interception") == []
+
+
+def test_an_interception_is_written_only_when_its_kind_is():
+    rows = lane_scene(ev.INTERCEPT_SHARE - 0.05)
+    assert kinds_of(rows, "interception") and not [
+        e for e in ev.detect(rows, kinds=())[0] if e["type"] == "interception"]
+
+
+# Pressure: the nearest opponent closer than PRESSURE_M to the player on the ball, once in
+# PRESSURE_REPEAT_S for each side.
+
+
+def press_scene(distances, presser_y0=34.0, frames=None, second=None):
+    """A blue player stands with the ball at his feet at (50, 34) throughout; a red player stands at
+    (50, 34 + d) for d in `distances`, one per frame (None: not seen). `second` adds another red
+    player the same way."""
+    rows = []
+    for f, d in enumerate(distances):
+        line = [(50.0, 34.0, BLUE)]
+        if d is not None:
+            line.append((50.0, presser_y0 + d, RED))
+        if second and second[f] is not None:
+            line.append((50.0, presser_y0 - second[f], RED))
+        rows.append(row(f, crowd(f) + line, (50.3, 34.0)))
+    return rows
+
+
+def approach(start, end, frames):
+    return [start + (end - start) * f / (frames - 1) for f in range(frames)]
+
+
+def test_an_opponent_coming_closer_than_two_metres_is_one_pressure_at_him_when_he_does():
+    ds = approach(4.0, 1.0, 76)  # 4 cm a frame, from 4 m to 1 m in 3 s
+    (p,) = kinds_of(press_scene(ds), "pressure")
+    first = next(f for f, d in enumerate(ds) if d < ev.PRESSURE_M)
+    assert (p["frame"], p["team"], p["x"], p["y"]) == (first, "away", 50.0, round(34.0 + ds[first], 2))
+    assert p["receiver"] == "h-t9" and p["player"] == "a-t10"
+
+
+def test_an_opponent_held_at_exactly_two_metres_is_no_pressure():
+    assert kinds_of(press_scene([2.0] * 60), "pressure") == []
+    assert len(kinds_of(press_scene([1.99] * 60), "pressure")) == 1
+
+
+def test_a_side_presses_once_in_eight_seconds_and_again_after():
+    # In at 1 m, out to 5 m, back in: at 6 s after the first (too soon), and at 9 s (another).
+    def scene(back_s):
+        n = round(back_s * FPS)
+        return press_scene([1.0] * 25 + [5.0] * (n - 25) + [1.0] * 50)
+    assert len(kinds_of(scene(6.0), "pressure")) == 1
+    assert len(kinds_of(scene(9.0), "pressure")) == 2
+
+
+def test_the_eight_seconds_are_the_sides_not_the_pressers():
+    # A second red player comes in 3 s after the first: the engine's memory is the side's.
+    first = [1.0] * 40 + [6.0] * 100
+    other = [None] * 75 + [1.0] * 65
+    assert len(kinds_of(press_scene(first, second=other), "pressure")) == 1
+
+
+def test_a_pressure_within_the_position_error_of_the_line_is_half_as_sure():
+    near, edge = kinds_of(press_scene([0.5] * 60), "pressure"), kinds_of(press_scene([1.9] * 60), "pressure")
+    assert near[0]["confidence"] == 0.8 and edge[0]["confidence"] == 0.4
+    assert 1.9 > ev.PRESSURE_M - ev.RIVAL_M > 0.5  # the premise: one each side of the error band
+
+
+def test_two_pressers_as_near_as_each_other_leave_the_presser_unnamed():
+    (p,) = kinds_of(press_scene([1.0] * 60, second=[1.2] * 60), "pressure")
+    assert p["player"] is None and p["team"] == "away"
+
+
+def test_a_ball_rolling_past_a_player_is_no_one_to_press():
+    # pass_scene's ball between the two: nobody has it while it runs.
+    rows = pass_scene(RED)
+    for r in rows:
+        r["players"].append({"bbox": [400, 0, 410, 30], "score": 0.9, "x": 56.0, "y": 35.0, "rgb": RED})
+    presses = kinds_of(rows, "pressure")
+    assert all(not 20 < p["frame"] < 45 for p in presses)
+
+
+# Tackles: a spell that ends with the ball leaving slower than ARRIVE_MPS and an opponent at it.
+
+
+def tackle_scene(knock=5.0, taker=RED, tackler_gap=1.0, tackler_gone_after=None, frames=70, y=34.0):
+    """A blue player dribbles along +x at 3 m/s at `y`, the ball 0.3 m ahead; at frame 30 a red
+    player stands `tackler_gap` metres ahead of the ball, and the ball is knocked sideways (+y) at
+    `knock` m/s for 3 m, where a player of `taker` (None: nobody) stands and keeps it."""
+    rows = []
+    stop_x = 50.0 + 3.0 * 30 / FPS + 0.3
+    for f in range(frames):
+        cx = 50.0 + 3.0 * min(f, 30) / FPS
+        if f <= 30:
+            ball = (cx + 0.3, y)
+        else:
+            ball = (stop_x, min(y + knock * (f - 30) / FPS, y + 3.0))
+        line = [(cx, y, BLUE)]
+        if tackler_gone_after is None or f <= tackler_gone_after:
+            line.append((stop_x + tackler_gap, y, RED))
+        if taker is not None:
+            line.append((stop_x, y + 3.3, taker))
+        rows.append(row(f, crowd(f) + line, ball))
+    return rows
+
+
+def test_a_ball_knocked_off_the_dribbler_and_won_is_a_tackle_won_at_the_contact():
+    (t,) = kinds_of(tackle_scene(), "tackle")
+    assert (t["team"], t["outcome"]) == ("away", "success")
+    assert abs(t["frame"] - 30) <= ev.SPEED_FRAMES and abs(t["y"] - 34.0) < 0.5
+    assert t["confidence"] == 0.8
+
+
+def test_knocked_off_him_but_picked_up_by_his_team_mate_is_a_tackle_lost():
+    (t,) = kinds_of(tackle_scene(taker=BLUE), "tackle")
+    assert (t["team"], t["outcome"]) == ("away", "fail")
+
+
+def test_knocked_loose_and_nobody_has_it_by_the_end_leaves_the_outcome_open():
+    (t,) = kinds_of(tackle_scene(taker=None), "tackle")
+    assert t["outcome"] is None
+
+
+def test_knocked_out_of_play_and_taken_for_the_restart_leaves_the_outcome_open():
+    # Near the touchline the ball runs over it (y 68) and comes to rest beyond, where the red player
+    # stands to take the throw-in: the next spell is a restart, not who came away with it.
+    rows = tackle_scene(y=66.0)
+    assert any(e["type"] == "out_of_play" for e in ev.detect(rows)[0])  # the premise
+    (t,) = kinds_of(rows, "tackle")
+    assert t["outcome"] is None
+
+
+def test_a_ball_struck_away_is_a_pass_not_a_tackle():
+    assert kinds_of(tackle_scene(knock=ev.ARRIVE_MPS + 0.2), "tackle") == []
+    assert len(kinds_of(tackle_scene(knock=ev.ARRIVE_MPS - 0.2), "tackle")) == 1
+
+
+def test_with_no_opponent_at_the_ball_a_slow_ball_leaving_him_is_no_tackle():
+    assert kinds_of(tackle_scene(tackler_gap=ev.CONTROL_M + 0.6), "tackle") == []
+
+
+def test_a_tackle_whose_tackler_the_tracker_loses_in_the_contact_is_held_under_the_gate():
+    (contact,) = kinds_of(tackle_scene(), "tackle")
+    (t,) = kinds_of(tackle_scene(tackler_gone_after=contact["frame"]), "tackle")
+    assert t["frame"] == contact["frame"] and t["confidence"] == ev.HELD
