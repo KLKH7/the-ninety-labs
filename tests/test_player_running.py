@@ -335,3 +335,17 @@ def test_once_a_figure_is_said_a_question_asking_no_figure_and_no_place_is_still
     monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10})
     r = _zone_reply(_standin(), "Who has been the best player?")
     assert r.source == "code" and r.answer.status == "unanswerable"
+
+
+@pytest.mark.parametrize("who", ["Alex Gumble", "Alex Purrow", "Mateo Vinnet", "Ilya Sarrow"])
+def test_a_full_name_is_that_player_even_when_others_share_his_first_name(who):
+    # The merge queue's review of #323: "Where does Alex Gumble play?" listed all three Alexes.
+    from ninety.agents.contracts import Question
+
+    mi = _standin()
+    first = who.split()[0]
+    assert sum(n.split()[0] == first for n in mi.sheet_names()) > 1
+    q = f"Where does {who} play?"
+    a, _ = cm.code_match_answer(Question("s", None, q, 60.0 * 20 - 1), mi)
+    assert a.status == "verified" and a.text.startswith(f"{who} was most often")
+    assert _zone_reply(mi, q, who).source == "model"

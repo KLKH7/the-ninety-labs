@@ -919,11 +919,13 @@ def asked_running(text: str) -> str | None:
 def asked_players(text: str, insights) -> set[str] | None:
     """The players a question names, by a sheet name or a part of one ("Kai") or by a position
     ("the left-back"), as names; None when it names none."""
-    names = set()
-    for name in insights.sheet_names():
-        parts = [name, *(w for w in name.split() if len(w) > 2)]
-        if any(re.search(rf"\b{re.escape(w)}\b", text, re.I) for w in parts):
-            names.add(name)
+    said = lambda w: re.search(rf"\b{re.escape(w)}\b", text, re.I)  # noqa: E731
+    sheet = insights.sheet_names()
+    # A full name the fan gave is that player, whoever shares his first name; a part ("Kai") is
+    # matched only when no full name is (merge-queue review of #323).
+    names = {n for n in sheet if said(n)} or {
+        n for n in sheet if any(said(w) for w in n.split() if len(w) > 2)
+    }
     lowered = text.lower()
     roles = {role for role, words in ROLE_WORDS if re.search(rf"\b(?:{words})", lowered)}
     if roles:
