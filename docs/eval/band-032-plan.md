@@ -126,3 +126,39 @@ figure (event-report-v2: 0.67, 7 of 13), with the denominators.
   #298's 0.25 unless this merges.
 
 ## Outcome
+
+### Amendment (2026-10-24, before any derivation: no band, ratio or validation error has been computed)
+
+**This band is not adoptable as derived here.** It measures each box's height against an upright
+1.80 m. The label boxes are tight around the drawn body; ours-v2's boxes have their own systematic
+size error, of unknown sign and size at this look. A band from label boxes applied to ours-v2's test
+detections mixes two box sources, which can bias it either way. So:
+
+- the band derived below is a **stand-in band**, and the proposal can only be adopted once it is
+  re-derived, by the same command, on ours-v2 detections of the 12 validation clips;
+- the test-set numbers below are an **estimate under that mismatch**, never a replacement for main's
+  0.25 or a published figure;
+- the gap between label and detector boxes is **not measured on any test clip**.
+
+**Searched first, for ours-v2 detections or observations at the 0.3.2 look:** the repo, `docs/eval/`,
+`tests/fixtures/`, every remote branch's history and the PRs. The only ours-v2 validation
+observations are #187's (commit 7448d3d8: seeds 108, 109, 114 to 116, 120 to 122, 2041 to 2043,
+3041, 3042). They are render run v1, renderer 0.3.0, before #102 redrew the players' bodies as their
+labelled capsules (0.3.1; 0.3.1 to 0.3.2 changed labels only), and from other 10 s windows (seed 108:
+frames 3286 to 3535 there, 4258 to 4507 here). Their boxes are of another picture of the players, the
+very thing the ratio measures, so they cannot stand in for 0.3.2. `tests/fixtures/broadcast-seed108`
+holds 2 frames. None is used.
+
+**What finishes it:** ours-v2's checkpoint (`checkpoint_best_total.pth`, train manifest
+`docs/eval/vision-report-v1/train-manifest.json`) on a machine holding the 12 clips, then for each
+seed N in 108 to 119:
+
+    uv run --group vision python -m ninety.vision.detect <clips>/seedN --checkpoint ours-v2 \
+        --weights <ours-v2>/checkpoint_best_total.pth --out <dets>/seedN.jsonl
+    uv run --group vision python -m ninety.vision.observe <clips>/seedN \
+        --detections <dets>/seedN.jsonl --out <obs>/broadcast/seedN.jsonl
+
+and `uv run python -m ninety.eval.band_derive --clips <clips> --obs <obs> --seeds 108 ... 119
+--out docs/eval/band-broadcast-032.json`, then BANDS["0.3.2"] set from it and the test set scored
+again (section 5). The clips are track B's local renders at `cca498c` (about 1 GB), or
+`uv run ninety-dataset` at `cca498c` for those seeds.
