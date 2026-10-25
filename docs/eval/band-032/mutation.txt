@@ -1,0 +1,11 @@
+KILLED   0.3.2 band = main's
+KILLED   0.3.2 band low end moved
+KILLED   0.3.2 band = old band
+KILLED   default look is 0.3.2
+KILLED   place ignores band
+KILLED   regate ignores look
+KILLED   fit path ignores look
+KILLED   any look accepted
+KILLED   B3 markings dropped
+KILLED   mixed looks allowed
+KILLED   renderer not recorded
