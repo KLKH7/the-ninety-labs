@@ -51,8 +51,15 @@ MATCH_TOOLS = (
     "pass_options",
     "team_shape",
     "lineup",
+    "possession",
+    "territory",
 )
 TOOL_HELP = {
+    "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
+    "on the ball); "
+    "unsure when the video could not tell whose some passes were",
+    "territory": "where the ball was: each club's share of the time with it in its attacking third, as "
+    "a range (the ball near a third's line could be on either side)",
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
     "before it",
     "players": "players ranked by the opponents their passes took out of the game",
@@ -114,6 +121,15 @@ TOOL_WORDS = (
         "team_shape",
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
+    ),
+    (
+        "possession",
+        r"\b(?:possession|more of the ball|keep(?:ing|s)? the ball|have the ball more|dominat\w*)\b",
+    ),
+    (
+        "territory",
+        r"\b(?:territory|where (?:has|is) the ball|pinned (?:back|in)|camped|on the front foot"
+        r"|in (?:their|the other) half)\b",
     ),
     (
         "lineup",
@@ -327,6 +343,16 @@ FOLLOW_UPS = {
         "And in the last ten minutes?",
         "How are {club} playing?",
     ),
+    "possession": (
+        "Where has the ball been?",
+        "How quickly do {club} win the ball back?",
+        "Which passes cut through?",
+    ),
+    "territory": (
+        "Who has had more of the ball?",
+        "Where are {club} outnumbering them?",
+        "How are {club} playing?",
+    ),
     "lineup": (
         "Who has been the best player?",
         "Why do {club} keep losing the ball?",
@@ -503,6 +529,8 @@ def _figure(f: dict) -> str | None:
     if f.get("value") is None or not f.get("unit"):
         return None
     v, unit = _num(f["value"]), f["unit"]
+    if f.get("metric") == "final_third_share":  # said as its range: the ball near a line is either side
+        return f"{f['lo']}%" if f["lo"] == f["hi"] else f"{f['lo']} to {f['hi']}%"
     if f.get("metric") == "regains_within_5s":
         return f"{v} {'regain' if v == '1' else 'regains'} in 5 s"  # the window the sentence says
     if unit == "%":
@@ -678,6 +706,14 @@ def code_texts(fact: dict) -> list[str]:
             f"{span.capitalize()}, {club} won the ball back and had a shot "
             f"{_num(fact['value'])} seconds later."
         ]
+    if metric == "possession_share":
+        if fact.get("value") is None:
+            return []
+        return [f"{club} had {fact['value']}% of possession {span}, counted by share of passes."]
+    if metric == "final_third_share":
+        lo, hi = fact["lo"], fact["hi"]
+        share = f"{lo}%" if lo == hi else f"between {lo}% and {hi}%"
+        return [f"The ball was in {club}'s attacking third {share} of the footage shown {span}."]
     if metric == "one_two":
         a, b = fact.get("passer_is"), fact.get("receiver_is")
         if not a or not b or a == b:  # one name twice is no one-two a fan would believe
