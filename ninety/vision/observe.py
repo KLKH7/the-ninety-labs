@@ -75,6 +75,18 @@ NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
 HEIGHT_BAND = (0.966, 1.121)
+# One band per renderer look (lesson 230; docs/eval/band-032-plan.md, a proposal for #270's option
+# (a)). Each is derived by the same rule (ninety/eval/band_derive.py) on that look's own validation
+# clips. The look is declared by whoever runs the clip (`--look`), never detected: no signal on the
+# live path is known to tell the looks apart (same frame size, overlapping grain), and the live path
+# never reads the render settings. The default is the demo's look; live_job always runs at it.
+# "0.3.2": the frozen test set's renderer, ours-v2's validation seeds 108 to 119 rendered at cca498c,
+# the drawn label boxes standing in for detections (the detector's weights were not at hand: a
+# different reading, lesson 227), 1,508 good frames of 3,000, docs/eval/band-broadcast-032.json. A
+# stand-in band: not adoptable until re-derived on ours-v2's detections (band-032-plan.md).
+BAND_032 = (0.901, 0.994)
+BANDS = {"0.5.15": HEIGHT_BAND, "0.3.2": BAND_032}
+DEFAULT_LOOK = "0.5.15"
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
@@ -151,10 +163,10 @@ def agree(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def place(row: dict, markings: bool = True) -> dict:
-    """Judge the frame's camera by its players' heights and, with `markings` (the broadcast), its
-    marking fit's own verdict too; when it is trusted, place every detection on the pitch through
-    it (players at the foot point, the ball one radius up)."""
+def place(row: dict, markings: bool = True, band: tuple[float, float] = HEIGHT_BAND) -> dict:
+    """Judge the frame's camera by its players' heights (in `band`, its look's) and, with
+    `markings` (the broadcast), its marking fit's own verdict too; when it is trusted, place every
+    detection on the pitch through it (players at the foot point, the ball one radius up)."""
     cam = row["camera"]
     P = np.array(cam["P"]) if cam.get("P") is not None else None
     ratio = height_ratio(row["players"], P) if P is not None else None
@@ -162,7 +174,7 @@ def place(row: dict, markings: bool = True) -> dict:
     # With no player to measure, the heights cannot judge the camera, and the markings' verdict
     # stands (one frame of 3,250 on validation, untrusted either way).
     if ratio is not None:
-        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1] and (cam["markings_ok"] or not markings)
+        ok = band[0] <= ratio <= band[1] and (cam["markings_ok"] or not markings)
     else:
         ok = bool(P is not None and cam["markings_ok"])
     cam["height_ratio"] = None if ratio is None else round(ratio, 4)
@@ -241,13 +253,17 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
                          "without the camera fit (its cameras are kept)")
+    ap.add_argument("--look", choices=sorted(BANDS), default=DEFAULT_LOOK,
+                    help="the renderer look whose height band judges the frames, as declared for "
+                         "the clip (docs/eval/band-032-plan.md); default the demo's")
     a = ap.parse_args(argv)
+    band = BANDS[a.look]
     if a.regate is not None:
         rows = []
         lines = [json.loads(x) for x in a.regate.read_text().splitlines() if x.strip()]
         fixed = bool(lines and lines[0].get("fixed"))
         for x in lines:
-            rows.append(place(x, markings=not fixed))
+            rows.append(place(x, markings=not fixed, band=band))
         rows = agree(rows)
     else:
         if a.clip is None or a.detections is None:
@@ -255,6 +271,8 @@ def main(argv: list[str] | None = None) -> None:
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
         rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")), fixed=a.fixed)
+        if band != HEIGHT_BAND:  # judged again by the declared look's band; the fit is unchanged
+            rows = agree([place(r, markings=not a.fixed, band=band) for r in rows])
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")

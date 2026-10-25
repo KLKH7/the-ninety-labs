@@ -443,6 +443,29 @@ The event and tracker thresholds were tried on a grid and none changed. On seed 
 is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure (F1 0.67
 on 13 passes) replaces it as the headline.
 
+**Proposed, not adopted: one height band per renderer look** ([eval/band-032-plan.md](eval/band-032-plan.md),
+for @KLKH7 to choose, #270's option (a)). Main's current figure is the one main's code gives, F1 0.25
+(#298), until this merges. The frozen test set is renderer 0.3.2 and main's band (0.966 to 1.121) was
+derived on 0.5.15. By the same rule on the 0.3.2 look's own validation clips (seeds 108 to 119, 1,508
+good frames of 3,000), the band is 0.901 to 0.994 (`observe --look 0.3.2`; the look is declared for
+the test set, offline, since no live-path signal tells the looks apart). **It is a stand-in band and
+not adoptable:** the detector's weights were not at hand, so it was derived on the drawn label boxes,
+while the test set is scored on ours-v2's boxes (lesson 227). It is re-derived on ours-v2 detections
+of the same clips before anything is adopted. On validation it keeps 96.5% of good frames (main's
+band 25.3%) and misses its bar on the worst trusted frame: 48.96 m against 8.5 m, seed 117's reverse
+angle fitted as the main camera's mirror, which main's band trusts too. On the test set, scored once,
+**an estimate under that mismatch, not a replacement for 0.25**:
+
+| Test set, five clips | Main today (band 0.966 to 1.121, B3) | Proposed (0.3.2 band 0.901 to 0.994, B3) | Published (event-report-v2) |
+|---|---|---|---|
+| Passes, strict | 2 of 13 found, 1 false: F1 0.25 | 5 of 13 found, 2 false: F1 0.50 | 7 of 13 found, 1 false: F1 0.67 |
+| Frames trusted, of 250 (900001 / 900002 / 900003 / 900004 / 900005) | 115 / 0 / 0 / 30 / 9 | 177 / 101 / 0 / 153 / 250 | 238 / 0 / 4 / 194 / 248 |
+| Trusted frames over 1.0 m wrong | 54 of 154 (worst 1.77 m) | 0 of 681 (worst 0.98 m) | not graded per frame; 4 known, about 46 m |
+| Good frames kept (of 707 within 1.0 m) | 100 (14.1%) | 681 (96.3%) | not graded |
+
+Per clip, the ground error and the events: [eval/band-032/](eval/band-032/) (`test-camera-*.json`,
+`test-events-*.json`).
+
 **Read with care.** Five ten-second clips hold 13 passes and one shot, and two of the clips give no
 events at all. A single pass moves the recall by 8 points. This shows the pipeline works end to end
 and where it fails, not how well it does on a match.
