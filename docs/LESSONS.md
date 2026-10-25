@@ -2900,7 +2900,7 @@ short and actionable. This file is public: no research sources, product names or
   - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
     following off by default until it passes its bar.
 
-### 245. A side the voice holds is held on every screen, or the gate protects only one of them
+### 245. A side the voice holds is held on the screens too, or the gate protects only one of them
 - **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
   out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
   track id into a club from its first letter (`h-t8` became "a London player"), and that letter is
@@ -2912,7 +2912,9 @@ short and actionable. This file is public: no research sources, product names or
   as a title). An event's own side (`team`) is named the same way: the bundle carries the
   fact-checker's threshold (`min_team_confidence`), and the phone's play-by-play, story colours and
   shot list name a club only above it ("A player completes a pass"; an unsure shot is in "All"
-  only, with no zone). A writer that names a side and a screen that names it ask the same rule.
+  only, listed but not drawn; an unsure goal is "Goal 43′" and in no club's score). A writer that
+  names a side and a screen that names it ask the same rule; what still reads the tracker's vote is
+  listed in EVALUATION.md as a residual, not left unsaid.
 - **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
   and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
   fail when the screens ignore the list, and

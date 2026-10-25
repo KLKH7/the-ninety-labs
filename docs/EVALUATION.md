@@ -541,8 +541,11 @@ encodes the side by its letter, from the tracker's vote. The agents keep it, as 
 how they say who, but no screen reads a club from it unless the bundle vouches for that track
 (`sides_known`, lesson 245): otherwise the viewer and the phone say "a player". An event's own side
 is named on the phone only above the same threshold, which the bundle carries
-(`min_team_confidence`). **Known residual:** the radar still colours each dot by the tracker's vote,
-and its screen-reader summary and the phone's answer pictures still name a dot's club from it.
+(`min_team_confidence`), and a goal counts for a club's score only on a side told surely
+(`condensed.build`). **Known residual:** the radar still colours each dot by the tracker's vote, and
+its screen-reader summary names a dot's club from it; the phone's answer pictures name clubs from
+the insight facts' own team, gated by those tools' confidence, not by this threshold; and the team
+stats count each detected event for the side the tracker voted.
 
 **Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
 is looked at again: the fact-checker re-runs R3's event detection (`ninety.vision.events.detect`,

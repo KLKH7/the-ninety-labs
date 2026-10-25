@@ -1872,14 +1872,14 @@ function showMatch(t: number) {
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
   // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
-  // when the detection names no player).
-  const scored = m.goals.filter((g) => g.t <= t && g.team);
+  // when the detection names no player, or "Goal 43′" when its side was not told surely).
+  const scored = m.goals.filter((g) => g.t <= t);
   const scorers = $("scorers");
   scorers.hidden = scored.length === 0;
   const said = scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
-      return `${who ? playerName(who) : teams[g.team!]} ${Math.floor(g.t / 60) + 1}′`;
+      return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
     })
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
@@ -2012,7 +2012,9 @@ function renderShots(t: number) {
   if (key === shotsKey) return;
   shotsKey = key;
   const svg = $("shots") as unknown as SVGSVGElement;
-  shotMap.draw(svg, shown);
+  // Placed and coloured only on a sure side: where a shot sits on the half pitch is read from the
+  // direction its side attacks. An unsure one is listed, not drawn.
+  shotMap.draw(svg, shown.filter((s) => s.sure));
   const goals = shown.filter((s) => s.outcome === "goal").length;
   svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
   $("shot-list").replaceChildren(

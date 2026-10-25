@@ -49,7 +49,12 @@ def site(browser, tmp_path_factory):  # noqa: F811
     nobody = {**sure, "player": None, "outcome": "success", "end_x": 75.0, "end_y": 22.0, "team": "home"}
     told = {**nobody, "id": "e5", "t": 61.6, "frame": 1540, "team_confidence": 0.99}
     unsure = {**nobody, "id": "e6", "t": 61.8, "frame": 1545, "team_confidence": 0.3}
-    events.write_text(events.read_text() + "".join(json.dumps(e) + "\n" for e in (sure, told, unsure)))
+    # The clip's shot (e2) on a side told surely; a second shot (e7) on a side that was not.
+    rows = [json.loads(line) for line in events.read_text().splitlines()]
+    rows = [{**r, "team_confidence": 0.99} if r["id"] == "e2" else r for r in rows]
+    unsure_shot = {**rows[1], "id": "e7", "t": 62.4, "frame": 1560, "team_confidence": 0.3,
+                   "outcome": "off_target"}
+    events.write_text("".join(json.dumps(e) + "\n" for e in (*rows, sure, told, unsure, unsure_shot)))
     meta = json.loads((clip / "clip.json").read_text())
     (clip / "clip.json").write_text(json.dumps({**meta, "segments": SEGMENTS}))
     tracked = root / "tracked.json"
@@ -635,13 +640,15 @@ def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(brows
     assert dot.count() == 1
     assert dot.get_attribute("class") == "shot home on"
     assert float(dot.get_attribute("cx")) == 34 and float(dot.get_attribute("cy")) == 25
-    assert "saved" in page.inner_text("#shot-list")
-    assert "from the" not in page.inner_text("#shot-list")  # where from needs the side's direction
+    listed = page.locator("#shot-list li").all_inner_texts()
+    assert len(listed) == 2 and "saved" in listed[0]
+    # e7's side was not told surely (lesson 245): listed with no zone and drawn nowhere, as where it
+    # sits on the half pitch is read from the direction its side attacks.
+    assert "from the" not in listed[1] and "off target" in listed[1]
     page.locator("#shot-filter ion-segment-button[value=away]").click()
     page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
-    # Its side was never told (no team_confidence), so not even home's filter claims it (lesson 245).
     page.locator("#shot-filter ion-segment-button[value=home]").click()
-    page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
+    page.wait_for_function("document.querySelectorAll('#shot-list li').length === 1")  # no club claims e7
     # Rewound to before the shot (61.2 s), there is none to show.
     page.click("#lt-pitch")
     page.locator("#momentum-strip").focus()
@@ -774,4 +781,30 @@ def test_the_play_by_play_names_a_club_only_for_a_side_told_surely(browser, site
              for li in page.locator("#insights .play").all()}
     assert "Crowmere completes a pass." in plays["e5"][0] and "home" in plays["e5"][1].split()
     assert "A player completes a pass." in plays["e6"][0] and "neutral" in plays["e6"][1].split()
+    assert not errors
+
+
+def test_a_bundle_that_does_not_carry_the_threshold_names_no_detected_side(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    manifest = json.loads(page.evaluate("fetch('/bundle/manifest.json').then(r => r.text())"))
+    del manifest["min_team_confidence"]
+    page.context.route("**/bundle/manifest.json", lambda route: route.fulfill(json=manifest))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play")
+    told = page.locator("#insights .play[data-event=e5]").inner_text()
+    assert "A player completes a pass." in told  # fail closed: e5's 0.99 counts for nothing without it
+    assert not errors
+
+
+def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    match = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))
+    match["goals"] = [{"t": 61.0, "team": None, "event": "e6"}]  # condensed.build: an unsure side, no player
+    page.context.route("**/bundle/match.json", lambda route: route.fulfill(json=match))
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("document.querySelector('#scorers') && !document.querySelector('#scorers').hidden")
+    assert page.inner_text("#scorers") == "Goal 2′"
     assert not errors
