@@ -13,10 +13,15 @@ from ninety.eval import restart_score as rsc
 FPS = 25
 
 
-def clip(tmp_path, kick_at=60, event_at=30, frames=120, team="home"):
+VALIDATION_SEED = 920101  # the set-piece set's validation split: graded freely
+
+
+def clip(tmp_path, kick_at=60, event_at=30, frames=120, team="home", seed=VALIDATION_SEED, name="clip"):
     """The ball on the mark until `kick_at`, then rolling; the engine's kickoff event at `event_at`."""
-    d = tmp_path / "clip"
+    d = tmp_path / name
     d.mkdir()
+    if seed is not None:
+        (d / "meta.json").write_text(json.dumps({"seed": seed}))
     rows = []
     for f in range(frames):
         x = 52.5 if f <= kick_at else 52.5 - 0.4 * (f - kick_at)
@@ -62,6 +67,7 @@ def two_kickoffs(tmp_path):
     """Kick-offs kicked at frames 60 (home) and 160 (away); the engine's events 30 frames before."""
     d = tmp_path / "clip2"
     d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"seed": VALIDATION_SEED}))
     rows = []
     for f in range(240):
         x = 52.5 if f <= 60 or 100 <= f <= 160 else 40.0 + 0.01 * f
@@ -126,3 +132,28 @@ def test_a_detection_exactly_a_window_away_matches_despite_floating_point(tmp_pa
     # Kicked at 1.16 s: 2.16 - 1.16 is 1.0000000000000002 in floating point, still the window's edge.
     c = clip(tmp_path, kick_at=29, event_at=10)
     assert rsc.score([(c, found(tmp_path, {"t": 2.16, "team": "home"}))])["recall"]["k"] == 1
+
+
+def test_test_seeds_and_unknown_seeds_are_refused_unless_final(tmp_path):
+    import pytest
+
+    from ninety.eval import set_piece_set
+    from ninety.render.splits import TEST_SEEDS
+    for seed in (TEST_SEEDS[0], set_piece_set.TEST[0], None):
+        c = clip(tmp_path, seed=seed, name=f"c{seed}x")
+        f = found(tmp_path, {"t": 2.4, "team": "home"})
+        with pytest.raises(SystemExit, match="refused"):
+            rsc.score([(c, f)])
+        assert rsc.score([(c, f)], final_test=True)["recall"]["k"] == 1
+    # A validation seed from the folder's name, when meta.json gives none.
+    assert rsc.score([(clip(tmp_path, seed=None, name=f"seed{set_piece_set.VALIDATION[0]}"),
+                       found(tmp_path, {"t": 2.4, "team": "home"}))])["recall"]["k"] == 1
+
+
+def test_the_command_line_refuses_a_test_clip(tmp_path):
+    import pytest
+
+    from ninety.render.splits import TEST_SEEDS
+    c = clip(tmp_path, seed=TEST_SEEDS[0])
+    with pytest.raises(SystemExit, match="refused"):
+        rsc.main([str(c), str(found(tmp_path, {"t": 2.4, "team": "home"}))])
