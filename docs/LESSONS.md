@@ -2975,3 +2975,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
   and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
   phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 253. A rule that walks back through events must stop at a cut
+- **What happened:** the highlights reel's `origin` rule (#324) walked back from a shot through the
+  detected events to find how the attack began. A development run on the demo match found a wrong
+  origin: a throw-in seen before a broadcast cut was read as the free kick after it, because the
+  condensed match's cut had skipped minutes and a foul in between. The run had also given every
+  origin as null before, because the rule stopped at event types it did not know.
+- **Rule:** an event before a cut says nothing about what followed it. A rule that reads backwards
+  through events stops at a cut (a restart after the cut is the restart detector's to see), and the
+  list of event types it understands is checked against the types the source writes, so "null for
+  everything" is noticed.
+- **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
+  fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.

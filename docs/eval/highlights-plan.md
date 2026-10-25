@@ -281,6 +281,17 @@ match's cut had skipped minutes and a foul; nothing before a cut is read now. Wi
 run gave 7 open-play origins that agree with the full answer key and 6 nulls (set pieces whose
 stoppage the edit cut away, which only the restart detector can see), and no wrong origin.
 
+### Honest status of "pre-registered" (added at merge-queue review)
+
+This amendment was not fixed before the code. It was written together with the code, revised once
+for Kian's restart detector, and revised a second time after a development run on seed 8080's
+answer key (above), which changed the rules: the possession_change, press, tackle, foul and
+kindless set piece rules (1 to 5 and 4a) and the nothing-across-a-cut rule. Seed 8080 is the demo
+match, not a sealed seed and not a validation or test clip. The rules below are the ones as of the
+pull request; they are frozen from here, and nothing has been scored on a validation or test clip,
+so "pre-registered" here means *stated in this plan before any validation or test scoring*, not
+before every look at output.
+
 ### The source, and why there is no time threshold
 
 StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,
