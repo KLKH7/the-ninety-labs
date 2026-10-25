@@ -397,3 +397,15 @@ def test_the_bundle_passes_the_clips_clubs_to_the_describer(tmp_path, monkeypatc
     monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
     run(tmp_path)
     assert seen == [{"home": "London", "away": "Lisbon"}]
+
+
+def test_the_bundle_has_a_commentary_track_from_its_checked_events(tmp_path):
+    out, manifest = run(tmp_path)
+    body = json.loads((out / "commentary.json").read_text())
+    assert manifest["commentary"] == {"lines": len(body["lines"]), "dropped": len(body["dropped"]),
+                                      "refused": len(body["refused"]),
+                                      "chars": sum(len(line["text"]) for line in body["lines"])}
+    assert "commentary.json" in manifest["files"]
+    # The fixture's shot (e2, on target, detected at 0.9) carries no side confidence, so no club is said.
+    shots = [line["text"] for line in body["lines"] if line["kind"] == "shot"]
+    assert shots == ["A shot, on target."]
