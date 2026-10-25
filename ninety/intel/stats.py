@@ -12,7 +12,9 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-SPRINT_THRESHOLD_KMH = 25.0
+# The most common absolute sprint threshold in match analysis (docs/GROUNDING.md I22): the one
+# constant every sprint count reads (ninety/intel/physical.py too).
+SPRINT_THRESHOLD_KMH = 25.2
 
 
 @dataclass(frozen=True)

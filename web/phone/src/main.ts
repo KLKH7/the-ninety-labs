@@ -12,12 +12,11 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
-import londonCrest from "./crests/london-athletic.svg?raw";
-import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
+import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -332,6 +331,8 @@ interface BundleManifest {
   footage: { kind: "video" | "frames"; src: string; frames: number };
   detector?: string | null;
   teams?: unknown;
+  sides_known?: unknown;
+  min_team_confidence?: unknown;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -351,7 +352,21 @@ interface DetectedEvent {
   x?: number;
   y?: number;
   confidence?: number | null;
+  team_confidence?: number | null;
   interceptor?: string | null;
+}
+/** The side threshold the fact-checker uses (the bundle's `min_team_confidence`, from
+ * ninety/agents/factcheck.py); null for a bundle that does not say, where every detected side is unsure. */
+let minTeamConfidence: number | null = null;
+
+/** An event's side, only where the fact-checker would name it (factcheck.side_known): ground truth
+ * (no detection confidence), or a detection whose side was told above the threshold. Else null, and
+ * no screen names a club for it. */
+function sureSide(e: DetectedEvent): "home" | "away" | null {
+  if (e.team !== "home" && e.team !== "away") return null;
+  if (e.confidence === undefined || e.confidence === null) return e.team;
+  const told = e.team_confidence;
+  return minTeamConfidence !== null && typeof told === "number" && told > minTeamConfidence ? e.team : null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
@@ -376,7 +391,14 @@ async function loadBundle() {
     const m = (await get("manifest.json")) as BundleManifest;
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
-    Object.assign(teams, teamNames(m.teams));
+    // A bundle that does not name both clubs is not given the demo's: neutral sides, said so.
+    // (teamNames hands back DEFAULT_TEAMS itself only when it falls back.)
+    const named = teamNames(m.teams);
+    const confirmed = named !== DEFAULT_TEAMS;
+    Object.assign(teams, confirmed ? named : { home: "Home", away: "Away" });
+    $("teams-note").hidden = confirmed;
+    setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
+    minTeamConfidence = typeof m.min_team_confidence === "number" ? m.min_team_confidence : null;
     showTeams();
     const cuts = timeline(m);
     laptop.cuts = cuts;
@@ -548,8 +570,8 @@ function averagePositions(): Map<string, [number, number]> {
 /** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
  * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  if (club === "London") return londonCrest;
-  if (club === "Lisbon") return lisbonCrest;
+  const own = crestOf(club);
+  if (own) return own;
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
@@ -939,6 +961,9 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
+    $("so-far-box").hidden = true;
+    $("heat-box").hidden = true;
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
@@ -987,6 +1012,8 @@ async function refreshCard(force = false) {
 }
 
 function showCard(c: PlayerCard) {
+  $("so-far-box").hidden = false;
+  $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
@@ -1057,13 +1084,21 @@ function showInvolved(id: string, t: number) {
 
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  const others = rosterIds().filter((o) => o !== id);
+  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
+  const side = { home: 0, away: 0 };
+  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
+  const others = rosterIds()
+    .filter((o) => o !== id)
+    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    .filter((o) => ++side[team(o)] <= 11);
+  $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
     ...others.map((o) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
+      b.dataset.player = o;
       b.textContent = playerName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
@@ -1077,9 +1112,12 @@ async function compare(a: string, b: string) {
   let cb: PlayerCard;
   try {
     [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
-  } catch (e) {
-    $("compare-rows").hidden = false;
-    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+  } catch {
+    // No numbers for one of them yet: nothing is drawn, and that player's chip says so quietly.
+    $("compare-rows").hidden = true;
+    const chip = $("compare-chips").querySelector<HTMLButtonElement>(`[data-player="${b}"]`);
+    chip?.setAttribute("aria-disabled", "true");
+    chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
   const rows: [string, number, number, number][] = [
@@ -1145,10 +1183,13 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** Questions this fan has already asked: never suggested back to them. */
+const asked = new Set<string>();
+
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
-  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
+  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
 }
 
@@ -1191,6 +1232,8 @@ async function ask(text: string) {
   const input = $<HTMLInputElement>("question");
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
+  asked.add(q);
+  renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
   const at = state.card && state.card.player === state.selected ? state.card.t_to : Math.round(Math.max(0, laptop.time()) * 10) / 10;
@@ -1708,12 +1751,14 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 /** A detected event as a play-by-play line (Apple Sports: "Kyle Walker takes a throw-in."), from
  * its own fields only; a player the detection did not name is his club. */
 function playSentence(e: DetectedEvent): string | null {
-  const side = e.team === "home" || e.team === "away" ? e.team : null;
+  const side = sureSide(e);
   // A tracked player nobody has named is "a London player", never the tracker's number; a pass
   // between two of them reaches "a teammate".
   const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
   const low = (t: string) => t.replace(/^A /, "a "); // named() capitalises a sentence's first word
-  const to = (id: string) => (isTrack(id) && e.player && isTrack(e.player) && team(id) === team(e.player) ? "a teammate" : low(named(id)));
+  // "a teammate" only when both sides are vouched for: the id letters are the tracker's votes.
+  const mates = (id: string) => !!e.player && isTrack(id) && isTrack(e.player) && !sideUnsure(id) && !sideUnsure(e.player);
+  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(named(id)));
   switch (e.type) {
     case "pass":
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
@@ -1786,8 +1831,7 @@ function renderInsights() {
   for (const e of plays) {
     const goal = e.type === "shot" && e.outcome === "goal";
     if (key && !goal) continue;
-    const side = e.team === "home" || e.team === "away" ? e.team : null;
-    const { li } = storyItem(side, playSentence(e)!, e.t);
+    const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
     li.dataset.event = e.id;
     if (goal) {
@@ -1853,16 +1897,18 @@ function showMatch(t: number) {
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
   // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
-  // when the detection names no player).
-  const scored = m.goals.filter((g) => g.t <= t && g.team);
+  // when the detection names no player, or "Goal 43′" when its side was not told surely).
+  const scored = m.goals.filter((g) => g.t <= t);
   const scorers = $("scorers");
-  scorers.hidden = scored.length === 0;
-  const said = scored
+  // Always one line, so the band never grows when the first goal goes in.
+  scorers.hidden = false;
+  scorers.classList.toggle("none", scored.length === 0);
+  const said = scored.length === 0 ? "No goals yet" : scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
-      return `${who ? playerName(who) : teams[g.team!]} ${Math.floor(g.t / 60) + 1}′`;
+      return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
     })
-    .join(", ");
+        .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
   if (playsUpTo(t).length !== playsShown) renderInsights();
@@ -1944,8 +1990,10 @@ function renderStats(st: MatchData["stats"][number]) {
       li.querySelector(".label")!.append(pm);
       li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
     }
-    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly, in grey (nothing to
+    // share yet, so no club's colour); 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
+    li.classList.toggle("empty", h + a === 0);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
     (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
@@ -1983,22 +2031,27 @@ $("shot-filter").addEventListener("ionChange", (e) => {
 
 function renderShots(t: number) {
   const min = state.match?.min_confidence ?? 1;
-  const all: shotMap.Shot[] = [...bundleEvents.values()]
+  const all: (shotMap.Shot & { sure: boolean })[] = [...bundleEvents.values()]
     .filter((e) => e.type === "shot" && e.t <= t && (e.team === "home" || e.team === "away") && e.x !== undefined && e.y !== undefined && (e.confidence ?? 0) >= min)
-    .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null }));
+    .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null, sure: sureSide(e) !== null }));
   $("shot-map").hidden = all.length === 0;
-  const shown = all.filter((s) => shotFilter === "all" || s.team === shotFilter);
+  // A shot on an unsure side is in "All" only: no club's filter claims it.
+  const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
   const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
   if (key === shotsKey) return;
   shotsKey = key;
   const svg = $("shots") as unknown as SVGSVGElement;
-  shotMap.draw(svg, shown);
+  // Placed and coloured only on a sure side: where a shot sits on the half pitch is read from the
+  // direction its side attacks. An unsure one is listed, not drawn.
+  shotMap.draw(svg, shown.filter((s) => s.sure));
   const goals = shown.filter((s) => s.outcome === "goal").length;
   svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
-      li.textContent = `${momentum.minuteOf(s.t)}′ ${s.player ? playerName(s.player) : teams[s.team]}, ${shotMap.label(s.outcome)}, from the ${zoneFor(s.team, s.x, s.y)}`;
+      // Who and where only on a sure side: the zone is read from that side's direction of attack.
+      const who = s.player ? playerName(s.player) : s.sure ? teams[s.team] : "A shot";
+      li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
   );

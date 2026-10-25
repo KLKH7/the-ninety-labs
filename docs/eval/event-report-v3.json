@@ -1,0 +1,1554 @@
+{
+  "command": "uv run python -m ninety.eval.possession_report --test-dir <rebuilt answer key> --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/possession-change",
+  "commit": "3bad1769aa545381b565ee82874abf257214e70f",
+  "date": "2026-10-24",
+  "pooled": {
+    "strict": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
+      },
+      "pass": {
+        "true": 13,
+        "detected": 8,
+        "tp": 7,
+        "fp": 1,
+        "fn": 6,
+        "precision": 0.875,
+        "recall": 0.5384615384615384,
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
+      },
+      "possession_change": {
+        "true": 5,
+        "detected": 1,
+        "tp": 1,
+        "fp": 0,
+        "fn": 4,
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1": 0.33333333333333337,
+        "precision_95": [
+          0.21,
+          1.0
+        ],
+        "recall_95": [
+          0.04,
+          0.62
+        ]
+      },
+      "pressure": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    },
+    "lenient": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
+      },
+      "pass": {
+        "true": 13,
+        "detected": 8,
+        "tp": 7,
+        "fp": 1,
+        "fn": 6,
+        "precision": 0.875,
+        "recall": 0.5384615384615384,
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
+      },
+      "possession_change": {
+        "true": 5,
+        "detected": 1,
+        "tp": 1,
+        "fp": 0,
+        "fn": 4,
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1": 0.33333333333333337,
+        "precision_95": [
+          0.21,
+          1.0
+        ],
+        "recall_95": [
+          0.04,
+          0.62
+        ]
+      },
+      "pressure": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    },
+    "time_only": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
+      },
+      "pass": {
+        "true": 13,
+        "detected": 8,
+        "tp": 7,
+        "fp": 1,
+        "fn": 6,
+        "precision": 0.875,
+        "recall": 0.5384615384615384,
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
+      },
+      "possession_change": {
+        "true": 5,
+        "detected": 1,
+        "tp": 1,
+        "fp": 0,
+        "fn": 4,
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1": 0.33333333333333337,
+        "precision_95": [
+          0.21,
+          1.0
+        ],
+        "recall_95": [
+          0.04,
+          0.62
+        ]
+      },
+      "pressure": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    }
+  },
+  "clips": [
+    {
+      "seed": 900001,
+      "summary": {
+        "frames": 250,
+        "frames_camera_ok": 238,
+        "ball_frames": 214,
+        "tracks": 21,
+        "teams": {
+          "feature": "brightness",
+          "kits": {
+            "home": [
+              3.365
+            ],
+            "away": [
+              6.183
+            ]
+          },
+          "reason": "side nearer x = 105 on average: colour 0 in 126 more frames",
+          "frames_voting": 238,
+          "vote_margin": 126,
+          "keepers": 4,
+          "unassigned": 2
+        },
+        "spells": 5,
+        "events": {
+          "pass": 4,
+          "shot": 0,
+          "out_of_play": 1,
+          "possession_change": 1
+        },
+        "named": {
+          "player": 5,
+          "receiver": 2,
+          "interceptor": 1
+        }
+      },
+      "events": {
+        "strict": {
+          "per_type": {
+            "out_of_play": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.0,
+              "recall": null,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 4,
+              "detected": 4,
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "time_error_s": {
+                "mean": 0.04,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.238348,
+                "max": 0.353412
+              }
+            },
+            "possession_change": {
+              "true": 2,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6666666666666666,
+              "time_error_s": {
+                "mean": 0.12,
+                "max": 0.12
+              },
+              "distance_m": {
+                "mean": 0.429535,
+                "max": 0.429535
+              },
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 1,
+                  "fn": 1,
+                  "recall": 0.5
+                },
+                "at_restart": {
+                  "true": 0,
+                  "tp": 0,
+                  "fn": 0,
+                  "recall": null
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "shot": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00055",
+              "detected_id": "v00006",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.035355,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            },
+            {
+              "truth_id": "e00050",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.04,
+              "place_error_m": 0.05954,
+              "outside_frames": false,
+              "distance_m": 0.353412
+            },
+            {
+              "truth_id": "e00049",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.087573,
+              "outside_frames": false,
+              "distance_m": 0.325576
+            },
+            {
+              "truth_id": "e00051",
+              "detected_id": "v00003",
+              "type": "possession_change",
+              "team": "home",
+              "dt_s": 0.12,
+              "place_error_m": 0.457512,
+              "outside_frames": false,
+              "distance_m": 0.429535
+            }
+          ]
+        },
+        "lenient": {
+          "per_type": {
+            "out_of_play": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.0,
+              "recall": null,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 4,
+              "detected": 4,
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "time_error_s": {
+                "mean": 0.04,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.238348,
+                "max": 0.353412
+              }
+            },
+            "possession_change": {
+              "true": 2,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6666666666666666,
+              "time_error_s": {
+                "mean": 0.12,
+                "max": 0.12
+              },
+              "distance_m": {
+                "mean": 0.429535,
+                "max": 0.429535
+              },
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 1,
+                  "fn": 1,
+                  "recall": 0.5
+                },
+                "at_restart": {
+                  "true": 0,
+                  "tp": 0,
+                  "fn": 0,
+                  "recall": null
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "shot": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00055",
+              "detected_id": "v00006",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.035355,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            },
+            {
+              "truth_id": "e00050",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.04,
+              "place_error_m": 0.05954,
+              "outside_frames": false,
+              "distance_m": 0.353412
+            },
+            {
+              "truth_id": "e00049",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.087573,
+              "outside_frames": false,
+              "distance_m": 0.325576
+            },
+            {
+              "truth_id": "e00051",
+              "detected_id": "v00003",
+              "type": "possession_change",
+              "team": "home",
+              "dt_s": 0.12,
+              "place_error_m": 0.457512,
+              "outside_frames": false,
+              "distance_m": 0.429535
+            }
+          ]
+        },
+        "time_only": {
+          "per_type": {
+            "out_of_play": {
+              "true": 0,
+              "detected": 1,
+              "tp": 0,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.0,
+              "recall": null,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 4,
+              "detected": 4,
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "time_error_s": {
+                "mean": 0.04,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.238348,
+                "max": 0.353412
+              }
+            },
+            "possession_change": {
+              "true": 2,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6666666666666666,
+              "time_error_s": {
+                "mean": 0.12,
+                "max": 0.12
+              },
+              "distance_m": {
+                "mean": 0.429535,
+                "max": 0.429535
+              },
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 1,
+                  "fn": 1,
+                  "recall": 0.5
+                },
+                "at_restart": {
+                  "true": 0,
+                  "tp": 0,
+                  "fn": 0,
+                  "recall": null
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "shot": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00055",
+              "detected_id": "v00006",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.035355,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            },
+            {
+              "truth_id": "e00050",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.04,
+              "place_error_m": 0.05954,
+              "outside_frames": false,
+              "distance_m": 0.353412
+            },
+            {
+              "truth_id": "e00049",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.087573,
+              "outside_frames": false,
+              "distance_m": 0.325576
+            },
+            {
+              "truth_id": "e00051",
+              "detected_id": "v00003",
+              "type": "possession_change",
+              "team": "home",
+              "dt_s": 0.12,
+              "place_error_m": 0.457512,
+              "outside_frames": false,
+              "distance_m": 0.429535
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seed": 900002,
+      "summary": {
+        "frames": 250,
+        "frames_camera_ok": 0,
+        "ball_frames": 0,
+        "tracks": 0,
+        "teams": {
+          "feature": null,
+          "kits": null,
+          "reason": "fewer than two tracks long enough to learn kits"
+        },
+        "spells": 0,
+        "events": {
+          "pass": 0,
+          "shot": 0,
+          "out_of_play": 0,
+          "possession_change": 0
+        },
+        "named": {
+          "player": 0,
+          "receiver": 0,
+          "interceptor": 0
+        }
+      },
+      "events": {
+        "strict": {
+          "per_type": {
+            "pass": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        },
+        "lenient": {
+          "per_type": {
+            "pass": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        },
+        "time_only": {
+          "per_type": {
+            "pass": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        }
+      }
+    },
+    {
+      "seed": 900003,
+      "summary": {
+        "frames": 250,
+        "frames_camera_ok": 4,
+        "ball_frames": 4,
+        "tracks": 7,
+        "teams": {
+          "feature": null,
+          "kits": null,
+          "reason": "fewer than two tracks long enough to learn kits"
+        },
+        "spells": 0,
+        "events": {
+          "pass": 0,
+          "shot": 0,
+          "out_of_play": 0,
+          "possession_change": 0
+        },
+        "named": {
+          "player": 0,
+          "receiver": 0,
+          "interceptor": 0
+        }
+      },
+      "events": {
+        "strict": {
+          "per_type": {
+            "deflection": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "possession_change": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null,
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 0,
+                  "fn": 2,
+                  "recall": 0.0
+                },
+                "at_restart": {
+                  "true": 1,
+                  "tp": 0,
+                  "fn": 1,
+                  "recall": 0.0
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "set_piece": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "tackle": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        },
+        "lenient": {
+          "per_type": {
+            "deflection": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "possession_change": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null,
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 0,
+                  "fn": 2,
+                  "recall": 0.0
+                },
+                "at_restart": {
+                  "true": 1,
+                  "tp": 0,
+                  "fn": 1,
+                  "recall": 0.0
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "set_piece": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "tackle": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        },
+        "time_only": {
+          "per_type": {
+            "deflection": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "pass": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "possession_change": {
+              "true": 3,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 3,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null,
+              "by_phase": {
+                "open_play": {
+                  "true": 2,
+                  "tp": 0,
+                  "fn": 2,
+                  "recall": 0.0
+                },
+                "at_restart": {
+                  "true": 1,
+                  "tp": 0,
+                  "fn": 1,
+                  "recall": 0.0
+                }
+              }
+            },
+            "pressure": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "set_piece": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            },
+            "tackle": {
+              "true": 1,
+              "detected": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": null,
+              "recall": 0.0,
+              "f1": null,
+              "time_error_s": null,
+              "distance_m": null
+            }
+          },
+          "pairs": []
+        }
+      }
+    },
+    {
+      "seed": 900004,
+      "summary": {
+        "frames": 250,
+        "frames_camera_ok": 194,
+        "ball_frames": 187,
+        "tracks": 23,
+        "teams": {
+          "feature": "chromaticity",
+          "kits": {
+            "home": [
+              0.323,
+              0.358,
+              0.32
+            ],
+            "away": [
+              0.364,
+              0.369,
+              0.267
+            ]
+          },
+          "reason": "side nearer x = 105 on average: colour 1 in 4 more frames",
+          "frames_voting": 194,
+          "vote_margin": 4,
+          "keepers": 0,
+          "unassigned": 2
+        },
+        "spells": 4,
+        "events": {
+          "pass": 1,
+          "shot": 0,
+          "out_of_play": 0,
+          "possession_change": 0
+        },
+        "named": {
+          "player": 1,
+          "receiver": 1,
+          "interceptor": 0
+        }
+      },
+      "events": {
+        "strict": {
+          "per_type": {
+            "pass": {
+              "true": 1,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "time_error_s": {
+                "mean": 0.0,
+                "max": 0.0
+              },
+              "distance_m": {
+                "mean": 0.036056,
+                "max": 0.036056
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00090",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "home",
+              "dt_s": 0.0,
+              "place_error_m": 0.036235,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            }
+          ]
+        },
+        "lenient": {
+          "per_type": {
+            "pass": {
+              "true": 1,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "time_error_s": {
+                "mean": 0.0,
+                "max": 0.0
+              },
+              "distance_m": {
+                "mean": 0.036056,
+                "max": 0.036056
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00090",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "home",
+              "dt_s": 0.0,
+              "place_error_m": 0.036235,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            }
+          ]
+        },
+        "time_only": {
+          "per_type": {
+            "pass": {
+              "true": 1,
+              "detected": 1,
+              "tp": 1,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "time_error_s": {
+                "mean": 0.0,
+                "max": 0.0
+              },
+              "distance_m": {
+                "mean": 0.036056,
+                "max": 0.036056
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00090",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "home",
+              "dt_s": 0.0,
+              "place_error_m": 0.036235,
+              "outside_frames": false,
+              "distance_m": 0.036056
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seed": 900005,
+      "summary": {
+        "frames": 250,
+        "frames_camera_ok": 248,
+        "ball_frames": 245,
+        "tracks": 20,
+        "teams": {
+          "feature": "brightness",
+          "kits": {
+            "home": [
+              6.092
+            ],
+            "away": [
+              3.799
+            ]
+          },
+          "reason": "side nearer x = 105 on average: colour 0 in 134 more frames",
+          "frames_voting": 248,
+          "vote_margin": 134,
+          "keepers": 0,
+          "unassigned": 0
+        },
+        "spells": 6,
+        "events": {
+          "pass": 3,
+          "shot": 0,
+          "out_of_play": 0,
+          "possession_change": 0
+        },
+        "named": {
+          "player": 3,
+          "receiver": 3,
+          "interceptor": 0
+        }
+      },
+      "events": {
+        "strict": {
+          "per_type": {
+            "pass": {
+              "true": 4,
+              "detected": 3,
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "time_error_s": {
+                "mean": 0.02666666666666667,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.17499133333333336,
+                "max": 0.353553
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00058",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.141718,
+              "outside_frames": false,
+              "distance_m": 0.141421
+            },
+            {
+              "truth_id": "e00060",
+              "detected_id": "v00003",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.030265,
+              "outside_frames": false,
+              "distance_m": 0.03
+            },
+            {
+              "truth_id": "e00059",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.019849,
+              "outside_frames": false,
+              "distance_m": 0.353553
+            }
+          ]
+        },
+        "lenient": {
+          "per_type": {
+            "pass": {
+              "true": 4,
+              "detected": 3,
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "time_error_s": {
+                "mean": 0.02666666666666667,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.17499133333333336,
+                "max": 0.353553
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00058",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.141718,
+              "outside_frames": false,
+              "distance_m": 0.141421
+            },
+            {
+              "truth_id": "e00060",
+              "detected_id": "v00003",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.030265,
+              "outside_frames": false,
+              "distance_m": 0.03
+            },
+            {
+              "truth_id": "e00059",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.019849,
+              "outside_frames": false,
+              "distance_m": 0.353553
+            }
+          ]
+        },
+        "time_only": {
+          "per_type": {
+            "pass": {
+              "true": 4,
+              "detected": 3,
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "time_error_s": {
+                "mean": 0.02666666666666667,
+                "max": 0.08
+              },
+              "distance_m": {
+                "mean": 0.17499133333333336,
+                "max": 0.353553
+              }
+            }
+          },
+          "pairs": [
+            {
+              "truth_id": "e00058",
+              "detected_id": "v00001",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.141718,
+              "outside_frames": false,
+              "distance_m": 0.141421
+            },
+            {
+              "truth_id": "e00060",
+              "detected_id": "v00003",
+              "type": "pass",
+              "team": "away",
+              "dt_s": 0.0,
+              "place_error_m": 0.030265,
+              "outside_frames": false,
+              "distance_m": 0.03
+            },
+            {
+              "truth_id": "e00059",
+              "detected_id": "v00002",
+              "type": "pass",
+              "team": "away",
+              "dt_s": -0.08,
+              "place_error_m": 0.019849,
+              "outside_frames": false,
+              "distance_m": 0.353553
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

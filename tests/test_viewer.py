@@ -6,6 +6,7 @@ it, so the test can never silently stop running there).
 """
 
 import functools
+import json
 import os
 import shutil
 import threading
@@ -47,16 +48,22 @@ def browser():
 @pytest.fixture(scope="module")
 def site(browser, tmp_path_factory):
     """dist/ with a bundle at bundle/, served over HTTP the way a static host would."""
+    yield from serve_site(browser, tmp_path_factory, "--plant")
+
+
+def serve_site(browser, tmp_path_factory, *extra, events: list[dict] | None = None):
     root = tmp_path_factory.mktemp("site")
     page = browser.new_page(viewport={"width": W, "height": H})
     page.set_content('<body style="margin:0;background:#2e7d32"></body>')
     jpeg = page.screenshot(type="jpeg")
     page.close()
-    clip, detections, events = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    clip, detections, events_file = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    if events is not None:
+        events_file.write_text("".join(json.dumps(e) + "\n" for e in events))
     www = root / "www"
     shutil.copytree(DIST, www)
-    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", "--plant",
-            "--events-file", str(events)]
+    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", *extra,
+            "--events-file", str(events_file)]
     # Playwright's sync API holds this thread's event loop; ninety-e2e runs its own in another.
     worker = threading.Thread(target=e2e.main, args=(args,))
     worker.start()
@@ -224,4 +231,40 @@ def test_a_fallback_cue_says_so_on_screen_and_to_a_screen_reader(browser, site):
             break
         page.keyboard.press(".")
     assert "(fallback: held: timeout)" in page.inner_text("#on-air")
+    assert not errors
+
+
+# Tracked players (dry run of the demo, Oct 24): h-t4's side was told surely, a-t9's was not, and
+# h-t8 is only the receiver, whose side that pass did not measure.
+TRACKED = [
+    {"id": "e1", "t": 60.4, "frame": 1510, "type": "pass", "team": "home", "team_confidence": 0.99,
+     "player": "h-t4", "receiver": "h-t8", "intended": "h-t8", "interceptor": None, "deflected_by": None,
+     "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 35.0, "outcome": "success", "ball_speed_kmh": 48.0,
+     "source": "vision", "confidence": 0.9},
+    {"id": "e2", "t": 61.2, "frame": 1530, "type": "shot", "team": "away", "team_confidence": 0.3,
+     "player": "a-t9", "receiver": None, "x": 80.0, "y": 34.0, "end_x": 104.0, "end_y": 33.0,
+     "outcome": "on_target", "ball_speed_kmh": 101.4, "source": "vision", "confidence": 0.9},
+]
+
+
+@pytest.fixture(scope="module")
+def tracked_site(browser, tmp_path_factory):
+    yield from serve_site(browser, tmp_path_factory, events=TRACKED)
+
+
+def test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen(browser, tracked_site):
+    # A track id's letter is the tracker's side vote. The screen names the club only for a side the
+    # fact-checker vouches for (the bundle's sides_known); every other tracked player is "a player".
+    page, errors = open_viewer(browser, tracked_site)
+    page.get_by_role("button", name="Watch it").click()
+    page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.3")
+    page.keyboard.press("1")  # casual: the templates' sentences
+    seen = set()
+    for _ in range(40):
+        seen.add(page.locator("#on-air").inner_text().strip())
+        page.keyboard.press(".")
+    text = " | ".join(t for t in seen if t)
+    assert "Crowmere player" in text, text  # h-t4: a side told surely
+    assert "Dunhollow" not in text, text  # a-t9: the tracker's vote alone never names a club
+    assert "a player" in text or "A player" in text, text
     assert not errors

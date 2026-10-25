@@ -47,7 +47,8 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "referee", "lineup",
+    "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
+    "halves", "key_moments", "score", "set_pieces",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -223,6 +224,73 @@ def referee(match: str, minute_from: int, minute_to: int, club: str | None = Non
     return _insight(match, "referee", minute_from, minute_to, club)
 
 
+def possession(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Each club's share of the passes between two match minutes, the pass ratio Opta publishes as
+    possession (not time on the ball), with bounds: a pass whose side the video could not tell could be
+    either's, and the share is stated only when no pass is in doubt. Cite by id."""
+    return _insight(match, "possession", minute_from, minute_to, club)
+
+
+def territory(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Where the ball was between two match minutes: each club's share of the footage shown with the
+    ball in its attacking third, as a range (lo to hi: the ball near a third's line could be on either
+    side), and the share in each third. Cite by id; say the range as given."""
+    return _insight(match, "territory", minute_from, minute_to, club)
+
+
+def set_pieces(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Corners, goal kicks, penalties, throw-ins and free kicks between two match minutes: the total
+    of each, and each club's. The club is told by the Laws where they decide it (a corner or a penalty
+    is the club attacking that end, a goal kick the defending club's); throw-ins and free kicks have
+    bounds while the video could not tell whose. Empty until vision detects restarts. Cite by id."""
+    return _insight(match, "set_pieces", minute_from, minute_to, club)
+
+
+def score(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The score after minute_to (stated only when no goal's side is in doubt; the side is told by the
+    goal the ball went into), each goal up to then with its scorer and the pass that made it, oldest
+    first, and each club's goalkeeper's saves over the minutes. Empty until vision detects goals. Cite
+    by id."""
+    return _insight(match, "score", minute_from, minute_to, club)
+
+
+def halves(match: str, minute_to: int, club: str | None = None) -> dict:
+    """The first half against the second (Law 7's 45 minutes), up to a match minute: where the ball
+    was, the shots and what the passes did in each, with the same ids and bounds as those tools. Cite
+    by id."""
+    return _insight(match, "halves", 1, minute_to, club)
+
+
+def key_moments(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The key moments between two match minutes, latest first: goals, shots, regains that led to a
+    shot, one-twos and the biggest line breaks, each a checked fact. Cite by id."""
+    return _insight(match, "key_moments", minute_from, minute_to, club)
+
+
+def physical(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The zone each named player was in most between two match minutes, of the footage the video
+    named him in. A player's distance, top speed and sprints are computed but held (confident false,
+    why_held) until named players are measured well enough; do not state them. Cite by id."""
+    return _insight(match, "physical", minute_from, minute_to, club)
+
+
+def passing(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """What the passes did between two match minutes: progressive passes (a published definition),
+    passes into the final third, long passes (32 m or more) and passes intercepted, each club's count
+    with bounds while the video could not tell whose some were, and the totals; and the pairs of
+    named players who passed to each other most (only passes the video could name both players of).
+    Cite by id."""
+    return _insight(match, "passing", minute_from, minute_to, club)
+
+
+def shots(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The shot map between two match minutes: each detected shot's spot, its distance from the
+    goal its club attacks (m) and the angle the posts make there (degrees), nearest first; and each
+    club's shots and those from inside the penalty area. How a shot ended (goal, saved, blocked, off target)
+    is not known until the line-crossing events exist. Cite by id."""
+    return _insight(match, "shots", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -308,6 +376,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
+        possession, territory, shots, passing, physical, halves, key_moments, score, set_pieces,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

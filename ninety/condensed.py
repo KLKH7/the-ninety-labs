@@ -27,7 +27,7 @@ Reads the detected events and the clip's segments only; nothing here opens the a
 from __future__ import annotations
 
 from ninety import highlights
-from ninety.agents.factcheck import MIN_CONFIDENCE
+from ninety.agents.factcheck import MIN_CONFIDENCE, side_known
 from ninety.intel.stats import pass_facts, shot_facts
 from ninety.match.timeline import Timeline
 
@@ -122,7 +122,10 @@ def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | Non
     highlights measurement decided (ninety/highlights.py), none until it has run."""
     timeline = Timeline.of_clip(clip_meta)
     sure = confident(events)
-    goals = [{"t": e["t"], "team": e.get("team"), "event": e["id"]} for e in sure if is_goal(e)]
+    # A goal counts for a side only when that side was told surely (factcheck.side_known, lesson
+    # 245); otherwise it is a goal with no team, in no club's score.
+    goals = [{"t": e["t"], "team": e.get("team") if side_known(e) else None, "event": e["id"]}
+             for e in sure if is_goal(e)]
     stats = [{"t": round(timeline.segs[0].frame / timeline.fps, 2), "event": None, **team_stats([])}]
     for i, e in enumerate(sure):
         now = team_stats(sure[: i + 1])
