@@ -43,8 +43,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "docs" / "eval" / "latency-cost.json"
 REPORT = ROOT / "docs" / "eval" / "latency-cost.md"
 RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
-# The template cues for seed 7's first five minutes (docs/EVALUATION.md: 108 cues for seed 7, five
-# minutes): what the casual persona's graphics say, a floor for what a spoken description says.
+# The template cues for seed 7's first five minutes (docs/EVALUATION.md): what the casual persona's
+# graphics say, a floor for what a spoken description says.
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
@@ -103,7 +103,8 @@ def percentile(values: list[float], q: float) -> float:
 async def _tool_definitions() -> str:
     from ninety.mcp import match_server
 
-    tools = await match_server.server.list_tools()
+    # Only the tools the published Analyst may call reach its context (Foundry's allowed_tools).
+    tools = [t for t in await match_server.server.list_tools() if t.name in match_server.TOOLS]
     return json.dumps([{"name": t.name, "description": t.description, "parameters": t.inputSchema}
                        for t in tools])
 
@@ -194,7 +195,9 @@ def measure_latency(clip: Path, runs: int) -> dict:
     recording = Recording.load(RECORDING)
     scenarios: dict[str, list[dict[str, float]]] = {"e2e": [], "replay": []}
     with _Spans() as spans, tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames"])
+        # The single Analyst path: the committed timings and "What runs" describe it, not the graph.
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames",
+                                        "--single-analyst"])
         for n in range(runs + 1):  # the first run warms imports and caches, and is not counted
             _quiet(lambda: asyncio.run(e2e.run(args)))
             stages = spans.take()
@@ -216,7 +219,8 @@ def describe_clip(clip: Path) -> dict:
     from ninety import e2e
 
     with tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames"])
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames",
+                                        "--single-analyst"])
         manifest = _quiet(lambda: asyncio.run(e2e.run(args)))
     return {"frames": manifest["detections"]["frames"], "events": manifest["events"]["count"],
             "events_source": manifest["events"]["source"], "facts": manifest["facts"],
@@ -242,6 +246,9 @@ def measure(clip: Path, runs: int) -> dict:
                       "spoken_claim": json.loads(accepted.response)["text"]},
         "calls": model_calls(recording),
         "graphics_text": graphics_text(),
+        # The recording's agent definitions (ninety/agents/evidence.py), when it records them; an
+        # older recording names its versions in `model` only.
+        **({"agent_definitions": recording.agent_definitions} if recording.agent_definitions else {}),
     }
 
 

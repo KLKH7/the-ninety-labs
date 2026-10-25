@@ -65,6 +65,12 @@ assert personalize.last_route == "remote"
 assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
+assert match_server.team_shape(detected.M1_CLIP, 1, 99)["tracked"]  # shape from tracked positions only
+# Active perception re-runs vision's event detection on observations only (ninety/agents/perceive.py).
+from ninety.agents.perceive import Perceiver
+_obs = [json.loads(line) for line in open(detected.FIXTURES / "observations-seed900001.jsonl")]
+_m1 = detected.load(detected.m1_path(detected.M1_CLIP))[0]
+assert Perceiver({"tactical1": _obs}).re_perceive(_m1, "tactical1", "track").found is not None
 
 # The phone companion as deployed (NINETY_COMPANION unset is `on`): the M1 clip from tracked
 # positions only, and every stand-in, whose positions are the simulator's, refused before any is read.
@@ -82,6 +88,31 @@ m1 = phone.post("/api/pair", json={"clip": detected.M1_CLIP})
 assert m1.status_code in (201, 503), m1.text  # 503 until its tracked frames file is committed
 if m1.status_code == 201:
     assert phone.get(f"/api/minimap/{detected.M1_CLIP}").json()["source"] == "tracked"
+
+# Audio description: the model words each verified moment (a stand-in model here), the code and
+# the Judge check it, and the track is scheduled from the detected events and the live cues.
+from ninety.agents import describer
+from ninety.agents.contracts import Description
+from ninety.speech import describe
+
+async def model(event, around):
+    return Description(event["id"], f"{sure['player']} finds {sure['receiver']}", "", 0.0, "model")
+
+texts, calls = asyncio.run(describer.upgrades(events, result.cues, model, judge))
+track, refused = describe.describe(events, result.cues, upgrades=texts)
+assert calls and track.said
+
+# Match mode and the highlights reel (docs/eval/highlights-plan.md, rule 5): from the confident
+# detected events only, with no scorer, simulator or answer key loaded.
+from ninety import condensed, highlights
+_meta = {"fps": 25, "t_start": 0.0, "frames": 1500, "segments": [{"index": 0, "frame": 0, "frames": 1500}]}
+_shots = [{"id": "g", "t": 10.0, "frame": 250, "type": "shot", "team": "home", "x": 94.0, "y": 34.0,
+           "player": None, "outcome": "goal", "ball_speed_kmh": 80.0, "source": "vision", "confidence": 0.9},
+          {"id": "s", "t": 20.0, "frame": 500, "type": "shot", "team": "away", "x": 12.0, "y": 30.0,
+           "player": None, "outcome": "on_target", "ball_speed_kmh": 70.0, "source": "vision",
+           "confidence": 0.9}]
+_body = condensed.build(_meta, _shots, highlights.Verdict(save_filter=True, margins={"T_s": 0.02}))
+assert [m["event"] for m in _body["highlights"]["moments"]] == ["g", "s"]
 """
 
 

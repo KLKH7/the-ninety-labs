@@ -177,3 +177,157 @@ def test_the_command_refuses_the_folder_before_reading_the_weights(tmp_path):
     with pytest.raises(SystemExit, match="frames.jsonl"):
         live_job.main([str(clip), "--checkpoint", "ours-v4", "--weights", str(missing),
                        "--out", str(tmp_path / "out")])
+
+
+TAC = ("tac-l", "tac-r")
+
+
+def views_clip(tmp_path: Path) -> tuple[Path, Path]:
+    """The clean clip as the tactical camera's two views, each its own index and images."""
+    single, dets = clean_clip(tmp_path)
+    clip = tmp_path / "tac"
+    for name in TAC:
+        shutil.copytree(single, clip / "views" / name)
+    return clip, dets
+
+
+def quick_fixed_fit(static, points, w, h):
+    """A stand-in for pitch.fit_fixed, which searches a wide grid (tested in
+    tests/test_vision_pitch_fixed.py) and takes ~2 minutes here. This clip is drawn through the
+    gantry the tests pin, so its one camera comes from the broadcast fit, held for every frame."""
+    from ninety.vision import pitch
+
+    _, fits = pitch.fit_clip(points, w, h)
+    view = fits[0].view
+    return view, [pitch.FrameFit(view, f.median_px, f.points, f.ok) for f in fits]
+
+
+def test_a_clip_of_two_views_runs_detects_each_merges_them_and_opens_no_truth(tmp_path):
+    clip, dets = views_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)  # the search is tested elsewhere
+        def fit_fixed(static, points, w, h):
+            # a stand-in for the wide fixed-lens search (see quick_fixed_fit in the test file)
+            _, fits = pitch.fit_clip(points, w, h)
+            view = fits[0].view
+            return view, [pitch.FrameFit(view, f.median_px, f.points, f.ok) for f in fits]
+        pitch.fit_fixed = fit_fixed
+        found = read_detections({str(dets)!r})
+        calls = []
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}),
+                              lambda: (lambda rows: calls.append(rows[0]["image"]) or found), {{}})
+        o = Path({str(out)!r})
+        OUT = {{"report": report, "calls": [str(c) for c in calls],
+                "files": sorted(str(p.relative_to(o)) for p in o.rglob("*.jsonl"))}}
+    """)
+    report = run["out"]["report"]
+    assert [Path(c).parts[-3] for c in run["out"]["calls"]] == list(TAC)  # each view detected
+    assert report["views"] == list(TAC) and report["frames"] == 2 and report["camera_ok"] == 2
+    assert "fuse" in report["seconds"]
+    assert run["out"]["files"] == sorted(
+        ["detected.jsonl", "observations.jsonl"]
+        + [f"views/{n}/{f}" for n in TAC for f in ("detections.jsonl", "observations.jsonl")])
+    assert truth_reads(run) == []
+
+
+@pytest.mark.parametrize("where", ["views/tac-l", "views/tac-l/images", "views", "",
+                                   "views/tac-r/images/sub"])
+@pytest.mark.parametrize("name", [*TRUTH_FILES, "notes.txt"])
+def test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads(tmp_path, where, name):
+    clip, _ = views_clip(tmp_path)
+    (clip / where).mkdir(parents=True, exist_ok=True)
+    (clip / where / name).write_text("{}\n")
+    with pytest.raises(SystemExit, match="refused"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_planted_frame_file_in_a_single_clip_s_images_is_refused(tmp_path):
+    clip, _ = clean_clip(tmp_path)
+    (clip / "images" / "frames.jsonl").write_text("{}\n")
+    with pytest.raises(SystemExit, match="frames.jsonl"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_views_listing_different_frames_are_refused(tmp_path):
+    clip, _ = views_clip(tmp_path)
+    index = clip / "views" / "tac-r" / "index.jsonl"
+    rows = [json.loads(line) for line in index.read_text().splitlines()]
+    rows[1]["frame"] = 7
+    index.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    with pytest.raises(SystemExit, match="same frames"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_a_views_clip_with_one_view_is_refused(tmp_path):
+    clip, _ = views_clip(tmp_path)
+    shutil.rmtree(clip / "views" / "tac-r")
+    with pytest.raises(SystemExit, match="two views"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, monkeypatch):
+    """A view is the tactical camera, which never moves: observe fits it once (fixed=True). Without
+    it each frame is searched as the broadcast's gantry, and a view's frames place no player."""
+    from ninety.vision import observe, pitch
+    from ninety.vision.detections import read_detections
+
+    seen = []
+    real = observe.observe
+
+    def spy(images, dets, load, fixed=False):
+        seen.append(fixed)
+        return real(images, dets, load, fixed)
+
+    monkeypatch.setattr(observe, "observe", spy)
+    # The fits' searches are tested elsewhere; this test is about which mode each camera gets, and
+    # unstubbed they take ~2.5 minutes (the wide fixed grid, the gantry search).
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    monkeypatch.setattr(pitch, "fit_fixed", quick_fixed_fit)
+    clip, dets = views_clip(tmp_path)
+    found = read_detections(dets)
+    live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found), {})
+    single, dets1 = clean_clip(tmp_path / "b")
+    live_job.run(single, tmp_path / "out1", lambda: (lambda rows: read_detections(dets1)), {})
+    assert seen == [True, True, False]
+
+
+REAL_VIEWS = Path(__file__).parent / "fixtures" / "tactical-seed108"
+
+
+def test_a_real_tactical_clip_places_players_from_every_view(tmp_path):
+    """Lesson 235: two frames of validation seed108's tactical views as rendered (JPEG q85; the
+    detections ours-tactical made on them), through the whole views mode. Every view's camera is
+    trusted and most of its players are placed on the pitch; before the fix, none were."""
+    from ninety.vision.detections import read_detections
+
+    dets = {v: read_detections(REAL_VIEWS / f"detections-{v}.jsonl") for v in TAC}
+    report = live_job.run(REAL_VIEWS / "clip", tmp_path,
+                          lambda: (lambda rows: dets[Path(rows[0]["image"]).parts[-3]]), {})
+    assert report["camera_ok"] == 2
+    for v in TAC:
+        placed = tmp_path / "views" / v / "observations.jsonl"
+        rows = [json.loads(x) for x in placed.read_text().splitlines()]
+        players = [p for r in rows for p in r["players"]]
+        assert all(r["camera"]["ok"] for r in rows), v
+        assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0, v
+
+
+REAL_BROADCAST = Path(__file__).parent / "fixtures" / "broadcast-seed108"
+
+
+def test_a_real_broadcast_clip_places_players(tmp_path):
+    """Lesson 235: the broadcast mode on two frames of validation seed108 as rendered (JPEG q85;
+    ours-freeze's detections of them): the camera is trusted and most players are placed."""
+    from ninety.vision.detections import read_detections
+
+    dets = read_detections(REAL_BROADCAST / "detections.jsonl")
+    report = live_job.run(REAL_BROADCAST / "clip", tmp_path, lambda: (lambda rows: dets), {})
+    assert report["camera_ok"] == 2
+    rows = [json.loads(x) for x in (tmp_path / "observations.jsonl").read_text().splitlines()]
+    players = [p for r in rows for p in r["players"]]
+    assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0

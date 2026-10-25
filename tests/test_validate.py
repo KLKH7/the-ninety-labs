@@ -381,15 +381,20 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
 # Where a jolt in flight happens, relative to the goal at x = 105 (its net as the renderer draws
 # it: 2 m deep, its back 2 m high, the roof sloping down to it from the 2.44 m crossbar), and
 # whether the net can be what stopped the ball there. The engine holds a ball against the net with
-# its centre a radius (0.11 m) from the back or a side, or its top at the roof.
+# its centre a radius (0.11 m) from the back or a side, or its top at the roof, from inside; from
+# outside, its centre a radius off the back or a side, or its lowest point on the roof.
 NET_CASES = [
     ("in the middle of the goal", 105.9, 34.0, None, False),
     ("against the back of the net", 106.89, 34.0, None, True),
     ("against the side netting", 105.9, 37.55, None, True),
     ("against the net's roof", 106.0, 34.0, 2.0, True),  # roof 2.22 m there, less the ball's 0.22
     ("a few centimetres off the back of the net", 106.85, 34.0, None, False),
-    ("just behind the back of the net, outside it", 107.11, 34.0, None, False),
-    ("just outside the side netting", 105.9, 37.77, None, False),
+    ("against the back of the net from behind it", 107.11, 34.0, None, True),  # lesson 200
+    ("against the side netting from beside the goal", 105.9, 37.77, None, True),
+    ("lying on the net's roof", 106.0, 34.0, 2.22, True),  # its lowest point on the roof
+    ("a few centimetres behind the back of the net", 107.16, 34.0, None, False),
+    ("a few centimetres beside the side netting", 105.9, 37.82, None, False),
+    ("beside the goal, above the side netting", 105.9, 37.77, 2.5, False),
     ("above the roof", 106.0, 34.0, 2.5, False),
     ("4 m above the back of the net", 106.89, 34.0, 4.8, False),
 ]
@@ -397,9 +402,9 @@ NET_CASES = [
 
 @pytest.mark.parametrize(("where", "x", "y", "z", "contact"), NET_CASES)
 def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, z, contact):
-    """Lesson 184: inside a goal, a ball touching its net meets a contact, as at the woodwork. The
-    same jolt anywhere the net cannot be touching the ball is a defect. The ball flies in the middle
-    of the goal; on the jolt's frame it is where the case puts it."""
+    """Lessons 184 and 200: a ball touching a goal's net, inside it or out, meets a contact, as at
+    the woodwork. The same jolt anywhere the net cannot be touching the ball is a defect. The ball
+    flies in the middle of the goal; on the jolt's frame it is where the case puts it."""
     clip = clean_clip()
     lofted(clip)
     for n in range(PASS_AT, PASS_AT + 26):
@@ -1163,3 +1168,38 @@ def test_a_fall_without_the_down_action_fails(tmp_path):
     clip = fall_clip()
     clip["frames"][10]["players"][0]["action"] = "run"
     assert fails(run(tmp_path, clip), "P18 foul fall", "action run")
+
+
+def test_a_cut_from_the_end_of_a_half_to_the_kick_off_passes(tmp_path):
+    """Law 7, lesson 213: the ball is out of play from the end of a half to the kick-off that starts
+    the next, so a broadcast may cut away there (to a half-time card) as from any stoppage."""
+    clip = restart_clip()
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+        if e["type"] == "set_piece":
+            e["type"] = "kickoff"
+    assert run(tmp_path, cut_away(clip, 60, 120)) == {}
+
+
+def test_a_new_ball_placed_after_the_end_of_a_half_passes(tmp_path):
+    """Law 7, lesson 213: from the end of the first half the ball is out of play until the second
+    half's kick-off, so a new ball may be placed for it, as after any stoppage."""
+    clip = clean_clip()
+    for n in range(100, 150):
+        clip["frames"][n]["possessor"] = None
+    for n in range(105, 150):  # placed on the centre mark at frame 105, before the kick-off at 110
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 52.5, 34.0
+    clip["events"].append(event("e2", 100, "half_time", "away", x=50.0))
+    clip["events"].append(event("e3", 110, "kickoff", "away", "a1", x=52.5, y=34.0))
+    assert "P3 ball speed" not in run(tmp_path, clip)
+
+
+def test_a_substitution_at_half_time_passes(tmp_path):
+    """Law 3: a substitution is made at a stoppage, and the end of a half is one (Law 7)."""
+    clip = clean_clip()
+    substitute(clip, 120)
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+    assert run(tmp_path, clip) == {}

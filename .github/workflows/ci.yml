@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run on its previous head, so queued runs on superseded
+# heads stop taking runners. A run on main is never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -105,7 +111,8 @@ jobs:
 
   viewer:
     # Type-checks and builds the viewer, then drives it in headless Chromium on a bundle ninety-e2e
-    # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py).
+    # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py), and the
+    # radar across a cut (tests/test_radar.py), and match mode (tests/test_match_mode.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -119,14 +126,15 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py
+      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py tests/test_radar.py tests/test_match_mode.py
         env:
           NINETY_REQUIRE_VIEWER: "1"
 
   phone:
     # Type-checks and builds the phone companion and the viewer, then drives the phone at phone size
     # on its mock feed and against the companion API with the viewer pairing it: pairing, clock sync,
-    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py).
+    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py); the radar across
+    # a cut, answer pictures, insights and tabs (tests/test_phone_companion.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -145,7 +153,11 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_phone.py
+      - run: uv run pytest -q tests/test_phone.py tests/test_phone_companion.py
+        env:
+          NINETY_REQUIRE_PHONE: "1"
+      # Read-aloud in the pinned voice: the phone's player in a muted browser (tests/test_speech.py).
+      - run: uv run pytest -q tests/test_speech.py
         env:
           NINETY_REQUIRE_PHONE: "1"
 
@@ -176,14 +188,39 @@ jobs:
   image:
     # Builds the demo image the way the deploy does, runs it and calls it, so a file the code reads
     # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 100).
+    # The Replay bundle is a small fixture packed here (tests/fixture_bundle.py) and served from the
+    # runner, pinned by its own hash, so the job needs no release asset and no Azure. Then the live
+    # smoke test (tests/test_live_smoke.py) runs against the container, as the deploy runs it live.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: docker build -t ninety-api --build-arg NINETY_COMMIT=${{ github.sha }} .
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - name: The Dockerfile's pinned Replay bundle exists and matches its hash
+        # The build below swaps in a fixture, so without this a pin to an unpublished or replaced
+        # asset stays green here and fails only at deploy (docs/LESSONS.md, lesson 203).
+        run: |
+          url=$(sed -n 's/^ARG REPLAY_URL=//p' Dockerfile)
+          sha=$(sed -n 's/^ARG REPLAY_SHA256=//p' Dockerfile)
+          curl -fsSL --max-time 120 "$url" -o pinned.tar.gz
+          python3 infra/replay.py unpack pinned.tar.gz runs/pinned "$sha"
+      - name: Pack a fixture Replay bundle and serve it to the build
+        id: replay
+        run: |
+          echo "sha256=$(uv run python -m tests.fixture_bundle runs/fixture | tail -1)" >> "$GITHUB_OUTPUT"
+          (cd runs/fixture && python3 -m http.server 8766 >/dev/null 2>&1 &)
+      - run: >-
+          docker build --network host -t ninety-api
+          --build-arg NINETY_COMMIT=${{ github.sha }}
+          --build-arg REPLAY_URL=http://127.0.0.1:8766/replay.tar.gz
+          --build-arg REPLAY_SHA256=${{ steps.replay.outputs.sha256 }} .
       - name: The image serves health and an MCP call on the detected-events match
         run: |
           KEY=$(openssl rand -hex 16)  # made per run: no key-like literal in the repo
-          docker run -d --name api -p 8000:8000 -e NINETY_MCP_KEY="$KEY" ninety-api
+          echo "::add-mask::$KEY" && echo "NINETY_MCP_KEY=$KEY" >> "$GITHUB_ENV"  # for the smoke test's timed MCP calls
+          docker run -d --name api -p 8000:8000 -e NINETY_MCP_KEY="$KEY" \
+            -e NINETY_DEMO_PASSCODE="$(openssl rand -hex 16)" ninety-api
           for i in $(seq 1 30); do curl -fsS localhost:8000/api/health && break; sleep 1; done
           test "$(curl -fsS localhost:8000/api/health | jq -r .commit)" = "${{ github.sha }}"
           curl -fsS localhost:8000/mcp -H "x-api-key: $KEY" \
@@ -191,6 +228,13 @@ jobs:
             -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"match_info","arguments":{"match":"seed900001"}}}' \
             | tee mcp.json
           jq -e '.result.isError == false' mcp.json
+          curl -fsS localhost:8000/phone/ | grep -q '<html'  # the phone companion beside the viewer
+      - name: Live smoke test against the container
+        run: uv run pytest -q tests/test_live_smoke.py
+        env:
+          NINETY_LIVE_URL: http://127.0.0.1:8000
+          NINETY_EXPECT_COMMIT: ${{ github.sha }}
+          NINETY_REQUIRE_LIVE: "1"
       - name: The image upgrades the phone relay's WebSocket (uvicorn needs a WebSocket library for it)
         run: |
           docker run -d --name companion -p 8001:8000 -e NINETY_COMPANION=standin ninety-api

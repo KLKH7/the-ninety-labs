@@ -337,7 +337,10 @@ def ball_path(rows: list[dict]) -> list[BallPoint]:
             if near:
                 pick = near[0]
         cx, cy = (pick["bbox"][0] + pick["bbox"][2]) / 2, (pick["bbox"][1] + pick["bbox"][3]) / 2
-        on = any(d["score"] >= SCORE_MIN and d["bbox"][0] <= cx <= d["bbox"][2]
+        # Pixels compare only within one picture: on fused lines (ninety.vision.fuse) each box
+        # names the view it was drawn in.
+        on = any(d["score"] >= SCORE_MIN and d.get("view") == pick.get("view")
+                 and d["bbox"][0] <= cx <= d["bbox"][2]
                  and d["bbox"][1] <= cy <= d["bbox"][3] for d in row["players"])
         out.append(BallPoint(row["frame"], pick["x"], pick["y"], pick["score"], on, cx, cy))
     return out

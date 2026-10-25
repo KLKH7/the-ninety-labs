@@ -32,6 +32,15 @@ Ask = Callable[[str], Awaitable[str]]
 Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
 
 
+def _body(recording) -> dict:
+    """The recording as saved. A recording made before agent definitions were recorded has none,
+    and is saved without the field, so it round-trips byte for byte."""
+    body = asdict(recording)
+    if body.get("agent_definitions") is None:
+        body.pop("agent_definitions", None)
+    return body
+
+
 @dataclass
 class Turn:
     """One model answer: the Analyst's raw reply, or the Judge's verdict as JSON."""
@@ -53,11 +62,14 @@ class Recording:
     recorded_at: str
     turns: list[Turn]
     events: list[dict]  # what the fact-checker checked claims against in the live run
+    # Each published agent's version and definition fingerprint (ninety/agents/evidence.py); None in
+    # recordings made before they were recorded.
+    agent_definitions: dict | None = None
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
+        path.write_text(json.dumps({"format": REPLAY_FORMAT, **_body(self)}, indent=2) + "\n")
 
     @classmethod
     def load(cls, path: str | Path) -> Recording:
@@ -85,11 +97,12 @@ class WorkflowRecording:
     inputs: dict
     recorded_at: str
     turns: list[Turn] = field(default_factory=list)
+    agent_definitions: dict | None = None  # as Recording's
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": WORKFLOW_REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
+        path.write_text(json.dumps({"format": WORKFLOW_REPLAY_FORMAT, **_body(self)}, indent=2) + "\n")
 
     @classmethod
     def load(cls, path: str | Path) -> WorkflowRecording:

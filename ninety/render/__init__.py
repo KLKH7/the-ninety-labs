@@ -68,4 +68,19 @@ docs/decisions/0001-synthetic-data.md.
 # does next over a second; his feet stay planted through it.
 # 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
 # the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
-RENDERER_VERSION = "0.5.14"
+# 0.5.15: `views=tactical` also writes two fixed whole-pitch tactical lenses (camera.tactical_views)
+# under views/tac-l and views/tac-r, 1920x1080 without graphics, from the same scene frame for frame.
+# The broadcast's images and labels are byte-identical to 0.5.14's for every seed.
+# 0.5.16 (after #231's 0.5.15): a long ball the gantry cannot frame together with where it will be a
+# lag on is aimed at the latter, so the trailing pan lands on the ball rather than a lag behind it;
+# a goal soon after an edit cut waits for the restart's hold before the low angle (lesson 205).
+# 0.5.17 (after #231's 0.5.15 and #235's 0.5.16): a keeper's bowl (the engine's own wind-up, action
+# "bowl") is drawn as the hold it is, both hands bringing the ball down to the grass, never a kicking
+# leg. No engine before #216 names one, so every earlier clip renders byte-identical (lesson 204).
+# 0.5.18: a foul is legible (lesson 234). The fouler raises a hand and the fouled side's three nearest
+# turn their heads to the man down, for 2 s from the engine's foul frame, drawn from its event and
+# positions (bodies still face the engine's heading). The mp4 carries a synthesised whistle at each
+# foul the picture shows. Every clip shows London Athletic (LON) against Lisbon Esportes (LIS) on the
+# score bug (Kian, Oct 24); the seed's other draws are unchanged. A clip with no foul renders the same
+# pixels as 0.5.17 given those two codes.
+RENDERER_VERSION = "0.5.18"

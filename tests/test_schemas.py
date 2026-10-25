@@ -18,6 +18,8 @@ STRICT = {
     "agent_trace": "agent_trace.jsonl",
     "companion_message": "companion_message.jsonl",
     "minimap": "minimap.jsonl",
+    # truth events around the end of the first half (lesson 213): engine output, seed 7, a 70 s half
+    "match_event": "match_event.jsonl",
 }
 MIRRORS = {"viewer_question": Question, "viewer_answer": Answer, "agent_trace": TraceStep}
 
@@ -110,6 +112,15 @@ def test_an_overlay_cue_may_carry_a_pan_within_stereo():
             validator.validate({**cue, "pan": pan})
 
 
+def test_a_spoken_cue_says_whether_speech_was_available():
+    cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
+    validator = schema_validator("overlay_cue")
+    for speech in ("spoken", "unavailable"):
+        validator.validate({**cue, "kind": "audio_description", "speech": speech})
+    with pytest.raises(ValidationError):
+        validator.validate({**cue, "kind": "audio_description", "speech": "maybe"})
+
+
 def test_a_frame_says_whether_it_is_truth_or_tracked():
     frame = {"frame": 0, "t": 0.0, "ball": {"x": 52.5, "y": 34.0, "z": 0.11}, "players": []}
     validator = schema_validator("frame")
@@ -161,3 +172,10 @@ def test_focus_and_question_take_either_form(player):
     question = {**rows("viewer_question")[0], "player": player}
     schema_validator("viewer_question").validate(question)
     Question(**question)
+
+
+def test_the_event_fixture_holds_the_end_of_the_half():
+    """Lesson 213: the contract's fixture carries the half_time event, then the kick-off that starts
+    the second half."""
+    types = [r["type"] for r in rows("match_event")]
+    assert "half_time" in types and "kickoff" in types[types.index("half_time"):]

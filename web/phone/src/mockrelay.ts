@@ -26,10 +26,18 @@ export class MockLaptop {
   private readonly channel: BroadcastChannel;
   private readonly latest = new Map<string, RelayMessage>();
 
-  constructor(readonly code: string) {
+  /** `fresh` gives the clock as it stands now: a phone joining late gets that, not the last clock
+   * sent, which may be up to a second old (as the companion server does, ninety/api/companion.py). */
+  constructor(
+    readonly code: string,
+    private readonly fresh: () => RelayMessage | null = () => null,
+  ) {
     this.channel = new BroadcastChannel(channelName(code));
     this.channel.addEventListener("message", (e: MessageEvent<Hello | RelayMessage>) => {
-      if ("hello" in e.data) for (const m of this.latest.values()) this.channel.postMessage(m);
+      if (!("hello" in e.data)) return;
+      const now = this.fresh();
+      if (now) this.latest.set(now.type, now);
+      for (const m of this.latest.values()) this.channel.postMessage(m);
     });
   }
 

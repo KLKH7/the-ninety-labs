@@ -1,5 +1,8 @@
 // The bundle `ninety-e2e` writes (ninety/e2e.py), and the one rule for what is on screen.
 
+import type { MatchData } from "./match";
+import type { RadarData } from "./radar";
+
 export type Persona = "casual" | "analyst" | "audio";
 export const PERSONAS: Persona[] = ["casual", "analyst", "audio"];
 
@@ -63,6 +66,12 @@ export interface Manifest {
   agents: { mode: string; planted: boolean; claims: number; accepted: number };
   cues: number;
   audio?: { mode: string; lines: number; dropped: number; max_lag_s: number; vtt: string };
+  /** radar.json (ninety/radar.py), when the bundle was made with vision's tracked output. */
+  radar?: { source: string; frames: number; footprints: number } | null;
+  /** The clubs' names (src/teams.ts), when the bundle names them. */
+  teams?: { home: string; away: string };
+  /** match.json (ninety/condensed.py), for a condensed match. */
+  match?: { chapters: number; goals: number; min_confidence: number } | null;
 }
 
 /** One line of audio.json (ninety/speech/describe.py `Said`). */
@@ -103,6 +112,8 @@ export interface Bundle {
   claims: ClaimTrace[];
   detections: FrameDetections[];
   audio: AudioTrack | null; // bundles from before the Describer have none
+  radar: RadarData | null; // bundles made without vision's tracked output have none
+  match: MatchData | null; // only a condensed match has one
 }
 
 export const BUNDLE_FORMAT = 1;
@@ -125,13 +136,15 @@ export async function loadBundle(base: string): Promise<Bundle> {
   if (manifest.format !== BUNDLE_FORMAT) {
     throw new Error(`bundle format ${manifest.format}; this viewer reads format ${BUNDLE_FORMAT}`);
   }
-  const [cues, trace, detections, audio] = await Promise.all([
+  const [cues, trace, detections, audio, radar, match] = await Promise.all([
     get(base, "cues.jsonl").then((t) => jsonl<Cue>(t)),
     get(base, "trace.json").then((t) => JSON.parse(t) as { claims: ClaimTrace[] }),
     get(base, "detections.jsonl").then((t) => jsonl<FrameDetections>(t)),
     manifest.audio ? get(base, "audio.json").then((t) => JSON.parse(t) as AudioTrack) : Promise.resolve(null),
+    manifest.radar ? get(base, "radar.json").then((t) => JSON.parse(t) as RadarData) : Promise.resolve(null),
+    manifest.match ? get(base, "match.json").then((t) => JSON.parse(t) as MatchData) : Promise.resolve(null),
   ]);
-  return { base, manifest, cues, claims: trace.claims, detections, audio };
+  return { base, manifest, cues, claims: trace.claims, detections, audio, radar, match };
 }
 
 /**

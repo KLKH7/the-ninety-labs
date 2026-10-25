@@ -30,16 +30,20 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .persona button[aria-checked="true"] kbd { color: var(--bg); border-color: var(--bg); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* The radar sits beside the video; on a narrow screen straight under it, before the pipeline. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; grid-template-areas: "player side" "pipe side"; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
+.player { grid-area: player; min-width: 0; }
+.side { grid-area: side; }
+.layout > .pipeline { grid-area: pipe; align-self: start; margin: 0; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "player" "side" "pipe"; } }
 
 .stage { position: relative; aspect-ratio: var(--aspect); background: #000; border-radius: 8px; overflow: hidden; }
 .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage canvas[hidden], .stage video[hidden] { display: none; }
 
-.controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
 .controls button { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 18px; min-width: 88px; cursor: pointer; }
-.controls input[type="range"] { flex: 1; accent-color: var(--accent); }
+.controls input[type="range"] { flex: 1 1 120px; min-width: 0; accent-color: var(--accent); }
 .controls output { font: 600 1rem ui-monospace, monospace; min-width: 5ch; }
 .keys { color: var(--muted); font-size: 0.85rem; margin: 8px 0; }
 .audio-note { margin: 0 0 8px; padding: 8px 12px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 4px; }
@@ -52,6 +56,22 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .pipeline dd.warn::before { content: "⚠ "; }
 
 .side { display: grid; gap: 16px; align-content: start; }
+.radar-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 10px; }
+.radar-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.radar-head h2 { margin: 0; font-size: 1.05rem; }
+.radar-source { color: var(--muted); font-size: 0.8rem; }
+#radar { display: block; width: 100%; border-radius: 6px; background: #123d2b; }
+#radar[hidden], #radar-panel[hidden], .radar-legend[hidden] { display: none; }
+.radar-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; padding: 0; font-size: 0.8rem; color: var(--muted); }
+.radar-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.radar-legend .dir { color: var(--muted); opacity: 0.8; }
+.radar-legend .key { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.radar-legend .home { background: #4ea1ff; }
+.radar-legend .away { background: #ffb02e; box-shadow: inset 0 0 0 2px #2a1800; }
+.radar-legend .guess { border: 2px solid var(--ink); opacity: 0.75; }
+.radar-legend .view { border-radius: 2px; width: 16px; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.7); }
+.radar-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--tag); }
+.radar-note:empty { display: none; }
 .phone-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
 .phone-panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .phone-panel .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
@@ -89,3 +109,77 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 @media (prefers-reduced-motion: no-preference) {
   html[data-motion="full"] .claim { transition: border-color 0.2s, box-shadow 0.2s; }
 }
+
+/* Match mode (src/match.ts): a condensed match. */
+.match { margin-bottom: 10px; }
+.match[hidden], .stats-panel[hidden], .time-skip[hidden] { display: none; }
+.match-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.match-tag { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bg); background: var(--tag); border-radius: 999px; padding: 2px 9px; }
+.score { font: 800 1.35rem system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.chapter-now { color: var(--muted); font-size: 0.9rem; }
+.match-honest { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
+.match-honest.warn { color: var(--tag); }
+.match-honest.warn::before { content: "⚠ "; }
+body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match-keys { display: none; }
+
+.time-skip { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); z-index: 1; background: rgba(13, 27, 62, 0.94); color: #fff; border-left: 5px solid #e8ff3a; padding: 7px 14px; font: 700 clamp(0.8rem, 1.6vw, 1.05rem) system-ui, sans-serif; letter-spacing: 0.02em; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .time-skip:not(.still) { animation: skip-in 0.25s ease-out; }
+}
+@keyframes skip-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.chapter-bar { position: relative; margin-top: 10px; }
+.chapter-bar ol { list-style: none; display: flex; gap: 3px; margin: 0; padding: 0; }
+.chapter-bar li { min-width: 28px; flex-basis: 0; display: flex; }
+.chapter { flex: 1; min-width: 0; height: 42px; border: 0; border-radius: 4px; padding: 3px 7px; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: center; font: inherit; background: #2a3a50; color: var(--ink); }
+.chapter-time { font: 600 0.7rem ui-monospace, monospace; opacity: 0.8; }
+.chapter-label { font-size: 0.8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chapter.goal { background: var(--accent); color: #04130d; }
+.chapter.save { background: #7cc4ff; color: #04172b; }
+.chapter.shot { background: #c9a6ff; color: #1b0d33; }
+.chapter.set_piece { background: var(--tag); color: #231800; }
+.chapter[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+.chapter:not([aria-current="true"]) { opacity: 0.72; }
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; pointer-events: none; transform: translateX(-1px); }
+
+.stats-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.stats { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.stats th, .stats td { padding: 5px 4px; text-align: right; border-top: 1px solid var(--line); }
+.stats tr:first-child th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+.stats th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; }
+.stats td { font-weight: 700; }
+
+/* The big screen (main.ts, bigScreen): the broadcast, its graphics, score and clock, the chapters
+   and the QR code; everything else is on the phone. ?dev=1 shows it all. */
+body[data-screen="big"] .dev-only,
+body[data-screen="big"] .skip,
+body[data-screen="big"] #radar-section,
+body[data-screen="big"] .stats-panel,
+body[data-screen="big"] .trace,
+body[data-screen="big"] .layout > .pipeline,
+body[data-screen="big"] .match-honest:not(.warn) { display: none !important; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "player side"; grid-template-rows: auto; }
+body[data-screen="big"] .phone-panel { position: sticky; top: 16px; text-align: center; }
+body[data-screen="big"] .phone-panel .hint { font-size: 0.8rem; }
+body[data-screen="big"] .phone-qr { width: 100%; max-width: 208px; margin: 10px auto 6px; }
+body[data-screen="big"] #phone-pair { display: none; }
+body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
+@media (max-width: 900px) { body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "side"; } }
+
+/* The big screen's pairing card: a lower-third, like a TV app's sign-in card (black, white type), up for PAIR_CARD_S at kick-off and each chapter (match.ts). */
+.pair-card { position: absolute; right: 3%; bottom: 7%; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 10px;
+  background: #000; color: #fff; border-radius: 10px; font: 500 clamp(0.8rem, 1.5vw, 1.05rem)/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 70%; }
+.pair-card[hidden] { display: none; }
+.pair-qr { width: clamp(56px, 7vw, 92px); flex: none; background: #fff; border-radius: 6px; padding: 4px; line-height: 0; }
+.pair-qr svg { width: 100%; height: auto; }
+.pair-text { display: grid; gap: 2px; }
+.pair-kicker { font-size: 0.75em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b8bec8; }
+.pair-line b { font-weight: 700; }
+.pair-code { color: #fff; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .pair-card:not(.still) { animation: pair-in 0.35s ease-out; }
+}
+@keyframes pair-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* On the big screen the card replaces the side panel. */
+body[data-screen="big"] .side { display: none; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player"; }

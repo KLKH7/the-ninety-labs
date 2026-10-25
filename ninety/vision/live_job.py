@@ -11,10 +11,17 @@ owns it, nothing re-implemented here:
     -> events (tracks, teams, possession, passes, shots, out of play) -> tracked_frames (minimap)
 
 The input folder may hold only `index.jsonl` (ninety.vision.frame_index: clip id, frame, time and
-image path per frame) and `images/`. Anything else is refused before a model loads, so the answer
-key and the render settings cannot travel with the clip, and detect's fallback to the labelled
-frame file never runs. The index must list exactly the images in `images/`, in order, as observe
-pairs them with the detection lines.
+image path per frame) and `images/`, or, for the fixed tactical camera, only `views/<name>/`, each
+view holding only its own `index.jsonl` and `images/`. Anything else, at any depth, is refused
+before a model loads, so the answer key and the render settings cannot travel with the clip, and
+detect's fallback to the labelled frame file never runs. Each index must list exactly the images
+in its `images/`, in order, as observe pairs them with the detection lines; the views must list the
+same frames of one clip.
+
+With views, each view is detected and placed on its own (detect, observe), and the views'
+observations are merged on the pitch (ninety.vision.fuse) before events; `views/<name>/` under
+`--out` holds each view's detections and observations, and observations.jsonl is the merged one.
+`--tiles` detects each frame as a 2 x 2 grid of tiles (ninety.vision.tiles).
 
 Writes to `--out`:
 
@@ -54,26 +61,28 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import observe, track, tracked_frames
+from ninety.vision import fuse, observe, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
-from ninety.vision.frame_index import INDEX
+from ninety.vision.frame_index import INDEX, VIEWS
 from ninety.vision.model import load, model
 
 IMAGES = "images"
-ALLOWED = {INDEX, IMAGES}  # all the input folder may hold
+ALLOWED = {INDEX, IMAGES}  # all a view folder may hold
 
 Detector = Callable[[list[dict]], list[FrameDetections]]
 
 
-def check_input(clip: Path) -> list[dict]:
-    """The clip's frame rows, after refusing a folder that holds anything but the index and the
-    images, or whose index does not list exactly its images in order."""
+def _check_view(clip: Path) -> list[dict]:
+    """The view's frame rows, after refusing a folder that holds anything but the index and the
+    images (at any depth), or whose index does not list exactly its images in order."""
     if not (clip / INDEX).is_file() or not (clip / IMAGES).is_dir():
         raise SystemExit(f"{clip}: needs {INDEX} (python -m ninety.vision.frame_index) and {IMAGES}/")
     extra = sorted(p.name for p in clip.iterdir() if p.name not in ALLOWED)
+    extra += sorted(str(p.relative_to(clip)) for p in (clip / IMAGES).rglob("*")
+                    if p.is_dir() or p.suffix != ".jpg")
     if extra:
-        raise SystemExit(f"{clip}: refused: the input may hold only {INDEX} and {IMAGES}/, not {extra}")
+        raise SystemExit(f"{clip}: refused: the input may hold only {INDEX} and {IMAGES}/*.jpg, not {extra}")
     rows = frame_rows(clip)
     images = sorted((clip / IMAGES).glob("*.jpg"))
     if not rows or [Path(r["image"]).resolve() for r in rows] != [p.resolve() for p in images]:
@@ -81,6 +90,31 @@ def check_input(clip: Path) -> list[dict]:
     if len({r["clip"] for r in rows}) != 1:
         raise SystemExit(f"{clip}: {INDEX} names more than one clip")
     return rows
+
+
+def check_views(clip: Path) -> dict[str, list[dict]]:
+    """Each view's frame rows ({"": rows} for a single-camera clip), after refusing a folder that
+    holds anything else, at any depth (module docstring)."""
+    if not clip.is_dir():
+        raise SystemExit(f"{clip}: not a folder")
+    if not (clip / VIEWS).exists():
+        return {"": _check_view(clip)}
+    extra = sorted(p.name for p in clip.iterdir() if p.name != VIEWS)
+    extra += sorted(f"{VIEWS}/{p.name}" for p in (clip / VIEWS).iterdir() if not p.is_dir())
+    if extra:
+        raise SystemExit(f"{clip}: refused: a clip with {VIEWS}/ may hold only {VIEWS}/<name>/, not {extra}")
+    views = {p.name: _check_view(p) for p in sorted((clip / VIEWS).iterdir())}
+    if len(views) < 2:
+        raise SystemExit(f"{clip}: {VIEWS}/ must hold two views or more, not {sorted(views)}")
+    keys = {n: [(r["clip"], r["frame"], r["t"]) for r in rows] for n, rows in views.items()}
+    if len({tuple(k) for k in keys.values()}) != 1:
+        raise SystemExit(f"{clip}: the views' indexes do not list the same frames of one clip")
+    return views
+
+
+def check_input(clip: Path) -> list[dict]:
+    """A single-camera clip's frame rows, or the first view's (they all list the same frames)."""
+    return next(iter(check_views(clip).values()))
 
 
 def _rgb(path: Path) -> np.ndarray:
@@ -99,7 +133,7 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
     """Run the live path on `clip` into `out` and return run.json's contents. `load_detector()`
     loads the model and returns a function from frame rows to detections; it is passed in so the
     tests run the real stages after it without rfdetr installed."""
-    rows = check_input(clip)
+    views = check_views(clip)
     out.mkdir(parents=True, exist_ok=True)
     seconds: dict[str, float] = {}
     clock = time.perf_counter()
@@ -107,30 +141,43 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
     def lap(stage: str) -> None:
         nonlocal clock
         now = time.perf_counter()
-        seconds[stage] = round(now - clock, 3)
+        seconds[stage] = seconds.get(stage, 0.0) + round(now - clock, 3)
         clock = now
 
     detector = load_detector()
     lap("load")
-    dets = detector(rows)
-    lap("detect")
-    write_detections(out / "detections.jsonl", dets)
-    _jsonl(out / "observations.jsonl", observe.observe([r["image"] for r in rows], dets, _rgb))
-    lap("observe")
+    placed, n_dets = {}, 0
+    for name, rows in views.items():
+        where = out / VIEWS / name if name else out
+        where.mkdir(parents=True, exist_ok=True)
+        dets = detector(rows)
+        n_dets += sum(len(d.detections) for d in dets)
+        lap("detect")
+        write_detections(where / "detections.jsonl", dets)
+        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=bool(name))
+        if name:
+            _jsonl(where / "observations.jsonl", placed[name])
+        lap("observe")
+    _jsonl(out / "observations.jsonl", placed[""] if "" in placed else fuse.fuse(placed))
+    if "" not in placed:
+        lap("fuse")
     # Read back as the events stage always reads its input, so this run and the CLIs agree.
     obs = track.read_observations(out / "observations.jsonl")
     found, summary = ev.detect(obs)
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     lap("events")
+    rows = next(iter(views.values()))
     clip_id = rows[0]["clip"]
     tracked = tracked_frames.build(obs, clip_id)
     (out / "tracked.json").write_text(tracked_frames.text(tracked), encoding="utf-8")
     lap("tracked")
+    seconds = {k: round(v, 3) for k, v in seconds.items()}
     report = {
         "clip": clip_id,
         "frames": len(rows),
+        "views": sorted(n for n in views if n),
         "camera_ok": summary["frames_camera_ok"],
-        "detections": sum(len(d.detections) for d in dets),
+        "detections": n_dets,
         "events": summary["events"],
         "named": summary["named"],
         "seconds": seconds | {"total": round(sum(seconds.values()), 3)},
@@ -169,13 +216,15 @@ def verify_checkpoint(weights: Path, checkpoint: str, manifest: Path | None = No
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Run the live path of event detection on one clip, timed.")
-    ap.add_argument("clip", type=Path, help=f"a folder holding only {INDEX} and {IMAGES}/")
+    ap.add_argument("clip", type=Path,
+                    help=f"a folder holding only {INDEX} and {IMAGES}/, or only {VIEWS}/<name>/ with those")
     ap.add_argument("--checkpoint", required=True, help='our checkpoint name, e.g. ours-v4, or "coco"')
     ap.add_argument("--weights", type=Path, default=None, help="checkpoint file (not for coco)")
     ap.add_argument("--manifest", type=Path, default=None,
                     help="its training record (default: train-manifest.json beside the weights)")
     ap.add_argument("--resolution", type=int, default=None, help="default: the trained size")
     ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--echo", action="store_true",
                     help="also print run.json and each detected event, one JSON line each (the job's log)")
@@ -194,12 +243,13 @@ def main(argv: list[str] | None = None) -> None:
     def load_detector() -> Detector:
         det = load(weights, resolution=resolution)
         label = labels_for(a.checkpoint, det.class_names)
-        return lambda rows: detect_rows(det, rows, label, field, a.batch)
+        return lambda rows: detect_rows(det, rows, label, field, a.batch, a.tiles)
 
     about = {
         "model": asdict(field),
         "weights_sha256": record.get("checkpoint_sha256"),
         "resolution": resolution,
+        "tiles": a.tiles,
         "commit": os.environ.get("NINETY_COMMIT", "unknown"),
     }
     report = run(a.clip, a.out, load_detector, about)

@@ -8,6 +8,9 @@ Output directory layout:
     frames.jsonl    one row per frame (frame schema): positions, camera, boxes, visibility, keypoints
     images/NNNNN.jpg
     clip.mp4        only with --mp4 and ffmpeg on PATH (viewing copy; training reads the JPEGs)
+    views/<name>/   only with views=tactical: each fixed tactical lens (camera.tactical_views) as a
+                    complete clip of its own (clip.json with `view`, meta.json, events.jsonl,
+                    frames.jsonl, images/), the same match frames as the broadcast, without graphics
 """
 
 from __future__ import annotations
@@ -22,13 +25,21 @@ import shutil
 import subprocess
 import threading
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION, edit, fouls
-from ninety.render.camera import Camera, Director, blur_vector, corner_waits
-from ninety.render.params import RenderParams, sample_params
+from ninety.render import RENDERER_VERSION, audio, edit, fouls
+from ninety.render.camera import (
+    TACTICAL_VIEWS,
+    Camera,
+    Director,
+    blur_vector,
+    corner_waits,
+    tactical_views,
+)
+from ninety.render.params import RenderParams, sample_params, validate
 from ninety.render.scene import (
     ACCEL_BOX,
     LEAD_AHEAD_FRAMES,
@@ -203,10 +214,18 @@ def render_clip(
     gpu: bool = False,
     write_images: bool = True,
     page=None,
+    views: str | None = None,
 ) -> dict:
-    """Render one clip and return its clip.json content."""
+    """Render one clip and return its clip.json content.
+
+    `views` (params.VIEWS) adds streams beside the broadcast without changing it; it is not an
+    override, so a test-set seed may have them too."""
     overrides = dict(overrides or {})
     p = sample_params(seed, **overrides)
+    if views is not None:
+        p = replace(p, views=views)
+        validate(p)
+    view_cams = dict(zip(TACTICAL_VIEWS, tactical_views(p), strict=True)) if p.views == "tactical" else {}
     n = int(round(seconds * p.fps))
     if p.fps != FPS:
         raise ValueError(f"the simulator runs at {FPS} fps")
@@ -282,15 +301,27 @@ def render_clip(
     }
 
     ctx = browser_page(gpu) if page is None else _nullctx(page)
-    with ctx as (pg, chromium_version):
+    with ctx as (pg, chromium_version), ExitStack() as stack:
         clip["renderer"]["chromium"] = chromium_version
         info = pg.evaluate(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
+        # Each tactical lens films the same scene in a page of its own: the same seed, looks and
+        # per-frame spec as the broadcast, its own camera and picture size, and no graphics.
+        vpages = {}
+        for name, vcam in view_cams.items():
+            vpg = stack.enter_context(_sibling_page(pg))
+            vparams = {**p.to_dict(), "width": vcam.width, "height": vcam.height}
+            vpg.evaluate("cfg => window.ninety.init(cfg)",
+                         {"seed": seed, "params": vparams, "objects": objects, "graphics": False})
+            vpages[name] = vpg
+            (out / "views" / name / "images").mkdir(parents=True)
+        view_rows: dict[str, list[dict]] = {name: [] for name in view_cams}
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
+        reacts = fouls.reactions(frames, match.events)  # hands up, heads turned at a foul (lesson 234)
         held = holds(frames)
         thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
@@ -323,6 +354,9 @@ def render_clip(
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
+                mine = reacts.get(pl["id"], [])
+                fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
+                fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
@@ -393,29 +427,45 @@ def render_clip(
             clock = match_clock(fr["t"])
             recent = [g for g in goals if 0 <= fr["t"] - g["t"] <= 2.5]
             last = recent[-1] if recent else None
-            res = pg.evaluate(
-                "s => window.ninety.frame(s)",
-                {
-                    "index": index,
-                    "camera": {"position": list(cam.position), "R": cam.R, "fov_v_deg": cam.fov_v_deg},
-                    "objects": spec_objects,
-                    "keypoints": [[k["px"], k["py"]] for k in kps],
-                    "blur": list(blur),
-                    "score": score,
-                    "clock": clock,
-                    "goal_age": round(fr["t"] - last["t"], 3) if last else None,
-                    "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
-                    "net": director.net_view(),
-                    "stinger": stinger_at.get(index),
-                    "want_image": write_images,
-                },
-            )
+            spec = {
+                "index": index,
+                "camera": {"position": list(cam.position), "R": cam.R, "fov_v_deg": cam.fov_v_deg},
+                "objects": spec_objects,
+                "keypoints": [[k["px"], k["py"]] for k in kps],
+                "blur": list(blur),
+                "score": score,
+                "clock": clock,
+                "goal_age": round(fr["t"] - last["t"], 3) if last else None,
+                "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
+                "net": director.net_view(),
+                "stinger": stinger_at.get(index),
+                "want_image": write_images,
+            }
+            res = pg.evaluate("s => window.ninety.frame(s)", spec)
             image = f"images/{index:05d}.jpg"
             if write_images:
                 (out / image).write_bytes(base64.b64decode(res["image"].split(",", 1)[1]))
             rows.append(
                 _frame_row(fr, cam, ball, row_players, res, kps, blur, image, clip["clip_id"], director.angle)
             )
+            for name, vcam in view_cams.items():
+                # The same bodies and ball, boxed and keyed for this lens. It never moves, so nothing
+                # smears; the broadcast's stinger is the broadcast's alone.
+                vkps = project_keypoints(vcam)
+                vspec = {
+                    **spec,
+                    "camera": {"position": list(vcam.position), "R": vcam.R, "fov_v_deg": vcam.fov_v_deg},
+                    "objects": [{**o, "box": parts_box(vcam, o["parts"])} for o in spec_objects],
+                    "keypoints": [[k["px"], k["py"]] for k in vkps],
+                    "blur": [0.0, 0.0],
+                    "stinger": None,
+                }
+                vres = vpages[name].evaluate("s => window.ninety.frame(s)", vspec)
+                if write_images:
+                    jpg = base64.b64decode(vres["image"].split(",", 1)[1])
+                    (out / "views" / name / image).write_bytes(jpg)
+                view_rows[name].append(_frame_row(fr, vcam, ball, row_players, vres, vkps, (0.0, 0.0),
+                                                  image, _view_id(clip["clip_id"], name), name))
             index += 1
 
     with open(out / "frames.jsonl", "w") as f:
@@ -426,16 +476,73 @@ def render_clip(
         for e in events:
             f.write(json.dumps(e) + "\n")
     clip["event_counts"] = dict(Counter(e["type"] for e in events))
+    # The referee's whistle on the sound track at each foul the picture shows (lesson 234), by
+    # picture index: a foul inside a stretch the edit cut is not heard.
+    shown = {f: i for i, f in enumerate(show)}
+    fouled = (e["frame"] for e in events if e["type"] == "foul")
+    clip["whistles"] = sorted(shown[f] for f in fouled if f in shown)
     clip["ball_visibility_lt_0_5"] = round(
         sum(1 for r in rows if r["ball"]["visibility"] < 0.5 and r["ball"]["bbox"])
         / max(1, sum(1 for r in rows if r["ball"]["bbox"])),
         4,
     )
+    for name, vcam in view_cams.items():
+        _write_view(out, clip, name, vcam, view_rows[name], events)
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
     write_meta(out)
     if mp4:
-        _encode_mp4(out, p.fps)
+        _encode_mp4(out, p.fps, [i / p.fps for i in clip["whistles"]], n / p.fps)
+        for name in view_cams:
+            _encode_mp4(out / "views" / name, p.fps)
     return clip
+
+
+def _view_id(clip_id: str, name: str) -> str:
+    return f"{clip_id}-{name}"
+
+
+def _write_view(out: Path, clip: dict, name: str, cam: Camera, rows: list[dict], events: list[dict]) -> None:
+    """One tactical lens as a complete clip folder: the broadcast's clip.json with its own id, size
+    and `view`, no graphics; the same events; its own frames; then meta.json from those files."""
+    d = out / "views" / name
+    with open(d / "frames.jsonl", "w") as f:
+        for r in rows:
+            f.write(json.dumps(r, separators=(",", ":")) + "\n")
+    with open(d / "events.jsonl", "w") as f:
+        for e in events:
+            f.write(json.dumps(e) + "\n")
+    vclip = {
+        **clip,
+        "clip_id": _view_id(clip["clip_id"], name),
+        "params": {**clip["params"], "width": cam.width, "height": cam.height},
+        # A fixed lens of the clip in the folder two levels up, filmed frame for frame with it.
+        "view": {"name": name, "of": clip["clip_id"], "fixed": True, "camera": cam.to_dict()},
+        "stinger_frames": [],
+        "scorebug_px": None,
+        "ball_visibility_lt_0_5": round(
+            sum(1 for r in rows if r["ball"]["visibility"] < 0.5 and r["ball"]["bbox"])
+            / max(1, sum(1 for r in rows if r["ball"]["bbox"])),
+            4,
+        ),
+    }
+    (d / "clip.json").write_text(json.dumps(vclip, indent=2))
+    write_meta(d)
+
+
+@contextmanager
+def _sibling_page(page):
+    """Another page with the renderer loaded, in the same browser as `page`."""
+    errors: list[str] = []
+    sib = page.context.browser.new_page()  # a page of its own: browser.new_page's context owns one
+    try:
+        sib.on("pageerror", lambda exc: errors.append(str(exc)))
+        sib.goto(page.url)
+        sib.wait_for_function("window.ninety && window.ninety.ready", timeout=30_000)
+        if errors:
+            raise RuntimeError(f"renderer page error: {errors[0]}")
+        yield sib
+    finally:
+        sib.close()
 
 
 def _plan(segs: list[edit.Segment]) -> list[tuple[int | None, bool, int | None]]:
@@ -547,27 +654,20 @@ def _frame_row(
     }
 
 
-def _encode_mp4(out: Path, fps: int) -> None:
+def _encode_mp4(out: Path, fps: int, whistles: list[float] | None = None,
+                seconds: float | None = None) -> None:
+    """clip.mp4 from the JPEGs, with a sound track carrying a whistle at each time in `whistles`
+    (audio.py) when there is one."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RenderUnavailable("--mp4 needs ffmpeg on PATH; the JPEG frames are already written")
-    subprocess.run(
-        [
-            ffmpeg,
-            "-y",
-            "-loglevel",
-            "error",
-            "-framerate",
-            str(fps),
-            "-i",
-            str(out / "images" / "%05d.jpg"),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-crf",
-            "20",
-            str(out / "clip.mp4"),
-        ],
-        check=True,
-    )
+    cmd = [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(out / "images" / "%05d.jpg")]
+    wav = out / "sound.wav"
+    if whistles and seconds:
+        audio.write_wav(wav, audio.track(seconds, whistles))
+        cmd += ["-i", str(wav), "-c:a", "aac", "-b:a", "96k", "-shortest"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(out / "clip.mp4")]
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        wav.unlink(missing_ok=True)
