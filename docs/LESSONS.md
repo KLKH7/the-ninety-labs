@@ -3007,3 +3007,16 @@ short and actionable. This file is public: no research sources, product names or
   (11 kept, 12 held), `::test_a_pass_the_ball_could_not_have_made_is_held` and
   `::test_the_speed_check_allows_both_ends_position_error_and_no_more`; on the demo's t001350 every
   event's side confidence is 0 and the three impossible passes are held.
+
+### 231. A fallback that leaves cases undecided is scored on the cases it leaves, and its reference is measured first
+- **What happened:** the sides plan fixed a fallback, TB (tactical tracks inherit the broadcast's
+  sides), to ship if the tactical sides stayed below the broadcast's, B. B had never been scored,
+  so the condition could not be checked; scored, B was 0.578 and T1a 0.681 (on different track
+  populations and kit readers: PLAN.md's Oct 25 entry), and the fallback was not needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
+  but 38% of the tactical track-frames are players the broadcast never shows, and they get no side.
+  Judged only on what it decided, TB would have looked as good as B.
+- **Rule:** before a rule that compares with a reference is applied, the reference is measured on
+  the same clips. A variant that can leave a case undecided is scored over every case, undecided
+  ones counted against it, with its coverage reported beside its accuracy.
+- **Check:** `docs/eval/sides-tactical/B-validation.json` and `TB-validation.json`; PLAN.md's dated
+  entry gives both rates for TB.
