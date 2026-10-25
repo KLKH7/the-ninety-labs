@@ -40,6 +40,10 @@ from ninety.intel.teamsheet import Fixture
 
 BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
+HALF_MIN = 45  # Law 7: two halves of 45 minutes (GROUNDING I23)
+# The kinds a key moment is drawn from, each already a checked fact (GROUNDING I23, *design*).
+MOMENT_KINDS = ("goal", "shot", "counter", "one_two", "line_break")
+TOP_LINE_BREAKS = 3  # design: a window's key line breaks are its biggest three
 KIND_FACTS = ("line_break", "overload", "counter_press", "pass_options")
 
 
@@ -357,6 +361,32 @@ class MatchInsights:
                 r["within_pct"] = pct
             facts.append(r)
         return {"facts": facts, "summary": []}
+
+    def halves(self, minute_from: int = 1, minute_to: int | None = None, club: str | None = None) -> dict:
+        """The same summaries for each half (Law 7's 45 minutes) up to minute_to (the match so far
+        when None): where the ball was, the shots and what the passes did, first half then second, so
+        a fan can compare them. minute_from is ignored: a half starts where the Law starts it."""
+        now = self.minutes if minute_to is None else min(minute_to, self.minutes)
+        spans = [(1, min(HALF_MIN, now))]
+        if now > HALF_MIN:
+            spans.append((HALF_MIN + 1, now))
+        summary = []
+        for lo, hi in spans:
+            for tool in (self.territory, self.shots, self.passing):
+                summary += tool(lo, hi, club)["summary"]
+        return {"facts": [], "summary": summary}
+
+    def key_moments(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The window's key moments, latest first: its goals, shots, regains that led to a shot,
+        one-twos and its biggest line breaks, each a fact code can say."""
+        moments = []
+        for kind in MOMENT_KINDS:
+            rows = [r for r in self._rows(kind, minute_from, minute_to, club) if r.get("confident")]
+            if kind == "line_break":
+                rows = sorted(rows, key=lambda r: (-r["value"], r["t"]))[:TOP_LINE_BREAKS]
+            moments += rows
+        moments.sort(key=lambda r: -r["t"])
+        return {"facts": moments[:MAX_FACTS], "summary": []}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)

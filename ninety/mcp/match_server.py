@@ -48,6 +48,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
     "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
+    "halves", "key_moments",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -237,6 +238,19 @@ def territory(match: str, minute_from: int, minute_to: int, club: str | None = N
     return _insight(match, "territory", minute_from, minute_to, club)
 
 
+def halves(match: str, minute_to: int, club: str | None = None) -> dict:
+    """The first half against the second (Law 7's 45 minutes), up to a match minute: where the ball
+    was, the shots and what the passes did in each, with the same ids and bounds as those tools. Cite
+    by id."""
+    return _insight(match, "halves", 1, minute_to, club)
+
+
+def key_moments(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The key moments between two match minutes, latest first: goals, shots, regains that led to a
+    shot, one-twos and the biggest line breaks, each a checked fact. Cite by id."""
+    return _insight(match, "key_moments", minute_from, minute_to, club)
+
+
 def physical(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
     """Each named player's running between two match minutes: distance in km (from the footage
     shown, with its measured error as within_pct), top speed in km/h, sprints above 25.2 km/h held
@@ -347,7 +361,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
-        possession, territory, shots, passing, physical,
+        possession, territory, shots, passing, physical, halves, key_moments,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

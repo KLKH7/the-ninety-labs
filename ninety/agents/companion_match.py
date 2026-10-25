@@ -56,8 +56,14 @@ MATCH_TOOLS = (
     "shots",
     "passing",
     "physical",
+    "halves",
+    "key_moments",
 )
 TOOL_HELP = {
+    "halves": "the first half against the second (Law 7's 45 minutes): where the ball was, the shots and "
+    "what the passes did in each",
+    "key_moments": "the key moments, latest first: goals, shots, regains that led to a shot, one-twos and "
+    "the biggest line breaks",
     "physical": "each named player's running: distance in km (from the footage shown, give or take its "
     "measured error), top speed in km/h, sprints above 25.2 km/h, and the zone he was in most",
     "passing": "what the passes did: progressive passes, passes into the final third, long balls and "
@@ -131,6 +137,16 @@ TOOL_WORDS = (
         "team_shape",
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
         r"|width|spread out)\b",
+    ),
+    (
+        "halves",
+        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|since the break|after the break|half[- ]time"
+        r"|first half (?:and|v|vs|against) (?:the )?second)\b",
+    ),
+    (
+        "key_moments",
+        r"\b(?:key moments?|highlights?|what (?:have|did) i miss\w*|what happened|catch me up|recap"
+        r"|timeline)\b",
     ),
     (
         "physical",
@@ -363,6 +379,16 @@ FOLLOW_UPS = {
         "Where are {club} outnumbering them?",
         "And in the last ten minutes?",
         "How are {club} playing?",
+    ),
+    "halves": (
+        "Where has the ball been?",
+        "How many shots have there been?",
+        "Which passes cut through?",
+    ),
+    "key_moments": (
+        "Which passes cut through?",
+        "How many shots have there been?",
+        "Where has the ball been?",
     ),
     "physical": (
         "Who has been the best player?",
@@ -609,6 +635,9 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     unit for how many or how fast, the place for where; the supporting number stays in the sentence.
     A question of another kind is headed by the lead number, or by nothing."""
     kind = question_kind(question)
+    goal = next((f for f in cited if f.get("kind") == "goal" and f.get("club") and f.get("minute")), None)
+    if goal is not None and kind != "who":  # a recap with a goal in it leads with the goal
+        return f"Goal: {_short(insights, goal['club'])}, minute {goal['minute']}"
     if kind == "who":
         got = next((h for f in cited if (h := _who(f, insights))), None)
         got = got or next((_short(insights, f["club"]) for f in cited if f.get("club")), None)
