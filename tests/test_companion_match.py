@@ -921,3 +921,15 @@ def test_a_checked_sentence_of_a_fact_it_does_not_cite_is_not_its_choice():
 
     r = asyncio.run(companion.answer_match(q, mi, _choose(other)))
     assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,)
+
+
+def test_the_aired_text_is_the_checked_sentence_exactly():
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def padded(facts):
+        f = facts[0]
+        return "  " + f["say_as"][0] + "\n", [f["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(padded)))
+    assert r.source == "model" and r.answer.text == r.answer.text.strip()

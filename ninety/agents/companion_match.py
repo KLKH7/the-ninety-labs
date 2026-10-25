@@ -889,6 +889,7 @@ async def answer_match(
         chosen = {t for i in claim.evidence if i in known for t in _say_as(known[i], known, insights)}
         if claim.text.strip() not in chosen:
             return calls, claim, Verdict(ok=False, reasons=[NOT_CHOSEN]), facts
+        claim = Claim(claim.text.strip(), claim.evidence)  # the checked sentence exactly, nothing around it
         verdict = _verify(claim, known, insights)
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
