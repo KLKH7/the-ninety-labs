@@ -10,7 +10,9 @@ from ninety.match.facts import compact
 
 ROWS = {r["scenario"]: r for r in wf.rows()}
 BASE = ROWS["none"]
-KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(wf.m1_ground().events))}
+M1 = wf.m1_ground()
+MAIN, SIDE = M1.main, M1.side
+KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(M1.events))}
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
@@ -47,7 +49,7 @@ def test_failure_row(name):
     assert set(row["templates"]) <= set(BASE["templates"])
     assert len(BASE["templates"]) - len(row["templates"]) == lost
     if lost:  # only the unsure detection's graphics are gone
-        assert all(f"-{wf.SIDE}-" in i for i in set(BASE["templates"]) - set(row["templates"]))
+        assert all(f"-{SIDE}-" in i for i in set(BASE["templates"]) - set(row["templates"]))
     if row["status"] == "held":
         assert any("stays" in step for step in row["fallback"])  # the trace says the template stayed
 
@@ -83,7 +85,7 @@ def test_a_baseline_on_another_moment_than_the_main_pass_still_reads_its_claim()
     # The live baseline on M1 read "none" with a verified insight on screen: the Analyst had led
     # with another moment than the scripted main pass. Here it leads with the second pass.
     async def analyst(prompt: str) -> str:
-        return wf.picks(wf.SIDE, [wf.SIDE, wf.MAIN])
+        return wf.picks(SIDE, [SIDE, MAIN])
 
     other = wf.Scenario("none", "nothing (the baseline)", claim="verified",
                         override=lambda agent: {"analyst": analyst})
@@ -159,7 +161,7 @@ def test_the_offline_spanish_is_spanish():
     assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
     assert BASE["variants_english"] == BASE["variants_missing"] == BASE["variants_refused"] == []
     spanish = [i["text"] for i in BASE["insights"] if i["lang"] == "es"]
-    assert spanish and all(text == wf.claim_in_spanish(wf.MAIN, KNOWN) for text in spanish)
+    assert spanish and all(text == wf.claim_in_spanish(MAIN, KNOWN) for text in spanish)
 
 
 def test_the_baseline_fails_when_a_spanish_profile_gets_english():
@@ -369,14 +371,14 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
 
     monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Signed(3600)))
     monkeypatch.setattr(workflow, "simulated_events", simulate)
-    m1 = {wf.MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
+    m1 = {MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
     built = {e["id"]: compact(e) for e in EVENTS}
     seed = (PASSES[0]["id"], PASSES[1]["id"], built)
     # The live models each scenario still calls: the Analyst in 4, the Tactician in 3; the
     # Challenger in 4 on the M1 clip, 3 on a seed (the low-confidence row, M1 only, has its Analyst
     # and Tactician injected).
     replies = {"moment-analyst": [], "tactician": [], "challenger": [], "judge": [SUPPORTED] * 60}
-    for (main, side, known), challenges in (((wf.MAIN, wf.SIDE, m1), 4), (seed, 3), (seed, 3)):
+    for (main, side, known), challenges in (((MAIN, SIDE, m1), 4), (seed, 3), (seed, 3)):
         replies["moment-analyst"] += [wf.picks(main, [main, side])] * 4
         replies["tactician"] += [wf.reply(wf.claim_on(main, known))] * 3
         replies["challenger"] += ['{"agree": true}'] * challenges
@@ -489,3 +491,18 @@ def test_a_report_with_a_nan_is_refused_not_written(module):
     mod = importlib.import_module(f"ninety.eval.{module}")
     with pytest.raises(ValueError):
         mod.results({"rows": [{"x": float("nan")}]} if module == "agent_ablation" else [{"x": float("nan")}])
+
+
+def test_the_ground_picks_its_passes_by_what_they_are_not_by_id():
+    # A detected event's id is its place in the clip's order: a new kind of event (a possession
+    # change, #289) renumbers every event after it. The ground must still pick the same two passes.
+    events = [dict(e) for e in M1.events]
+    first = next(i for i, e in enumerate(events) if e["id"] == MAIN)
+    planted = {**events[first], "type": "possession_change", "outcome": None, "t": events[first]["t"] + 0.1}
+    shifted = events[:first + 1] + [planted] + events[first + 1:]
+    for n, e in enumerate(shifted, start=1):
+        e["id"] = f"v{n:05d}"
+    g = wf.ground_of("m1", shifted)
+    by_id = {e["id"]: e for e in shifted}
+    assert (by_id[g.main]["t"], by_id[g.side]["t"]) == (66.88, 73.72)
+    assert g.side != SIDE  # the premise: the side pass's id did move
