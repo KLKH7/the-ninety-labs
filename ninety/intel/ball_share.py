@@ -100,6 +100,8 @@ def territory_rows(frames: Sequence[Mapping]) -> list[dict]:
             r["seconds"] += 1
             if not ball or ball.get("x") is None:
                 continue
+            if not 0.0 <= float(ball["x"]) <= PITCH_X:
+                continue  # beyond a goal line: out of play, in no third (merge-queue review of #314)
             third, near = _third(float(ball["x"]), team)
             r["seen"] += 1
             if near:
