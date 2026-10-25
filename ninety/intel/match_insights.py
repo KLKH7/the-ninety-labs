@@ -31,6 +31,7 @@ from ninety.intel import (
     physical,
     roles,
     scoring,
+    set_pieces,
     shape,
     shot_map,
     style,
@@ -121,6 +122,7 @@ class MatchInsights:
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
         facts["save"] = scoring.saves(events)
+        facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs[r["team"]]
@@ -350,6 +352,17 @@ class MatchInsights:
                 r["within_pct"] = pct
             facts.append(r)
         return {"facts": facts, "summary": []}
+
+    def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each kind of restart over the minutes: the total, and each club's count with bounds."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in set_pieces.summary(self.facts.get("restart", ()), minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        return {"facts": [], "summary": summary}
 
     def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """The score after minute_to (said only when no goal's side is in doubt), each goal up to then

@@ -6,10 +6,10 @@ Caveat: the same author wrote the claim templates, the plants and the checker. T
 
 | Players missing a frame | True claims | Wrongly stopped | Planted false | Caught | Unsure claims | Held |
 |---|---|---|---|---|---|---|
-| 0% | 817 | 0 | 5599 | 5599 | 207 | 207 |
-| 5% | 761 | 0 | 5024 | 5024 | 298 | 298 |
+| 0% | 847 | 0 | 5789 | 5789 | 207 | 207 |
+| 5% | 791 | 0 | 5214 | 5214 | 298 | 298 |
 
 Caught by kind of plant:
 
-- 0% missing: club 387, id 124, kind 817, minute 817, name 107, number 1783, polarity 73, spelled 306, team word 368, uncited 817; missed: none; check p50 0.287 ms, p95 0.452 ms
-- 5% missing: club 346, id 107, kind 761, minute 761, name 94, number 1592, polarity 23, spelled 244, team word 335, uncited 761; missed: none; check p50 0.354 ms, p95 0.485 ms
+- 0% missing: club 407, id 124, kind 847, minute 847, name 107, number 1813, polarity 73, spelled 336, team word 388, uncited 847; missed: none; check p50 0.315 ms, p95 0.538 ms
+- 5% missing: club 366, id 107, kind 791, minute 791, name 94, number 1622, polarity 23, spelled 274, team word 355, uncited 791; missed: none; check p50 0.352 ms, p95 0.469 ms
