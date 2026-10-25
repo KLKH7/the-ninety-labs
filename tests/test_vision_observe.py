@@ -300,8 +300,8 @@ def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
     box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
     dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
     monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
-    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz),
-                                                                 [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3))
+    fits = [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h, **k: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
     shirt = hooped((32, 46, 162), (242, 242, 242))
     rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
     assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)

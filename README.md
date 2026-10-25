@@ -72,7 +72,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
-| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (video, graphics on the footage, match mode, analyst and casual switch, agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
+| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (a streaming player: video, graphics on the footage, match mode, the audio menu; `?dev=1` keeps the persona switch and the agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
