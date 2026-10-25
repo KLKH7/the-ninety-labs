@@ -202,13 +202,13 @@ def test_match_mode_shows_the_chapters_the_score_and_the_honest_line(browser, si
     line = page.inner_text("#match-honest")
     assert line == ("Condensed match, replayed at real speed. "
                     "Every event and number was computed from the pixels by our pipeline.")
-    seek(page, 5)  # 60.2 s: before the goal
-    assert page.get_attribute("#match", "data-score") == "0-0"
-    assert page.inner_text("#score") == "Crowmere 0 – 0 Dunhollow"
-    seek(page, 30)  # 61.22 s: after it
-    assert page.get_attribute("#match", "data-score") == "1-0"
-    seek(page, 66)  # 62.66 s: after the unsure second goal at 62.5, which never counts
-    assert page.get_attribute("#match", "data-score") == "1-0"
+    # The title row names the clubs, never a score counted from detected goals (Kian, Oct 25).
+    seek(page, 30)  # 61.22 s: after the detected goal
+    assert page.inner_text("#score") == "Crowmere v Dunhollow"
+    # scoreAt's rule still holds where code uses it: a goal counts only when confident.
+    score = lambda t: page.evaluate(f"window.ninetyMatch.scoreAt({t})")  # noqa: E731
+    assert score(60.2) == {"home": 0, "away": 0} and score(61.22) == {"home": 1, "away": 0}
+    assert score(62.66) == {"home": 1, "away": 0}  # the unsure second goal at 62.5 never counts
     assert not errors
 
 
@@ -256,11 +256,11 @@ def test_the_stats_follow_the_clock(browser, site):  # noqa: F811
     page, _ = open_viewer(browser, site + "?bundle=match/&dev=1")  # on the big screen they are on the phone
     seek(page, 5)
     rows = page.locator("#stats-table tr")
-    assert rows.nth(1).inner_text().split("\t") == ["Goals", "0", "0"]
+    assert rows.nth(1).inner_text().split("\t") == ["Shots (on target)", "0 (0)", "0 (0)"]
     seek(page, 74)
-    assert rows.nth(1).inner_text().split("\t") == ["Goals", "1", "0"]
-    assert rows.nth(2).inner_text().split("\t") == ["Shots (on target)", "1 (1)", "1 (1)"]
-    assert rows.nth(3).inner_text().split("\t") == ["Passes completed", "1 of 1", "1 of 1"]
+    assert rows.nth(1).inner_text().split("\t") == ["Shots (on target)", "1 (1)", "1 (1)"]
+    assert rows.nth(2).inner_text().split("\t") == ["Passes completed", "1 of 1", "1 of 1"]
+    assert "Goals" not in page.inner_text("#stats-table")  # no goal count: the scorebug carries it
 
 
 def test_a_bundle_without_match_json_has_no_match_mode(browser, site):  # noqa: F811
@@ -416,9 +416,9 @@ def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(b
     page = ctx.new_page()
     page.goto(site + "?bundle=match/&dev=1")
     page.wait_for_selector("#score-crest-away svg")
-    page.wait_for_function("document.querySelector('#score').textContent.startsWith('London')")
+    page.wait_for_function("document.querySelector('#score').textContent === 'London v Lisbon'")
     assert page.locator("#score-crest-home svg").count() == 1
-    assert page.inner_text("#score").startswith("London 0 – 0 Lisbon")
+    assert page.inner_text("#score") == "London v Lisbon"
     assert not errors
 
 

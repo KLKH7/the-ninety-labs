@@ -181,7 +181,6 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
   const announce = $("match-live");
   const table = $("stats-table");
   const rows: [string, (s: TeamStats) => string][] = [
-    ["Goals", (s) => String(s.goals)],
     ["Shots (on target)", (s) => `${s.shots} (${s.shots_on_target})`],
     ["Passes completed", (s) => `${s.passes_completed} of ${s.passes_attempted}`],
   ];
@@ -191,9 +190,10 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
 
   const tick = (v: number, t: number, reduceMotion: boolean) => {
     const c = chapterAt(m.chapters, fps, v);
-    const s = scoreAt(m, t);
-    score.textContent = `${teams.home} ${s.home} – ${s.away} ${teams.away}`;
-    score.setAttribute("aria-label", `Score from detected goals: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
+    // The clubs, never a score counted from detected goals: the broadcast's scorebug carries it, and
+    // vision can miss a goal (Kian, Oct 25).
+    const fixture = `${teams.home} v ${teams.away}`;
+    if (score.textContent !== fixture) score.textContent = fixture;
     head.style.left = `${Math.min(100, (100 * v * fps) / total)}%`;
     if (c && c.n !== lastChapter) {
       lastChapter = c.n;
@@ -229,7 +229,6 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
       );
     }
     root.dataset.chapter = c ? String(c.n) : "";
-    root.dataset.score = `${s.home}-${s.away}`;
   };
 
   /** To the start of the next (+1) or previous (-1) chapter; back to this one's start when more

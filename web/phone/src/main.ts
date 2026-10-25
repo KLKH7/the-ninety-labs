@@ -9,7 +9,7 @@
 
 import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
-import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
+import { type MatchData, chapterAt, chapterLabel, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
 import { crestOf } from "../../viewer/src/crests";
@@ -766,8 +766,8 @@ function announce(text: string) {
  * Playing card (Media Session). A web page cannot post a Live Activity; this is the nearest it gets. */
 function lockScreen(text: string) {
   if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
-  const score = state.match ? `${teams.home} ${$("score-home").textContent}–${$("score-away").textContent} ${teams.away}` : `${teams.home} v ${teams.away}`;
-  navigator.mediaSession.metadata = new MediaMetadata({ title: text, artist: `${score} · ${clock(laptop.time())}`, album: "Ninety" });
+  // Never a score: the broadcast carries it (Kian, Oct 25).
+  navigator.mediaSession.metadata = new MediaMetadata({ title: text, artist: `${teams.home} v ${teams.away} · ${clock(laptop.time())}`, album: "Ninety" });
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
   b.addEventListener("click", () => {
@@ -1871,7 +1871,6 @@ function renderInsights() {
   playsShown = plays.length;
   renderKeyMoments(plays);
   const key = list.dataset.mode === "key";
-  const score = (t: number) => (state.match ? scoreAt(state.match, t) : null);
   type Row = { t: number; el: HTMLLIElement };
   const rows: Row[] = state.insights.map((c) => {
     const { li, body } = storyItem(c.team, named(c.text, c.names), c.t);
@@ -1895,13 +1894,7 @@ function renderInsights() {
     const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
     li.dataset.event = e.id;
-    if (goal) {
-      const s = score(e.t);
-      const tally = document.createElement("span");
-      tally.className = "tally";
-      if (s) tally.textContent = `${s.home} · ${s.away}`;
-      li.querySelector(".when-line")!.append(tally);
-    }
+    if (goal) li.classList.add("goal"); // no running score: the broadcast carries it
     rows.push({ t: e.t, el: li });
   }
   if (!rows.length && !insightsLoaded) {
@@ -1937,40 +1930,64 @@ $("story-mode").addEventListener("ionChange", (e) => {
 
 // --- team stats and the score, from the bundle's match.json (match mode) -----------------------
 
+/** Under the band, the goals vision spotted so far, never a score (Kian, Oct 25: vision finds 2 of
+ * the demo's 3 goals, so a count would contradict the broadcast's scorebug). Each: the club's crest
+ * on a side told surely, the scorer (his name when the detection names him, else his club, else
+ * "A goal"), the minute and the detection's confidence, quietly. */
+let spottedKey = "";
+function renderSpotted(m: MatchData, t: number) {
+  const goals = m.goals.filter((g) => g.t <= t);
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}`;
+  if (key === spottedKey) return;
+  spottedKey = key;
+  const list = $("scorers");
+  list.hidden = false;
+  list.classList.toggle("none", goals.length === 0);
+  if (!goals.length) {
+    const li = document.createElement("li");
+    li.className = "spotted-none";
+    li.textContent = "None yet";
+    list.replaceChildren(li);
+    return;
+  }
+  list.replaceChildren(
+    ...goals.map((g) => {
+      const e = bundleEvents.get(g.event);
+      const li = document.createElement("li");
+      li.className = `spotted-goal ${g.team ?? "neutral"}`;
+      li.innerHTML = g.team ? `<span class="crest" aria-hidden="true">${crestSvg(teams[g.team], g.team)}</span>` : '<span class="crest" aria-hidden="true"></span>';
+      const who = document.createElement("span");
+      who.className = "who-scored";
+      who.textContent = e?.player ? playerName(e.player) : g.team ? teams[g.team] : "A goal";
+      const min = document.createElement("span");
+      min.className = "min";
+      min.textContent = `${Math.floor(g.t / 60) + 1}′`;
+      li.append(who, min);
+      if (typeof e?.confidence === "number") {
+        const sure = document.createElement("span");
+        sure.className = "sure";
+        sure.textContent = `${Math.round(100 * e.confidence)}%`;
+        sure.setAttribute("aria-label", `vision ${Math.round(100 * e.confidence)} percent sure`);
+        li.append(sure);
+      }
+      return li;
+    }),
+  );
+}
+
 let statsKey = "";
 function showMatch(t: number) {
   const m = state.match;
   if (!m) return;
-  const s = scoreAt(m, t);
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
   const c = chapterAt(m.chapters, bundleFps, v);
   const line = $("scoreline");
   line.hidden = !c;
   const chapter = c ? chapterLabel(c, teams) : "";
   if (line.textContent !== chapter) line.textContent = chapter;
-  const score = `${s.home} – ${s.away}`;
-  tickTo($("score-home"), s.home);
-  tickTo($("score-away"), s.away);
-  if ($("score").textContent !== score) {
-    $("score").textContent = score;
-    $("score").setAttribute("aria-label", `Score: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
-  }
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
-  // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
-  // when the detection names no player, or "Goal 43′" when its side was not told surely).
-  const scored = m.goals.filter((g) => g.t <= t);
-  const scorers = $("scorers");
-  // Always one line, so the band never grows when the first goal goes in.
-  scorers.hidden = false;
-  scorers.classList.toggle("none", scored.length === 0);
-  const said = scored.length === 0 ? "No goals yet" : scored
-    .map((g) => {
-      const who = bundleEvents.get(g.event)?.player;
-      return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
-    })
-        .join(", ");
-  if (scorers.textContent !== said) scorers.textContent = said;
+  renderSpotted(m, t);
   renderShots(t);
   renderSquad();
   if (playsUpTo(t).length !== playsShown) renderInsights();
@@ -2489,6 +2506,9 @@ async function refreshFlow() {
   }
 }
 
+// Kian's open choice for the band (Oct 25): crests and names in the numerals' place, or ?band=quiet.
+if (new URLSearchParams(location.search).get("band") === "quiet") document.body.dataset.band = "quiet";
+
 // --- every frame -----------------------------------------------------------------------------
 
 function frame(now: number) {
@@ -2496,16 +2516,12 @@ function frame(now: number) {
   if (scrubT !== null && scrubT > live) scrubT = live; // never ahead of the big screen
   const t = viewTime();
   $("clock").textContent = link ? clock(t) : "–:––";
-  const mini = state.match
-    ? `${teams.home}  ${$("score-home").textContent}   ${link ? clock(t) : "–:––"}   ${$("score-away").textContent}  ${teams.away}`
-    : `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
-  // The collapsed row (Apple Sports): crest, score, clock, score, crest; one label for a screen reader.
+  const mini = `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
+  // The collapsed row: crest, clock, crest (never a score); one label for a screen reader.
   const clockText = link ? clock(t) : "–:––";
   for (const el of document.querySelectorAll<HTMLElement>(".score-line")) {
     if (el.getAttribute("aria-label") === mini) continue;
     el.setAttribute("aria-label", mini);
-    el.querySelector(".mh")!.textContent = state.match ? $("score-home").textContent : "";
-    el.querySelector(".ma")!.textContent = state.match ? $("score-away").textContent : "";
     el.querySelector(".mc")!.textContent = clockText;
   }
   if (link) {

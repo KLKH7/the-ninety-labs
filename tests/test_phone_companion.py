@@ -805,12 +805,13 @@ def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip
     assert not errors
 
 
-def test_the_score_band_says_no_goals_yet_on_one_line_until_a_goal(browser, site):  # noqa: F811
+def test_the_band_lists_goals_spotted_by_vision_and_says_none_yet_on_one_line(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
     page.wait_for_selector("#scorers:not([hidden])")
+    assert page.inner_text("#spotted-title") == "Goals spotted by vision"
     goals = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["goals"]
-    if not [g for g in goals if g["t"] <= 1505 / FPS and g.get("team")]:
-        assert page.inner_text("#scorers") == "No goals yet"
+    if not [g for g in goals if g["t"] <= 1505 / FPS]:
+        assert page.inner_text("#scorers") == "None yet"
     assert page.locator("#teams-note").is_hidden()  # the clip names both clubs
     assert not errors
 
@@ -898,7 +899,10 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
     page.reload()
     page.wait_for_selector("body[data-state=live]")
     page.wait_for_function("document.querySelector('#scorers') && !document.querySelector('#scorers').hidden")
-    assert page.inner_text("#scorers") == "Goal 2′"
+    row = page.locator("#scorers .spotted-goal")
+    assert row.locator(".who-scored").inner_text() == "A goal" and row.locator(".min").inner_text() == "2′"
+    assert row.locator(".crest svg").count() == 0  # no club's crest on a side not told surely
+    assert row.locator(".sure").inner_text().endswith("%")  # the detection's confidence, quietly
     assert not errors
 
 
@@ -1052,5 +1056,45 @@ def test_a_key_moment_goal_on_an_unsure_side_carries_no_club_s_colour(browser, s
     page.wait_for_selector("#key-moments:not([hidden]) .moment-row.goal")
     row = page.locator("#key-rows .moment-row.goal").first
     assert "neutral" in row.get_attribute("class").split()  # not the tracker's side vote
+    assert not errors
+    ctx.close()
+
+
+SCORELINE = re.compile(r"\b\d{1,2}\s*[–·]\s*\d{1,2}\b")  # "2 – 1", "2 · 1": how a scoreline is written
+
+
+def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, site):  # noqa: F811
+    """Kian, Oct 25: vision finds 2 of the demo's 3 goals, so a score counted from them would
+    contradict the broadcast's scorebug. A goal is listed as spotted; no screen counts them."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def a_goal(route):  # e2, the clip's shot on a side told surely, went in
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal"} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", a_goal)
+    ctx.route("**/bundle/events.jsonl", a_goal)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#scorers .spotted-goal")
+    assert page.locator("#score-home, #score-away, .mh, .ma, .tally").count() == 0
+    js = """() => [...document.querySelectorAll('.band, .score-line, #insights, #panel-ask ion-header')]
+        .flatMap((el) => [el.innerText, el.getAttribute('aria-label') || ''])"""
+    for tab in ("radar", "insights", "ask"):
+        page.click(f"#tab-button-{tab}")
+        page.wait_for_timeout(300)
+        for text in page.evaluate(js):
+            assert not SCORELINE.search(text), (tab, text)
+    page.click("#tab-button-insights")
+    assert page.locator("#insights .play.goal").count() == 1  # the goal is in Story, with no running score
     assert not errors
     ctx.close()
