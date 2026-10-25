@@ -1,0 +1,67 @@
+{
+  "seeds": [
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "fixed": {
+    "frames": 11500,
+    "good": 11250,
+    "bad": 250,
+    "band": [
+      1.002,
+      1.151
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 978,
+        "good_kept_share": 0.0869,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
+      },
+      "B2 heights": {
+        "bad_rejected": 249,
+        "bad_trusted": 1,
+        "good_kept": 11042,
+        "good_kept_share": 0.9815,
+        "bad_trusted_by_seed": {
+          "2042": 1
+        },
+        "bad_trusted_worst_m": 69.422
+      },
+      "B3 both": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 966,
+        "good_kept_share": 0.0859,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
+      }
+    }
+  },
+  "detector": "ours-freeze, tiled",
+  "clips": "tactical1 validation, 6ea8e37, GPU GL; seed 118 excluded as in the fine-tune",
+  "code": "4b014a97 (fit_fixed of #229, before #250)"
+}
