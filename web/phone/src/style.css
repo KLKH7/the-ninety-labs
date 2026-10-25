@@ -836,3 +836,37 @@ ion-modal { --backdrop-opacity: 0.45; }
 .side-goal::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px;
   background: var(--text-2); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10.5' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M12 7.2l4.2 3-1.6 4.9H9.4L7.8 10.2z'/%3E%3Cpath d='M12 7.2V2.2M16.2 10.2l4.6-1.6M14.6 15.1l2.8 4.2M9.4 15.1l-2.8 4.2M7.8 10.2 3.2 8.6' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10.5' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M12 7.2l4.2 3-1.6 4.9H9.4L7.8 10.2z'/%3E%3Cpath d='M12 7.2V2.2M16.2 10.2l4.6-1.6M14.6 15.1l2.8 4.2M9.4 15.1l-2.8 4.2M7.8 10.2 3.2 8.6' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat; }
 #goals-unsure { min-height: 0; margin-top: 6px; }
+
+/* ---- First-run onboarding in Ask (onboarding.ts): iOS's setup screens on black: a large title,
+   an inset grouped list with blue ticks, page dots, blue Back and Skip. No captions. */
+.onboard { padding: 4px 0 24px; }
+.onboard[hidden] { display: none; }
+.onboarding #answers, .onboarding #recent-title { display: none; }
+.onboard-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 44px; padding: 0 8px; }
+.nav-link { border: 0; background: none; color: #0a84ff; font: inherit; font-size: 17px; min-height: 44px; padding: 0 8px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+.nav-link svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.nav-link.gone { visibility: hidden; }
+.onboard-back { grid-column: 1; grid-row: 1; justify-self: start; }
+.onboard-skip { grid-column: 3; grid-row: 1; justify-self: end; }
+.page-dots { grid-column: 2; grid-row: 1; display: flex; gap: 8px; }
+.page-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(235, 235, 245, 0.3); }
+.page-dots i.on { background: #fff; }
+.onboard-title { margin: 28px 20px 20px; font-size: 34px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.15; }
+.onboard-title:focus { outline: none; }
+.onboard-list { padding: 0 16px; border-radius: 12px; background: #1c1c1e; }
+.onboard-list .setting-row + .setting-row { border-top: 0.5px solid rgba(84, 84, 88, 0.65); }
+.onboard-option { gap: 14px; min-height: 60px; cursor: pointer; }
+.onboard-option .row-title { flex: 1; }
+.onboard-crest { width: 34px; height: 40px; display: inline-flex; flex: none; }
+.onboard-crest svg { width: 100%; height: 100%; }
+/* Settings: the Personalise row, iOS's value-and-chevron row. */
+.row-link { width: 100%; border: 0; background: none; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.row-link .row-title { flex: 1; }
+.row-value { color: var(--text-2); font-size: 17px; }
+.row-link .chev { width: 16px; height: 16px; fill: none; stroke: rgba(235, 235, 245, 0.3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+/* A fan who cares most about players sees the player questions first. */
+.ask-start[data-focus="players"] { display: flex; flex-direction: column; }
+.ask-start[data-focus="players"] #ask-players-title { order: -2; margin-top: 32px; }
+.ask-start[data-focus="players"] #ask-players { order: -1; }
+.ask-start[data-focus="players"] #ask-start-title { margin-top: 22px; }
+.ask-start[data-focus="players"][hidden] { display: none; }

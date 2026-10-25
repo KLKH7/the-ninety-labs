@@ -14,6 +14,8 @@ import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
 import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
+import * as fans from "./fan";
+import { mountOnboarding } from "./onboarding";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
@@ -1163,6 +1165,42 @@ async function compare(a: string, b: string) {
   $("compare-rows").hidden = false;
 }
 
+// --- the fan's choices (fan.ts, onboarding.ts): club, mode, focus; on this device only ----------
+
+let fan = fans.load();
+const chosen = () => (fan && fan !== "skipped" ? fan : null);
+let storyTouched = false; // the fan picked All or Key plays this visit: their pick stands
+const onboard = mountOnboarding($("onboard"), (picked, editing) => {
+  if (picked) fan = picked;
+  else if (!editing) fan = "skipped"; // not now: Personalise in the settings sheet reopens it
+  if (picked || !editing) fans.save(fan!);
+  applyFan(true);
+});
+
+/** What the choices shape: Ask's questions and which come first, the Story feed's starting filter,
+ * and the settings row. */
+function applyFan(rerender = false) {
+  const f = chosen();
+  $("fan-value").textContent = f ? fans.summary(f) : "";
+  $("ask-start").dataset.focus = f?.focus ?? "";
+  if (f && !storyTouched) {
+    const mode = fans.storyMode(f);
+    ($("story-mode") as HTMLElement & { value: string }).value = mode;
+    $("insights").dataset.mode = mode;
+    if (rerender) renderInsights();
+  }
+  syncAsk();
+  if (rerender) renderChips();
+}
+
+$("fan-edit").addEventListener("click", () => {
+  void settingsSheet.dismiss();
+  showTab("ask");
+  onboard.open(chosen(), true);
+  syncAsk();
+  void ($("ask-content") as HTMLElement & { scrollToTop(ms?: number): Promise<void> }).scrollToTop(0);
+});
+
 // --- questions -------------------------------------------------------------------------------
 
 function playerQuestions(id: string): string[] {
@@ -1172,6 +1210,8 @@ function playerQuestions(id: string): string[] {
 
 /** The match questions the Companion's tools answer with a picture. */
 function matchQuestions(): string[] {
+  const f = chosen();
+  if (f) return fans.questions(f, teams); // the fan's club and focus first
   return [
     `Where are ${teams.home} overloading?`,
     `Which pass broke ${teams.away}'s lines?`,
@@ -1201,7 +1241,9 @@ const asked = new Set<string>();
  * answer, the answers under "Recent" and the chips (or an answer's follow-ups) above the composer. */
 function syncAsk() {
   const any = $("answers").children.length > 0;
-  $("ask-start").hidden = any;
+  if (any && onboard.isOpen && !onboard.editing) onboard.close(); // they asked instead: next visit
+  $("ask-content").classList.toggle("onboarding", onboard.isOpen);
+  $("ask-start").hidden = any || onboard.isOpen;
   $("recent-title").hidden = !any;
   if (!any) $("ask-chips").hidden = true;
   else if ($("ask-chips").dataset.started !== "1") {
@@ -1210,7 +1252,8 @@ function syncAsk() {
   }
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
-syncAsk();
+if (fan === null) onboard.open(null, false); // the first visit opens on the three choices
+applyFan();
 
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
@@ -1268,6 +1311,7 @@ async function ask(text: string) {
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
   asked.add(q);
+  if (onboard.isOpen) onboard.close(); // a typed question wins over the choices: they wait
   renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
@@ -1925,6 +1969,7 @@ function renderInsights() {
 }
 
 $("story-mode").addEventListener("ionChange", (e) => {
+  storyTouched = true;
   $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
   renderInsights();
   requestAnimationFrame(redrawPictures);

@@ -41,7 +41,7 @@
             <ion-header>
               <ion-toolbar class="band-bar" id="live-bar">
                 <ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen scroll-events="true" id="live-content">
@@ -230,11 +230,12 @@
           <div class="ion-page">
             <ion-header>
               <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen id="ask-content">
               <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
+              <section class="onboard" id="onboard" aria-labelledby="onboard-title" hidden></section>
               <section class="ask-start" id="ask-start" aria-labelledby="ask-start-title">
                 <h2 class="section-title" id="ask-start-title">Ask about the match</h2>
                 <div class="chip-grid" id="ask-grid" role="group" aria-labelledby="ask-start-title"></div>
@@ -343,6 +344,9 @@
           <div class="sheet-head">
             <h2 id="settings-title" tabindex="-1">Listening and text</h2>
             <button type="button" class="close" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="group group-first">
+            <button type="button" class="setting-row row-link" id="fan-edit"><span class="row-title">Personalise</span><span class="row-value" id="fan-value"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
           </div>
           <div class="group group-first">
             <label class="setting-row"><span><span class="row-title">Read aloud</span></span>
