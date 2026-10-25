@@ -28,7 +28,7 @@ def test_a_commentator_calls_goals_shots_and_restarts_in_the_present_tense():
     events = [ev("v1", 10.0, "shot", outcome="on_target"), ev("v2", 20.0, "goal", team="away"),
               ev("v3", 40.0, "out_of_play", y=68.0), ev("v4", 60.0, "out_of_play", x=105.0, y=40.0),
               ev("v5", 80.0, "kickoff")]
-    assert texts(events) == ["London shoot, on target.", "Goal! Lisbon score!", "It's gone out for a throw.",
+    assert texts(events) == ["London shoot, on target.", "Goal! Lisbon score!", "It's gone out of play.",
                              "It's gone out of play.", "London kick off."]
 
 
@@ -169,13 +169,10 @@ def test_only_vision_detections_with_a_confidence_are_called():
         assert body["lines"] == [] and "vision detection" in body["refused"][0]["reason"]
 
 
-@pytest.mark.parametrize(("x", "y", "said"), [
-    (60.0, 68.0, "It's gone out for a throw."), (60.0, 1.5, "It's gone out for a throw."),  # within 2 m
-    (104.9, 0.5, "It's gone out of play."), (1.0, 67.0, "It's gone out of play."),  # by a corner flag
-    (105.0, 34.0, "It's gone out of play."), (60.0, 3.0, "It's gone out of play."),
-])
-def test_a_throw_is_called_only_over_a_touchline_clear_of_the_goal_lines(x, y, said):
-    assert texts([ev("v1", 10.0, "out_of_play", x=x, y=y)]) == [said]
+@pytest.mark.parametrize(("x", "y"), [(60.0, 68.0), (104.9, 0.5), (105.0, 34.0)])
+def test_a_ball_out_is_only_out_the_restart_is_visions_reading(x, y):
+    # Review of #328: where the ball crossed is not the restart; a set piece's `restart` says which.
+    assert texts([ev("v1", 10.0, "out_of_play", x=x, y=y)]) == ["It's gone out of play."]
 
 
 def test_half_time_and_a_blocked_shot_are_called():
@@ -218,7 +215,8 @@ def test_once_voiced_a_line_whose_audio_runs_long_drops_the_lower_priority_one_a
     assert len(body["lines"]) == 2
     body = commentary.refit(body, {"cm-v1": 3.0})  # the shot's audio is 3 s, not the estimate
     assert [line["id"] for line in body["lines"]] == ["cm-v1"] and body["lines"][0]["t_end"] == 13.0
-    assert body["dropped"][-1]["id"] == "cm-v2"
+    assert body["dropped"][-1] == {"id": "cm-v2", "t": 12.9,
+                                   "reason": "its audio runs longer than estimated: no room"}
 
 
 def test_the_estimate_cli_calls_nothing_and_writes_nothing(tmp_path, monkeypatch, capsys):
@@ -245,5 +243,5 @@ def test_voicing_the_bundle_times_each_call_by_its_audio(tmp_path):
     commentary.write(commentary.commentary([shot], [], CLUBS), tmp_path)
     bundle.write(tmp_path, synth=FakeSynth(), cache=tmp_path / "cache", sleep=lambda s: None)
     (line,) = json.loads((tmp_path / "commentary.json").read_text())["lines"]
-    heard = (tmp_path / line["audio"]).stat().st_size * 8 / bundle.MP3_BITS_PER_S
+    heard = (tmp_path / line["audio"]).stat().st_size / 6000  # 48 kbit/s: voice.FORMAT
     assert line["t_end"] == pytest.approx(line["t"] + heard, abs=0.011)

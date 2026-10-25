@@ -40,7 +40,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety.agents.factcheck import Claim, check, confidence_gate, side_known
-from ninety.agents.perceive import MATCH_M
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
 from ninety.speech import describe, voice
@@ -49,11 +48,6 @@ FORMAT = 1
 PRIORITY = {"goal": 0, "shot": 1, "restart": 2, "insight": 3}
 MAX_LAG_S = describe.MAX_LAG_S  # the Describer's limit: a line said late is about the wrong play
 GAP_S = 1.0  # design: the silence a commentator leaves between calls, so the crowd is heard
-PITCH_X, PITCH_Y = describe.PITCH_LENGTH_M, describe.PITCH_WIDTH_M
-# Where vision places an event, to within the event scorer's lenient spot rule (2 m: docs/EVALUATION.md,
-# perceive.MATCH_M). A ball out within it of a touchline, and further than it from either goal line,
-# went over the touchline, where Law 15 restarts play with a throw-in; any other ball out is only out.
-NEAR_M = MATCH_M
 SHOT_SAID = {"on_target": "on target", "off_target": "wide", "blocked": "blocked"}
 # A detected set piece's restart (schemas/match_event.schema.json `restart`), with its taker's side
 # and without it.
@@ -103,13 +97,6 @@ def _side(event: dict) -> str | None:
     return event["team"] if event.get("team") in ("home", "away") and side_known(event) else None
 
 
-def _out(event: dict) -> str:
-    x, y = event["x"], event["y"]
-    touchline = y <= NEAR_M or y >= PITCH_Y - NEAR_M
-    clear_of_goal_lines = NEAR_M < x < PITCH_X - NEAR_M
-    return "It's gone out for a throw." if touchline and clear_of_goal_lines else "It's gone out of play."
-
-
 def event_versions(event: dict) -> tuple[str, list[str]] | None:
     """(kind, versions) for one detected event, in its checked form ("home" and "away" for the
     sides, which the voice says as the clubs); None for an event a commentator does not call."""
@@ -125,7 +112,9 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
     if kind == "half_time":
         return "restart", ["Half-time."]
     if kind == "out_of_play":
-        return "restart", [_out(event)]
+        # Only that it went out: which restart follows is vision's own reading (a set piece's
+        # `restart`), never inferred here from where the ball crossed.
+        return "restart", ["It's gone out of play."]
     if kind == "set_piece":
         # Which restart (vision's `restart`, #325): `team` is the side taking it, named only when sure.
         said = RESTART_SAID.get(event.get("restart") or "")
