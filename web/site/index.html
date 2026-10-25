@@ -142,11 +142,6 @@
           <li>A claim resting on a low-confidence detection, or naming a team whose side is unsure, is held back.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_confidence_gate.py">Test</a></li>
         </ul>
-        <p class="label">Not yet</p>
-        <ul>
-          <li><span class="tag progress">in progress</span> The fact-checker evaluation re-run on the current Judge
-            (the numbers below are from an earlier version).</li>
-        </ul>
       </li>
 
       <li class="stage" aria-labelledby="s-render">
@@ -274,32 +269,32 @@
       <table>
         <caption id="fc-cap">Claims whose truth is known, each citing the event it describes, from the
           <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">fact-checker evaluation</a>
-          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on an earlier
-          version of the Judge; the re-run on the current one is pending</caption>
+          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on the
+          Judge as it is published today; every true claim it rejected used a tone word the facts do not show</caption>
         <thead>
           <tr><th scope="col">What</th><th scope="col">Code checks alone</th><th scope="col">Code checks and Judge</th></tr>
         </thead>
         <tbody>
           <tr>
             <th scope="row">Planted false claims kept off air (some by a Judge service error, failing closed)</th>
-            <td><data value="32" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">32</data> of
-              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
-            <td><data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
-              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
+            <td><data value="56" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">56</data> of
+              <data value="170" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">170</data></td>
+            <td><data value="170" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">170</data> of
+              <data value="170" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">170</data></td>
           </tr>
           <tr>
             <th scope="row">True claims wrongly rejected, leaving out claims held back when the Judge service failed</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
-            <td><data value="7" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">7</data> of
-              <data value="105" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">105</data></td>
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
+            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">14</data> of
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">129</data></td>
           </tr>
           <tr>
             <th scope="row">True claims held back or rejected, counting service failures</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
-            <td><data value="17" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">17</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
+            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">14</data> of
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
           </tr>
         </tbody>
       </table>
