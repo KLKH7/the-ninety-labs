@@ -43,8 +43,11 @@ def test_the_survey_finds_the_reports_and_replays_it_must():
 
 def test_older_files_are_read_through_the_registry_history():
     # Written before fingerprints: their labels map to the fingerprint each version was published
-    # from. The Oct 17 fact-checker run used judge:1; the workflow replay records `pins`.
-    assert BY_PATH["docs/eval/fact-checker.md"].ran == [evidence.Ran("ninety-judge", "1", "3eea4db1096b7a49")]
+    # from. The frozen planted set holds the Oct 17 run's judge:1 answers; the workflow replay
+    # records `pins`. The fact-checker report itself is now the Oct 25 run on judge:4, fingerprinted.
+    judge_1 = evidence.Ran("ninety-judge", "1", "3eea4db1096b7a49")
+    assert BY_PATH["docs/eval/planted-claims-v1.json"].ran == [judge_1]
+    assert BY_PATH["docs/eval/fact-checker.md"].ran == [evidence.Ran("ninety-judge", "4", "2b04c8ad1ac3c950")]
     assert BY_PATH["docs/eval/fact-checker.json"].source == "data of docs/eval/fact-checker.md"
     workflow = BY_PATH["replays/workflow-minute2-plant.json"]
     assert workflow.source == "derived" and workflow.fresh
@@ -118,12 +121,12 @@ def test_a_version_no_registry_pinned_is_unknown_and_fails(tmp_path):
 
 
 def test_a_listed_stale_file_passes_but_a_listing_without_a_reason_or_a_fresh_listing_fails(tmp_path):
-    root = copy_of(tmp_path, "docs/eval/fact-checker.md")
+    root = copy_of(tmp_path, "docs/eval/planted-claims-v1.json")
     survey = evidence.survey(root, NOW)
     assert len(evidence.problems(survey, stale={})) == 1  # judge:1 is not the Judge now
-    listed = {"docs/eval/fact-checker.md": {"agents": ["ninety-judge:1"], "why": "x", "rerun": "y"}}
+    listed = {"docs/eval/planted-claims-v1.json": {"agents": ["ninety-judge:1"], "why": "x", "rerun": "y"}}
     assert evidence.problems(survey, stale=listed) == []
-    no_rerun = {"docs/eval/fact-checker.md": {"agents": ["ninety-judge:1"], "why": "x"}}
+    no_rerun = {"docs/eval/planted-claims-v1.json": {"agents": ["ninety-judge:1"], "why": "x"}}
     assert "without both a reason" in evidence.problems(survey, stale=no_rerun)[0]
     # Once re-run on the current Judge, the listing must go.
     now_judge_1 = {**NOW, "ninety-judge": "3eea4db1096b7a49"}
@@ -239,4 +242,5 @@ def test_the_command_lists_every_file_and_exits_cleanly(module):
         ["uv", "run", "python", "-m", module], cwd=evidence.ROOT, capture_output=True, text=True, timeout=300
     )
     assert done.returncode == 0, done.stderr
-    assert "docs/eval/fact-checker.md: STALE, listed" in done.stdout
+    assert "docs/eval/planted-claims-v1.json: STALE, listed" in done.stdout
+    assert "docs/eval/fact-checker.md: fresh" in done.stdout
