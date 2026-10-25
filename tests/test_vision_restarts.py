@@ -273,15 +273,21 @@ def test_a_set_ball_walked_off_its_spot_is_not_struck():
 
 def test_under_a_looser_tolerance_a_ball_run_at_pace_is_still_not_set(monkeypatch):
     """The rule holds for whatever tolerance a camera's reading measures: with a live fit's metre or
-    so, a ball run along at 5 m/s (over CARRY_MPS) stays within it over a few frames but is moving."""
+    so, a ball dribbled to and fro in one place at 5 m/s (over CARRY_MPS), the player beside it,
+    stays within it but is moving."""
     monkeypatch.setattr(rs, "BALL_TOL_M", 1.5)
-    rows = open_play()
-    for k in range(30):
-        x = 40.0 + 5.0 * k / FPS
-        rows.append(row(AFTER + k, crowd() + [(x - 0.3, 30.0, BLUE)], (x, 30.0)))
+    step = 5.0 / FPS
+    rows, x, way = open_play(), 40.0, 1.0
+    for k in range(40):
+        rows.append(row(AFTER + k, crowd() + [(40.0, 30.6, BLUE)], (x, 30.0)))
+        if abs(x + way * step - 40.0) > 0.6:
+            way = -way
+        x += way * step
     for k in range(1, 15):
-        rows.append(row(AFTER + 29 + k, crowd() + [(45.7, 30.0, BLUE)], (46.0 + 0.6 * k, 30.0)))
+        rows.append(row(AFTER + 39 + k, crowd() + [(40.0, 30.6, BLUE)], (x + 0.6 * k, 30.0)))
     assert 5.0 > ev.CARRY_MPS and kinds(rows) == []
+    monkeypatch.setattr(ev, "CARRY_MPS", 6.0)  # the same scene, the ball now slower than a carry
+    assert kinds(rows) == ["free_kick"]
 
 
 def test_a_dead_ball_stopped_off_the_field_is_not_set():
