@@ -59,8 +59,10 @@ standard library). No recording or third-party sound is used, so there is nothin
 
 ## Scorebug digit templates (`ninety/vision/scorebug_glyphs.json`)
 
-Twenty 24 x 16 greyscale images: the digits 0 to 9, rasterised at 16 px by `python -m
-ninety.vision.scorebug --make-glyphs` from Helvetica Bold and Arial Bold as installed with macOS.
+Thirty 24 x 16 greyscale images: the digits 0 to 9, rasterised at 16 px by `python -m
+ninety.vision.scorebug --make-glyphs` from Helvetica Bold and Arial Bold as installed with macOS,
+and DejaVu Sans Bold as bundled in matplotlib's wheel (vision group; DejaVu's licence is the
+Bitstream Vera permissive licence).
 They are rendered output, the same digits our broadcast renders draw in every frame's scorebug (Chromium's
 `sans-serif`), not font software. No font file is copied or distributed. **Pending a decision**
 (docs/eval/scorebug-plan.md): if rasters of a proprietary face are not acceptable, they are
