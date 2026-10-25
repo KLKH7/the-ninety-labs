@@ -460,7 +460,8 @@ def detect(rows: list[dict], join_breaks: bool = True,
                 if line is not None:
                     score, k, y = line
                     g = path[i + k]
-                    kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks)
+                    kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks,
+                                                     scorer)
                     conf = round(1 - (1 - score) * (1 - kick), 3)
                 else:
                     g, y = path[i], _clip(path[i].y, PITCH_Y)

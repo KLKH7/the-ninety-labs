@@ -19,7 +19,8 @@ from tests.test_vision_events import BLUE, FPS, GREEN_KEEPER, RED, crowd, row
 KICK = 10
 
 
-def shot_scene(path, frames=60, keeper=None, others=(), heights=None, kickoff_after=None, shooter=BLUE):
+def shot_scene(path, frames=60, keeper=None, others=(), heights=None, kickoff_after=None, shooter=BLUE,
+               taker=None):
     """The shooter has the ball until KICK; from then the ball is at path(f - KICK) (x, y), or
     absent where path returns None. `keeper`/`others`: (x, y) or a function of the frame giving
     it. `heights`: f -> (z, se) for a fitted flight height on the ball."""
@@ -35,18 +36,21 @@ def shot_scene(path, frames=60, keeper=None, others=(), heights=None, kickoff_af
             r["ball"][0] |= {"z": z, "se": se, "flight": 0}
         rows.append(r)
     if kickoff_after is not None:
-        rows += kickoff_rows(kickoff_after, rows[-1]["frame"] + 1)
+        rows += kickoff_rows(kickoff_after, rows[-1]["frame"] + 1, taker=taker)
     return rows
 
 
-def kickoff_rows(own_halves: bool, first: int, frames: int = 10, off_spot: float = 0.5):
+def kickoff_rows(own_halves: bool, first: int, frames: int = 10, off_spot: float = 0.5, taker=None):
     """After a cut: the ball still on the centre spot, blue (home) in its half (x < 52.5) and red
-    in the other, or everyone on the wrong side."""
+    in the other, or everyone on the wrong side. `taker`: a player of that colour by the ball, in his
+    own half (none by default: nobody inside the centre circle)."""
     out = []
     for f in range(first + 200, first + 200 + frames):  # frame numbers jump: a cut
         blue_x, red_x = (40.0, 65.0) if own_halves else (65.0, 40.0)
         people = ([(blue_x, 10.0 + 6 * k, BLUE) for k in range(4)]
                   + [(red_x, 10.0 + 6 * k, RED) for k in range(4)])
+        if taker is not None:
+            people.append((oc.CENTRE[0] + (1.0 if taker == RED else -1.0), oc.CENTRE[1] + 1.0, taker))
         out.append(row(f, people, (oc.CENTRE[0] + off_spot, oc.CENTRE[1])))  # E_C is 0.688 m
     return out
 
@@ -395,3 +399,21 @@ def test_the_same_ball_with_no_kick_off_or_a_wrong_one_is_out_of_play():
     for after in (None, False):  # no restart seen; players in the wrong halves (no kick-off by Law 8)
         shots, goals, types, _ = run(shot_scene(roof_of_net, kickoff_after=after))
         assert goals == [] and shots == [] and "out_of_play" in types
+
+
+# Amendment 5: after a goal the side that conceded kicks off (Law 8); the scorer's own side kicking off
+# is a half's start.
+
+
+def test_a_kick_off_by_the_side_that_conceded_is_a_goal_and_by_the_scorers_side_is_not():
+    _, goals, _, _ = run(shot_scene(roof_of_net, kickoff_after=True, taker=RED))
+    assert [(g["team"], g["confidence"]) for g in goals] == [("home", 0.8)]
+    _, goals, types, _ = run(shot_scene(roof_of_net, kickoff_after=True, taker=BLUE))
+    assert goals == [] and "out_of_play" in types
+
+
+def test_a_kick_off_by_the_scorers_side_adds_no_evidence_to_a_goal_seen_in_the_net():
+    _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=True, taker=RED))
+    assert goals[0]["confidence"] == round(1 - (1 - 0.8) * (1 - 0.8), 3)
+    _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=True, taker=BLUE))
+    assert goals[0]["confidence"] == 0.8  # the line alone

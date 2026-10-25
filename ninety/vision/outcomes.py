@@ -221,9 +221,24 @@ def toucher(tracks: list[Track], p: BallPoint, team: str) -> str | None:
     return "mate" if t.team == team else None
 
 
-def kickoff_evidence(path: list[BallPoint], start: int, player_tracks: list[Track]) -> float:
+CIRCLE_M = 9.15  # Law 1: the centre circle's radius
+
+
+def kicker_side(p: BallPoint, frame: int, tracks: list[Track]) -> str | None:
+    """Amendment 5: the side kicking off, as restarts.py reads its taker: the side of the nearest
+    outfield player with a side inside the centre circle (less RIVAL_M) at `frame`; None if none."""
+    near = []
+    for t in tracks:
+        q = t.at(frame) if t.team is not None and not t.keeper else None
+        if q is not None and math.dist(q, (p.x, p.y)) <= CIRCLE_M - RIVAL_M:
+            near.append((math.dist(q, (p.x, p.y)), t.team))
+    return min(near)[1] if near else None
+
+
+def kickoff_evidence(path: list[BallPoint], start: int, player_tracks: list[Track], team: str) -> float:
     """Rule 4: the ball still on the centre spot on IN_NET_FRAMES frames running after path[start],
-    with the players who have a side in their own halves; the mean ball score there, else 0."""
+    with the players who have a side in their own halves and not kicked off by `team` (amendment 5:
+    after its goal the other side kicks off, Law 8); the mean ball score there, else 0."""
     after = path[start:]
     still = []
     for k, p in enumerate(after):
@@ -235,6 +250,8 @@ def kickoff_evidence(path: list[BallPoint], start: int, player_tracks: list[Trac
         frames = [after[k].frame for k in run]
         if not own_halves(player_tracks, frames):
             continue
+        if kicker_side(after[run[-1]], frames[-1], player_tracks) == team:
+            return 0.0  # the scorer's own side kicks off: not after his goal (a half's start)
         return sum(after[k].score for k in run) / len(run)
     return 0.0
 
@@ -282,9 +299,10 @@ def still_runs(points: list[BallPoint]) -> list[list[int]]:
 def restart_kind(p: BallPoint, team: str, frames: list[int], player_tracks: list[Track]) -> str | None:
     """Which restart a still ball at p is set for, by where the Laws put it (GROUNDING L4, L8, L9):
     the kick-off spot (with the players in their own halves), the goal area of the goal `team`
-    attacks, or a corner of that end; None for anywhere else."""
+    attacks, or a corner of that end; None for anywhere else. A kick-off taken by `team` itself is
+    "kickoff_own" (amendment 5): a half's start, not the kick-off after its goal (Law 8)."""
     if math.dist((p.x, p.y), CENTRE) <= E_C and own_halves(player_tracks, frames):
-        return "kickoff"
+        return "kickoff_own" if kicker_side(p, frames[-1], player_tracks) == team else "kickoff"
     d = -behind(p, team)  # metres in front of the attacked goal line
     if -E_X <= d <= GOAL_AREA_DEPTH + E_X and abs(p.y - CENTRE[1]) <= GOAL_AREA_HALF + E_Y:
         return "goal_kick"
@@ -363,7 +381,7 @@ def judge(path: list[BallPoint], i: int, stop: int | None, goal_stop: int | None
     if line is not None:
         score, k, y = line
         p = after[k]
-        kick = kickoff_evidence(path, i + 1 + k, player_tracks if player_tracks is not None else tracks)
+        kick = kickoff_evidence(path, i + 1 + k, player_tracks if player_tracks is not None else tracks, team)
         conf = 1 - (1 - score) * (1 - kick)
         goal = {"frame": p.frame, "x": goal_line(team), "y": round(y, 2), "confidence": round(conf, 3),
                 "line": round(score, 3), "kickoff": round(kick, 3)}
