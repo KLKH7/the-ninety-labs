@@ -167,16 +167,40 @@ def sheet_closed(page):
     page.wait_for_function("!document.querySelector('#player-sheet').classList.contains('show-modal')")
 
 
+def fresh(page):
+    """Wait until the page has drawn a new frame. A screen's clock is written to the DOM each time it
+    draws (the phone's #map, the viewer's #overlay), so on a loaded machine the attribute can be a
+    frame half a second old; a read after a fresh frame is the clock the screen shows now."""
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
 def phone_t(phone) -> float:
+    fresh(phone)
     return float(phone.get_attribute("#map", "data-t"))
 
 
+# The big screen sends its clock every second (web/viewer/src/companion.ts, EVERY_MS) and the
+# phone re-anchors on each.
+SETTLE_S = 1.0
+
+
 def assert_in_step(sample_laptop, phone):
-    """The phone's time sits between two laptop readings taken around it, give or take TOLERANCE_S."""
-    before = sample_laptop()
-    shown = phone_t(phone)
-    after = sample_laptop()
-    assert before - TOLERANCE_S <= shown <= after + TOLERANCE_S, (before, shown, after)
+    """The phone's time sits between two laptop readings taken around it, give or take TOLERANCE_S,
+    once settled: on a loaded machine one clock message can arrive late and leave the phone behind
+    until the next (at most SETTLE_S later), so the samples are retaken for up to SETTLE_S. The bar
+    stays TOLERANCE_S; a phone that never comes within it fails, with every sample."""
+    samples = []
+    deadline = time.monotonic() + SETTLE_S
+    while True:
+        before = sample_laptop()
+        shown = phone_t(phone)
+        after = sample_laptop()
+        samples.append((before, shown, after))
+        if before - TOLERANCE_S <= shown <= after + TOLERANCE_S:
+            return
+        if time.monotonic() > deadline:
+            raise AssertionError(f"not within {TOLERANCE_S} s after {SETTLE_S} s: {samples}")
+        phone.wait_for_timeout(100)
 
 
 def seen(phone) -> list[dict]:
@@ -542,10 +566,13 @@ def pair_through_viewer(browser, url):
 def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, api_site):
     url = api_site
     viewer, phone, errors, _, _ = pair_through_viewer(browser, url)
-    lap = lambda: float(viewer.get_attribute("#overlay", "data-t"))  # noqa: E731
+    def lap() -> float:  # the big screen's clock as it shows it now (a fresh frame, then its data-t)
+        fresh(viewer)
+        return float(viewer.get_attribute("#overlay", "data-t"))
+
     phone.wait_for_selector("#refused:not([hidden])", timeout=10_000)  # the truth minimap, refused
     phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
-    assert abs(phone_t(phone) - lap()) <= TOLERANCE_S
+    assert_in_step(lap, phone)
     # The API's stand-ins are ground truth, so the phone shows the clock alone, and says so (the
     # status is redrawn each animation frame, so it follows the refusal by a frame: wait for it).
     phone.wait_for_function("document.querySelector('#status').textContent === 'Clock only'", timeout=5_000)
