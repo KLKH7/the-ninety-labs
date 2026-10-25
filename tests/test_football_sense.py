@@ -375,3 +375,14 @@ def test_cli_prints_a_table_per_90(tmp_path, capsys):
     # One defect in 1.2 s of match is 4,500 per 90 minutes.
     assert "| 1 | 4500.0 |" in row and "seedX 00:00.0 h7" in row
     assert json.loads(out.read_text())["seedX"]["findings"]["pass_out_unpressed"][0]["player"] == "h7"
+
+
+def test_the_ball_is_dead_from_the_end_of_the_half_to_the_kick_off():
+    """Law 7, lesson 213: from the half_time event the ball is dead until the second half's kick-off;
+    football sense does not judge play in that gap."""
+    players = {**KEEPERS, "h7": ("home", "CM", still(50.0, 34.0)), "a7": ("away", "CM", still(60.0, 34.0))}
+    evs = [ev(0, "kickoff", "home", "h7", 52.5, 34.0), ev(1, "pass", "home", "h7", 52.5, 34.0),
+           ev(30, "half_time", "away", None, 50.0, 34.0),
+           ev(50, "kickoff", "away", "a7", 52.5, 34.0), ev(51, "pass", "away", "a7", 52.5, 34.0)]
+    live, _ = fs.play_mask(scene(players, lambda f: (52.5, 34.0, 0.0), 80, evs))
+    assert live[20] == 1 and live[40] == 0 and live[60] == 1

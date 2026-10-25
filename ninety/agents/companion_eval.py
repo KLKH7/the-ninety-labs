@@ -264,6 +264,18 @@ async def foundry_live() -> tuple[Ask, Judge]:
     return models.ask, models.judge
 
 
+def definitions(live: bool) -> dict:
+    """The published definitions a --foundry run calls (ninety/agents/evidence.py): the Companion
+    and the Judge, as `ninety.api.companion.foundry_models` pins them. None offline, where scripted
+    models answer."""
+    if not live:
+        return {}
+    from ninety.agents import evidence
+    from ninety.agents.judge import judge_agent
+
+    return evidence.of_code(lambda client: [companion.companion_agent(client), judge_agent(client)])
+
+
 def _commit() -> str:
     try:
         return subprocess.run(
@@ -280,12 +292,17 @@ def report(seeds: list[int], foundry: bool) -> tuple[str, dict]:
     unans = {s: asyncio.run(unanswerable(s, live)) for s in seeds}
     reading = metric_reading()
     who = "the published Companion and Judge (Foundry)" if foundry else "a scripted attacker model"
+    defs = definitions(foundry)
+    from ninety.agents.evidence import KEY, md_line
+
     lines = [
         "# Companion evaluation",
         "",
         f"Measured by `uv run python -m ninety.agents.companion_eval --seeds {','.join(map(str, seeds))}"
         f"{' --foundry' if foundry else ''}` at commit `{_commit()}`, on {MINUTES}-minute clips. "
         "How each number is measured: [EVALUATION.md](../EVALUATION.md#phone-companion).",
+        "",
+        md_line(defs),
         "",
         "## Number accuracy: window facts against the engine's own velocity",
         "",
@@ -349,6 +366,7 @@ def report(seeds: list[int], foundry: bool) -> tuple[str, dict]:
         "injections": planted,
         "unanswerable": unans,
         "metric_reading": reading,
+        KEY: defs,
     }
     return "\n".join(lines) + "\n", data
 

@@ -25,9 +25,12 @@ from ninety.validate import validate as validate_clip
 
 # sample_params(seed).to_dict() at origin/main 0f101db, before the views existed: a seed keeps every
 # draw it had, so its broadcast looks the same (sha256 of the sorted JSON, first 16 hex digits).
+# The team codes are left out: they are no longer drawn but fixed (params.TEAMS, lesson 234; the
+# draw itself is still made), and the test below holds them.
 MAIN_PARAMS = {
-    1: "b548d145d229ffb3", 7: "4fc97e83e939ea5b", 42: "108c4730e51b48f3", 900001: "02ec90ba5cb6aab3",
+    1: "f519f64391fd0d30", 7: "cb2cf91406107bae", 42: "b59ab0c991e30d06", 900001: "514ba69ccdd72554",
 }
+CODES = ("home_code", "away_code")
 
 
 def _sha(d: dict) -> str:
@@ -36,7 +39,16 @@ def _sha(d: dict) -> str:
 
 @pytest.mark.parametrize("seed", sorted(MAIN_PARAMS))
 def test_a_seed_keeps_every_draw_it_had_before_the_views(seed):
-    assert _sha(sample_params(seed).to_dict()) == MAIN_PARAMS[seed]
+    drawn = {k: v for k, v in sample_params(seed).to_dict().items() if k not in CODES}
+    assert _sha(drawn) == MAIN_PARAMS[seed]
+
+
+@pytest.mark.parametrize("seed", sorted(MAIN_PARAMS))
+def test_every_seed_plays_the_fixed_teams(seed):
+    from ninety.render.params import TEAMS
+
+    d = sample_params(seed).to_dict()
+    assert (d["home_code"], d["away_code"]) == (TEAMS["home"][0], TEAMS["away"][0])
 
 
 def test_the_mount_is_drawn_for_every_seed_and_the_views_never_are():

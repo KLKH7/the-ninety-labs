@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 from ninety import config
 from ninety.agents.contracts import Describe, Description, Judge, status_for
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate
 from ninety.match.facts import compact
 
 # design: the model gets the Judge's own budget (ninety/agents/judge.py, 15 s). It is not the 2 s
@@ -119,6 +119,11 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
         verdict = check(claim, {e["id"]: e for e in evidence})
         if not verdict.ok:
             return "code checks: " + "; ".join(verdict.reasons)
+        # The moment's detections are confident (checked before asking), but a line may still name a
+        # side told unsurely: the same gate as every other claim holds it, and the code line stays.
+        verdict = confidence_gate(claim, {e["id"]: e for e in evidence})
+        if not verdict.ok:
+            return "confidence gate: " + "; ".join(verdict.reasons)
         # The Judge keeps its own timeout and retry (ninety/agents/judge.py), and says a held claim
         # with a verdict, not an error. The one mapping decides (contracts.status_for): only
         # "verified" airs; held, rejected, an unknown category or an error keep the code line.

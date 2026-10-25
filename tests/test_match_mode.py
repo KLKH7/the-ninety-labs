@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import re
 import shutil
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -167,15 +168,15 @@ def test_match_mode_shows_the_chapters_the_score_and_the_honest_line(browser, si
     assert page.get_attribute("body", "data-mode") == "match"
     chapters = page.locator("#chapters .chapter")
     assert chapters.count() == 2
-    first = "Chapter 1 of 2: Goal, home, match clock 01:00 to 01:01"
+    first = "Chapter 1 of 2: Goal · Crowmere, match clock 01:00 to 01:01"
     assert chapters.nth(0).get_attribute("aria-label") == first
-    assert "Shot saved, away" in chapters.nth(1).inner_text()
+    assert "Shot saved · Dunhollow" in chapters.nth(1).inner_text()
     line = page.inner_text("#match-honest")
     assert line == ("Condensed match, replayed at real speed. "
                     "Every event and number was computed from the pixels by our pipeline.")
     seek(page, 5)  # 60.2 s: before the goal
     assert page.get_attribute("#match", "data-score") == "0-0"
-    assert page.inner_text("#score") == "Home 0 – 0 Away"
+    assert page.inner_text("#score") == "Crowmere 0 – 0 Dunhollow"
     seek(page, 30)  # 61.22 s: after it
     assert page.get_attribute("#match", "data-score") == "1-0"
     seek(page, 66)  # 62.66 s: after the unsure second goal at 62.5, which never counts
@@ -224,7 +225,7 @@ def test_chapters_from_the_keyboard(browser, site):  # noqa: F811
 
 
 def test_the_stats_follow_the_clock(browser, site):  # noqa: F811
-    page, _ = open_viewer(browser, site + "?bundle=match/")
+    page, _ = open_viewer(browser, site + "?bundle=match/&dev=1")  # on the big screen they are on the phone
     seek(page, 5)
     rows = page.locator("#stats-table tr")
     assert rows.nth(1).inner_text().split("\t") == ["Goals", "0", "0"]
@@ -243,6 +244,82 @@ def test_a_bundle_without_match_json_has_no_match_mode(browser, site):  # noqa: 
     assert not page.is_visible("#time-skip")
     assert not errors
 
+
+# ---------------------------------------------------------------- the big screen (R5, Oct 23)
+
+PANELS = ("#radar-section", "#match-stats", "#trace", "#pipeline", "#show-boxes", "#show-radar")
+
+
+def test_the_pairing_card_is_up_at_kick_off_and_each_chapter_then_goes(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    chapters = [{"index": 0}, {"index": 25 * 600}]  # a chapter starting 10 minutes into the video
+    up = lambda v: page.evaluate(f"window.ninetyMatch.pairCardUp({json.dumps(chapters)}, 25, {v})")  # noqa: E731
+    assert up(0.0) and up(19.9)  # PAIR_CARD_S: 20 s from kick-off
+    assert not up(20.1) and not up(599.9)  # then gone, until...
+    assert up(600.0) and up(619.9) and not up(620.1)  # ...20 s from the next chapter's start
+    assert not errors
+    page.context.close()
+
+
+def test_the_big_screen_shows_the_broadcast_score_chapters_and_qr_and_nothing_else(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    assert page.get_attribute("body", "data-screen") == "big"
+    for hidden in PANELS:  # on the phone instead
+        assert not page.is_visible(hidden), hidden
+    for shown in ("#stage", "#score", "#chapters", "#clock"):
+        assert page.is_visible(shown), shown
+    # Pairing is the TV card over the picture (up once a code exists), not a side panel.
+    assert not page.is_visible("#phone-panel") and page.locator("#pair-card").count() == 1
+    assert not page.is_checked("#show-boxes")  # the detector's boxes are not broadcast graphics
+    page.keyboard.press("d")
+    assert not page.is_checked("#show-boxes")
+    assert not errors
+    page.context.close()  # an open page keeps drawing; the audio tests time real playback
+
+
+def test_the_dev_flag_keeps_every_panel(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/&dev=1")
+    assert page.get_attribute("body", "data-screen") is None
+    for shown in PANELS:
+        assert page.is_visible(shown), shown
+    assert not errors
+    page.context.close()  # an open page keeps drawing; the audio tests time real playback
+
+
+def test_a_clip_out_of_match_mode_keeps_its_panels(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=plain/")
+    assert page.get_attribute("body", "data-screen") is None
+    assert page.is_visible("#trace") and page.is_visible("#pipeline")
+    assert not errors
+    page.context.close()  # an open page keeps drawing; the audio tests time real playback
+
+
+def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut(browser, site):  # noqa: F811
+    """The QR code is up without a click, names the bundle, and the clock the phone gets is match
+    time: past the cut, image 40 shows match frame 1550 (62.02 s), not t_start plus video time."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    sent: list[dict] = []
+
+    def relay(ws):
+        ws.on_message(lambda m: sent.append(json.loads(m)))
+
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), relay)
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.wait_for_selector("#pair-card")  # no click: the TV's pairing card is up at kick-off
+    assert page.inner_text("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
+    assert page.locator("#pair-qr svg").count() == 1
+    link = page.get_attribute("#phone-link", "href")
+    assert "code=K7MP3Q" in link and "bundle=%2Fmatch%2F" in link
+    seek(page, 40)
+    page.wait_for_function("document.querySelector('#overlay').dataset.t >= 62")
+    page.wait_for_timeout(400)
+    last = [m for m in sent if m["type"] == "clock"][-1]
+    assert last["t"] == pytest.approx((1550 + 0.5) / FPS, abs=0.03)  # mutation: t_start + video time -> 61.62
+    ctx.close()
 
 # ---------------------------------------------------------------- highlights (src/highlights.ts)
 
@@ -327,8 +404,11 @@ def test_before_the_measurement_the_reel_is_unlabelled_and_says_why(browser, sit
 
 
 def test_reduced_motion_keeps_the_card_still(browser, site):  # noqa: F811
-    page, _ = open_viewer(browser, site + "?bundle=highlights/")
-    page.check("#reduce-motion")
+    # The browser asks for reduced motion, which the viewer reads at load (its own box follows it).
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, reduced_motion="reduce")
+    page = ctx.new_page()
+    page.goto(site + "?bundle=highlights/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
     seek(page, 26)
     assert "still" in page.get_attribute("#hl-card", "class").split()
 

@@ -20,6 +20,8 @@ FROM node:22.21.1-slim AS phone
 WORKDIR /phone
 COPY web/phone/package.json web/phone/package-lock.json ./
 RUN npm ci --no-audit --no-fund
+# The phone imports the viewer's radar, match, speech and club modules (../../viewer/src from /phone).
+COPY web/viewer/src /viewer/src
 COPY web/phone ./
 RUN npm run build && test -f dist/index.html && test ! -e dist/mock-laptop.html
 

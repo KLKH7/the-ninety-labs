@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import ninety.eval.shot_flight as shot_flight
 from ninety.eval.shot_flight import (
     agreement,
     clip_rows,
@@ -14,8 +15,10 @@ from ninety.eval.shot_flight import (
     error_table,
     flight_time_s,
     main,
+    percentile,
     save_gate,
     score,
+    summary,
     true_flight,
     woodwork_hits,
     woodwork_matches,
@@ -200,14 +203,15 @@ def test_the_woodwork_goes_live_only_with_ten_true_hits_and_ninety_percent_preci
 # Goal-mouth crossings
 
 
-def crossing_row(det_id, y, z):
-    return {"detected_id": det_id, "crossing": {"y": y, "z": z, "t": 1.0}}
+def crossing_row(det_id, y, z, clip="A"):
+    return {"clip": clip, "detected_id": det_id, "crossing": {"y": y, "z": z, "t": 1.0}}
 
 
 def test_crossings_within_two_metres_of_the_frame_are_measured_and_further_out_are_not():
     rows = [crossing_row("a", 34.0 + 3.66 + 2.0, 1.0), crossing_row("b", 34.0 + 3.66 + 2.01, 1.0),
             crossing_row("c", 34.0, 2.44 + 2.01)]
-    vision = {"a": {"y": 39.0, "z": 1.2}, "b": {"y": 40.0, "z": 1.0}, "c": {"y": 34.0, "z": 4.0}}
+    vision = {("A", "a"): {"y": 39.0, "z": 1.2}, ("A", "b"): {"y": 40.0, "z": 1.0},
+              ("A", "c"): {"y": 34.0, "z": 4.0}}
     t = crossing_table(rows, vision)
     assert (t["true_crossings"], t["with_vision_crossing"]) == (1, 1)
     assert t["y_m"]["median_signed"] == pytest.approx(39.0 - 39.66)
@@ -261,3 +265,182 @@ def test_the_command_writes_a_strict_json_report(tmp_path):
     report = json.loads((tmp_path / "report.json").read_text())
     assert report["counts"][0]["matched"] == 1
     assert report["agreement"]["saves"] == 1
+
+
+def test_the_same_detected_id_in_two_clips_is_two_shots():
+    # Detected ids count from v1 in every clip: clip B's v1 is not clip A's.
+    rows = [crossing_row("v1", 34.0, 1.0, clip="A"), crossing_row("v1", 36.0, 1.5, clip="B")]
+    vision = {("A", "v1"): {"y": 34.5, "z": 1.0}, ("B", "v1"): {"y": 36.2, "z": 1.4}}
+    t = crossing_table(rows, vision)
+    assert t["with_vision_crossing"] == 2
+    assert t["y_m"]["median_signed"] == pytest.approx(0.35)  # errors 0.5 and 0.2, not 2.5 and 1.8
+    assert t["z_m"]["p95_abs"] == pytest.approx(0.0 + (0.1 - 0.0) * 0.95)  # errors 0.0 and -0.1
+    # A clip with no crossing for its v1 is not given another clip's.
+    t = crossing_table(rows, {("A", "v1"): {"y": 34.5, "z": 1.0}})
+    assert t["with_vision_crossing"] == 1
+
+
+def test_rows_name_their_clip_through_score():
+    clips = [{"name": n, "truth": [shot("t1", 1.0)], "frames": still_frames([(0.0, 94.0, 34.0)], 2.0),
+              "detected": [shot("v1", 1.0, source="vision")]} for n in ("A", "B")]
+    report = score(clips)
+    assert [r["clip"] for r in report["rows"]] == ["A", "B"]  # both detected ids are v1
+
+
+# The statistic the save gate stands on
+
+
+def test_a_percentile_is_interpolated_between_the_ranks():
+    assert percentile([1.0, 2.0, 3.0, 4.0, 5.0], 0.95) == pytest.approx(4.8)
+    assert percentile([5.0, 1.0, 3.0], 0.5) == pytest.approx(3.0)
+    assert percentile([], 0.5) is None
+    assert percentile([2.0], 0.95) == pytest.approx(2.0)
+
+
+def test_the_summary_of_five_errors_has_the_exact_p95_median_and_bias():
+    s = summary([0.01, -0.02, 0.05, -0.08, 0.11])
+    assert s["n"] == 5
+    assert s["median_abs"] == pytest.approx(0.05)
+    assert s["p95_abs"] == pytest.approx(0.08 + (0.11 - 0.08) * 0.8)  # rank 3.8 of the sorted |errors|
+    assert s["median_signed"] == pytest.approx(0.01)
+
+
+def full_row(**over):
+    base = {"clip": "A", "truth_id": "t", "detected_id": "d", "outcome": "on_target",
+            "v_true": 80.0, "v_vision": 80.0, "d_true": 11.0, "d_vision": 11.0,
+            "x_error": 0.0, "y_error": 0.0, "T_true": 0.5, "T_vision": 0.5, "T_flown": 0.5,
+            "lifted": False, "crossing": None}
+    return {**base, **over}
+
+
+def test_the_save_gate_reads_the_p95_of_the_flight_time_errors_of_saves():
+    # Twenty saves, every one on the same side of the dive time; the errors are 0.00 for nineteen
+    # and 0.20 for one: rank 18.05 of 19 puts the p95 at 0.01, under the gate; two at 0.20 put it at 0.2.
+    ok = [full_row(T_true=0.5, T_vision=0.5) for _ in range(19)] + [full_row(T_true=0.5, T_vision=0.7)]
+    gate = save_gate(error_table(ok), agreement(ok))
+    assert gate["p95_T_s"] == pytest.approx(0.2 * 0.05)
+    assert gate["live"] is True
+    bad = [full_row(T_true=0.5, T_vision=0.5) for _ in range(18)] + [full_row(T_true=0.5, T_vision=0.7)] * 2
+    gate = save_gate(error_table(bad), agreement(bad))
+    assert gate["p95_T_s"] == pytest.approx(0.2)
+    assert gate["live"] is False
+
+
+def test_each_error_is_read_from_its_own_field_and_ground_and_lifted_are_apart():
+    rows = [full_row(x_error=1.0, y_error=0.25, lifted=False, v_vision=90.0),
+            full_row(x_error=1.0, y_error=0.25, lifted=True, v_vision=70.0)]
+    errors = error_table(rows)
+    assert errors["all"]["all"]["x_m"]["median_signed"] == pytest.approx(1.0)
+    assert errors["all"]["all"]["y_m"]["median_signed"] == pytest.approx(0.25)
+    assert errors["saves"]["ground"]["v_kmh"]["median_signed"] == pytest.approx(10.0)
+    assert errors["saves"]["lifted"]["v_kmh"]["median_signed"] == pytest.approx(-10.0)
+
+
+def test_a_high_ball_past_a_post_is_not_a_hit_on_it():
+    # Over the bar's height beside the post: neither the post (under the bar) nor the bar (between the posts).
+    assert woodwork_hits(bounce(y=34.0 + 3.66 + 0.1, z=3.0)) == []
+
+
+# Test seeds are scored once
+
+
+def make_clip(tmp_path, name, seed=None):
+    root = tmp_path / name
+    root.mkdir()
+    (root / "events.jsonl").write_text(json.dumps(shot("t1", 1.0)) + "\n")
+    lines = (json.dumps(f) + "\n" for f in still_frames([(0.0, 94.0, 34.0)], 2.0))
+    (root / "frames.jsonl").write_text("".join(lines))
+    if seed is not None:
+        (root / "meta.json").write_text(json.dumps({"seed": seed}))
+    det = tmp_path / f"{name}.detected.jsonl"
+    det.write_text(json.dumps(shot("v1", 1.0, source="vision")) + "\n")
+    return root, det
+
+
+@pytest.mark.parametrize("name,seed", [("seed900001", None), ("seed900030", None), ("seed910009", None),
+                                       ("seed910016", None), ("clip", 900015), ("clip", 910012)])
+def test_a_test_seed_is_refused_unless_it_is_the_final_look(tmp_path, name, seed):
+    root, det = make_clip(tmp_path, name, seed)
+    with pytest.raises(SystemExit, match="test seed"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+    assert not (tmp_path / "r.json").exists()
+    main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r"), "--final-test"])
+    assert (tmp_path / "r.json").exists()
+
+
+@pytest.mark.parametrize("name,seed", [("seed910001", None), ("seed910008", None), ("seed12", None),
+                                       ("clip", 910004), ("seed900031", None)])
+def test_a_validation_or_training_seed_is_scored_without_the_flag(tmp_path, name, seed):
+    root, det = make_clip(tmp_path, name, seed)
+    main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+    assert (tmp_path / "r.json").exists()
+
+
+def test_a_clip_whose_seed_cannot_be_told_is_refused(tmp_path):
+    root, det = make_clip(tmp_path, "clip")
+    with pytest.raises(SystemExit, match="unknown"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+
+
+def test_crossings_name_their_clip_and_each_clip_reads_only_its_own(tmp_path):
+    a, da = make_clip(tmp_path, "seed1")
+    b, db = make_clip(tmp_path, "seed2")
+    cross = tmp_path / "crossings.jsonl"
+    cross.write_text(json.dumps({"shot": "v1", "y": 34.0, "z": 1.0}) + "\n")
+    with pytest.raises(SystemExit, match="names its clip"):
+        main(["--clip", str(a), "--detected", str(da), "--clip", str(b), "--detected", str(db),
+              "--crossings", str(cross), "--out", str(tmp_path / "r")])
+    cross.write_text(json.dumps({"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}) + "\n")
+    main(["--clip", str(a), "--detected", str(da), "--clip", str(b), "--detected", str(db),
+          "--crossings", str(cross), "--out", str(tmp_path / "r")])
+
+
+@pytest.mark.parametrize("name,seed", [("seed910001", 900001), ("seed910001", "900001"),
+                                       ("seed910001", 900001.0), ("seed12", 910012)])
+def test_meta_jsons_seed_beats_the_folders_name(tmp_path, name, seed):
+    root, det = make_clip(tmp_path, name, seed)
+    with pytest.raises(SystemExit, match="test seed"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+
+
+def test_a_folder_named_for_a_test_seed_is_scored_when_meta_jsons_seed_is_a_validation_one(tmp_path):
+    root, det = make_clip(tmp_path, "seed900001", 910001)
+    main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+    assert (tmp_path / "r.json").exists()
+
+
+@pytest.mark.parametrize("seed", [None, "n/a", True, 12.5])
+def test_a_seed_meta_json_cannot_give_is_unknown_not_the_names(tmp_path, seed):
+    root, det = make_clip(tmp_path, "seed910001", seed)
+    (root / "meta.json").write_text(json.dumps({"seed": seed}))
+    with pytest.raises(SystemExit, match="unknown"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])
+
+
+def test_each_clip_is_given_only_its_own_crossings(tmp_path, monkeypatch):
+    a, da = make_clip(tmp_path, "seed1")
+    b, db = make_clip(tmp_path, "seed2")
+    cross = tmp_path / "crossings.jsonl"
+    cross.write_text(json.dumps({"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}) + "\n"
+                     + json.dumps({"clip": "seed2", "shot": "v1", "y": 36.0, "z": 1.5}) + "\n"
+                     + json.dumps({"clip": "seed2", "shot": "v2", "y": 35.0, "z": 0.5}) + "\n")
+    seen = {}
+
+    def spy(clips):
+        seen.update({c["name"]: c["crossings"] for c in clips})
+        return {"counts": [], "agreement": {"saves": 0, "same_side": 0, "share": None}, "save_filter": None}
+
+    monkeypatch.setattr(shot_flight, "score", spy)
+    main(["--clip", str(a), "--detected", str(da), "--clip", str(b), "--detected", str(db),
+          "--crossings", str(cross), "--out", str(tmp_path / "r")])
+    assert seen == {"seed1": {"v1": {"clip": "seed1", "shot": "v1", "y": 34.0, "z": 1.0}},
+                    "seed2": {"v1": {"clip": "seed2", "shot": "v1", "y": 36.0, "z": 1.5},
+                              "v2": {"clip": "seed2", "shot": "v2", "y": 35.0, "z": 0.5}}}
+
+
+@pytest.mark.parametrize("body", [[], [{"seed": 900001}], "seed", 5, None])
+def test_a_meta_json_that_is_not_an_object_leaves_the_seed_unknown(tmp_path, body):
+    root, det = make_clip(tmp_path, "seed910001")
+    (root / "meta.json").write_text(json.dumps(body))
+    with pytest.raises(SystemExit, match="unknown"):
+        main(["--clip", str(root), "--detected", str(det), "--out", str(tmp_path / "r")])

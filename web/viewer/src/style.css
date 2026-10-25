@@ -149,6 +149,41 @@ body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match
 .stats th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; }
 .stats td { font-weight: 700; }
 
+/* The big screen (main.ts, bigScreen): the broadcast, its graphics, score and clock, the chapters
+   and the QR code; everything else is on the phone. ?dev=1 shows it all. */
+body[data-screen="big"] .dev-only,
+body[data-screen="big"] .skip,
+body[data-screen="big"] #radar-section,
+body[data-screen="big"] .stats-panel,
+body[data-screen="big"] .trace,
+body[data-screen="big"] .layout > .pipeline,
+body[data-screen="big"] .match-honest:not(.warn) { display: none !important; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "player side"; grid-template-rows: auto; }
+body[data-screen="big"] .phone-panel { position: sticky; top: 16px; text-align: center; }
+body[data-screen="big"] .phone-panel .hint { font-size: 0.8rem; }
+body[data-screen="big"] .phone-qr { width: 100%; max-width: 208px; margin: 10px auto 6px; }
+body[data-screen="big"] #phone-pair { display: none; }
+body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
+@media (max-width: 900px) { body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "side"; } }
+
+/* The big screen's pairing card: a lower-third, like a TV app's sign-in card (black, white type), up for PAIR_CARD_S at kick-off and each chapter (match.ts). */
+.pair-card { position: absolute; right: 3%; bottom: 7%; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 10px;
+  background: #000; color: #fff; border-radius: 10px; font: 500 clamp(0.8rem, 1.5vw, 1.05rem)/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 70%; }
+.pair-card[hidden] { display: none; }
+.pair-qr { width: clamp(56px, 7vw, 92px); flex: none; background: #fff; border-radius: 6px; padding: 4px; line-height: 0; }
+.pair-qr svg { width: 100%; height: auto; }
+.pair-text { display: grid; gap: 2px; }
+.pair-kicker { font-size: 0.75em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b8bec8; }
+.pair-line b { font-weight: 700; }
+.pair-code { color: #fff; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .pair-card:not(.still) { animation: pair-in 0.35s ease-out; }
+}
+@keyframes pair-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* On the big screen the card replaces the side panel. */
+body[data-screen="big"] .side { display: none; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player"; }
+
 /* Highlights mode (src/highlights.ts): the reel's card over the footage and its list below it. */
 .highlights { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .highlights[hidden], .hl-card[hidden], .hl-progress[hidden], .hl-detail[hidden], .hl-caption[hidden], .hl-source[hidden] { display: none; }

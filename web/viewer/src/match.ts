@@ -5,6 +5,7 @@
 
 import { type Bundle, type Manifest, clock } from "./bundle";
 import type { Reel } from "./highlights";
+import type { TeamNames } from "./teams";
 
 export type Kind = "goal" | "save" | "shot" | "set_piece" | "build_up";
 
@@ -35,6 +36,23 @@ export interface MatchData {
 /** How long the "time skip" label stays up after a cut (design: long enough to read, gone before
  * the play it skipped to matters). */
 export const SKIP_LABEL_S = 2.5;
+
+/** A chapter's label with the club's name for the side it names ("Goal, home" -> "Goal · London"):
+ * match.json names sides, the screen names clubs. */
+export function chapterLabel(c: Pick<Chapter, "label">, teams: TeamNames): string {
+  return c.label.replace(/, (home|away)$/, (_, side: "home" | "away") => ` · ${teams[side]}`);
+}
+
+/** How long the big screen's pairing card stays up at kick-off and after each chapter starts (design:
+ * long enough to scan, short enough not to sit on the play). */
+export const PAIR_CARD_S = 20;
+
+/** Whether the pairing card is up at video time `v`: the clip's first PAIR_CARD_S seconds, and the
+ * same after each chapter starts. */
+export function pairCardUp(chapters: Pick<Chapter, "index">[], fps: number, v: number): boolean {
+  if (v < PAIR_CARD_S) return true;
+  return chapters.some((c) => v >= c.index / fps && v - c.index / fps < PAIR_CARD_S);
+}
 
 /** The chapter on screen at video time `v`. */
 export function chapterAt(chapters: Chapter[], fps: number, v: number): Chapter | null {
@@ -85,7 +103,7 @@ function cell(tag: "td" | "th", text: string, scope?: string) {
 
 /** Match mode's panels, or nothing when the bundle has no match.json. Returns what main.ts calls
  * each frame and the chapter keys. */
-export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
+export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: TeamNames) {
   const m = b.match;
   const root = $("match");
   const statsPanel = $("match-stats");
@@ -113,11 +131,12 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
     btn.className = `chapter ${c.kind}`;
     btn.dataset.n = String(c.n);
     const span = `${clock(c.t)} to ${clock(c.t_end)}`;
-    btn.setAttribute("aria-label", `Chapter ${c.n} of ${m.chapters.length}: ${c.label}, match clock ${span}`);
-    btn.title = `${c.label} · ${span}`;
+    const named = chapterLabel(c, teams);
+    btn.setAttribute("aria-label", `Chapter ${c.n} of ${m.chapters.length}: ${named}, match clock ${span}`);
+    btn.title = `${named} · ${span}`;
     const label = document.createElement("span");
     label.className = "chapter-label";
-    label.textContent = c.label;
+    label.textContent = named;
     const time = document.createElement("span");
     time.className = "chapter-time";
     time.textContent = clock(c.t);
@@ -146,12 +165,12 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
   const tick = (v: number, t: number, reduceMotion: boolean) => {
     const c = chapterAt(m.chapters, fps, v);
     const s = scoreAt(m, t);
-    score.textContent = `Home ${s.home} – ${s.away} Away`;
-    score.setAttribute("aria-label", `Score from detected goals: home ${s.home}, away ${s.away}`);
+    score.textContent = `${teams.home} ${s.home} – ${s.away} ${teams.away}`;
+    score.setAttribute("aria-label", `Score from detected goals: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
     head.style.left = `${Math.min(100, (100 * v * fps) / total)}%`;
     if (c && c.n !== lastChapter) {
       lastChapter = c.n;
-      chapterNow.textContent = `Chapter ${c.n} of ${m.chapters.length} · ${c.label}`;
+      chapterNow.textContent = `Chapter ${c.n} of ${m.chapters.length} · ${chapterLabel(c, teams)}`;
       for (const x of buttons) {
         if (x.c.n === c.n) x.btn.setAttribute("aria-current", "true");
         else x.btn.removeAttribute("aria-current");
@@ -164,7 +183,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
       skip.textContent = `Time skip · ${clock(sk.from)} → ${clock(sk.to)}`;
       if (c && c.n !== lastSkip) {
         lastSkip = c.n;
-        announce.textContent = `Time skip to ${clock(sk.to)}: ${c.label}.`;
+        announce.textContent = `Time skip to ${clock(sk.to)}: ${chapterLabel(c, teams)}.`;
       }
     } else if (c && v - c.index / fps >= SKIP_LABEL_S) lastSkip = -1;
     const st = statsAt(m, t);
@@ -172,7 +191,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
     if (key !== shown) {
       shown = key;
       const headRow = document.createElement("tr");
-      headRow.append(cell("th", ""), cell("th", "Home", "col"), cell("th", "Away", "col"));
+      headRow.append(cell("th", ""), cell("th", teams.home, "col"), cell("th", teams.away, "col"));
       table.replaceChildren(
         headRow,
         ...rows.map(([name, f]) => {
@@ -202,6 +221,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void) {
     scoreAt: (t: number) => scoreAt(m, t),
     statsAt: (t: number) => statsAt(m, t),
     skipAt: (v: number) => skipAt(m.chapters, fps, v),
+    pairCardUp: (chapters: { index: number }[], f: number, v: number) => pairCardUp(chapters, f, v),
   };
   return { tick, step };
 }

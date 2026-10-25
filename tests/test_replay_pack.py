@@ -64,3 +64,13 @@ def test_pack_refuses_events_that_are_not_detected(tmp_path, event):
     (b / "events.jsonl").write_text(detected + "\n" + json.dumps(event) + "\n")
     with pytest.raises(SystemExit, match="not a detected event"):
         replay.pack(b, tmp_path / "out.tar.gz")
+
+
+def test_a_bundle_made_with_the_radar_match_mode_and_live_agents_packs(tmp_path):
+    # ninety-e2e --tracked, --match and --agents live write radar.json, match.json and agents.json:
+    # all three are viewer files, so a demo bundle made with them can be published.
+    b = bundle(tmp_path / "b")
+    for name in ("radar.json", "match.json", "agents.json"):
+        (b / name).write_text("{}\n")
+    names = [p.relative_to(b).as_posix() for p in replay.members(b)]
+    assert {"radar.json", "match.json", "agents.json"} <= set(names)
