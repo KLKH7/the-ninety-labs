@@ -25,7 +25,8 @@ BOX_DEPTH_M = 16.5
 BOX_HALF_W = 16.5 + GOAL_W / 2
 # "and took 3 shots from inside the penalty area": the inside count is the number after "took".
 INSIDE_CONTEXT = r"\btook\s+$"
-OUTCOMES = ("goal", "saved", "blocked", "off_target")  # the words of #271's shot outcomes
+# #271's shot outcomes (ninety/vision/outcomes.py): on_target is a save.
+OUTCOMES = ("goal", "on_target", "blocked", "off_target")
 
 
 def geometry(x: float, y: float, team: str | None) -> tuple[float, float]:

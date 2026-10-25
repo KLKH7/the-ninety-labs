@@ -82,6 +82,8 @@ UNIT_WORDS = {
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
     "shots": ("shots", "shot"),
+    "goals": ("goals", "goal"),
+    "saves": ("saves", "save"),
     "km": ("km", "kilometres", "kilometers"),
     "km/h": ("km/h", "kilometres an hour", "kph"),
     "progressive passes": ("progressive passes", "progressive pass"),
@@ -517,6 +519,8 @@ DIRECTED = (
     "shots_all",
     "shots",
     "shot_distance_m",
+    "score",
+    "saves",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -567,6 +571,10 @@ TEMPLATES = {
     "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
     "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "score": [
+        r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
+    ],
+    "saves": [rf"made {_N} saves?"],
     "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
     "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
     "shot_distance_m": [

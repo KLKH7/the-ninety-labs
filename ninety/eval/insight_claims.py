@@ -71,7 +71,7 @@ WORDS = {
 
 SUMMARY_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "possession", "territory", "shots",
-    "passing",
+    "passing", "score",
 )
 
 

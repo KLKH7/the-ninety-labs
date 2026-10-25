@@ -48,7 +48,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
     "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
-    "halves", "key_moments",
+    "halves", "key_moments", "score",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -238,6 +238,14 @@ def territory(match: str, minute_from: int, minute_to: int, club: str | None = N
     return _insight(match, "territory", minute_from, minute_to, club)
 
 
+def score(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The score after minute_to (stated only when no goal's side is in doubt; the side is told by the
+    goal the ball went into), each goal up to then with its scorer and the pass that made it, oldest
+    first, and each club's goalkeeper's saves over the minutes. Empty until vision detects goals. Cite
+    by id."""
+    return _insight(match, "score", minute_from, minute_to, club)
+
+
 def halves(match: str, minute_to: int, club: str | None = None) -> dict:
     """The first half against the second (Law 7's 45 minutes), up to a match minute: where the ball
     was, the shots and what the passes did in each, with the same ids and bounds as those tools. Cite
@@ -360,7 +368,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
-        possession, territory, shots, passing, physical, halves, key_moments,
+        possession, territory, shots, passing, physical, halves, key_moments, score,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)
