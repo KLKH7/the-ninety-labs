@@ -2,9 +2,11 @@
 
     uv run ninety-e2e <clip> --out <bundle> --voice-audio       # as the last step of the bundle
     uv run python -m ninety.speech.bundle <bundle>               # or on a bundle already written
+    uv run python -m ninety.speech.bundle <bundle> --estimate    # lines and cost first: no call
 
 Every line the phone reads aloud from the bundle gets an MP3: the fixed lines (FIXED, the voice
-preview), each audio description line (audio.json), and each verified insight card (cards.json)
+preview), each audio description line (audio.json), each commentary call (commentary.json), and
+each verified insight card (cards.json)
 as its spoken form, with and without the "New insight: " the phone says before a new one, and its
 "Why?" answer. They are written to
 speech/<key>.mp3, and speech.json maps each line's key (voice.key: SHA-256 of the text) to its
@@ -43,6 +45,10 @@ RETRY_WAIT_S = 3.0  # design: when a 429 gives no Retry-After; F0 refills over a
 # product "Azure Speech", meter "S1 Neural Text To Speech Characters", northcentralus, read
 # 2026-10-23). The resource is F0 today, whose first 0.5 M characters a month are free.
 USD_PER_CHAR = 15 / 1_000_000
+# voice.FORMAT is constant-bitrate MP3 at 48 kbit/s, so a file's length in seconds is its size over
+# 6,000 bytes (the few header bytes make it a little long, which errs toward more silence).
+MP3_BITS_PER_S = 48_000
+assert "48kbitrate" in voice.FORMAT, "MP3_BITS_PER_S follows voice.FORMAT"
 
 Synth = Callable[[str], tuple[bytes, float]]  # SSML -> (audio, seconds the request took)
 
@@ -62,6 +68,10 @@ def lines(bundle: Path) -> list[tuple[str, str]]:
     if audio.is_file():
         for said in json.loads(audio.read_text()).get("said", []):
             add(said.get("spoken"), "description")
+    commentary = bundle / "commentary.json"
+    if commentary.is_file():  # the commentary toggle's calls (ninety/speech/commentary.py)
+        for line in json.loads(commentary.read_text()).get("lines", []):
+            add(line.get("text"), "commentary")
     cards = bundle / "cards.json"
     if cards.is_file():
         for card in json.loads(cards.read_text()):
@@ -137,6 +147,7 @@ def write(bundle: Path, synth: Synth | None = None, cache: Path | None = None,
     body = {"voice": voice.VOICE, "format": voice.FORMAT, "insight_rate": voice.INSIGHT_RATE,
             "key": "sha256 of the text, whitespace collapsed", "lines": index}
     (bundle / "speech.json").write_text(json.dumps(body, indent=1, sort_keys=True) + "\n")
+    _point_commentary_at_audio(bundle, index)
     took.sort()
     return {
         "voice": voice.VOICE,
@@ -152,6 +163,47 @@ def write(bundle: Path, synth: Synth | None = None, cache: Path | None = None,
         "chars_total": sum(len(t) for t, _ in wanted),
         "usd_at_s1": round(sum(len(t) for t, _ in wanted) * USD_PER_CHAR, 4),
     }
+
+
+def _point_commentary_at_audio(bundle: Path, index: dict[str, dict]) -> None:
+    """Each commentary call's `audio` (commentary.json, the big-screen player's format): its file,
+    or None when its synthesis failed and the player shows the caption alone; and each call re-timed
+    to its audio's own length (`commentary.refit`), dropping any that would then overlap."""
+    from ninety.speech import commentary
+
+    path = bundle / "commentary.json"
+    if not path.is_file():
+        return
+    body = json.loads(path.read_text())
+    measured = {}
+    for line in body["lines"]:
+        entry = index.get(voice.key(line["text"])) or {}
+        line["audio"] = entry.get("file")
+        if entry:
+            measured[line["id"]] = entry["bytes"] * 8 / MP3_BITS_PER_S
+    body = commentary.refit(body, measured)
+    path.write_text(json.dumps(body, indent=1) + "\n")
+    manifest = bundle / "manifest.json"
+    if manifest.is_file():
+        doc = json.loads(manifest.read_text())
+        doc["commentary"] = commentary.summary(body)
+        manifest.write_text(json.dumps(doc, indent=2) + "\n")
+
+
+def estimate(bundle: Path, cache: Path | None = None) -> dict:
+    """What `write` would synthesise, and its cost at S1, without calling Azure: every line, and
+    those the cache does not hold yet (what a run would bill)."""
+    cache = cache or CACHE
+    wanted = lines(bundle)
+    new = [(t, k) for t, k in wanted if not (cache / cache_name(t, rate_for(k))).is_file()]
+    by_kind: dict[str, int] = {}
+    for _, kind in wanted:
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+    chars = sum(len(t) for t, _ in wanted)
+    new_chars = sum(len(t) for t, _ in new)
+    return {"lines": len(wanted), "by_kind": by_kind, "chars": chars,
+            "usd_at_s1": round(chars * USD_PER_CHAR, 4), "new_lines": len(new), "new_chars": new_chars,
+            "new_usd_at_s1": round(new_chars * USD_PER_CHAR, 4)}
 
 
 def _quantile(values: list[float], q: float) -> float | None:
@@ -174,7 +226,12 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Pre-generate a bundle's read-aloud audio (a live Azure call).")
     ap.add_argument("bundle", type=Path)
     ap.add_argument("--cache", type=Path, default=CACHE)
+    ap.add_argument("--estimate", action="store_true",
+                    help="count the lines and their cost; call nothing (run this first, and agree the cost)")
     args = ap.parse_args(argv)
+    if args.estimate:
+        print(json.dumps(estimate(args.bundle, args.cache), indent=1))
+        return
     summary = write(args.bundle, cache=args.cache)
     add_to_manifest(args.bundle, summary)
     print(json.dumps(summary, indent=1))
