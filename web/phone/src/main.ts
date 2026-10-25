@@ -12,8 +12,7 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
-import londonCrest from "./crests/london-athletic.svg?raw";
-import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
+import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
@@ -571,8 +570,8 @@ function averagePositions(): Map<string, [number, number]> {
 /** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
  * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  if (club === "London") return londonCrest;
-  if (club === "Lisbon") return lisbonCrest;
+  const own = crestOf(club);
+  if (own) return own;
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 

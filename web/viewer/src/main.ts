@@ -1,7 +1,9 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
-import { pairCardUp, setupMatch } from "./match";
+import { AudioTracks, readCommentary } from "./commentary";
+import { setupHud } from "./hud";
+import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
@@ -229,6 +231,7 @@ async function start() {
   overlay.width = m.width;
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
+  document.documentElement.style.setProperty("--ar", String(m.width / m.height)); // the big screen's fit
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
   const { matchTime, videoTime, segmentOf } = timeline(m);
   const teams = teamNames(m.teams);
@@ -247,7 +250,8 @@ async function start() {
 
   let lastAired = "";
   const rememberedPersona = store.get("persona") as Persona | null;
-  let persona: Persona = rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
+  // The big screen has no persona switch: personas are the phone's (Kian, Oct 24).
+  let persona: Persona = !big && rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
   const narrator = new Narrator(b.audio?.said ?? [], b.base);
   document.body.dataset.voice = narrator.state.voice;
   (window as unknown as { ninetyNarrator: Narrator }).ninetyNarrator = narrator; // read by tests/test_viewer.py
@@ -270,12 +274,13 @@ async function start() {
     applyVoice();
   });
   const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
-  const remembered = store.get("reduceMotion");
+  // The big screen has no motion switch: it follows the system setting alone.
+  const remembered = big ? null : store.get("reduceMotion");
   reduceMotionBox.checked = remembered === null ? motionQuery.matches : remembered === "1";
   const applyMotion = () => (document.documentElement.dataset.motion = reduceMotionBox.checked ? "reduce" : "full");
   applyMotion();
   motionQuery.addEventListener("change", () => {
-    if (store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
+    if (big || store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
     applyMotion();
   });
   reduceMotionBox.addEventListener("change", () => {
@@ -286,8 +291,9 @@ async function start() {
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
   const setPersona = (p: Persona, focus = false, picked = true) => {
     if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
+    if (big && p !== "audio") p = "casual"; // only the audio menu changes it here
     persona = p;
-    store.set("persona", p);
+    if (!big) store.set("persona", p);
     document.body.dataset.persona = p;
     for (const btn of personaButtons) {
       const on = btn.dataset.persona === p;
@@ -335,6 +341,34 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
+  // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
+  // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
+  let tracks: AudioTracks | null = null;
+  if (big) {
+    const body = m.commentary?.count
+      ? await fetch(new URL("commentary.json", new URL(b.base, location.href))).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      : null;
+    tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
+    tracks.described = !!b.audio;
+  }
+  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
+  const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
+  const hud = big
+    ? setupHud({
+        footage,
+        video: m.footage.kind === "video" ? video : null,
+        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / m.fps, goal: c.kind === "goal" })),
+        play: playButton,
+        scrub,
+        clock: clockOut,
+        qrOpen: (open) => {
+          qrState.open = open;
+          if (!open) qrState.closed = true;
+        },
+        audio: tracks,
+        onTrack: (track) => setPersona(track === "described" ? "audio" : "casual"),
+      })
+    : null;
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -345,6 +379,8 @@ async function start() {
       case " ":
       case "k":
         if (target.tagName === "BUTTON" && e.key === " ") return; // the button's own click
+        // A radio or checkbox's own Space (the audio menu): it chooses, it does not play.
+        if (e.key === " " && target instanceof HTMLInputElement && ["radio", "checkbox"].includes(target.type)) return;
         e.preventDefault();
         togglePlay();
         break;
@@ -360,13 +396,26 @@ async function start() {
         footage.pause(); // to the middle of the next or previous frame
         footage.seek((Math.floor(footage.time() * m.fps) + (e.key === "." ? 1 : -1) + 0.5) * step);
         break;
+      case "f":
+        if (!hud) return;
+        hud.toggleFull();
+        break;
+      case "Escape":
+        if (!hud) return;
+        hud.closeQr();
+        hud.closeMenu();
+        qrState.closed = true;
+        break;
       case "1":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("casual");
         break;
       case "2":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("analyst");
         break;
       case "3":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("audio");
         break;
       case "d":
@@ -395,11 +444,13 @@ async function start() {
     }
   });
 
+  const broadcast = broadcastSchedule(b.cues);
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
     const t = matchTime(v);
-    const aired: Cue[] = onAir(b.cues, persona, t);
+    // The big screen airs the broadcast's few lower thirds; audio description keeps its own cues.
+    const aired: Cue[] = big && persona !== "audio" ? broadcast.filter((c) => c.t_in <= t && t < c.t_out) : onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
@@ -407,13 +458,16 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
-    if (big) {
-      const up = phone.paired && pairCardUp(b.match?.chapters ?? [], m.fps, v);
+    if (hud) {
+      const at = phone.paired ? pairCardAt(v, qrState) : "hidden";
       const card = $("pair-card");
-      if (card.hidden === up) {
-        card.hidden = !up;
+      if (card.dataset.at !== at) {
+        card.dataset.at = at;
+        card.hidden = at === "hidden";
         card.classList.toggle("still", reduceMotionBox.checked);
       }
+      hud.tick();
+      tracks?.update(v, t, !footage.paused());
     }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
@@ -441,8 +495,10 @@ async function start() {
     if (document.activeElement !== scrub) scrub.value = String(v);
     clockOut.textContent = clock(t);
     const paused = footage.paused();
-    playButton.textContent = paused ? "Play" : "Pause";
-    playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    if (!hud) {
+      playButton.textContent = paused ? "Play" : "Pause";
+      playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    }
     requestAnimationFrame(frame);
   };
   setPersona(persona, false, false);
