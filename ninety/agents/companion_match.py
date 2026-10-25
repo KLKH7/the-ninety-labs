@@ -152,7 +152,8 @@ TOOL_WORDS = (
     (
         "physical",
         r"\b(?:distance|covered|how far|sprint\w*|fastest|top speed|how fast|heat ?map|work rate|tired"
-        r"|ran the most|running|where (?:has|does|did|is) [\w' ]+ (?:been )?play\w*)\b",
+        r"|ran the most|run the most|running|furthest|farthest|kilomet\w*|km|quickest|stamina|fitness"
+        r"|where (?:has|does|did|is) [\w' ]+ (?:been )?play\w*)\b",
     ),
     (
         "passing",
@@ -891,28 +892,68 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     return [{"name": n, "club": None, "minute_from": lo, "minute_to": hi} for n in names]
 
 
-# What a fan calls each running figure the physical tool may hold (merge-queue review of #323).
+# What a fan calls each running figure the physical tool may hold, the most specific first: a
+# sprint before a speed, a speed before a distance (merge-queue reviews of #323).
 ASKS_RUNNING = {
-    "player_km": (r"\b(?:distance|covered|how far|ran the most|running)\b", "distance"),
-    "player_top_kmh": (r"\b(?:fastest|top speed|how fast|quickest)\b", "top speed"),
-    "player_sprints": (r"\bsprint\w*\b", "sprint count"),
+    "player_sprints": (r"\b(?:sprint\w*|bursts?)\b", "sprint count"),
+    "player_top_kmh": (
+        r"\b(?:fastest|quickest|top speed|how fast|speed\w*|pace|km/h|quick(?:er)?)\b", "top speed"
+    ),
+    "player_km": (
+        r"\b(?:distance|covered|how far|km|kms|kilomet\w*|miles?|ground|ran|run|runs|running|furthest"
+        r"|farthest|tired\w*|work rate|stamina|legs|energy|fitness|engine)\b",
+        "distance",
+    ),
 }
+# What the physical tool says when its figures are held: the zone a player was in most. A question
+# asks for that only with a word of place.
+ASKS_ZONE = (
+    r"\b(?:where|zones?|positions?|positioned|heat ?maps?|thirds?|wings?|flanks?|channels?|left|right"
+    r"|middle|centre|center|areas?|parts? of the pitch)\b"
+)
+
+
+def asked_running(text: str) -> str | None:
+    """The running figure a question asks for, the most specific one, or None."""
+    return next((m for m, (words, _) in ASKS_RUNNING.items() if re.search(words, text, re.I)), None)
 
 
 def held_ask(text: str, calls, facts) -> str | None:
-    """Why a question about a held running figure cannot be answered, or None. Held means every fact
-    of that figure is unsure: the video does not yet follow enough of each named player."""
+    """Why a physical question cannot be answered, or None. A running figure asked for is held when
+    every fact of it is unsure: the video does not yet follow enough of each named player. A
+    question that asks no figure and no place is answered only while some figure is said: the zone
+    is never the answer to a question that did not ask where (the fact-check never sees the
+    question, so code gates on it here)."""
     if not any(c["name"] == "physical" for c in calls):
         return None
-    for metric, (words, said) in ASKS_RUNNING.items():
-        if re.search(words, text, re.I):
-            rows = [f for f in facts if f.get("metric") == metric]
-            if not rows or not any(f.get("confident") for f in rows):
-                return (
-                    f"A player's {said} isn't available yet: the video can't follow enough of each named "
-                    "player to measure it reliably."
-                )
-    return None
+    sure = {f.get("metric") for f in facts if f.get("confident")}
+    metric = asked_running(text)
+    if metric is not None:
+        if metric in sure:
+            return None
+        said = ASKS_RUNNING[metric][1]
+    elif re.search(ASKS_ZONE, text, re.I) or sure & set(ASKS_RUNNING):
+        return None
+    else:
+        said = "running"
+    return (
+        f"A player's {said} isn't available yet: the video can't follow enough of each named "
+        "player to measure it reliably."
+    )
+
+
+def running_first(text: str, facts: list[dict]) -> list[dict]:
+    """A running figure asked for: its facts first, the player the question names first, else the
+    highest value first ("who is the fastest?" is the maximum, not the first by distance)."""
+    metric = asked_running(text)
+    if metric is None:
+        return facts
+    def key(f):
+        if f.get("metric") != metric:
+            return (1, 0, 0.0)
+        named = bool(f.get("player_is")) and re.search(rf"\b{re.escape(f['player_is'])}\b", text, re.I)
+        return (0, not named, -(f.get("value") or 0))
+    return sorted(facts, key=key)
 
 
 def code_match_answer(
@@ -948,6 +989,7 @@ def code_match_answer(
     why = held_ask(question.text, calls, facts)
     if why is not None:  # a figure asked for that is held: say so, never answer something else
         return Answer("unanswerable", why, None, None, None, (), 0.0, float(question.t)), calls
+    facts = running_first(question.text, facts)
     asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
     if asked is not None:
         # A referee question: an offside reading first when it is about offside, then the Laws the
@@ -1053,6 +1095,10 @@ async def answer_match(
         if not claim.text.strip():
             return calls, claim, None, facts
         verdict = _verify(claim, known, insights)
+        metric = asked_running(question.text) if any(c["name"] == "physical" for c in calls) else None
+        if verdict.ok and metric and all(known.get(i, {}).get("metric") != metric for i in claim.evidence):
+            said = ASKS_RUNNING[metric][1]
+            verdict = Verdict(ok=False, reasons=[f"the question asks for a {said}; the answer cites none"])
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
         return calls, claim, verdict, facts
