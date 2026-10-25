@@ -33,8 +33,8 @@ SHAPE_ROWS = (
 
 
 def _summary(get: Callable[[int, int], dict], metric: str, field: str = "value") -> Callable[[int], dict]:
-    def at(m: int) -> dict:
-        rows = {r["team"]: r for r in get(1, m)["summary"] if r.get("metric") == metric}
+    def at(m: int, lo: int = 1) -> dict:
+        rows = {r["team"]: r for r in get(lo, m)["summary"] if r.get("metric") == metric}
         out = {t: (rows[t].get(field) if t in rows else None) for t in TEAMS}
         out["confident"] = all(rows.get(t, {}).get("confident", False) for t in TEAMS)
         out["evidence"] = [rows[t]["id"] for t in TEAMS if t in rows]
@@ -46,8 +46,8 @@ def _summary(get: Callable[[int, int], dict], metric: str, field: str = "value")
 def _also(get, metric: str, unit: str, context: str | None = None) -> Callable[[int], dict]:
     """A summary's own `also` number (turnovers, a channel's share), by unit and context."""
 
-    def at(m: int) -> dict:
-        rows = {r["team"]: r for r in get(1, m)["summary"] if r.get("metric") == metric}
+    def at(m: int, lo: int = 1) -> dict:
+        rows = {r["team"]: r for r in get(lo, m)["summary"] if r.get("metric") == metric}
         out = {}
         for t in TEAMS:
             hit = [
@@ -68,8 +68,8 @@ def _territory(mi) -> Callable[[int], dict]:
 
 
 def _count(mi, kind: str) -> Callable[[int], dict]:
-    def at(m: int) -> dict:
-        rows = [f for f in mi.facts.get(kind, ()) if f["minute"] <= m]
+    def at(m: int, lo: int = 1) -> dict:
+        rows = [f for f in mi.facts.get(kind, ()) if lo <= f["minute"] <= m]
         return {
             **{t: sum(f["team"] == t for f in rows) for t in TEAMS},
             "confident": True,
@@ -80,13 +80,13 @@ def _count(mi, kind: str) -> Callable[[int], dict]:
 
 
 def _shape(mi, metric: str) -> Callable[[int], dict]:
-    def at(m: int) -> dict:
+    def at(m: int, lo: int = 1) -> dict:
         out = {}
         for t in TEAMS:
             vals = [
                 r["value"]
                 for r in mi.facts.get("shape", ())
-                if r["metric"] == metric and r["team"] == t and r["confident"] and r["minute"] <= m
+                if r["metric"] == metric and r["team"] == t and r["confident"] and lo <= r["minute"] <= m
             ]
             out[t] = int(statistics.median(vals) + 0.5) if vals else None
         out["confident"] = all(out[t] is not None for t in TEAMS)
@@ -97,10 +97,12 @@ def _shape(mi, metric: str) -> Callable[[int], dict]:
 
 
 def _distance(mi) -> Callable[[int], dict]:
-    def at(m: int) -> dict:
+    def at(m: int, lo: int = 1) -> dict:
         bins = {
             t: [
-                b for b in mi.team_stats.get("distance", {}).get(t, {}).get("bins", []) if b["minute_to"] <= m
+                b
+                for b in mi.team_stats.get("distance", {}).get(t, {}).get("bins", [])
+                if b["minute_to"] <= m and b["minute_from"] >= lo
             ]
             for t in TEAMS
         }
@@ -116,9 +118,9 @@ def _distance(mi) -> Callable[[int], dict]:
     return at
 
 
-def stats_table(mi) -> dict:
-    """The Stats tab's rows, each with a series of "so far" values per BIN_MIN minutes."""
-    rows = [
+def _rows(mi) -> list:
+    """The Stats tab's rows: group, key, label, unit, and the function giving its value over minutes."""
+    return [
         (
             "Attack",
             "possession",
@@ -213,12 +215,74 @@ def stats_table(mi) -> dict:
         *[("Shape", key, label, unit, _shape(mi, key)) for key, label, unit in SHAPE_ROWS],
         ("Physical", "distance_km", _distance_label(), "km", _distance(mi)),
     ]
+
+
+def stats_table(mi) -> dict:
+    """The Stats tab's rows, each with a series of "so far" values per BIN_MIN minutes; the same rows
+    for each half (Law 7's 45 minutes); and the pass network of named players."""
+    from ninety.intel.match_insights import HALF_MIN  # Law 7 (imported here: match_insights imports us)
+
+    rows = _rows(mi)
     ends = list(range(BIN_MIN, mi.minutes + BIN_MIN, BIN_MIN))
     out = []
     for group, key, label, unit, at in rows:
         series = [{"minute_to": min(m, mi.minutes), **at(min(m, mi.minutes))} for m in ends]
         out.append({"group": group, "key": key, "label": label, "unit": unit, "series": series})
-    return {"bin_min": BIN_MIN, "from_footage": True, "rows": out}
+    halves = {}
+    for name, lo, hi in (("first", 1, min(HALF_MIN, mi.minutes)), ("second", HALF_MIN + 1, mi.minutes)):
+        if hi < lo:
+            continue
+        halves[name] = {
+            "minute_from": lo,
+            "minute_to": hi,
+            "rows": [
+                {"group": g, "key": k, "label": lb, "unit": u, **at(hi, lo)} for g, k, lb, u, at in rows
+            ],
+        }
+    return {
+        "bin_min": BIN_MIN,
+        "from_footage": True,
+        "rows": out,
+        "halves": halves,
+        "pass_network": pass_network(mi, 1, mi.minutes),
+    }
 
 
-__all__ = ["stats_table"]
+def pass_network(mi, minute_from: int, minute_to: int) -> dict:
+    """Each club's named players at their average position, and the completed passes between them:
+    only the passes the video could name both players of (GROUNDING I21)."""
+    from ninety.intel import passing
+
+    pos: dict[tuple, list[float]] = {}
+    for r in mi.facts.get("running", ()):
+        who = mi.people.get(r["track"], {})
+        if not who.get("name") or not minute_from <= r["minute"] <= minute_to or not r.get("n"):
+            continue
+        p = pos.setdefault((who["team"], who["name"]), [0.0, 0.0, 0])
+        p[0], p[1], p[2] = p[0] + r["sx"], p[1] + r["sy"], p[2] + r["n"]
+    made: dict[tuple, int] = {}
+    for r in mi.facts.get("pass_type", ()):
+        who = mi.people.get(r.get("passer"), {})
+        if r.get("receiver") and who.get("name") and minute_from <= r["minute"] <= minute_to:
+            made[(who["team"], who["name"])] = made.get((who["team"], who["name"]), 0) + 1
+    links = passing.network(mi.facts.get("pass_type", ()), mi.people, minute_from, minute_to, top=10_000)
+    out = {}
+    for team in TEAMS:
+        nodes = [
+            {
+                "id": name,
+                "x": round(p[0] / p[2], 1),
+                "y": round(p[1] / p[2], 1),
+                "passes": made.get((t, name), 0),
+            }
+            for (t, name), p in sorted(pos.items())
+            if t == team
+        ]
+        edges = [
+            {"a": r["passer_is"], "b": r["receiver_is"], "n": r["value"]} for r in links if r["team"] == team
+        ]
+        out[team] = {"nodes": nodes, "links": edges, "named_passes_only": True}
+    return out
+
+
+__all__ = ["pass_network", "stats_table"]

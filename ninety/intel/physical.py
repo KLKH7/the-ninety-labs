@@ -70,7 +70,8 @@ def rows(frames: Sequence[Mapping]) -> list[dict]:
             r = by.setdefault(
                 (track, m),
                 {"id": f"run:{track}:m{m}", "kind": "running_minute", "track": track, "team": pl["team"],
-                 "minute": m, "m": 0.0, "top_kmh": 0.0, "sprints": 0, "zones": defaultdict(float)},
+                 "minute": m, "m": 0.0, "top_kmh": 0.0, "sprints": 0, "zones": defaultdict(float),
+                 "sx": 0.0, "sy": 0.0, "n": 0},
             )
             if kmh > MAX_STEP_KMH:
                 run[track] = 0.0
@@ -78,6 +79,7 @@ def rows(frames: Sequence[Mapping]) -> list[dict]:
             r["m"] += kmh / 3.6 * dt
             r["top_kmh"] = max(r["top_kmh"], kmh)
             r["zones"][_zone(x, y, pl["team"])] += dt
+            r["sx"], r["sy"], r["n"] = r["sx"] + x, r["sy"] + y, r["n"] + 1  # for his average position
             before = run[track]
             run[track] = before + dt if kmh >= SPRINT_KMH else 0.0
             if before < MIN_SPRINT_S <= run[track]:
