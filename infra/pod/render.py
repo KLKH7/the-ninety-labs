@@ -1,0 +1,391 @@
+"""Render a pre-registered dataset on a rented CPU machine, check every clip, write its manifest and
+upload it to the same Blob layout as the Azure render job (ninety/render/job.py).
+
+It runs against a checkout of the render commit (`--repo`): the renderer, the checks and the upload
+are that commit's own code, so the clips are what the commit makes; this file only schedules them.
+
+    python render.py glcheck  --repo REPO --gl gpu|software
+    python render.py determinism --plan PLAN --repo REPO --out OUT --gl gpu|software [--seeds 3]
+    python render.py render   --plan PLAN --repo REPO --out OUT --split test|train --workers N
+                              --gl gpu|software [--seeds 3,4]
+    python render.py manifest --plan PLAN --repo REPO --out OUT
+    python render.py verify   --out OUT
+    python render.py upload   --out OUT --account ACCOUNT
+
+No credential goes to the render machine. Copy `--out` back over SSH, then on the maintainer's
+machine run `verify` (every sha256 against the manifest) and `upload --account <name>`, which uses
+the local az login. The test split's answer key goes to `truth-test`, never `truth`.
+
+A plan's `render.views` (`tactical`: the two fixed whole-pitch lenses, ninety/render/clip.py) is
+passed to every clip of both splits, the determinism check included. It is not an override: a test
+seed keeps none, and its broadcast is byte-identical with or without the views.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import multiprocessing as mp
+import subprocess
+import sys
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+# Hardware GL on a Linux NVIDIA pod: Chromium flag sets tried in order, the first whose WebGL renderer
+# is a real GPU wins. The last, no flags, is Chromium's own choice (Metal on a Mac). Software GL is the
+# render commit's own browser_page (SwiftShader), unchanged.
+GPU_ARGS = [  # Chrome's guidance for headless Linux NVIDIA first (--headless=new is the chromium channel)
+    ["--use-angle=vulkan", "--enable-features=Vulkan", "--disable-vulkan-surface", "--ignore-gpu-blocklist",
+     "--enable-gpu"],
+    ["--use-gl=angle", "--use-angle=gl-egl", "--ignore-gpu-blocklist", "--enable-gpu"],
+    ["--use-gl=egl", "--ignore-gpu-blocklist", "--enable-gpu"],
+    [],
+]
+SOFTWARE_GL = ("swiftshader", "llvmpipe", "softpipe", "software")
+PROBE = """() => {
+  const c = document.createElement('canvas');
+  const gl = c.getContext('webgl2') || c.getContext('webgl');
+  if (!gl) return '';
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+}"""
+
+
+def is_hardware(renderer: str) -> bool:
+    """True when WebGL reports a GPU; software GL and an unknown (empty) renderer are not."""
+    r = renderer.lower()
+    return bool(r.strip()) and not any(m in r for m in SOFTWARE_GL)
+
+
+@contextmanager
+def open_page(gl: str):
+    """(page, browser version, WebGL renderer). `gpu` refuses to start on software GL, loudly."""
+    from ninety.render.clip import WEB, _serve, browser_page
+
+    if gl == "software":
+        with browser_page(False) as (page, version):
+            yield page, version, page.evaluate(PROBE)
+        return
+    from playwright.sync_api import sync_playwright
+
+    tried = []
+    with _serve(WEB) as base, sync_playwright() as pw:
+        for channel in ("chromium", None):  # new headless first, then the headless shell
+            for args in GPU_ARGS:
+                try:
+                    browser = pw.chromium.launch(args=args, channel=channel)
+                except Exception as e:  # noqa: BLE001 - a channel that is not installed: try the next
+                    tried.append(f"{channel} {args}: {str(e).splitlines()[0]}")
+                    continue
+                page = browser.new_page()
+                renderer = page.evaluate(PROBE)
+                if not is_hardware(renderer):
+                    tried.append(f"{channel} {args}: {renderer or 'no WebGL'}")
+                    browser.close()
+                    continue
+                try:
+                    errors: list[str] = []
+                    page.on("pageerror", lambda exc, errors=errors: errors.append(str(exc)))
+                    page.goto(f"{base}/render/index.html")
+                    page.wait_for_function("window.ninety && window.ninety.ready", timeout=30_000)
+                    if errors:
+                        raise RuntimeError(f"renderer page error: {errors[0]}")
+                    print(json.dumps({"gl": "gpu", "renderer": renderer, "channel": channel, "args": args}),
+                          flush=True)
+                    yield page, browser.version, renderer
+                finally:
+                    browser.close()
+                return
+    raise SystemExit("GPU GL unavailable, refusing software GL for --gl gpu:\n  " + "\n  ".join(tried))
+
+
+def differences(a: Path, b: Path) -> list[str]:
+    """Files (relative paths) that are missing from one directory or differ in bytes, sorted."""
+    fa = {f.relative_to(a).as_posix() for f in a.rglob("*") if f.is_file()}
+    fb = {f.relative_to(b).as_posix() for f in b.rglob("*") if f.is_file()}
+    return sorted(r for r in fa | fb
+                  if r not in fa or r not in fb or (a / r).read_bytes() != (b / r).read_bytes())
+
+
+def expand(plan: dict, split: str = "train") -> list[tuple[int, dict]]:
+    """Every (seed, overrides) of a split of the plan, in order; refuses a seed of another split."""
+    from ninety.render.splits import check_seed
+
+    if split == "test":
+        first, last = plan["test_set"]["seeds"]
+        seeds = list(range(first, last + 1))
+        for s in seeds:
+            check_seed(s, "test")
+        if len(seeds) != plan["test_set"]["clips"]:
+            raise ValueError(f"the test set lists {len(seeds)} seeds, not {plan['test_set']['clips']}")
+        return [(s, {}) for s in seeds]
+    out = []
+    for g in plan["seeds"]["groups"]:
+        for s in range(g["first"], g["last"] + 1):
+            check_seed(s, "train")
+            out.append((s, dict(g["overrides"])))
+    if len(out) != plan["seeds"]["clips"] or len({s for s, _ in out}) != len(out):
+        raise ValueError(f"the plan lists {len(out)} seeds, not {plan['seeds']['clips']} distinct ones")
+    return out
+
+
+SPLITS = ("test", "train")  # the test set renders first
+
+
+def clip_dir(out: Path, run: str, seed: int, split: str = "train") -> Path:
+    return out / run / split / f"seed{seed}"
+
+
+def report_path(out: Path, split: str, seed: int) -> Path:
+    return out / "reports" / split / f"seed{seed}.json"
+
+
+def judge(clip: dict, report: dict) -> dict:
+    """The render checks' verdicts plus the dataset's own: a training clip shows every frame (no
+    dead-ball cut, docs/DATA_CONTRACT.md, lesson 156)."""
+    return {**report["passed"], "no_cuts": not clip.get("cuts") and not clip["params"].get("dead_ball_cut")}
+
+
+def _worker(index: int, jobs: list[tuple[int, dict]], out: str, run: str, seconds: float, split: str,
+            gl: str = "software", views: str | None = None) -> None:
+    from ninety.render.checks import check_clip
+    from ninety.render.clip import render_clip
+
+    out_p = Path(out)
+    log = out_p / f"results-{split}-w{index}.jsonl"
+    with open_page(gl) as (page, _, renderer):
+        for seed, overrides in jobs:
+            rp = report_path(out_p, split, seed)
+            if rp.exists():
+                continue  # finished in an earlier run: resume
+            d = clip_dir(out_p, run, seed, split)
+            t = time.time()
+            clip = render_clip(seed, d, seconds=seconds, overrides=overrides, gpu=gl == "gpu", page=page,
+                               views=views)
+            report = check_clip(d)
+            report["passed"] = judge(clip, report)
+            rp.write_text(json.dumps(report))
+            line = {"seed": seed, "passed": all(report["passed"].values()), "frames": clip["frames"],
+                    "seconds_taken": round(time.time() - t, 1), "worker": index,
+                    "gl_renderer": renderer}
+            with log.open("a") as f:
+                f.write(json.dumps(line) + "\n")
+            print(json.dumps(line), flush=True)
+
+
+def render(plan: dict, out: Path, workers: int, only: set[int] | None, split: str = "train",
+           gl: str = "software") -> None:
+    jobs = [j for j in expand(plan, split) if only is None or j[0] in only]
+    (out / "reports" / split).mkdir(parents=True, exist_ok=True)
+    chunks = [jobs[i::workers] for i in range(workers)]  # round-robin, so slow groups spread out
+    t = time.time()
+    ctx = mp.get_context("spawn")
+    seconds = plan["render"]["seconds"]
+    views = plan["render"].get("views")
+    procs = [ctx.Process(target=_worker, args=(i, c, str(out), plan["run"], seconds, split, gl, views))
+             for i, c in enumerate(chunks) if c]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+    hours = (time.time() - t) / 3600
+    print(json.dumps({"split": split, "gl": gl, "clips": len(jobs), "workers": workers,
+                      "hours": round(hours, 3),
+                      "clips_per_hour": round(len(jobs) / hours, 1) if hours else None,
+                      "worker_exit_codes": [p.exitcode for p in procs]}), flush=True)
+
+
+def determinism(plan: dict, out: Path, seed: int, gl: str) -> list[str]:
+    """Render one training seed twice, each in a fresh browser; the files that differ (none to pass)."""
+    from ninety.render.clip import render_clip
+
+    overrides = dict(next(o for s, o in expand(plan, "train") if s == seed))
+    dirs = [out / "determinism" / f"seed{seed}-{k}" for k in ("a", "b")]
+    for d in dirs:
+        with open_page(gl) as (page, _, _renderer):
+            render_clip(seed, d, seconds=plan["render"]["seconds"], overrides=overrides, gpu=gl == "gpu",
+                        page=page, views=plan["render"].get("views"))
+    return differences(*dirs)
+
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def git_head(repo: Path) -> str:
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True,
+                          text=True, check=True).stdout.strip()
+
+
+def driver_id() -> dict:
+    """This driver as the manifest records it: its commit when it runs from a checkout, else (a copy
+    on a rented machine, outside any repository) its sha256."""
+    try:
+        return {"driver_commit": git_head(Path(__file__).resolve().parents[2])}
+    except (OSError, subprocess.CalledProcessError):
+        return {"driver_sha256": sha256(Path(__file__))}
+
+
+KNOBS = ("lighting", "kit_contrast", "occlusion", "weather")
+
+
+def manifest(plan: dict, repo: Path, out: Path) -> dict:
+    from ninety.render import RENDERER_VERSION
+
+    clips, failed, missing = [], [], []
+    for split in SPLITS:
+        for seed, overrides in expand(plan, split):
+            rp = report_path(out, split, seed)
+            if not rp.exists():
+                missing.append({"split": split, "seed": seed})
+                continue
+            report = json.loads(rp.read_text())
+            if not all(report["passed"].values()):
+                bad = sorted(k for k, v in report["passed"].items() if not v)
+                failed.append({"split": split, "seed": seed, "failed": bad})
+                continue
+            d = clip_dir(out, plan["run"], seed, split)
+            clip = json.loads((d / "clip.json").read_text())
+            files = {f.relative_to(d).as_posix(): {"sha256": sha256(f), "bytes": f.stat().st_size}
+                     for f in sorted(d.rglob("*")) if f.is_file()}
+            clips.append({"split": split, "seed": seed, "overrides": overrides, "frames": clip["frames"],
+                          "params": {k: clip["params"].get(k) for k in KNOBS}, "files": files})
+    m = {"name": plan["name"], "run": plan["run"], "render_commit": git_head(repo),
+         "renderer": RENDERER_VERSION, "plan_commit": plan.get("commit"),
+         "driver": "infra/pod/render.py", **driver_id(),
+         "clips": len(clips),
+         "bytes": sum(f["bytes"] for c in clips for f in c["files"].values()),
+         "failed": failed, "missing": missing, "clips_list": clips}
+    (out / "manifest.json").write_text(json.dumps(m, indent=1))
+    return m
+
+
+def verify(out: Path) -> list[str]:
+    """Every file the manifest lists, with its sha256 and size: what differs (empty when all match)."""
+    m = json.loads((out / "manifest.json").read_text())
+    bad = []
+    for c in m["clips_list"]:
+        d = clip_dir(out, m["run"], c["seed"], c["split"])
+        on_disk = {f.relative_to(d).as_posix() for f in d.rglob("*") if f.is_file()}
+        if on_disk != set(c["files"]):
+            bad.append(f"{c['split']}/seed{c['seed']}: files differ from the manifest")
+        for rel, want in c["files"].items():
+            f = d / rel
+            if not f.is_file() or f.stat().st_size != want["bytes"] or sha256(f) != want["sha256"]:
+                bad.append(f"{c['split']}/seed{c['seed']}/{rel}")
+    return bad
+
+
+# The answer key goes to the sealed container: frames and events for training (ninety/render/job.py),
+# and meta.json too for the test set, as the 91d1e3b test set was uploaded.
+TRUTH = {"train": ("events.jsonl", "frames.jsonl"), "test": ("events.jsonl", "frames.jsonl", "meta.json")}
+TRUTH_CONTAINER = {"train": "truth", "test": "truth-test"}
+
+
+def blob_path(run: str, split: str, seed: int, rel: str) -> str:
+    return f"{run}/{split}/seed{seed}/{rel}"
+
+
+def upload_clip(containers: dict, run: str, split: str, seed: int, d: Path) -> int:
+    """The answer key first, then the media, clip.json last, so its presence means the whole clip."""
+    files = sorted(f for f in d.rglob("*") if f.is_file() and f.name != "clip.json")
+    # At any depth: a clip's views (views/<name>/) carry their own answer key (lesson 192).
+    truth = [f for f in files if f.name in TRUTH[split]]
+    media = [f for f in files if f not in truth] + [d / "clip.json"]
+    n = 0
+    for name, group in ((TRUTH_CONTAINER[split], truth), ("renders", media)):
+        for f in group:
+            with open(f, "rb") as data:
+                containers[name].upload_blob(blob_path(run, split, seed, f.relative_to(d).as_posix()),
+                                             data, overwrite=True)
+            n += 1
+    return n
+
+
+def upload_failed(containers: dict, run: str, failed: list[dict], out: Path) -> int:
+    """Each failed clip's check report, to its split's sealed container: its contract messages quote
+    the answer key (a true event, where it was), and a test seed's must never be inspected (lesson 192)."""
+    for f in failed:
+        rp = report_path(out, f["split"], f["seed"])
+        name = f"{run}/failed/{f['split']}/seed{f['seed']}.json"
+        containers[TRUTH_CONTAINER[f["split"]]].upload_blob(name, rp.read_bytes(), overwrite=True)
+    return len(failed)
+
+
+def upload(out: Path, account: str) -> dict:
+    """Upload from the maintainer's machine with its az login, after `verify` passes."""
+    from azure.identity import AzureCliCredential
+    from azure.storage.blob import BlobServiceClient
+
+    bad = verify(out)
+    if bad:
+        raise SystemExit(f"{len(bad)} files differ from the manifest, first: {bad[0]}")
+    service = BlobServiceClient(f"https://{account}.blob.core.windows.net", credential=AzureCliCredential())
+    containers = {n: service.get_container_client(n) for n in ("renders", "truth", "truth-test")}
+    m = json.loads((out / "manifest.json").read_text())
+    run = m["run"]
+    done = {"uploaded": 0, "skipped": 0, "files": 0}
+    for c in m["clips_list"]:
+        split, s = c["split"], c["seed"]
+        if containers["renders"].get_blob_client(blob_path(run, split, s, "clip.json")).exists():
+            done["skipped"] += 1
+            continue
+        done["files"] += upload_clip(containers, run, split, s, clip_dir(out, run, s, split))
+        done["uploaded"] += 1
+    upload_failed(containers, run, m["failed"], out)
+    manifest_bytes = (out / "manifest.json").read_bytes()
+    containers["renders"].upload_blob(f"{run}/manifest.json", manifest_bytes, overwrite=True)
+    print(json.dumps(done), flush=True)
+    return done
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("command", choices=("glcheck", "determinism", "render", "manifest", "verify", "upload"))
+    ap.add_argument("--gl", choices=("software", "gpu"), default="software",
+                    help="gpu: the pod's GPU, refusing software GL; software: SwiftShader, as the Azure job")
+    ap.add_argument("--plan", type=Path)
+    ap.add_argument("--repo", type=Path, help="checkout of the render commit")
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--split", choices=SPLITS, default="train")
+    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--seeds", default="", help="comma-separated subset, for the throughput test")
+    ap.add_argument("--account", help="storage account, for upload")
+    a = ap.parse_args(argv)
+    if a.command == "verify":
+        bad = verify(a.out)
+        print(json.dumps({"files_differing": len(bad), "first": bad[:5]}))
+        sys.exit(1 if bad else 0)
+    if a.command == "upload":
+        upload(a.out, a.account)
+        return
+    sys.path.insert(0, str(a.repo))
+    if a.command == "glcheck":
+        with open_page(a.gl) as (_, version, renderer):
+            print(json.dumps({"gl": a.gl, "chromium": version, "renderer": renderer,
+                              "hardware": is_hardware(renderer)}))
+        return
+    plan = json.loads(a.plan.read_text())
+    only = {int(s) for s in a.seeds.split(",") if s} or None
+    if a.command == "determinism":
+        seeds = sorted(only or {3})
+        bad = {s: determinism(plan, a.out, s, a.gl) for s in seeds}
+        print(json.dumps({"gl": a.gl, "seeds": seeds, "differing": {s: b[:5] for s, b in bad.items()},
+                          "identical": not any(bad.values())}))
+        sys.exit(1 if any(bad.values()) else 0)
+    if a.command == "render":
+        render(plan, a.out, a.workers, only, a.split, a.gl)
+    else:
+        m = manifest(plan, a.repo, a.out)
+        keys = ("clips", "bytes", "failed", "missing", "render_commit", "renderer")
+        print(json.dumps({k: m[k] for k in keys}))
+
+
+if __name__ == "__main__":
+    main()
