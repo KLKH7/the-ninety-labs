@@ -63,7 +63,10 @@
   <div class="wrap">
     <h2 id="stages-h">The five stages, as they run today</h2>
     <p class="section-lede">The brief asks for five stages. Each card says what runs on <code>main</code> now, with the
-      file that proves it, and what is not built yet.</p>
+      file that proves it, and what is not built yet. The match engine is frozen at <code>65247ba3</code>; the demo
+      plays seed <code>8080</code>, a whole match condensed, chosen by Kian after seeing the pre-registered rule's
+      result (the rule's own pick, seed <code>8076</code>, is recorded beside it).
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/demo-match.md">Demo match</a></p>
 
     <ol class="stages">
       <li class="stage" aria-labelledby="s-ingest">
@@ -71,19 +74,31 @@
         <p class="status"><span class="tag progress">in progress</span></p>
         <p class="label">Runs today</p>
         <ul>
-          <li>RF-DETR Small, fine-tuned only on our renders, finds players and the ball on a frozen test set of
-            <data value="1250" data-src="docs/eval/vision-report-v2.json" data-key="frames_scored" data-fmt="int">1,250</data>
-            frames from footage it never trained on. Player recall
-            <data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.recall" data-fmt="3">0.994</data>.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">Vision report</a></li>
-          <li>The live path loads detected events only and refuses ground truth; a test fails if it ever opens the answer key.
+          <li>RF-DETR Small, fine-tuned only on our renders, watches the broadcast: ball recall
+            <data value="0.884" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="by_class.ball.recall" data-fmt="3">0.884</data>
+            and player recall
+            <data value="0.997" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="by_class.player.recall" data-fmt="3">0.997</data>
+            on a frozen test set of
+            <data value="7500" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="frames_scored" data-fmt="int">7,500</data>
+            frames it never trained on.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/finetune-v2freeze/test-ours-freeze.json">Test report</a></li>
+          <li>Two fixed whole-pitch tactical views beside the broadcast give the players; the broadcast gives the
+            ball and the events. The two cameras are joined on the pitch.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association.md">Join</a></li>
+          <li>Events are read from possession, from the pixels alone. On the frozen test clips with today's code:
+            passes <data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> found of <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>, and the only shot,
+            <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, missed. The camera-trust band, re-measured on our newer renders, rejects
+            most right frames on the test set's older ones.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">Event report</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts-plan.md">why</a></li>
+          <li>The live path loads detected events only; a test fails if it ever opens the answer key.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_live_reads_no_truth.py">Test</a></li>
         </ul>
         <p class="label">Not yet</p>
         <ul>
-          <li><span class="tag planned">planned</span> Events detected from the pixels (tracking, camera-to-pitch mapping,
-            possession and event rules). Until then the live path reads a hand-written stand-in and names it as one,
-            so there is no event-level precision or recall yet.</li>
+          <li><span class="tag progress">in progress</span> Event detection at the plan's target, and re-measured since
+            the camera fit changed; shot outcomes, possession changes and a camera fit that follows cuts (open pull requests).</li>
+          <li><span class="tag progress">in progress</span> Team sides sure enough to air a team claim (open pull request).</li>
         </ul>
       </li>
 
@@ -93,13 +108,16 @@
         <p class="label">Runs today</p>
         <ul>
           <li>A deterministic stats engine turns events and tracking into pass, shot, possession, pressure and movement
-            facts, each citing the event ids or frame range it rests on.
+            facts, each citing the event ids or frame range it rests on, with pressing, territory and tempo windows.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/stats.py">Code</a>,
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_stats.py">tests</a></li>
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/windows.py">windows</a></li>
+          <li>Hidden stats from tracked positions: line breaks, overloads, counter-presses, pass options and team shape,
+            each held when too few players were tracked to vouch for it.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/line_breaks.py">Line breaks</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/shape.py">shape</a></li>
         </ul>
         <p class="label">Not yet</p>
         <ul>
-          <li><span class="tag progress">in progress</span> Pressing, territory and tempo windows (open pull request).</li>
           <li><span class="tag planned">planned</span> Pass difficulty and expected goals.</li>
         </ul>
       </li>
@@ -109,39 +127,43 @@
         <p class="status"><span class="tag running">running</span></p>
         <p class="label">Runs today</p>
         <ul>
-          <li>An Analyst agent on Microsoft Foundry reads the match over our MCP server and drafts a claim. The
-            fact-checking agent (code checks, then a Judge agent) rejects what the data does not support and sends it back.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/factcheck.py">Code checks</a>,
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/judge.py">Judge</a></li>
-          <li>It caught
-            <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
-            <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data>
-            planted false claims.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">Evaluation</a></li>
-          <li>A claim resting on a low-confidence detection is held back.
+          <li>A multi-agent graph on Microsoft Foundry explains each minute of the demo: a moment Analyst picks the
+            moments, a Tactician explains each, a Challenger offers another reading, the fact-checking agent (code checks,
+            then a Judge agent) rejects what the data does not support and sends it back, and a Producer airs only what passed.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/workflow.py">Workflow</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/factcheck.py">code checks</a></li>
+          <li>Live, on held-out matches, one agent alone aired
+            <data value="7" data-src="docs/eval/ablation-agents.json" data-key="arms.one agent.false_aired" data-fmt="int">7</data> false claims of
+            <data value="10" data-src="docs/eval/ablation-agents.json" data-key="arms.one agent.aired" data-fmt="int">10</data>; the graph aired
+            <data value="1" data-src="docs/eval/ablation-agents.json" data-key="arms.graph.false_aired" data-fmt="int">1</data> of
+            <data value="24" data-src="docs/eval/ablation-agents.json" data-key="arms.graph.aired" data-fmt="int">24</data>.
+            A small sample: ten minutes of play an arm, graded by the same checks and Judge the graph uses.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/ablation-agents.md">Ablation</a></li>
+          <li>A claim resting on a low-confidence detection, or naming a team whose side is unsure, is held back.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_confidence_gate.py">Test</a></li>
         </ul>
         <p class="label">Not yet</p>
         <ul>
-          <li><span class="tag progress">in progress</span> The multi-agent workflow with a Producer and handoffs (open pull request).</li>
-          <li><span class="tag planned">planned</span> A Tactician agent, and the ablation and failure tables.</li>
+          <li><span class="tag progress">in progress</span> The fact-checker evaluation re-run on the current Judge
+            (the numbers below are from an earlier version).</li>
         </ul>
       </li>
 
       <li class="stage" aria-labelledby="s-render">
         <h3 id="s-render"><span class="step">Render</span> Graphics drawn on the footage</h3>
-        <p class="status"><span class="tag local">running locally</span></p>
+        <p class="status"><span class="tag running">running</span></p>
         <p class="label">Runs today</p>
         <ul>
-          <li><code>ninety-e2e</code> runs one clip through the chain with no Azure and writes a bundle; the viewer draws the
-            overlay cues and detections on the footage, with the fact-checked insight and the agent trace.
+          <li>Deployed from every green <code>main</code>: the big screen draws the overlay cues and detections on the
+            footage, with the fact-checked insight; in match mode it shows chapters, the score from detected goals and a
+            time-skip label at each cut, and pairs a phone by QR code.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/e2e.py">Chain</a>,
             <a href="https://github.com/KLKH7/the-ninety-labs/tree/main/web/viewer">viewer</a>,
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_viewer.py">tests</a></li>
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_match_mode.py">tests</a></li>
         </ul>
         <p class="label">Not yet</p>
         <ul>
-          <li><span class="tag planned">planned</span> The viewer deployed as a public demo.</li>
+          <li><span class="tag progress">in progress</span> The demo match rendered, with its render checks.</li>
           <li><span class="tag planned">planned</span> Live name tags and speed badges on players.</li>
         </ul>
       </li>
@@ -151,17 +173,34 @@
         <p class="status"><span class="tag progress">in progress</span></p>
         <p class="label">Runs today</p>
         <ul>
-          <li>Analyst and casual versions of every graphic, switched from the keyboard in the viewer.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/cues.py">Cues</a></li>
-          <li>Speech from Azure AI Speech neural voices.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/tts.py">Code</a></li>
+          <li>Analyst, casual and audio-description personas in the viewer. Audio description speaks only fact-checked
+            lines, each close to its play and placed in stereo where the ball is.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/describe.py">Describer</a></li>
+          <li>A phone companion, deployed, following the clip the big screen plays: a radar of the whole pitch from the
+            video's tracked positions, player cards, and questions answered from code's facts. Team distance is shown with
+            &plusmn;<data value="21" data-src="ninety/intel/team_distance_calibration.json" data-key="within_pct" data-fmt="int">21</data>%,
+            its measured worst case.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/team_distance_calibration.json">Calibration</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/team-distance.md">evaluation</a></li>
         </ul>
         <p class="label">Not yet</p>
         <ul>
-          <li><span class="tag progress">in progress</span> Audio description for blind and low-vision fans, spoken as play happens (open pull request).</li>
-          <li><span class="tag progress">in progress</span> A Personalizer agent over <abbr title="Agent2Agent protocol">A2A</abbr>, with Spanish variants, each re-checked (open pull request).</li>
-          <li><span class="tag planned">planned</span> Player cam and a single-metric view.</li>
-        </ul>
+          <li><span class="tag progress">in progress</span> One pinned neural voice for every line, pre-generated:
+            <data value="0.54" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p50_s" data-fmt="2">0.54</data> s
+            a line at the median,
+            <data value="0.85" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p95_s" data-fmt="2">0.85</data> s
+            at the slow end. The deployed replay was built before it, and the phone reads aloud in the device's own voice.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/speech-latency.md">Speech latency</a></li>
+          <li><span class="tag progress">in progress</span> A Personalizer agent over <abbr title="Agent2Agent protocol">A2A</abbr>
+            writing per-persona variants in English and Spanish, each re-checked before it airs; evaluated live, where some
+            casual variants were dropped by the re-check. Behind a flag: not yet in the demo chain or deployed.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/personalizer.md">Evaluation</a></li>
+          <li><span class="tag progress">in progress</span> Hidden-stat cards with "Why?" on the phone (built and tested
+            on the phone's mock; not in the deployed replay yet).</li>
+          <li><span class="tag progress">in progress</span> The phone's Companion agent airing its own fact-checked
+            sentences (so far every answer measured live was code's own).</li>
+          <li><span class="tag planned">planned</span> Player cam, a single-metric view and a voice per language.</li>
+</ul>
       </li>
     </ol>
   </div>
@@ -173,72 +212,76 @@
     <p class="section-lede">Each number is read from a committed report; a test fails if this page and the report disagree.
       How each is measured: <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/EVALUATION.md">EVALUATION.md</a>.</p>
 
-    <h3>Detection on the frozen test set</h3>
+    <h3>Vision on frozen test sets</h3>
     <div class="table-wrap" role="region" aria-labelledby="vision-cap" tabindex="0">
       <table>
-        <caption id="vision-cap">Detector <code>ours-v3</code> on footage it never saw, from
-          <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">vision report</a>
-          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.json">data</a>)</caption>
+        <caption id="vision-cap">Footage the models never saw; each row links its report</caption>
         <thead>
-          <tr><th scope="col">What</th><th scope="col">Recall</th><th scope="col">Precision</th><th scope="col">Found</th></tr>
+          <tr><th scope="col">What</th><th scope="col">Result</th><th scope="col">Report</th></tr>
         </thead>
         <tbody>
           <tr>
-            <th scope="row">Players</th>
-            <td><data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.recall" data-fmt="3">0.994</data></td>
-            <td><data value="0.999" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.precision" data-fmt="3">0.999</data></td>
-            <td><data value="9556" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.tp" data-fmt="int">9,556</data> of
-              <data value="9610" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.tp+fn" data-fmt="int">9,610</data></td>
+            <th scope="row">Ball, broadcast detector</th>
+            <td>recall <data value="0.884" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="by_class.ball.recall" data-fmt="3">0.884</data>:
+              <data value="6575" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="by_class.ball.tp" data-fmt="int">6,575</data> of
+              <data value="7437" data-src="docs/eval/finetune-v2freeze/test-ours-freeze.json" data-key="by_class.ball.tp+fn" data-fmt="int">7,437</data></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/finetune-v2freeze/test-ours-freeze.json">data</a></td>
           </tr>
           <tr>
-            <th scope="row">Ball, at least half visible</th>
-            <td><data value="0.964" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.recall" data-fmt="3">0.964</data></td>
-            <td><data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.precision" data-fmt="3">0.994</data></td>
-            <td><data value="1024" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.tp" data-fmt="int">1,024</data> of
-              <data value="1062" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.tp+fn" data-fmt="int">1,062</data></td>
+            <th scope="row">Ball, tactical-view detector (adopted by a pre-registered rule)</th>
+            <td>recall <data value="0.692" data-src="docs/eval/finetune-tactical/test.json" data-key="models.ours-tactical.recall.ball.recall" data-fmt="3">0.692</data>:
+              <data value="963" data-src="docs/eval/finetune-tactical/test.json" data-key="models.ours-tactical.recall.ball.k" data-fmt="int">963</data> of
+              <data value="1392" data-src="docs/eval/finetune-tactical/test.json" data-key="models.ours-tactical.recall.ball.n" data-fmt="int">1,392</data></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/finetune-tactical/test.json">data</a></td>
           </tr>
           <tr>
-            <th scope="row">Players, mostly hidden</th>
-            <td><data value="0.893" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.recall" data-fmt="3">0.893</data></td>
-            <td><data value="0.985" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.precision" data-fmt="3">0.985</data></td>
-            <td><data value="67" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.tp" data-fmt="int">67</data> of
-              <data value="75" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.tp+fn" data-fmt="int">75</data></td>
+            <th scope="row">Players, tactical-view detector</th>
+            <td>recall <data value="0.998" data-src="docs/eval/finetune-tactical/test.json" data-key="models.ours-tactical.recall.player.recall" data-fmt="3">0.998</data></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/finetune-tactical/test.json">data</a></td>
           </tr>
           <tr>
-            <th scope="row">Ball, mostly hidden: our known weakness</th>
-            <td><data value="0.493" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.recall" data-fmt="3">0.493</data></td>
-            <td><data value="0.841" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.precision" data-fmt="3">0.841</data></td>
-            <td><data value="37" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.tp" data-fmt="int">37</data> of
-              <data value="75" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.tp+fn" data-fmt="int">75</data></td>
+            <th scope="row">Broadcast player tracks joined to the same man on the tactical views (validation clips)</th>
+            <td><data value="144" data-src="docs/eval/association/grade.json" data-key="pooled.associated" data-fmt="int">144</data> of
+              <data value="179" data-src="docs/eval/association/grade.json" data-key="pooled.broadcast_tracks" data-fmt="int">179</data> joined;
+              <data value="4" data-src="docs/eval/association/grade.json" data-key="pooled.wrong" data-fmt="int">4</data> of them wrong</td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association/grade.json">data</a></td>
+          </tr>
+          <tr>
+            <th scope="row">Passes detected from the pixels, strict matching, today's code</th>
+            <td><data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> of
+              <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data> found,
+              <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.fp" data-fmt="int">1</data> false;
+              <abbr title="the harmonic mean of precision and recall">F-score</abbr>
+              <data value="0.25" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.25</data>, below the plan's target. Before the camera-trust band changed it was
+              <data value="0.67" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.67</data>
+              (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">earlier report</a>); that no longer holds on today's code</td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">data</a></td>
+          </tr>
+          <tr>
+            <th scope="row">Team claims held because the side is unsure (validation clips)</th>
+            <td><data value="80" data-src="docs/eval/re-perceive.json" data-key="summary.held_on_side" data-fmt="int">80</data> of
+              <data value="81" data-src="docs/eval/re-perceive.json" data-key="summary.held" data-fmt="int">81</data> held claims;
+              a second look resolved
+              <data value="0" data-src="docs/eval/re-perceive.json" data-key="summary.resolved" data-fmt="int">0</data></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/re-perceive.md">report</a></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p>Retraining on footage from the test set's own engine cut false detections from
-      <data value="121" data-src="docs/eval/vision-report-v1.json" data-key="overall.fp" data-fmt="int">121</data> to
-      <data value="27" data-src="docs/eval/vision-report-v2.json" data-key="overall.fp" data-fmt="int">27</data>
-      (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v1.md">before</a>,
-      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">after</a>). Where the ball is
-      in shot but fully hidden, a phantom ball now appears in
-      <data value="1" data-src="docs/eval/vision-report-v2.json" data-key="hidden_ball_frames.with_a_ball_detection" data-fmt="int">1</data> of
-      <data value="113" data-src="docs/eval/vision-report-v2.json" data-key="hidden_ball_frames.hidden_balls" data-fmt="int">113</data> frames, down from
-      <data value="45" data-src="docs/eval/vision-report-v1.json" data-key="hidden_ball_frames.with_a_ball_detection" data-fmt="int">45</data>.
-      Several things changed between the two models at once, so the report credits the whole change, not one cause.
-      This was a matched-engine retrain, not yet a round of targeted synthetic data aimed at a failure:
-      <span class="tag planned">planned</span></p>
 
     <h3>The fact-checking agent</h3>
     <div class="table-wrap" role="region" aria-labelledby="fc-cap" tabindex="0">
       <table>
         <caption id="fc-cap">Claims whose truth is known, each citing the event it describes, from the
           <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">fact-checker evaluation</a>
-          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>)</caption>
+          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on an earlier
+          version of the Judge; the re-run on the current one is pending</caption>
         <thead>
           <tr><th scope="col">What</th><th scope="col">Code checks alone</th><th scope="col">Code checks and Judge</th></tr>
         </thead>
         <tbody>
           <tr>
-            <th scope="row">Planted false claims caught</th>
+            <th scope="row">Planted false claims kept off air (some by a Judge service error, failing closed)</th>
             <td><data value="32" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">32</data> of
               <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
             <td><data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
@@ -263,8 +306,17 @@
     </div>
     <p>Code checks catch wrong numbers, players and clocks. The Judge catches what code cannot: invented
       intent or blame, a missed shot called a goal, and instructions smuggled into a claim. Its cost is caution:
-      it sometimes rejects a true claim that adds a word the data cannot support, and the claim is then held, never aired wrong.
-      Not measured yet: <span class="tag planned">planned</span> events detected from pixels, the ablation, and latency.</p>
+      it sometimes rejects a true claim that adds a word the data cannot support, and the claim is then held, never aired wrong.</p>
+
+    <h3>The phone's Companion</h3>
+    <p>On held-out fan questions, code chose the right tool for
+      <data value="26" data-src="docs/eval/companion-tools.json" data-key="code.right" data-fmt="int">26</data> of
+      <data value="32" data-src="docs/eval/companion-tools.json" data-key="code.questions" data-fmt="int">32</data>. In the
+      committed live run of the published Companion, all
+      <data value="32" data-src="docs/eval/companion-tools.json" data-key="model.answers.code:verified+code:unanswerable" data-fmt="int">32</data>
+      answers shown were code's own checked sentences: no model sentence aired. A newer Companion, where the model
+      chooses among sentences code has already checked, is not measured on <code>main</code> yet.
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/companion-tools.md">Evaluation</a></p>
   </div>
 </section>
 
@@ -369,23 +421,23 @@
         </thead>
         <tbody>
           <tr><th scope="row">Microsoft Foundry</th>
-            <td>Hosts the Analyst and Judge as versioned prompt agents, each with a content-safety guardrail (default filters plus Prompt Shields); runs the fact-checker evaluation; traces every claim</td>
+            <td>Hosts the agents (the graph's Analysts, Tactician, Challenger and Judge, the Personalizer and the phone's Companion) as versioned prompt agents, each with a content-safety guardrail (default filters plus Prompt Shields); runs the evaluations; traces every claim</td>
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/foundry_agents.json">Pinned agent versions</a></td></tr>
           <tr><th scope="row">Microsoft Agent Framework</th>
-            <td>The workflow around the agents: drafts, verdicts, rewrites and handoffs</td>
+            <td>The multi-agent graph: drafts, verdicts, rewrites and handoffs</td>
             <td><span class="tag running">running</span></td>
-            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/slice.py">Workflow</a></td></tr>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/workflow.py">Workflow</a></td></tr>
           <tr><th scope="row">Model Context Protocol</th>
             <td>A read-only match server Foundry calls at <code>/mcp</code> on our API, with a key held in Key Vault</td>
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/mcp/match_server.py">MCP server</a></td></tr>
           <tr><th scope="row">Azure AI Speech</th>
-            <td>Neural voices with SSML for spoken descriptions</td>
+            <td>One pinned neural voice for audio description lines, pre-generated at build time</td>
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/tts.py">Speech</a></td></tr>
           <tr><th scope="row">Azure Container Apps</th>
-            <td>The API (deployed on every green <code>main</code>) and an event-driven render job that makes targeted synthetic data</td>
+            <td>One image, deployed on every green <code>main</code> (the API, the MCP server, the viewer, the phone and the replay bundle), and an event-driven render job that makes targeted synthetic data</td>
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/infra/main.bicep">Bicep</a></td></tr>
           <tr><th scope="row">Azure Storage, Key Vault, managed identity</th>
@@ -405,9 +457,9 @@
             <td><span class="tag planned">planned</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/ledger.py">Ledger</a></td></tr>
           <tr><th scope="row">Azure AI Translator</th>
-            <td>More languages for the graphics and speech</td>
-            <td><span class="tag planned">planned</span></td>
-            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/CHALLENGE_MAP.md">Challenge map</a></td></tr>
+            <td>More languages for the graphics, behind a flag, with the facts kept untranslated and re-checked; tested against a mock service only</td>
+            <td><span class="tag progress">in progress</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/personalizer/translate.py">Translator</a></td></tr>
         </tbody>
       </table>
     </div>
@@ -434,7 +486,7 @@ NINETY_BUNDLE=runs/e2e/seed900001 npm run dev --prefix web/viewer</code></pre>
 <pre><code>uv run ninety-slice --replay replays/slice-minute2-plant.json</code></pre>
     <p>More: <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/README.md">README</a>,
       <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/web/README.md">viewer guide</a>.
-      Public demo link: <span class="tag planned">planned</span></p>
+      Public demo link: <span class="tag progress">in progress</span> (deployed; the link is not published yet)</p>
   </div>
 </section>
 

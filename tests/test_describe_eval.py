@@ -34,9 +34,10 @@ def test_an_unsure_event_is_not_counted_as_one_to_cover(tmp_path):
 def test_on_the_pixel_clip_a_verified_insight_covers_its_event_and_false_detections_are_told_apart():
     m = describe_eval.measure(describe_eval.CLIPS["seed900001 (detected from the pixels)"])
     real = describe_eval.real_detections()
-    assert real == {"v00001", "v00002", "v00005"}  # the event report's matches on 900001
-    assert "v00003" in m["covered_ids"]  # the insight's event, said inside the verified claim
-    assert "v00003" not in real  # and it is the shot read as a pass: a false detection
+    # The event report's matches on 900001: three passes and the possession change (v00003).
+    assert real == {"v00001", "v00002", "v00003", "v00006"}
+    assert "v00004" in m["covered_ids"]  # the insight's event, said inside the verified claim
+    assert "v00004" not in real  # and it is the shot read as a pass: a false detection
 
 
 def _report_with(tmp_path, pair: dict):
@@ -51,7 +52,7 @@ def _report_with(tmp_path, pair: dict):
 
 @pytest.mark.parametrize("pair", [
     {"truth_id": "e1", "detected_id": "v99999", "type": "pass"},  # no such detected event
-    {"truth_id": "e1", "detected_id": "v00005", "type": "shot"},  # the id now names another event
+    {"truth_id": "e1", "detected_id": "v00006", "type": "shot"},  # the id now names another event
 ])
 def test_a_report_pair_that_no_longer_names_its_event_is_refused(tmp_path, monkeypatch, pair):
     # Review of #268: the report grades detected events by id; an id that left the fixture, or now
@@ -62,6 +63,6 @@ def test_a_report_pair_that_no_longer_names_its_event_is_refused(tmp_path, monke
 
 
 def test_a_report_pair_that_still_names_its_event_is_graded(tmp_path, monkeypatch):
-    pair = {"truth_id": "e1", "detected_id": "v00005", "type": "pass"}
+    pair = {"truth_id": "e1", "detected_id": "v00006", "type": "pass"}
     monkeypatch.setattr(describe_eval, "EVENT_REPORT", _report_with(tmp_path, pair))
-    assert describe_eval.real_detections() == {"v00005"}
+    assert describe_eval.real_detections() == {"v00006"}
