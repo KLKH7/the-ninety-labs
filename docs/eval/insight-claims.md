@@ -11,5 +11,5 @@ Caveat: the same author wrote the claim templates, the plants and the checker. T
 
 Caught by kind of plant:
 
-- 0% missing: club 379, id 124, kind 673, minute 673, name 107, number 1378, polarity 73, spelled 257, team word 362, uncited 673; missed: none; check p50 0.268 ms, p95 0.426 ms
-- 5% missing: club 338, id 107, kind 617, minute 617, name 94, number 1199, polarity 23, spelled 200, team word 329, uncited 617; missed: none; check p50 0.339 ms, p95 0.423 ms
+- 0% missing: club 379, id 124, kind 673, minute 673, name 107, number 1378, polarity 73, spelled 257, team word 362, uncited 673; missed: none; check p50 0.47 ms, p95 0.781 ms
+- 5% missing: club 338, id 107, kind 617, minute 617, name 94, number 1199, polarity 23, spelled 200, team word 329, uncited 617; missed: none; check p50 0.483 ms, p95 0.727 ms

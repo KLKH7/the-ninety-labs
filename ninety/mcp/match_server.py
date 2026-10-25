@@ -252,10 +252,9 @@ def key_moments(match: str, minute_from: int, minute_to: int, club: str | None =
 
 
 def physical(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-    """Each named player's running between two match minutes: distance in km (from the footage
-    shown, with its measured error as within_pct), top speed in km/h, sprints above 25.2 km/h held
-    for a second, and the zone he was in most. Tracks the video could not name are left out. Cite by
-    id."""
+    """The zone each named player was in most between two match minutes, of the footage the video
+    named him in. A player's distance, top speed and sprints are computed but held (confident false,
+    why_held) until named players are measured well enough; do not state them. Cite by id."""
     return _insight(match, "physical", minute_from, minute_to, club)
 
 
