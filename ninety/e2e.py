@@ -717,6 +717,8 @@ async def run(args: argparse.Namespace) -> dict:
             lineup = read_lineup(args.team_stats)
             if lineup is not None:
                 body["lineup"] = lineup
+        body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
+                                                             args.captioner)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"],
@@ -775,6 +777,29 @@ async def run(args: argparse.Namespace) -> dict:
     return manifest
 
 
+
+async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
+    """Each highlight's caption (ninety/agents/captioner.py): code-written, or with `foundry` the
+    published Captioner's line where the fact-checker passes it. Returns the run's record."""
+    from ninety.agents import captioner
+
+    tokens, unavailable, results = {}, None, None
+    if mode == "foundry":
+        from ninety.agents.foundry import RegistryDrift  # the agent framework: only behind the flag
+
+        try:
+            async with captioner.foundry_model(tokens) as (model, judge):
+                results = await captioner.captions(reel["moments"], events, model, judge)
+        except RegistryDrift:
+            raise  # a changed or unpublished prompt never runs under an old name
+        except Exception as e:  # noqa: BLE001  sign-in or outage: the code captions still air
+            unavailable = type(e).__name__  # the type only: no endpoint or token
+    if results is None:
+        results = await captioner.captions(reel["moments"], events, None, None)
+    captioner.apply(reel, results)
+    return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
+            "tokens": tokens, "unavailable": unavailable}
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Run the chain on one clip and write a bundle for the viewer.")
     ap.add_argument("clip", type=Path, help="a rendered clip directory (clip.json and images/)")
@@ -811,6 +836,9 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--captioner", choices=("code", "foundry"), default="code",
+                    help="highlight captions with --match: code only, or foundry (the published Captioner "
+                         "model, each caption fact-checked, the code caption kept when it is refused)")
     ap.add_argument("--highlights-verdict", type=Path, default=None,
                     help="the highlights measurement's report (docs/eval/shot-flight.json): turns on the "
                          "save filter and the labels it passed; without it every save is in, unlabelled")
