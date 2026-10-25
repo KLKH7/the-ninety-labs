@@ -146,7 +146,7 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
 | Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | 19 / 19 claims answered, p95 4.6 s in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
-| Read-aloud in the pinned neural voice | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
+| Read-aloud in the pinned neural voice, pre-generated (not yet in the deployed Replay bundle) | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
 
 **Runs on `main`:** the seeded match engine; the broadcast and two fixed whole-pitch tactical
 views, rendered with exact ground truth and render checks in CI
@@ -159,7 +159,8 @@ deployed).
 
 **Ships in the image every green `main` deploys:** the API, the match MCP server, the viewer (match
 mode, graphics drawn on the footage, analyst, casual and audio-description personas) with its
-Replay bundle, and the phone companion (radar, Insights cards, Ask, read-aloud).
+Replay bundle (the M1 clip, seed900001, built before the pinned voice and the Insights cards, so it
+carries neither), and the phone companion (radar, player cards, Ask; read-aloud in the device's voice).
 
 **Not yet, or not measured:**
 
