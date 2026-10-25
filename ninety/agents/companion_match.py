@@ -276,6 +276,9 @@ def answer_prompt(question: Question, facts: list[dict], history=(), insights=No
     )
 
 
+NOT_CHOSEN = "not one of the checked sentences of the facts it cites"
+
+
 def _say_as(fact: dict, known: dict, insights) -> list[str]:
     if insights is None:
         return []
@@ -881,6 +884,11 @@ async def answer_match(
         known = {f["id"]: f for f in facts}
         if not claim.text.strip():
             return calls, claim, None, facts
+        # The model chooses; it does not write (v4): its text must be exactly one of the checked
+        # sentences of a fact it cites, or code's answer is shown.
+        chosen = {t for i in claim.evidence if i in known for t in _say_as(known[i], known, insights)}
+        if claim.text.strip() not in chosen:
+            return calls, claim, Verdict(ok=False, reasons=[NOT_CHOSEN]), facts
         verdict = _verify(claim, known, insights)
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])

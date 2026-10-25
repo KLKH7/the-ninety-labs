@@ -130,14 +130,20 @@ def test_code_answers_without_a_model():
     assert r.answer.evidence == ("cp:home:m15-29",)
 
 
+def said(fact_id, mi=None):
+    """The checked sentence the model is given for a fact (its say_as), as a v4 model returns it."""
+    mi = mi or insights()
+    call = {"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}
+    facts = companion.run_tools(mi, [call])
+    body = json.loads(companion.answer_prompt(Q, facts, (), mi))
+    return next(f["say_as"][0] for f in body["facts"] if f["id"] == fact_id)
+
+
 def test_model_plans_tools_and_answers_from_them():
     plan = json.dumps(
         {"tools": [{"name": "line_breaks", "club": "London Athletic", "minute_from": 20, "minute_to": 28}]}
     )
-    text = {
-        "text": f"{LB.name} took out 4 Lisbon Esportes players with a single pass in minute 23.",
-        "evidence": ["lb:v1"],
-    }
+    text = {"text": said("lb:v1"), "evidence": ["lb:v1"]}
     ask, prompts = scripted(plan, json.dumps(text))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "model", r.reasons
@@ -160,10 +166,7 @@ def test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only
         "evidence": ["cp1"],
     }
     plan = {"tools": [{"name": "line_breaks", "club": "London Athletic", "minute_from": 20, "minute_to": 28}]}
-    text = {
-        "text": f"{LB.name} took out 4 Lisbon Esportes players with a single pass in minute 23.",
-        "evidence": ["lb:v1"],
-    }
+    text = {"text": said("lb:v1"), "evidence": ["lb:v1"]}
     ask, _ = scripted(f"{json.dumps(plan)} {json.dumps(made_up)}", json.dumps(text))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "model", r.reasons
@@ -257,8 +260,11 @@ def test_a_draft_that_fails_the_check_never_airs(draft, why):
     )
     ask, _ = scripted(plan, json.dumps(draft))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
-    assert r.source == "code" and any(why in x for x in r.reasons), r.reasons
+    # v4: a draft that is not a checked sentence is refused before the checks; the checks' own reasons
+    # for it are what insight_check would say (tests/test_insight_check.py covers each).
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,), r.reasons
     assert draft["text"] != r.answer.text
+    assert why  # the reason the checks would give, kept as the case's label
 
 
 def test_judge_rejection_falls_back():
@@ -271,10 +277,7 @@ def test_judge_rejection_falls_back():
     ask, _ = scripted(
         plan,
         json.dumps(
-            {
-                "text": "London Athletic took out 4 Lisbon Esportes players in minute 23.",
-                "evidence": ["lb:v1"],
-            }
+            {"text": said("lb:v1"), "evidence": ["lb:v1"]}
         ),
     )
     r = asyncio.run(companion.answer_match(Q, insights(), ask, judge))
@@ -877,3 +880,44 @@ def test_a_say_as_sentence_returned_word_for_word_airs_as_the_models():
     r = asyncio.run(companion.answer_match(q, mi, ask))
     assert r.source == "model", r.reasons
     assert r.answer.text == seen["text"]
+
+
+def _choose(pick):
+    """A scripted model: plans counter-press and line breaks, then answers with pick(facts)."""
+    names = ("counter_press", "line_breaks")
+    call = [{"name": n, "club": None, "minute_from": 6, "minute_to": 20} for n in names]
+
+    async def ask(prompt):
+        body = json.loads(prompt)
+        if body["step"] == "plan":
+            return json.dumps({"tools": call})
+        text, ids = pick([f for f in body["facts"] if f["say_as"]])
+        return json.dumps({"text": text, "evidence": ids})
+
+    return ask
+
+
+def test_a_clipped_checked_sentence_is_not_the_models_choice():
+    # The merge queue's review of #309: "lost the ball 13 times in open play from minute 6 to minute 20."
+    # passes the checks, but it is not one of the sentences the model was given, so it does not air.
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def clip(facts):
+        f = next(f for f in facts if " and " in f["say_as"][0])
+        return f["say_as"][0].split(" and ")[0] + ".", [f["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(clip)))
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,)
+
+
+def test_a_checked_sentence_of_a_fact_it_does_not_cite_is_not_its_choice():
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def other(facts):
+        a, b = facts[0], next(f for f in facts if f["id"] != facts[0]["id"])
+        return a["say_as"][0], [b["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(other)))
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,)
