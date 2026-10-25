@@ -80,6 +80,11 @@ PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average 
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
+# L15: the fastest a keeper throws the ball. Experienced handball players' overarm throw, as fast as
+# they could, of a 0.409 kg ball 0.3 m round (a football weighs about 0.43 kg): 21.5 m/s (van den
+# Tillaar and Ettema 2004, J Sports Sci Med 3:211-219). *verify*: a football does not fit a hand, so a
+# keeper's throw is taken as no faster; no keeper-specific figure was found.
+KEEPER_THROW_MPS = 21.5
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
 CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
@@ -190,7 +195,12 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    # Law 12: the ball is in the keeper's hands, so he releases it without turning to a kicking
+    # side (engine.release, can_strike). With throw as well, it is his throw and may roll (L15).
+    # Alone, it is a drop kick.
+    from_hands: bool = False
     set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
+    committed: bool = False  # lesson 202: off his run-up he plays it; holding is no option (design)
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -331,13 +341,19 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
+def faces(heading: float, dx: float, dy: float) -> bool:
+    """P16: does he face within STRIKE_FACING of the way (dx, dy)? One rule for every kick, from his
+    feet (can_strike) or from a keeper's hands (engine.can_strike)."""
+    return abs(turn_deg(fmath.atan2(dy, dx), heading)) <= math.degrees(STRIKE_FACING)
+
+
 def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bool:
     """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
     `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
     through him. A throw-in is the engine's own case (engine.can_strike: in his hands)."""
-    if abs(turn_deg(fmath.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+    if not faces(heading, dx, dy):
         return False
     sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
     return (ox - sx) * dx + (oy - sy) * dy >= 0
@@ -487,6 +503,8 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     nodes = []
     for w, (d_deg, s_err, l_deg) in errors:
         v = struck_speed(speed, s_err, foot)
+        if scene.throw and scene.from_hands:  # L15: as the engine throws it, never faster than an arm can
+            v = min(v, KEEPER_THROW_MPS)
         loft = loft0 + math.radians(l_deg)
         nodes.append((w, math.radians(d_deg), v * fmath.cos(loft), v * fmath.sin(loft)))
     return nodes
@@ -813,10 +831,22 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
     # D1: how to play it is his choice: along the ground at a pace the lane needs, or, from
-    # LOFT_FROM_M, over the top. A throw-in always goes through the air.
-    ways = [(True, ARRIVE_MPS)] if scene.throw else [(False, pace) for pace in PASS_PACES]
-    if not scene.throw and dist >= LOFT_FROM_M:
-        ways.append((True, ARRIVE_MPS))
+    # LOFT_FROM_M, over the top. A throw-in always goes through the air (Law 15). A keeper's
+    # throw (throw and from_hands, L15) may roll or go through the air, on the paces a pass
+    # already has. No new distance.
+    if scene.throw and not scene.from_hands:
+        ways = [(True, ARRIVE_MPS)]
+    elif scene.throw and scene.from_hands:
+        # As far as he can throw it (KEEPER_THROW_MPS): beyond that he kicks it or puts it down.
+        ways = [(False, pace) for pace in PASS_PACES if launch_speed(dist, pace) <= KEEPER_THROW_MPS]
+        if math.hypot(*loft_launch(dist)) <= KEEPER_THROW_MPS:
+            ways.append((True, ARRIVE_MPS))
+    elif scene.from_hands:  # a kick from his hands (L15): dropped and struck, it goes through the air
+        ways = [(True, ARRIVE_MPS)]
+    else:
+        ways = [(False, pace) for pace in PASS_PACES]
+        if dist >= LOFT_FROM_M:
+            ways.append((True, ARRIVE_MPS))
     best = None
     for lofted, pace in ways:
         confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace, mid)
@@ -1034,7 +1064,8 @@ def options(scene: Scene) -> list[Option]:
     best = max((o.value for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
     lose = 0.5 * p
-    out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
+    if not scene.committed:
+        out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
     return out
 
 

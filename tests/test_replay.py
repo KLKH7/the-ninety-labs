@@ -104,6 +104,19 @@ def test_a_workflow_recording_keeps_its_commit_and_pins(tmp_path):
     assert WorkflowRecording.load(path) == original
 
 
+def test_a_recording_keeps_its_agent_definitions_and_the_evidence_check_reads_them(tmp_path):
+    # Lesson 216: a new recording says which definition of each agent answered.
+    from ninety.agents import evidence
+
+    defs = {"ninety-judge": {"version": "4", "definition_sha": "2b04c8ad1ac3c950"}}
+    original = WorkflowRecording("moment", "51a8790", {"ninety-judge": "4"}, {}, "t", list(TURNS), defs)
+    path = tmp_path / "w.json"
+    original.save(path)
+    assert WorkflowRecording.load(path) == original
+    ran = [evidence.Ran("ninety-judge", "4", "2b04c8ad1ac3c950")]
+    assert evidence.read(path, tmp_path) == (ran, "recorded")
+
+
 def test_each_format_refuses_the_other(tmp_path):
     slice_file = sorted((Path(__file__).resolve().parent.parent / "replays").glob("*.json"))[0]
     with pytest.raises(ValueError, match="workflow recording"):

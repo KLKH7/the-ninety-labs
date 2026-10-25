@@ -63,16 +63,16 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 |---|---|
 | `ninety/sim` | Seeded match engine: events + per-frame positions (the ground-truth data) |
 | `ninety/render` | Broadcast camera, player bodies, ground-truth labels, render checks, train/test split |
-| `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
-| `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders) and training; tracking, camera-to-pitch mapping, possession and event rules are planned |
+| `web/render` | three.js renderer that turns a sim run into broadcast and whole-pitch tactical video |
+| `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders), the camera fit to the pitch markings (per frame on the broadcast, once per clip on the two fixed tactical views), tracking, team sides, events from possession, the join of the two cameras, and the live detection job |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow on Foundry: the multi-agent graph (Analyst, Tactician, Challenger, fact-checking agent with the Judge, Producer), the slice (Analyst and Judge), the live path to overlay cues; the Vision Auditor (offline, code-written; its model path not yet recorded) and the Data agent (code). The Personalizer is `ninety/personalizer` |
+| `ninety/agents` | Agent Framework workflow on Foundry: the multi-agent graph (Analyst, Tactician, Challenger, fact-checking agent with the Judge, Producer), the slice (Analyst and Judge), the live path to overlay cues; the phone's match Companion and Insight Scout; the Vision Auditor (offline, code-written; its model path not yet recorded) and the Data agent (code). The Personalizer is `ninety/personalizer` |
 | `ninety/speech` | The Describer: audio description from fact-checked lines only, within 2 s of the play, placed in stereo; SSML and WebVTT; Azure AI Speech behind `--speech azure` |
 | `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
-| `web` | `web/render`: the broadcast renderer. `web/viewer`: the viewer (video, graphics on the footage, analyst and casual switch, agent trace) |
+| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (a streaming player: video, graphics on the footage, match mode, the audio menu; `?dev=1` keeps the persona switch and the agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
@@ -125,33 +125,65 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Audited against `main` on Oct 19; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md) has every
-requirement with its status. Working toward **M1, end to end on one clip**.
+Audited against `main` at `ea7743a8` on Oct 25, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
+has every requirement with its status (built, partial or planned). The match engine is frozen at
+`65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
+seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
+8076, and both are recorded in [demo-match.md](docs/eval/demo-match.md).
 
 **Measured on `main`:**
 
 | What | Number | Evidence |
 |---|---|---|
-| Player detection on the frozen test set (1,250 frames of footage the model never saw) | recall 0.994, precision 0.999 | [vision-report-v2](docs/eval/vision-report-v2.md) |
-| Ball detection, ball at least half visible | recall 0.964, precision 0.994 | [vision-report-v2](docs/eval/vision-report-v2.md) |
-| Ball detection, ball mostly hidden (the known weakness) | recall 0.493, precision 0.841 | [vision-report-v2](docs/eval/vision-report-v2.md) |
-| False detections, all classes, after a retrain on footage from the test set's engine | 121 down to 27; a phantom ball where the ball is fully hidden in 1 of 113 frames, down from 45 | [vision-report-v2](docs/eval/vision-report-v2.md) against [vision-report-v1](docs/eval/vision-report-v1.md) |
-| Planted false claims caught by the fact-checking agent | 136 / 136 (code checks alone: 32 / 136) | [fact-checker.md](docs/eval/fact-checker.md) |
-| True claims wrongly rejected | 7 / 105, leaving out 10 held back when the Judge service failed (17 / 115 with them) | [fact-checker.md](docs/eval/fact-checker.md) |
+| Broadcast detector (ours-freeze), test set of 30 clips, 7,500 frames | ball recall 0.884 (95% 0.877 to 0.891), player recall 0.997 | [finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md) |
+| Ball mostly hidden, same detector and test set (still the weakness) | recall 0.425 (229 / 539, 95% 0.384 to 0.467) | [finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md) |
+| Tactical-view detector (ours-tactical), adopted by the pre-registered rule, test set of 28 clips | ball recall 0.692 (963 / 1,392, 95% 0.667 to 0.716), player recall 0.998 | [finetune-tactical](docs/eval/finetune-tactical/RESULTS.md) |
+| Broadcast player tracks paired with the same man on the tactical views, 7 validation clips | 144 / 179 paired (80.4%, 95% 74 to 86%); 4 / 144 pairs wrong (2.8%, 95% 1 to 7%) | [association.md](docs/eval/association.md) |
+| Passes detected from pixels, frozen test set's five clips | on today's `main`, strict F1 0.25 (2 of 13 found, 1 false): the camera-trust band (#270) rejects most right frames on the test set's older renderer. The earlier 0.67 (7 of 13) no longer holds. Both are below the 0.70 target | [camera-cuts-plan.md](docs/eval/camera-cuts-plan.md), [detector-plan.md](docs/eval/detector-plan.md) |
+| Possession changes in open play, same clips | 1 of 5 found, none false | [possession-change.md](docs/eval/possession-change.md) |
+| False claims aired, live ablation on held-out seeds | one agent 7 / 10, the multi-agent graph 1 / 24 | [ablation-agents.md](docs/eval/ablation-agents.md) |
+| Planted false claims kept off air by the fact-checking agent, on `ninety-judge:1` | 136 / 136, of which 9 held by a Judge service error (127 / 127 where a check decided); 7 / 105 true claims wrongly rejected. Re-run on the current Judge pending | [fact-checker.md](docs/eval/fact-checker.md) |
+| Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
+| Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
+| Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
+| Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | 19 / 19 claims answered, p95 4.6 s in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
+| Read-aloud in the pinned neural voice, pre-generated (not yet in the deployed Replay bundle) | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
 
-**Running on `main`:** the seeded match engine and the broadcast renderer with exact ground
-truth and render checks in CI ([decision 0001](docs/decisions/0001-synthetic-data.md)); a frozen
-test set and the data contract; the stats engine; the Analyst and fact-checking agent on Foundry
-over MCP (`ninety-slice`, replayable without Azure); the live path from detected events to overlay
-cues, with a confidence gate and a test that it never reads ground truth (`ninety-live`); one clip
-through the whole chain with no Azure (`ninety-e2e`), opened in the viewer, which draws the
-graphics on the footage and switches analyst and casual (local, not yet deployed); the Data
-agent and the event-driven render job; CI, and a deploy of the API on every green `main`.
+**Runs on `main`:** the seeded match engine; the broadcast and two fixed whole-pitch tactical
+views, rendered with exact ground truth and render checks in CI
+([decision 0001](docs/decisions/0001-synthetic-data.md)); frozen test sets and the data contract;
+vision from pixels to events, with the tactical views giving the players and the broadcast the ball
+and the events; the live detection job for one clip (built, not deployed); the stats engine and the
+hidden stats; the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
+replayable without Azure); the Personalizer over A2A (evaluated live; off in `ninety-e2e` and not
+deployed).
 
-**Not yet:** events detected from the video (until they land the live path reads a hand-written
-stand-in and says so), so there is no event-level precision or recall yet; the viewer deployed; the
-multi-agent workflow and Personalizer (open pull requests); the model-written Describer (today's lines are written by code); player tags, player
-cam, recaps, translation, the ablation and failure tables. See [docs/PLAN.md](docs/PLAN.md).
+**Ships in the image every green `main` deploys:** the API, the match MCP server, the viewer (match
+mode, graphics drawn on the footage, analyst, casual and audio-description personas) with its
+Replay bundle (the M1 clip, seed900001, built before the pinned voice and the Insights cards, so it
+carries neither), and the phone companion (radar, player cards, Ask; read-aloud in the device's voice).
+
+**Not yet, or not measured:**
+
+- The Companion's own sentences: the committed live run (v2) aired no model sentence; of its 32
+  answers, 24 were code's verified sentence and 8 code's "unanswerable" reply ([companion-tools.md](docs/eval/companion-tools.md)). The v3
+  run is not committed; v4, where the model chooses among code's checked sentences, is not on
+  `main` and its evaluation is pending.
+- Event detection at the 0.70 target; the camera-trust band re-derived for the test set's renderer.
+  Shot outcomes are in an open pull request; following camera cuts is built but off (it fits a
+  reverse angle as the main camera's mirror).
+- The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
+  off until the shot-flight measurement runs.
+- Team sides good enough to air most team claims (a spatial side model is in open #283).
+- The demo match rendered, with its render checks and its detected events.
+- Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
+- The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera
+  fit is about 14 m wrong in every frame ([gate-b3.md](docs/eval/gate-b3.md)).
+- Known engine gaps at the freeze: too much sideways passing, long shots taken with no defender
+  screening the goal, no change of ends at half-time (and `ninety/sim/touches.py` and
+  `ninety/render/edit.py` do not yet treat `half_time` as a stop), and one seed's keeper
+  acceleration ([issue #297](https://github.com/KLKH7/the-ninety-labs/issues/297)). See
+  [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
 
 ## License
 

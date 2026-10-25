@@ -1,9 +1,12 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
-import { setupMatch } from "./match";
+import { AudioTracks, readCommentary } from "./commentary";
+import { setupHud } from "./hud";
+import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
+import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -207,6 +210,13 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
   );
 }
 
+/** The big screen: in match mode the TV shows only the broadcast, its on-screen graphics, the score
+ * and clock, the chapters and the QR code to pair a phone; the radar, stats, trace and pipeline
+ * live on the phone. `?dev=1` keeps every panel, for building and judging the pipeline. */
+export function bigScreen(matchMode: boolean, search: string): boolean {
+  return matchMode && new URLSearchParams(search).get("dev") !== "1";
+}
+
 async function start() {
   const base = new URLSearchParams(location.search).get("bundle") ?? "bundle/";
   let b: Bundle;
@@ -221,15 +231,27 @@ async function start() {
   overlay.width = m.width;
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
+  document.documentElement.style.setProperty("--ar", String(m.width / m.height)); // the big screen's fit
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
   const { matchTime, videoTime, segmentOf } = timeline(m);
+  const teams = teamNames(m.teams);
+  // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
+  // the names change, never a number, so what the fact-checking agent passed is what airs.
+  setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
+  b.cues = b.cues.map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  const big = bigScreen(!!b.match, location.search);
+  if (big) {
+    document.body.dataset.screen = "big";
+    showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
+  }
   scrub.max = String(footage.duration);
   scrub.step = String(1 / m.fps);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
 
   let lastAired = "";
   const rememberedPersona = store.get("persona") as Persona | null;
-  let persona: Persona = rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
+  // The big screen has no persona switch: personas are the phone's (Kian, Oct 24).
+  let persona: Persona = !big && rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
   const narrator = new Narrator(b.audio?.said ?? [], b.base);
   document.body.dataset.voice = narrator.state.voice;
   (window as unknown as { ninetyNarrator: Narrator }).ninetyNarrator = narrator; // read by tests/test_viewer.py
@@ -239,8 +261,9 @@ async function start() {
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
       : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
-  const rememberedVoice = store.get("voice");
-  voiceBox.checked = rememberedVoice !== "0";
+  // The voice is off until a fan picks audio description on this page: a remembered choice never
+  // starts it speaking on load.
+  voiceBox.checked = false;
   const applyVoice = () => {
     // With the voice on, the live region stays quiet so a screen reader does not say it twice.
     onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
@@ -251,12 +274,13 @@ async function start() {
     applyVoice();
   });
   const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
-  const remembered = store.get("reduceMotion");
+  // The big screen has no motion switch: it follows the system setting alone.
+  const remembered = big ? null : store.get("reduceMotion");
   reduceMotionBox.checked = remembered === null ? motionQuery.matches : remembered === "1";
   const applyMotion = () => (document.documentElement.dataset.motion = reduceMotionBox.checked ? "reduce" : "full");
   applyMotion();
   motionQuery.addEventListener("change", () => {
-    if (store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
+    if (big || store.get("reduceMotion") === null) reduceMotionBox.checked = motionQuery.matches;
     applyMotion();
   });
   reduceMotionBox.addEventListener("change", () => {
@@ -265,9 +289,11 @@ async function start() {
   });
 
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
-  const setPersona = (p: Persona, focus = false) => {
+  const setPersona = (p: Persona, focus = false, picked = true) => {
+    if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
+    if (big && p !== "audio") p = "casual"; // only the audio menu changes it here
     persona = p;
-    store.set("persona", p);
+    if (!big) store.set("persona", p);
     document.body.dataset.persona = p;
     for (const btn of personaButtons) {
       const on = btn.dataset.persona === p;
@@ -305,9 +331,44 @@ async function start() {
   scrub.addEventListener("input", () => footage.seek(Number(scrub.value)));
   renderPipeline(b);
   renderTrace(b, seekMatch);
-  const radar = setupRadar(b, segmentOf, matchTime);
-  const match = setupMatch(b, (v) => footage.seek(v));
-  const phone = new PhonePanel(m.clip, { time: () => m.t_start + footage.time(), playing: () => !footage.paused() });
+  const radar = setupRadar(b, segmentOf, matchTime, teams, big);
+  const match = setupMatch(b, (v) => footage.seek(v), teams);
+  // The phone runs on match time, across the broadcast's cuts: the same clock the radar and the
+  // graphics use (lesson 33), so its radar shows the frame on the TV.
+  const phone = new PhonePanel(
+    m.clip,
+    { time: () => matchTime(footage.time()), playing: () => !footage.paused() },
+    new URL(b.base, location.href).pathname,
+    big,
+  );
+  // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
+  // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
+  let tracks: AudioTracks | null = null;
+  if (big) {
+    const body = m.commentary?.count
+      ? await fetch(new URL("commentary.json", new URL(b.base, location.href))).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      : null;
+    tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
+    tracks.described = !!b.audio;
+  }
+  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
+  const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
+  const hud = big
+    ? setupHud({
+        footage,
+        video: m.footage.kind === "video" ? video : null,
+        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / m.fps, goal: c.kind === "goal" })),
+        play: playButton,
+        scrub,
+        clock: clockOut,
+        qrOpen: (open) => {
+          qrState.open = open;
+          if (!open) qrState.closed = true;
+        },
+        audio: tracks,
+        onTrack: (track) => setPersona(track === "described" ? "audio" : "casual"),
+      })
+    : null;
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -318,6 +379,8 @@ async function start() {
       case " ":
       case "k":
         if (target.tagName === "BUTTON" && e.key === " ") return; // the button's own click
+        // A radio or checkbox's own Space (the audio menu): it chooses, it does not play.
+        if (e.key === " " && target instanceof HTMLInputElement && ["radio", "checkbox"].includes(target.type)) return;
         e.preventDefault();
         togglePlay();
         break;
@@ -333,16 +396,30 @@ async function start() {
         footage.pause(); // to the middle of the next or previous frame
         footage.seek((Math.floor(footage.time() * m.fps) + (e.key === "." ? 1 : -1) + 0.5) * step);
         break;
+      case "f":
+        if (!hud) return;
+        hud.toggleFull();
+        break;
+      case "Escape":
+        if (!hud) return;
+        hud.closeQr();
+        hud.closeMenu();
+        qrState.closed = true;
+        break;
       case "1":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("casual");
         break;
       case "2":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("analyst");
         break;
       case "3":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("audio");
         break;
       case "d":
+        if (big) return;
         showBoxes.checked = !showBoxes.checked;
         break;
       case "[":
@@ -352,7 +429,7 @@ async function start() {
         match.step(footage.time(), e.key === "]" ? 1 : -1);
         break;
       case "m":
-        if (!b.radar) return;
+        if (!b.radar || big) return;
         showRadar.checked = !showRadar.checked;
         showRadar.dispatchEvent(new Event("change"));
         break;
@@ -367,11 +444,13 @@ async function start() {
     }
   });
 
+  const broadcast = broadcastSchedule(b.cues);
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
     const t = matchTime(v);
-    const aired: Cue[] = onAir(b.cues, persona, t);
+    // The big screen airs the broadcast's few lower thirds; audio description keeps its own cues.
+    const aired: Cue[] = big && persona !== "audio" ? broadcast.filter((c) => c.t_in <= t && t < c.t_out) : onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
@@ -379,6 +458,17 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
+    if (hud) {
+      const at = phone.paired ? pairCardAt(v, qrState) : "hidden";
+      const card = $("pair-card");
+      if (card.dataset.at !== at) {
+        card.dataset.at = at;
+        card.hidden = at === "hidden";
+        card.classList.toggle("still", reduceMotionBox.checked);
+      }
+      hud.tick();
+      tracks?.update(v, t, !footage.paused());
+    }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
@@ -388,7 +478,8 @@ async function start() {
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
         .map((c) => {
-          const said = (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, "");
+          // The check's result belongs in How we know, never prefixed to what is shown or said.
+          const said = c.text.replace(/\.$/, "");
           return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
         })
         .join(". ");
@@ -404,17 +495,25 @@ async function start() {
     if (document.activeElement !== scrub) scrub.value = String(v);
     clockOut.textContent = clock(t);
     const paused = footage.paused();
-    playButton.textContent = paused ? "Play" : "Pause";
-    playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    if (!hud) {
+      playButton.textContent = paused ? "Play" : "Pause";
+      playButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    }
     requestAnimationFrame(frame);
   };
-  setPersona(persona);
+  setPersona(persona, false, false);
   document.body.dataset.state = "ready";
   requestAnimationFrame(frame);
 }
 
 /** The radar panel: drawn each frame from the bundle's radar.json, or a note saying it has none. */
-function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], matchTime: (v: number) => number) {
+function setupRadar(
+  b: Bundle,
+  segmentOf: (k: number) => [number, number],
+  matchTime: (v: number) => number,
+  teams: TeamNames,
+  big: boolean,
+) {
   const panel = $("radar-panel");
   const note = $("radar-note");
   let model: RadarModel | null = null;
@@ -429,6 +528,13 @@ function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], match
     showRadar.disabled = true;
     radarCanvas.hidden = true;
     $("radar-legend").hidden = true;
+  }
+  for (const side of ["home", "away"] as const) $(`radar-${side}`).textContent = teams[side];
+  if (big) {
+    // On the phone instead (web/phone); nothing is drawn here.
+    $("radar-section").hidden = true;
+    showRadar.checked = false;
+    return { tick: () => null };
   }
   const remembered = store.get("radar");
   showRadar.checked = remembered !== "0";
@@ -468,7 +574,7 @@ function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], match
     radarCanvas.dataset.frame = state ? String(state.frame) : "";
     // The description changes at most once a second, so a screen reader is not flooded.
     const now = performance.now();
-    const said = describe(state);
+    const said = describe(state, teams);
     if (said !== spoken && now - spokenAt > 1000) {
       spoken = said;
       spokenAt = now;

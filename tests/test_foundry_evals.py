@@ -131,11 +131,14 @@ def test_reports_name_the_agent_versions_and_link_the_foundry_run():
         "total": 1,
         "per_criterion": {"fact-checker correct": {"passed": 1, "failed": 0, "errored": 0}},
     }
-    text = factcheck_report([row(true=False, code_ok=True, judge_ok=False)], "21", "`ninety-judge:1`", run)
+    judge1 = {"ninety-judge": {"version": "1", "definition_sha": "3eea4db1096b7a49"}}
+    rows = [row(true=False, code_ok=True, judge_ok=False)]
+    text = factcheck_report(rows, "21", "`ninety-judge:1`", run, defs=judge1)
     assert "judge `ninety-judge:1`" in text and "(https://ai.azure.com/r)" in text
     assert "fact-checker correct 1/1" in text
 
     drafts = [{"seed": 21, "minute": 1, "claim": "a | b", "verdict": "reject", "reasons": ["x"]}]
-    text = analyst_report(drafts, "21", "ninety-analyst:2, ninety-judge:1", None, None)
+    analyst2 = {"ninety-analyst": {"version": "2", "definition_sha": "ac3506fea4a55bf5"}, **judge1}
+    text = analyst_report(drafts, "21", "ninety-analyst:2, ninety-judge:1", None, None, defs=analyst2)
     assert "**First drafts that would air:** 0/1." in text and "ninety-analyst:2" in text
     assert "a / b" in text  # a pipe in a claim cannot break the table
