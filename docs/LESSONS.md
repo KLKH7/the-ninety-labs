@@ -2922,6 +2922,34 @@ short and actionable. This file is public: no research sources, product names or
   when the phone reads an event's side without the threshold;
   `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
 
+### 246. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
+
+### 247. A paid machine's cap runs on the machine, and its results leave it as they are made
+- **What happened:** on Oct 24–25 two rented GPU hosts ran past their hard caps. Each cap was a
+  timer on the maintainer's laptop. The first fired 14 min late with the laptop asleep, hit a DNS
+  failure, and exited. The second retried with the laptop kept awake, but the laptop was offline
+  for about 1 h 40 min, so the host billed about 1.5 h past its 2 h cap. Each time, finished work
+  that had not been copied back was lost when the host was finally deleted: the shot-outcome set's
+  renders and its validation scoring.
+- **Rule:** the cap is enforced on the host itself: the first thing a rented host runs is its own
+  deletion at the cap, started before any other work. The laptop's retrying timer is only a second
+  line. Every finished result (a clip's report, a score, a set list) is copied off the host as it
+  is written, never in a batch at the end.
+- **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
+  deadline the host enforces on itself, and the cadence at which results are copied back (every
+  couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+
 ### 248. A place along the pitch is checked against the pitch before it is cut into thirds
 - **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
   capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
