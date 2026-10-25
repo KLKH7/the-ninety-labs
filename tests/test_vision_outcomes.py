@@ -39,7 +39,7 @@ def shot_scene(path, frames=60, keeper=None, others=(), heights=None, kickoff_af
     return rows
 
 
-def kickoff_rows(own_halves: bool, first: int, frames: int = 10):
+def kickoff_rows(own_halves: bool, first: int, frames: int = 10, off_spot: float = 0.5):
     """After a cut: the ball still on the centre spot, blue (home) in its half (x < 52.5) and red
     in the other, or everyone on the wrong side."""
     out = []
@@ -47,7 +47,7 @@ def kickoff_rows(own_halves: bool, first: int, frames: int = 10):
         blue_x, red_x = (40.0, 65.0) if own_halves else (65.0, 40.0)
         people = ([(blue_x, 10.0 + 6 * k, BLUE) for k in range(4)]
                   + [(red_x, 10.0 + 6 * k, RED) for k in range(4)])
-        out.append(row(f, people, oc.CENTRE))
+        out.append(row(f, people, (oc.CENTRE[0] + off_spot, oc.CENTRE[1])))  # E_C is 0.688 m
     return out
 
 
@@ -253,3 +253,71 @@ def test_the_goal_is_when_the_ball_crossed_the_line_not_when_it_came_to_rest():
     over = next(r["frame"] for r in rows if r["ball"] and r["ball"][0]["x"] - 105.0 > oc.BALL_R + oc.E_X)
     _, goals, _, _ = run(rows)
     assert len(goals) == 1 and goals[0]["frame"] == over
+
+
+def restart_rows(first, at, frames=10, cut=True):
+    """The ball still at `at` from frame `first` (+200: after a cut), players spread on both sides."""
+    out = []
+    start = first + (200 if cut else 0)
+    for f in range(start, start + frames):
+        people = ([(30.0, 10.0 + 6 * k, BLUE) for k in range(4)]
+                  + [(75.0, 10.0 + 6 * k, RED) for k in range(4)])
+        out.append(row(f, people, at))
+    return out
+
+
+def wide_then_unseen(k):
+    """A shot struck at goal that leaves the picture after 0.4 s (the broadcast cuts away)."""
+    return (90.3 + 25.0 * k / FPS, 34.0) if k <= 10 else None
+
+
+def test_a_kick_off_after_a_shot_the_picture_lost_is_a_goal_for_the_shooters_side():
+    rows = shot_scene(wide_then_unseen, frames=30) + kickoff_rows(True, 30)
+    shots, goals, _, _ = run(rows)
+    assert [s["outcome"] for s in shots] == ["goal"] and len(goals) == 1 and goals[0]["team"] == "home"
+    assert goals[0]["confidence"] == 0.8  # the kick-off's own evidence, the net unseen
+    assert goals[0]["frame"] == KICK + 10  # the ball's last point nearest the line before the restart
+
+
+def test_a_kick_off_with_the_players_in_the_wrong_halves_is_no_restart():
+    rows = shot_scene(wide_then_unseen, frames=30) + kickoff_rows(False, 30)
+    _, goals, _, _ = run(rows)
+    assert goals == []
+
+
+def test_a_goal_kick_after_a_shot_means_no_goal():
+    # The shot goes on over the goal line wide of the post (crossing at y = 38.1: past the post's
+    # 37.66, inside the shot rule's margin), then the ball is set in the goal area.
+    def path(k):
+        return 90.3 + 25.0 * k / FPS, 34.0 + 7.0 * k / FPS
+    rows = shot_scene(path, frames=30) + restart_rows(30, (105.0 - 4.0, 30.0))
+    shots, goals, _, _ = run(rows)
+    assert goals == [] and [s["outcome"] for s in shots] == ["off_target"]
+
+
+def test_a_corner_after_a_shot_on_target_is_a_save():
+    rows = shot_scene(wide_then_unseen, frames=30) + restart_rows(30, (105.0 - 0.5, 0.5))
+    shots, goals, _, _ = run(rows)
+    assert goals == [] and [s["outcome"] for s in shots] == ["on_target"]
+
+
+def test_a_keeper_holding_his_catch_in_his_goal_area_is_no_goal_kick():
+    # No dead ball between: the save stands, it is not read as a shot that went out.
+    rows = shot_scene(keeper_catch(), keeper=(103.0, 34.0), frames=60)
+    shots, _, _, _ = run(rows)
+    assert [s["outcome"] for s in shots] == ["on_target"]
+
+
+@pytest.mark.parametrize("d,kind", [(5.5, "goal_kick"), (5.5 + 0.093 + 0.05, None)])
+def test_the_goal_area_is_law_1s_and_the_measured_error_and_no_more(d, kind):
+    # 5.5 m from the line plus E_X (0.093 m) is inside; 0.05 m beyond is not (Law 1, measured error).
+    from ninety.vision.track import BallPoint
+    p = BallPoint(0, 105.0 - d, 34.0, 0.9)
+    assert oc.restart_kind(p, "home", [0], []) == kind
+
+
+def test_a_ball_still_beyond_the_spots_measured_error_is_no_kick_off():
+    # 0.75 m from the spot is beyond E_C (0.688 m, the measured position error there).
+    rows = shot_scene(wide_then_unseen, frames=30) + kickoff_rows(True, 30, off_spot=0.75)
+    _, goals, _, _ = run(rows)
+    assert goals == []

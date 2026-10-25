@@ -253,15 +253,73 @@ def _index(path: list[BallPoint], frame: int | None) -> int:
     return next((k for k, p in enumerate(path) if p.frame >= frame), len(path))
 
 
+GOAL_AREA_DEPTH = 5.5  # Law 1: the goal area reaches 5.5 m into the pitch
+GOAL_AREA_HALF = 3.66 + 5.5  # and 5.5 m beyond each post
+CORNER_R = 1.0  # Law 1: the corner arc's radius
+# The broadcast cuts away from a dead ball only when it leaves out at least this long (the renderer's
+# edit, ninety/render/edit.py MIN_CUT_S): a gap this long in the ball's path is a dead ball cut away.
+DEAD_CUT_S = 4.0
+
+
+def still_runs(points: list[BallPoint]) -> list[list[int]]:
+    """Runs of IN_NET_FRAMES or more consecutive points with the ball moving under CARRY_MPS: a dead
+    ball set for a restart."""
+    still = []
+    for k in range(len(points)):
+        v = _velocity(points, k)
+        still.append(v is not None and math.hypot(*v) < CARRY_MPS)
+    return [r for r in _runs(points, still) if len(r) >= IN_NET_FRAMES]
+
+
+def restart_kind(p: BallPoint, team: str, frames: list[int], player_tracks: list[Track]) -> str | None:
+    """Which restart a still ball at p is set for, by where the Laws put it (GROUNDING L4, L8, L9):
+    the kick-off spot (with the players in their own halves), the goal area of the goal `team`
+    attacks, or a corner of that end; None for anywhere else."""
+    if math.dist((p.x, p.y), CENTRE) <= E_C and own_halves(player_tracks, frames):
+        return "kickoff"
+    d = -behind(p, team)  # metres in front of the attacked goal line
+    if -E_X <= d <= GOAL_AREA_DEPTH + E_X and abs(p.y - CENTRE[1]) <= GOAL_AREA_HALF + E_Y:
+        return "goal_kick"
+    gx = goal_line(team)
+    if any(math.dist((p.x, p.y), (gx, cy)) <= CORNER_R + E_Y for cy in (0.0, PITCH_Y)):
+        return "corner"
+    return None
+
+
+def first_restart(path: list[BallPoint], i: int, stop: int | None, team: str,
+                  player_tracks: list[Track]) -> tuple[str, int, float] | None:
+    """The first restart after the strike at path[i], before frame `stop` (the next strike): (kind,
+    the index of its first point in path, the mean ball score over the run); None if none is seen."""
+    after = path[i + 1:_index(path, stop)]
+    for run in still_runs(after):
+        p = after[run[0]]
+        # A restart follows a dead ball (Laws 8, 16, 17): the ball seen over that goal line after the
+        # strike, or the picture cut away (a broadcast cut leaves out DEAD_CUT_S or more of a dead
+        # ball). A keeper holding a save in his goal area is not a goal kick.
+        seen = [path[i]] + after[:run[0] + 1]
+        dead = (any(behind(q, team) > BALL_R for q in seen)
+                or any(b.frame - a.frame >= DEAD_CUT_S * FPS for a, b in zip(seen, seen[1:], strict=False)))
+        if not dead:
+            continue
+        kind = restart_kind(p, team, [after[k].frame for k in run], player_tracks)
+        if kind is not None:
+            return kind, i + 1 + run[0], sum(after[k].score for k in run) / len(run)
+    return None
+
+
 def judge(path: list[BallPoint], i: int, stop: int | None, goal_stop: int | None, team: str,
           tracks: list[Track], heights: dict, look: int, next_holder: Track | None,
-          out_frame: int | None, player_tracks: list[Track] | None = None) -> Outcome:
+          out_frame: int | None, player_tracks: list[Track] | None = None,
+          restart_stop: int | None = None) -> Outcome:
     """One shot struck at path[i]. `stop` is the frame where its run ends (the next spell's first
     frame, or a cut), None at the clip's end; `next_holder` that spell's player; `out_frame` the
     frame the ball was seen out of play before `stop`, if any. The net is searched up to
     `goal_stop` (the next cut or shot), past any spell: a keeper standing by a ball at rest in his
-    net reads as having it at his feet."""
+    net reads as having it at his feet. The restart that follows (plan, amendment 2) is searched up
+    to `restart_stop` (the next strike), across cuts, and decides when it is seen."""
     end = _index(path, stop)
+    players = player_tracks if player_tracks is not None else tracks
+    restart = first_restart(path, i, restart_stop, team, players)
     after = path[i + 1:_index(path, goal_stop)]
     gy = goal_y(path, i, team, look)
     on_target = gy is not None and abs(gy - CENTRE[1]) <= GOAL_HALF - BALL_R + E_Y
@@ -276,6 +334,23 @@ def judge(path: list[BallPoint], i: int, stop: int | None, goal_stop: int | None
                 break
             touched = None
     line = line_evidence(after, heights, team)
+    if restart is not None and restart[0] == "kickoff":
+        score, k, y = line if line is not None else (0.0, None, None)
+        conf = 1 - (1 - score) * (1 - restart[2])
+        if k is not None:
+            p = after[k]
+        else:  # the net unseen: the ball's last point nearest the goal line before the restart
+            before = path[i + 1:restart[1]] or [path[i]]
+            p = max(before, key=lambda q: behind(q, team))
+            y = p.y
+        goal = {"frame": p.frame, "x": goal_line(team), "y": round(y, 2), "confidence": round(conf, 3),
+                "line": round(score, 3), "kickoff": round(restart[2], 3)}
+        return Outcome("goal", goal, "restart: kickoff")
+    if restart is not None and restart[0] == "goal_kick":
+        saved = touched == "keeper" and on_target
+        return Outcome("on_target" if saved else "off_target", how="restart: goal kick")
+    if restart is not None and restart[0] == "corner":
+        return Outcome("on_target" if on_target else "blocked", how="restart: corner")
     if line is not None:
         score, k, y = line
         p = after[k]

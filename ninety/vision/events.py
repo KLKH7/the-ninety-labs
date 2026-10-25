@@ -325,11 +325,15 @@ def detect(rows: list[dict], join_breaks: bool = True,
             goal_stop = min(bounds, default=None)
             stop = b.first if b is not None else (cut + 1 if cut is not None else None)
             result = outcomes.judge(path, i, stop, goal_stop, team, tracks, heights, int(SHOT_LOOK_S * FPS),
-                                    b.track if b is not None else None, gone, others)
+                                    b.track if b is not None else None, gone, others,
+                                    restart_stop=min((f for f in strikes if f > a.last), default=None))
         is_goal = result is not None and result.outcome == "goal"
-        if b is None and gone is None and not is_goal:
+        # A restart seen later (a kick-off, goal kick or corner) says where his ball went, even when
+        # the picture lost it or cut away first (outcomes.first_restart).
+        decided = is_goal or (result is not None and result.how.startswith("restart"))
+        if b is None and gone is None and not decided:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
-        if cut is not None and (gone is None or gone > cut) and not is_goal:
+        if cut is not None and (gone is None or gone > cut) and not decided:
             continue  # the picture cut away before anything showed where his ball went
         conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
         speed = _speed_kmh(path, i)

@@ -86,3 +86,25 @@ of play and a second, false goal 2.3 s later. Three rule fixes, none of them a t
 
 On the demo clip afterwards: one shot (0.3 s from the true strike) and one goal (one frame from the
 true goal), confidence 0.865 with the kick-off seen after the cut.
+
+## Amendment 2 (Oct 24, evening, before any number of the shot-outcome set was read): the restart decides
+
+Kian's call, relayed by the Coordinator: the restart after a shot is evidence of its own, from the
+Laws. After a detected shot, the **first restart seen before the next strike** (across a broadcast cut
+too) decides:
+
+- **kick-off** (GROUNDING L4, Law 8): the ball still within `E_C` of the centre spot on 3 frames running
+  (moving under `CARRY_MPS`), with the players who have a side in their own halves (rule 4's test).
+  Then the shot is a **goal** for the shooter's side. Its confidence is `1 - (1 - line)(1 - kickoff)`,
+  `line` 0 when the net was not seen; its time is the crossing frame when the line was seen, else the
+  ball's last point nearest the goal line before the restart.
+- **goal kick** (L8, Law 16): the ball still inside the goal area of the goal the shot attacked (no more
+  than 5.5 m + `E_X` from the goal line, within 9.16 m + `E_Y` of the centre of the goal). Then
+  **not a goal**: `on_target` if the keeper rule saw a save, else `off_target`.
+- **corner** (L9, Law 17): the ball still within 1 m + `E_Y` of a corner of the end the shot attacked.
+  Then **not a goal**: `on_target` (a save) if the shot was on target, else `blocked`.
+- **none seen:** rules 1 to 5 as before.
+
+A restart seen overrides the line evidence (the Laws say what happened; the net is a pixel judgement).
+Thresholds are Law 1's geometry and the errors already measured on validation (`E_X`, `E_Y`, `E_C`,
+`docs/eval/shot-outcomes.json`); nothing is fitted.
