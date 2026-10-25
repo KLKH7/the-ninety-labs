@@ -115,3 +115,23 @@ here. The real test number needs the detector checkpoint and the test renders (t
 ## Outcome
 
 To be written after the runs, below this line, without changing anything above.
+
+### M0 (2026-10-24, 15 validation matches simulated at `65247ba`, 35 minutes each)
+
+The rule ran as written; nothing above was changed after it. 477 true passes an opponent controlled,
+all judged (a speed and a direction on every one); the engine called 229 of them interceptions.
+
+| Rule | Disagrees | Rate (95%) | Interception called recovery | Recovery called interception |
+|---|---:|---|---:|---:|
+| `pace14` | 237 of 477 | 0.50 (0.45 to 0.54) | 95 | 142 |
+| `pace10` | 214 | 0.45 (0.40 to 0.49) | 138 | 76 |
+| **`pace6`** | **133** | **0.28 (0.24 to 0.32)** | 31 | 102 |
+| `rest` | 232 | 0.49 (0.44 to 0.53) | 0 | 232 |
+| every one an interception | 248 | 0.52 (0.48 to 0.56) | 0 | 248 |
+| none | 229 | 0.48 (0.44 to 0.52) | 229 | 0 |
+
+**Chosen: `pace6`**, which disagrees less often than the better constant rule (133 against 229), so it
+clears the bar and `events.TARGET_PACE` is 6 m/s. Its error leans one way: 102 of its 133 are
+recoveries it calls interceptions (a ball the passer struck softer than 6 m/s on arrival, or lofted).
+So on a perfect ball path about one detected interception in four is a recovery, before any position
+error (M1, M2 below).

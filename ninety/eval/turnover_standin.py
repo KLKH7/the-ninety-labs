@@ -1,7 +1,7 @@
 """Interceptions, pressure and tackles on validation: development numbers on stand-in observations.
 
     uv run python -m ninety.eval.turnover_standin --matches <dir of seed920101 ...> \\
-        [--rendered <rendered clip> ...] --out docs/eval/turnovers-dev
+        [--rendered <rendered clip> ...] [--set docs/eval/possession-set.json] --out docs/eval/turnovers-dev
 
 The plans (docs/eval/interception-plan.md, pressure-plan.md, tackle-plan.md) were committed before
 this ran. It reads the answer key, so it is an evaluation; nothing on the live path imports it.
@@ -32,7 +32,7 @@ from ninety.vision.track import BallPoint
 from ninety.vision.tracked_frames import player_id
 
 ROOT = Path(__file__).resolve().parents[2]
-SET = ROOT / "docs" / "eval" / "possession-set.json"
+SET = ROOT / "docs" / "eval" / "possession-set.json"  # written by #299 (ninety/eval/possession_set.py)
 # The players' measured median position error on ours-v2's validation clips (0.221 m,
 # docs/eval/attribution-derive.json) over a 2-D Gaussian's median radius, sqrt(2 ln 2) sigma.
 NOISE_M = round(0.221 / math.sqrt(2 * math.log(2)), 3)
@@ -253,9 +253,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--matches", type=Path, required=True, help="folder of simulated validation matches")
     ap.add_argument("--rendered", type=Path, nargs="*", default=[], help="rendered validation clips")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--set", type=Path, default=SET, help="the possession set's manifest")
     ap.add_argument("--m0-only", action="store_true")
     a = ap.parse_args(argv)
-    manifest = json.loads(SET.read_text())
+    manifest = json.loads(a.set.read_text())
     clips = [c for c in manifest["clips"] if c["split"] == "validation"]
     matches = sorted(a.matches / f"seed{s}" for s in sorted({c["seed"] for c in clips}))
     report = {"plans": [f"docs/eval/{k}-plan.md" for k in ("interception", "pressure", "tackle")],

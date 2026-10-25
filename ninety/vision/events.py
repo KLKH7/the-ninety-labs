@@ -125,7 +125,10 @@ ROLL_DECEL = 1.2
 # (the engine strikes a ground pass to arrive at 6, 10 or 14 m/s, decisions.PASS_PACES; 0 is where it
 # stops). Chosen among those on validation truth by the plan's rule, set before any test number.
 STAND_INS = {"pace14": 14.0, "pace10": 10.0, "pace6": 6.0, "rest": 0.0}
-TARGET_PACE = STAND_INS["pace14"]  # placeholder until the plan's M0 choice is made
+# Chosen by the plan's rule (fewest disagreements with the engine's interceptions on the validation
+# matches' 477 passes an opponent controlled): pace6, 133 of 477 (0.28), against 229 for the better
+# rule that ignores the ball (docs/eval/interception-plan.md, Outcome; docs/eval/turnovers-dev.json).
+TARGET_PACE = STAND_INS["pace6"]
 # Pressure (docs/eval/pressure-plan.md): the engine writes one when the nearest opponent of the player
 # on the ball is closer than PRESSURE_M, at most once in PRESSURE_REPEAT_S for each pressing side.
 # Both are the engine's literals (design, no GROUNDING row), copied unchanged.
