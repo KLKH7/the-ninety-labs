@@ -1,0 +1,163 @@
+{
+ "match": "demo8080",
+ "gantry": [
+  56.51736099493055,
+  -33.748867066554254,
+  14.333165997309406
+ ],
+ "clips": [
+  {
+   "clip": "demo8080",
+   "true_gantry": [
+    56.5,
+    -33.8,
+    14.3472
+   ],
+   "match_gantry_error_m": 0.056,
+   "before": {
+    "frames": 100,
+    "trusted": 100,
+    "good": 100,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.492,
+    "gantry": [
+     56.53,
+     -33.756,
+     14.345
+    ],
+    "gantry_error_m": 0.053
+   },
+   "after": {
+    "frames": 100,
+    "trusted": 100,
+    "good": 100,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.454,
+    "gantry": [
+     56.517,
+     -33.749,
+     14.333
+    ],
+    "gantry_error_m": 0.056,
+    "shots": [
+     {
+      "frame": 1500,
+      "gantry": [
+       56.53,
+       -33.756,
+       14.345
+      ],
+      "distance_m": 0.019,
+      "ok_own": 100,
+      "ok_match": 100,
+      "unsure": false
+     }
+    ]
+   }
+  },
+  {
+   "clip": "demo8080cut",
+   "true_gantry": [
+    56.5,
+    -33.8,
+    14.3472
+   ],
+   "match_gantry_error_m": 0.056,
+   "before": {
+    "frames": 575,
+    "trusted": 564,
+    "good": 564,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.501,
+    "gantry": [
+     56.5,
+     -33.766,
+     14.341
+    ],
+    "gantry_error_m": 0.035
+   },
+   "after": {
+    "frames": 575,
+    "trusted": 565,
+    "good": 565,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.507,
+    "gantry": [
+     56.517,
+     -33.749,
+     14.333
+    ],
+    "gantry_error_m": 0.056,
+    "shots": [
+     {
+      "frame": 850,
+      "gantry": [
+       56.5,
+       -33.766,
+       14.341
+      ],
+      "distance_m": 0.026,
+      "ok_own": 568,
+      "ok_match": 569,
+      "unsure": false
+     }
+    ]
+   }
+  },
+  {
+   "clip": "demo8080corner",
+   "true_gantry": [
+    56.5,
+    -33.8,
+    14.3472
+   ],
+   "match_gantry_error_m": 0.056,
+   "before": {
+    "frames": 205,
+    "trusted": 77,
+    "good": 75,
+    "bad": 2,
+    "unmeasured": 0,
+    "worst_m": 1.254,
+    "gantry": [
+     46.66,
+     -42.038,
+     17.607
+    ],
+    "gantry_error_m": 13.241
+   },
+   "after": {
+    "frames": 205,
+    "trusted": 201,
+    "good": 201,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.181,
+    "gantry": [
+     56.517,
+     -33.749,
+     14.333
+    ],
+    "gantry_error_m": 0.056,
+    "shots": [
+     {
+      "frame": 20345,
+      "gantry": [
+       46.66,
+       -42.038,
+       17.607
+      ],
+      "distance_m": 13.289,
+      "ok_own": 77,
+      "ok_match": 203,
+      "unsure": false
+     }
+    ]
+   }
+  }
+ ]
+}

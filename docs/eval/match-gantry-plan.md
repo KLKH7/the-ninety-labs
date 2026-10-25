@@ -140,3 +140,70 @@ the open-play window, the throw-in across a dead-ball cut, the corner of segment
 
 Then once, at the end, the frozen test set (900001 to 900005, each its own match): with the option,
 each clip's observations equal today's (bar 5). Nothing is set from it.
+
+## Outcome
+
+Run on this branch at `c51cba1a` and its test follow-up (the code measured is unchanged since),
+drawn label boxes as detections (no checkpoint on this machine: an upper bound on a detector's
+trusted counts). Per-clip reports: [match-gantry/](match-gantry/) (the measuring scripts were
+scratch, kept outside the repo with the session's notes). Kick-off windows
+rendered at `65247ba` with #330's flags, each passing `ninety-validate`.
+
+### SHOT_GANTRY_M, by the rule, before any "after" run
+
+Today's fitted gantry against the true one, validation clips whose camera is the main gantry in
+every frame:
+
+| Look | Clip: gantry error (m) |
+|---|---|
+| 0.3.2 (#298's renders, #332's observations) | 108: 3.88, 109: 2.28, 113: 5.97, 114: 1.26, 115: 26.62, 116: 5.89, 118: 6.26, 119: 38.43 |
+| 0.5.17 (kick-off windows) | 920106: 0.32, 920108: 0.29, 920109: 0.99 |
+
+(110 and 111 cut to other cameras, 112 is behind a goal throughout, 117 is a reverse angle: not
+main-gantry clips.) The larger look's maximum is 38.43 m, so **SHOT_GANTRY_M = 38.5 m**. On
+today's look alone it would be 1.0 m. Open-play trusted share (bar 2's reference), kick-off windows,
+today's fit: 298 of 300, 0.993; so bar 2 asks at least 0.795.
+
+### Per clip, before (one clip at a time, today) and after (one gantry per match)
+
+| Match | Clip | Gantry error before / after (m) | Trusted before (bad) | Trusted after (bad) | Worst after (m) | Own gantry from match gantry (m) | Unsure |
+|---|---|---|---|---|---|---|---|
+| validation 920106 | goal kick (seed920106-4570) | 2.49 / 0.04 | 315 of 352 (0) | 345 of 352 (0) | 0.27 | 2.46 | no |
+| | kick-off | 0.32 / 0.04 | 100 of 100 (0) | 100 of 100 (0) | 0.30 | 0.36 | no |
+| validation 920108 | free kick and kick-off (seed920108-1061) | 0.23 / 0.12 | 731 of 743 (1) | 670 of 743 (0) | 0.78 | 0.35 | no |
+| | kick-off | 0.29 / 0.12 | 98 of 100 (0) | 98 of 100 (0) | 0.38 | 0.41 | no |
+| validation 920109 | corner (seed920109-3109) | 11.36 / 0.19 | 0 of 352 | 17 of 352 (0) | 0.45 | 11.54 | no |
+| | kick-off | 0.99 / 0.19 | 100 of 100 (0) | 100 of 100 (0) | 0.32 | 1.18 | no |
+| demo 8080 (not validation) | open play, 60 to 64 s | 0.05 / 0.06 | 100 of 100 (0) | 100 of 100 (0) | 0.45 | 0.02 | no |
+| | throw-in across a dead-ball cut, 34 to 70 s | 0.04 / 0.06 | 564 of 575 (0) | 565 of 575 (0) | 0.51 | 0.03 | no |
+| | **corner, segment 6, 813.8 to 822 s** | **13.24 / 0.06** | **77 of 205 (2)** | **201 of 205 (0)** | **0.18** | 13.29 | no |
+
+### Against the bar
+
+1. **Met.** The match gantry is within 0.19 m of the true one on every validation match (well inside
+   38.5 m, and inside today's look's 1.0 m).
+2. **Met on 2 of 3.** Goal kick 0.98, free kick 0.90 (both at least 0.795). **Not met on 920109's
+   corner: 0.05**, with the gantry right (0.19 m). #345's cause is present there: its pans are 28
+   to 53 degrees, where the line model drops the near touchline, so frames fail the marking fit
+   through a right gantry. Reported as that cause, not tuned.
+3. **Met.** Worst trusted 0.78 m (bound 8.5 m); no bad frame is trusted after on any clip, so every
+   newly trusted frame is good.
+4. **Met for main-gantry shots:** no shot is marked unsure. The reverse angle (seed 117 at 0.3.2,
+   `--cuts`) was **not run** for lack of time; at SHOT_GANTRY_M = 38.5 m a reverse angle whose mirror
+   is within 38.5 m of the match gantry (any gantry near halfway) cannot be marked, as the planted
+   test `test_at_the_measured_tolerance_a_reverse_angle_near_halfway_is_a_known_limit` shows.
+5. **Met.** Frozen test set, once, each clip its own match with the option: every frame of all five
+   clips equal to today's observations (900001: 115 trusted, 900002: 0, 900003: 0, 900004: 30,
+   900005: 9, before and after; 900002 and 900003's "before" byte-identical to the committed
+   `camera-cuts/observations`). [match-gantry/test-set.json](match-gantry/test-set.json).
+
+**Also seen:** on 920108's long clip, 61 frames trusted before are not trusted after (60 of them
+good). The match gantry is nearer the truth (0.12 m against 0.23 m), but through it those frames'
+marking median rises from about 0.9 px to 1.5 to 1.75 px, just over MAX_MEDIAN_PX (1.5 px). That
+clip's camera shakes up to 0.1 m (its render settings, read for this diagnosis only), so no single
+gantry fits every frame as closely as the clip's own did. Not tuned; it is the gate working as set.
+
+**So:** bar 2 fails on one clip for a known, separate cause, and check (3) cannot see a reverse
+angle at the measured tolerance. The option stays **off by default**; turning it on for the demo is
+Kian's call. The demo's corner goes from 77 trusted frames (2 bad, gantry 13 m off) to 201 (none
+bad, worst 0.18 m).

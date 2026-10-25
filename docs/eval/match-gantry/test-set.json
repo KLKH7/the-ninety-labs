@@ -1,0 +1,157 @@
+[
+ {
+  "seed": 900001,
+  "frames": 250,
+  "trusted_before": 115,
+  "trusted_after": 115,
+  "frames_equal": true,
+  "gantry_before": [
+   59.115,
+   -35.799,
+   15.623
+  ],
+  "gantry_after": [
+   59.115,
+   -35.799,
+   15.623
+  ],
+  "shots": [
+   {
+    "frame": 1650,
+    "gantry": [
+     59.115,
+     -35.799,
+     15.623
+    ],
+    "distance_m": 0.0,
+    "ok_own": 247,
+    "ok_match": 247,
+    "unsure": false
+   }
+  ]
+ },
+ {
+  "seed": 900002,
+  "frames": 250,
+  "trusted_before": 0,
+  "trusted_after": 0,
+  "frames_equal": true,
+  "gantry_before": [
+   57.865,
+   -29.257,
+   13.187
+  ],
+  "gantry_after": [
+   57.865,
+   -29.257,
+   13.187
+  ],
+  "shots": [
+   {
+    "frame": 5250,
+    "gantry": [
+     57.865,
+     -29.257,
+     13.187
+    ],
+    "distance_m": 0.0,
+    "ok_own": 101,
+    "ok_match": 101,
+    "unsure": false
+   }
+  ]
+ },
+ {
+  "seed": 900003,
+  "frames": 250,
+  "trusted_before": 0,
+  "trusted_after": 0,
+  "frames_equal": true,
+  "gantry_before": [
+   107.731,
+   -23.299,
+   5.484
+  ],
+  "gantry_after": [
+   107.731,
+   -23.299,
+   5.484
+  ],
+  "shots": [
+   {
+    "frame": 5801,
+    "gantry": [
+     107.731,
+     -23.299,
+     5.484
+    ],
+    "distance_m": 0.0,
+    "ok_own": 0,
+    "ok_match": 0,
+    "unsure": false
+   }
+  ]
+ },
+ {
+  "seed": 900004,
+  "frames": 250,
+  "trusted_before": 30,
+  "trusted_after": 30,
+  "frames_equal": true,
+  "gantry_before": [
+   53.37,
+   -32.747,
+   14.361
+  ],
+  "gantry_after": [
+   53.37,
+   -32.747,
+   14.361
+  ],
+  "shots": [
+   {
+    "frame": 5600,
+    "gantry": [
+     53.37,
+     -32.747,
+     14.361
+    ],
+    "distance_m": 0.0,
+    "ok_own": 158,
+    "ok_match": 158,
+    "unsure": false
+   }
+  ]
+ },
+ {
+  "seed": 900005,
+  "frames": 250,
+  "trusted_before": 9,
+  "trusted_after": 9,
+  "frames_equal": true,
+  "gantry_before": [
+   51.775,
+   -36.3,
+   15.527
+  ],
+  "gantry_after": [
+   51.775,
+   -36.3,
+   15.527
+  ],
+  "shots": [
+   {
+    "frame": 4018,
+    "gantry": [
+     51.775,
+     -36.3,
+     15.527
+    ],
+    "distance_m": 0.0,
+    "ok_own": 250,
+    "ok_match": 250,
+    "unsure": false
+   }
+  ]
+ }
+]
