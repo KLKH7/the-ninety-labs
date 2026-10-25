@@ -117,7 +117,10 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
         "away": n["away"],
         "lo": dict(n),
         "hi": {t: n[t] + unknown for t in TEAMS},
-        "confident": unknown == 0,
+        # Never said (Kian, Oct 26): vision finds some goals and misses others, so a count of them
+        # would contradict the broadcast's scorebug. The goals it did spot are said one by one.
+        "confident": False,
+        "in_doubt": unknown > 0,
     }
 
 

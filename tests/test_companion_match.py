@@ -3,6 +3,7 @@ code whenever its plan or its draft is unusable or fails the fact-check."""
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -933,3 +934,15 @@ def test_the_aired_text_is_the_checked_sentence_exactly():
 
     r = asyncio.run(companion.answer_match(q, mi, _choose(padded)))
     assert r.source == "model" and r.answer.text == r.answer.text.strip()
+
+
+def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline():
+    # Kian, Oct 26 (option B): the scorebug shows the score; the answer lists the goals vision spotted.
+    mi = insights()
+    mi.facts["goal"] = [{"id": "goal:v90", "kind": "goal", "team": "home", "club": "London Athletic",
+                         "minute": 23, "t": 1350.0, "event": "v90", "event_confidence": 0.9,
+                         "side_known": True, "confident": True}]
+    r = asyncio.run(companion.answer_match(Question("s1", None, "What's the score?", 30 * 60.0), mi))
+    assert "London Athletic scored in minute 23." in r.answer.text
+    assert "scorebug" in r.answer.text and not re.search(r"\b\d+\s*[-–]\s*\d+\b|had scored \d", r.answer.text)
+    assert r.answer.headline in ("Goals spotted by vision", "See the scorebug")

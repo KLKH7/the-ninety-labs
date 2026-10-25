@@ -1,5 +1,7 @@
 """The score, scorers, assists and saves, from vision's goals and shot outcomes (GROUNDING I24)."""
 
+import re
+
 import pytest
 
 from ninety.agents import companion_match as cm
@@ -64,24 +66,21 @@ def test_a_save_is_the_club_defending_the_end_the_shot_was_struck_at():
     assert (got["away"]["value"], got["home"]["value"]) == (2, 0)  # away's keeper saved both
 
 
-def test_the_score_is_said_with_each_number_in_its_own_place():
-    sc = {**scoring.score(scoring.goals(goal_events()), 90, CLUBS), "clubs": CLUBS}
-    want = "By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals."
-    assert cm.code_texts(sc) == [want]
-    nil = {**scoring.score([], 90, CLUBS), "clubs": CLUBS}
-    assert cm.code_texts(nil) == ["By minute 90, neither London Athletic nor Lisbon Esportes had scored."]
+def test_no_scoreline_is_ever_said_from_vision():
+    # Kian, Oct 26 (option B): vision finds some goals and misses others, so a count of them would
+    # contradict the broadcast's scorebug. The score points at the scorebug, with no numeral.
+    for goals in (scoring.goals(goal_events()), []):
+        sc = {**scoring.score(goals, 90, CLUBS), "clubs": CLUBS}
+        assert sc["confident"] is False
+        assert cm.code_texts(sc) == [cm.SCORE_POINTER] and not re.search(r"\d", cm.SCORE_POINTER)
 
 
-@pytest.mark.parametrize(
-    "text, ok",
-    [
-        ("By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals.", True),
-        ("By minute 90, London Athletic had scored 0 goals and Lisbon Esportes 1 goal.", False),
-        ("By minute 90, London Athletic had scored 2 goals and Lisbon Esportes 0 goals.", False),
-        ("By minute 90, London Athletic were cruising, 1 goal and Lisbon Esportes 0 goals.", False),
-    ],
-)
-def test_a_score_sentence_cannot_swap_or_dress_up_the_numbers(text, ok):
+@pytest.mark.parametrize("text", [
+    "By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals.",  # right, but a count
+    "London Athletic lead 1-0.",
+    "It is 1 goal to 0.",
+])
+def test_a_score_sentence_is_held_whatever_its_numbers(text):
     from ninety.agents.factcheck import Claim
     from ninety.agents.insight_check import verify
     from ninety.intel.teamsheet import Fixture
@@ -89,7 +88,7 @@ def test_a_score_sentence_cannot_swap_or_dress_up_the_numbers(text, ok):
     sc = {**scoring.score(scoring.goals(goal_events()), 90, CLUBS), "clubs": CLUBS}
     fx = Fixture(7, "OAK", "FEN")
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
-    assert verify(Claim(text, [sc["id"]]), {sc["id"]: sc}, fx.clubs, {}, names).ok is ok
+    assert not verify(Claim(text, [sc["id"]]), {sc["id"]: sc}, fx.clubs, {}, names).ok
 
 
 @pytest.mark.parametrize(
