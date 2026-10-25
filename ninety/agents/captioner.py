@@ -15,9 +15,9 @@ errs or is late, leaves the code-written caption, and the record says why.
 
     uv run ninety-e2e <clip> --out <bundle> --match --captioner foundry   # the published agent
 
-`ninety-captioner` is one of foundry.build_agents, published with the rest by the agents-live
-workflow (`ninety-agents publish`) and pinned in foundry_agents.json. A changed prompt refuses to
-run (RegistryDrift) until it is published again; the default run uses code captions.
+`ninety-captioner` is defined here but not yet in foundry.build_agents: it is published, and added
+there, by someone with the Foundry project (`uv run ninety-agents publish`). Until then a foundry
+run refuses with RegistryDrift, as for any unpublished agent, and the default run uses code captions.
 """
 
 from __future__ import annotations
