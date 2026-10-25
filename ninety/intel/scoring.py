@@ -22,14 +22,14 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 
 from ninety.agents.factcheck import MIN_CONFIDENCE
-from ninety.intel.scene import PITCH_X, TEAMS, minute_of
+from ninety.intel.scene import PITCH_X, TEAMS, attacks_right, minute_of
 
 OTHER = {"home": "away", "away": "home"}
 
 
 def attacking_end(x: float) -> str:
-    """The club that attacks the end nearer x: home attacks toward x = PITCH_X."""
-    return "home" if x > PITCH_X / 2 else "away"
+    """The club that attacks the end nearer x (scene.attacks_right: home toward x = PITCH_X)."""
+    return "home" if (x > PITCH_X / 2) == attacks_right("home") else "away"
 
 
 def goals(events: Sequence[Mapping]) -> list[dict]:
@@ -40,12 +40,11 @@ def goals(events: Sequence[Mapping]) -> list[dict]:
         if g.get("type") != "goal" or g.get("team") not in TEAMS:
             continue
         # The goal's shot: the latest shot by the scoring side at or before the goal, with outcome goal.
-        shot_i = next(
-            (j for j in range(k - 1, -1, -1)
-             if rows[j].get("type") == "shot" and rows[j].get("team") == g["team"]
-             and rows[j].get("outcome") == "goal"),
-            None,
-        )
+        # The goal's shot is the event just before it, a shot by the scoring side that went in: each
+        # shot is one goal's, and a goal with anything else before it has none (merge-queue review).
+        prev = rows[k - 1] if k > 0 else None
+        is_shot = prev is not None and prev.get("type") == "shot" and prev.get("outcome") == "goal"
+        shot_i = k - 1 if is_shot and prev.get("team") == g["team"] else None
         # The goal's `player` is the scoring side's last holder (C, #271): without a shot just before it,
         # that may not be who put it in (an own goal), so no scorer is named.
         scorer = (g.get("player") or rows[shot_i].get("player")) if shot_i is not None else None
@@ -91,7 +90,8 @@ def saves(events: Iterable[Mapping]) -> list[dict]:
             "minute": minute_of(float(e["t"])),
             "t": round(float(e["t"]), 2),
             "side_known": True,
-            "confident": True,
+            # A save is as sure as the shot's detection (the fact-checker's event gate).
+            "confident": e.get("confidence") is None or float(e["confidence"]) >= MIN_CONFIDENCE,
         }
         for e in events
         if e.get("type") == "shot" and e.get("outcome") == "on_target" and e.get("x") is not None
@@ -124,10 +124,10 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
 
 def save_counts(save_rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
     window = [s for s in save_rows if minute_from <= s["minute"] <= minute_to]
-    unknown = sum(not s["side_known"] for s in window)
+    unknown = sum(not s["confident"] for s in window)
     out = {}
     for team in TEAMS:
-        n = sum(s["side_known"] and s["team"] == team for s in window)
+        n = sum(s["confident"] and s["team"] == team for s in window)
         out[team] = {
             "id": f"saves:{team}:m{minute_from}-{minute_to}",
             "kind": "saves",

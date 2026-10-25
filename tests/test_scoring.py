@@ -121,3 +121,24 @@ def test_a_goal_under_the_event_gate_holds_the_score():
     [g] = scoring.goals(rows)
     assert not g["confident"]
     assert not scoring.score(scoring.goals(rows), 90, CLUBS)["confident"]
+
+
+def test_a_second_goal_with_no_shot_of_its_own_does_not_take_the_firsts():
+    # The merge queue's review of #337: a second goal (t = 1300) with no detected shot named the first
+    # goal's shooter.
+    rows = goal_events() + [e(9, "goal", "home", 1300.0, player="h-t3", x=105.0, y=34.0)]
+    first, second = scoring.goals(rows)
+    assert first["player"] == "h-t9" and second["player"] is None
+
+
+def test_a_save_goes_to_the_end_even_when_the_shots_side_is_misread():
+    # Read as away's, but struck at home's attacking end: the save is away's keeper's.
+    shots = [e(5, "shot", "away", 300.0, outcome="on_target", x=92.0, y=30.0)]
+    got = scoring.save_counts(scoring.saves(shots), 1, 90)
+    assert (got["away"]["value"], got["home"]["value"]) == (1, 0)
+
+
+def test_a_save_under_the_event_gate_is_unsure():
+    shots = [e(5, "shot", "home", 300.0, outcome="on_target", x=92.0, y=30.0, confidence=0.3)]
+    got = scoring.save_counts(scoring.saves(shots), 1, 90)
+    assert not got["away"]["confident"] and (got["away"]["lo"], got["away"]["hi"]) == (0, 1)
