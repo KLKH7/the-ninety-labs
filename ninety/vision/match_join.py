@@ -21,6 +21,11 @@ does not list its frames, and runs that list other frames than the segment shows
 same man. Track ids are renumbered per segment, `h-t8` in segment 3 becoming `h-t3008`, wherever
 they appear (events, tracked frames, the association); event ids get the segment as a prefix.
 
+Beside the clip, what `ninety-e2e <clip> --match` is given: detected.jsonl (--events-file),
+detections.jsonl (--detections, the broadcast's, its clip id the joined clip's), observations.jsonl
+and tracked.json (--observations, --tracked), views/<lens>/observations.jsonl (--views) and
+association.json. Every frame number in them is a match frame, as in each segment's own files.
+
 The clip's footage is the segments' broadcast images, linked in order as images/00000.jpg on; its
 clip.json keeps only what the viewer and e2e read (fps, size, the team codes, the timeline). The
 edit's own chapters and the half-time come from the manifest, which was chosen from the answer key:
@@ -42,6 +47,7 @@ FPS = 25
 TRACK = re.compile(r"^([ha])-t(\d+)$")
 PER_SEGMENT = 1000  # track ids per segment: a segment of under a minute and a half has a few hundred
 RUN_FILES = ("detected.jsonl", "observations.jsonl", "tracked.json", "association.json")
+VIEWS = ("tac-l", "tac-r")
 META_KEYS = ("width", "height", "fps", "home_code", "away_code")
 
 
@@ -89,6 +95,9 @@ def read_segment(clips: Path, vision: Path, name: str) -> dict:
         "observations": _jsonl(joined / "observations.jsonl"),
         "tracked": json.loads((joined / "tracked.json").read_text()),
         "association": json.loads((joined / "association.json").read_text()),
+        # the broadcast's detections (e2e's --detections) and each view's own placed observations
+        "detections": _jsonl(vision / name / "broadcast" / "detections.jsonl"),
+        "views": {v: _jsonl(vision / name / "views" / "views" / v / "observations.jsonl") for v in VIEWS},
     }
 
 
@@ -110,6 +119,9 @@ def check(segs: list[dict]) -> None:
         if any(abs(r["t"] - r["frame"] / FPS) > 1e-6 for r in s["observations"]):
             raise SystemExit(f"refused: {s['name']}'s observations are not on the match clock")
         shown = set(own)
+        if [d["frame"] for d in s["detections"]] != own or any(
+                [r["frame"] for r in rows] != own for rows in s["views"].values()):
+            raise SystemExit(f"refused: {s['name']}'s detections or views are not its shown frames")
         stray = [x["frame"] for x in s["tracked"]["frames"] + s["events"] if x["frame"] not in shown]
         if stray:
             raise SystemExit(f"refused: {s['name']} has tracked frames or events outside it: {stray[:3]}")
@@ -127,6 +139,7 @@ def build(manifest: dict, clips: Path, vision: Path, out: Path) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     (out / "images").mkdir(exist_ok=True)
     timeline, events, observations, tracked, restarts, tracks = [], [], [], [], [], {}
+    detections, views = [], {v: [] for v in VIEWS}
     index = 0
     for k, s in enumerate(segs):
         timeline += [{**r, "index": index + r["index"]} for r in s["runs"]]
@@ -138,6 +151,9 @@ def build(manifest: dict, clips: Path, vision: Path, out: Path) -> dict:
         index += s["frames"]
         events += [{**renumber(e, k), "id": f"s{k:02d}-{e['id']}"} for e in s["events"]]
         observations += s["observations"]
+        detections += [{**d, "clip": f"seed{seed}-match"} for d in s["detections"]]
+        for v in VIEWS:
+            views[v] += s["views"][v]
         tracked += [renumber(f, k) for f in s["tracked"]["frames"]]
         restarts += s["tracked"].get("restarts", [])
         tracks |= renumber(s["association"]["tracks"], k)
@@ -159,6 +175,12 @@ def build(manifest: dict, clips: Path, vision: Path, out: Path) -> dict:
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     (out / "observations.jsonl").write_text(
         "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in observations))
+    (out / "detections.jsonl").write_text(
+        "".join(json.dumps(d, separators=(",", ":")) + "\n" for d in detections))
+    for v in VIEWS:
+        (out / "views" / v).mkdir(parents=True, exist_ok=True)
+        (out / "views" / v / "observations.jsonl").write_text(
+            "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in views[v]))
     (out / "tracked.json").write_text(
         json.dumps({"restarts": restarts, "frames": tracked}, separators=(",", ":")) + "\n")
     (out / "association.json").write_text(json.dumps({

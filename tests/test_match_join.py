@@ -45,6 +45,15 @@ def _write(tmp_path: Path, runs=RUNS, params=PARAMS, obs_shift=0) -> tuple[Path,
         (j / "tracked.json").write_text(json.dumps({"restarts": [], "frames": [
             {"frame": f, "t": f / 25, "players": [{"id": "h-t8", "team": "home", "x": 1.0, "y": 2.0}],
              "ball": {"x": 0.0, "y": 0.0, "z": 0.0}} for f in frames[:2]]}))
+        b = vision / name / "broadcast"
+        b.mkdir(parents=True)
+        (b / "detections.jsonl").write_text("".join(json.dumps(
+            {"clip": "seed7", "frame": f, "t": f / 25, "detections": []}) + "\n" for f in frames))
+        for v in ("tac-l", "tac-r"):
+            w = vision / name / "views" / "views" / v
+            w.mkdir(parents=True)
+            rows = [{"frame": f, "t": f / 25, "camera": {"ok": True}, "players": [], "ball": []} for f in frames]
+            (w / "observations.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
         (j / "association.json").write_text(json.dumps(
             {"match_m": 1.319, "tracks": {"h-t1": {"track": "a-t4", "confidence": 1.0}}}))
     manifest = {"seed": 7, "rule": "docs/eval/demo-match.md", "segments": SEGMENTS,
@@ -81,6 +90,11 @@ def test_no_frame_twice_and_ids_kept_apart_per_segment(tmp_path):
     assert [(e["player"], e["receiver"]) for e in events] == [("h-t8", "h-t3"), ("h-t1008", "h-t1003")]
     tracked = json.loads((out / "tracked.json").read_text())["frames"]
     assert [p["id"] for f in tracked for p in f["players"]] == ["h-t8", "h-t8", "h-t1008", "h-t1008"]
+    dets = [json.loads(x) for x in (out / "detections.jsonl").read_text().splitlines()]
+    assert [d["frame"] for d in dets] == obs and {d["clip"] for d in dets} == {"seed7-match"}
+    for v in ("tac-l", "tac-r"):
+        rows = (out / "views" / v / "observations.jsonl").read_text().splitlines()
+        assert [json.loads(x)["frame"] for x in rows] == obs
     tracks = json.loads((out / "association.json").read_text())["tracks"]
     assert tracks == {"h-t1": {"track": "a-t4", "confidence": 1.0},
                       "h-t1001": {"track": "a-t1004", "confidence": 1.0}}
@@ -109,6 +123,14 @@ def test_overlapping_or_out_of_order_segments_are_refused(tmp_path, runs, messag
 def test_runs_on_other_frames_than_the_segment_shows_are_refused(tmp_path):
     clips, vision, manifest = _write(tmp_path, obs_shift=1)
     with pytest.raises(SystemExit, match="not its shown frames"):
+        mj.build(manifest, clips, vision, tmp_path / "match")
+
+
+def test_detections_on_other_frames_are_refused(tmp_path):
+    clips, vision, manifest = _write(tmp_path)
+    f = vision / "seed7-t000100" / "broadcast" / "detections.jsonl"
+    f.write_text("".join(f.read_text().splitlines(keepends=True)[:-1]))
+    with pytest.raises(SystemExit, match="detections or views"):
         mj.build(manifest, clips, vision, tmp_path / "match")
 
 
