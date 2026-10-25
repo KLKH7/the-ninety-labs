@@ -282,16 +282,32 @@ def plan_prompt(question: Question, insights, history=()) -> str:
     )
 
 
-def answer_prompt(question: Question, facts: list[dict], history=()) -> str:
+def answer_prompt(question: Question, facts: list[dict], history=(), insights=None) -> str:
+    """The answer step's message. Each fact carries `say_as`, code's own sentences for it that the
+    fact-checker passes, for the model to word its answer from rather than paraphrase."""
+    known = {f["id"]: f for f in facts}
     return json.dumps(
         {
             "step": "answer",
             "question": question.text,
             "history": _history(history),
-            "facts": [_for_prompt(f) for f in facts],
+            "facts": [{**_for_prompt(f), "say_as": _say_as(f, known, insights)} for f in facts],
         },
         separators=(",", ":"),
     )
+
+
+NOT_CHOSEN = "not one of the checked sentences of the facts it cites"
+
+
+def _say_as(fact: dict, known: dict, insights) -> list[str]:
+    if insights is None:
+        return []
+    try:
+        texts = code_texts({**fact, "clubs": fact.get("clubs") or insights.fixture.clubs})
+    except (KeyError, TypeError, ValueError, StopIteration):  # a fact code has no sentence for
+        return []
+    return [t for t in texts if _verify(Claim(t, [fact["id"]]), known, insights).ok]
 
 
 # When a question names a stretch of the match ("in the first half", "the last ten minutes"), the
@@ -921,7 +937,7 @@ async def answer_match(
         # hands the facts over, and the same fact-check gates what comes back.
         rules = any(c["name"] == "referee" for c in calls)
         writer = referee_ask if referee_ask is not None and rules else ask
-        reply = await writer(answer_prompt(question, facts, history))
+        reply = await writer(answer_prompt(question, facts, history, insights))
         try:
             claim = parse_claim(reply)
         except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:
@@ -929,6 +945,12 @@ async def answer_match(
         known = {f["id"]: f for f in facts}
         if not claim.text.strip():
             return calls, claim, None, facts
+        # The model chooses; it does not write (v4): its text must be exactly one of the checked
+        # sentences of a fact it cites, or code's answer is shown.
+        chosen = {t for i in claim.evidence if i in known for t in _say_as(known[i], known, insights)}
+        if claim.text.strip() not in chosen:
+            return calls, claim, Verdict(ok=False, reasons=[NOT_CHOSEN]), facts
+        claim = Claim(claim.text.strip(), claim.evidence)  # the checked sentence exactly, nothing around it
         verdict = _verify(claim, known, insights)
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
