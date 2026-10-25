@@ -350,9 +350,18 @@ Walking back from the shot through the confident detected events, the shooting s
 (rule 0): nothing else in the video shows them. StatsBomb's "From Keeper" and "From Counter" are
 not tried.
 
+**Known limit: rule 4a fires only on the answer key.** A free kick or penalty read from "the other
+side's foul" or offside needs a `foul` or `offside` event, and vision detects neither yet
+(docs/eval/restarts-vision-plan.md). On the live path, then, a free kick or a penalty is an origin
+only when the restart detector names it (rule 0); a set piece it sees with no kind gives none.
+(R4's review of #324.)
+
 **Side.** A moment's `team` and `player` are null unless the shot's side was told surely
 (`factcheck.side_known`, the gate every writer uses), since a track id (`h-t12`) names a side too.
 `origin` still compares the detector's sides; how often that is wrong is part of what is graded.
+A detected restart's `team` is the side taking it, and its `team_confidence` is null when no player
+of that side is within reach of the ball (Kian's field spec on #324), so a restart's side can be
+unsure even where the shot's is sure.
 
 ### What the captions may say
 
@@ -369,7 +378,10 @@ The same rule over the answer key's events gives each true shot its true origin.
 sets give one, else from the fallback rules. On the matched
 shots of the measurement above (validation, then the test split once): how often the detected origin
 equals the true one, per origin, with Wilson intervals, each disagreement listed, and how often the
-detected origin is null where the truth has one.
+detected origin is null where the truth has one. The answer key's `set_piece` comes 1 to 2.3 s
+before the kick (when the taker stands set), and the detector times a restart at the kick; origin is
+compared per shot, so this moves no origin, but a grader matching restart events to the truth's
+compares them at the kick (ninety/eval/restart_score.py does).
 
 ## Outcome
 
