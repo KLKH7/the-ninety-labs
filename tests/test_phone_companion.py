@@ -583,6 +583,9 @@ def test_the_player_sheet_compares_two_players_from_their_own_cards(browser, sit
     page.get_by_role("button", name="London 7", exact=True).click()
     page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert "average position" in page.inner_text("#avg-pos")
+    names = [c.inner_text() for c in page.locator("#compare-chips button").all()]
+    assert names[:3] == ["London 1", "London 2", "London 3"] and "London 10" in names  # 3 before 10
+    assert names.index("London 11") < names.index("Lisbon 1")  # his own club first
     page.locator("#compare-chips").get_by_role("button", name="Lisbon 7", exact=True).click()
     page.wait_for_selector("#compare-rows:not([hidden]) .stat-row")
     labels = [page.locator("#compare-rows .stat-row").nth(i).get_attribute("aria-label") for i in range(3)]
@@ -768,6 +771,95 @@ def test_team_distance_says_how_close_it_is_measured(browser, site):  # noqa: F8
     row.wait_for()
     assert row.locator(".within").inner_text().strip() == "±15%"  # quiet, after the label; no caption
     assert row.get_attribute("aria-label").endswith(", measured to within 15 percent")
+    assert not errors
+
+
+def test_a_question_already_asked_is_not_suggested_again(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#tab-button-ask")
+    first = page.locator("#ask-chips .chip").first.inner_text()
+    ask(page, first)
+    suggested = [c.inner_text() for c in page.locator("#ask-chips .chip").all()]
+    assert first not in suggested and len(suggested) == 3
+    assert not errors
+
+
+# --- thin real data: an empty card is hidden, never a dash, an error or a guess -----------------
+
+
+def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip_dims(browser, site):  # noqa: F811
+    """The cut clip's tracks have no player card in the mock feed, as a real track fragment can
+    have none: the sheet keeps its name and hides what it cannot fill."""
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.click("#lt-players")
+    page.locator("#pane-players button.who").first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    page.wait_for_timeout(300)  # the card request has failed by now
+    assert page.locator("#so-far-box").is_hidden() and page.locator("#heat-box").is_hidden()
+    chips = page.locator("#compare-chips button")
+    assert 0 < chips.count() <= 22  # who is on the pitch now, never every fragment
+    chips.first.click()
+    page.wait_for_selector("#compare-chips button[aria-disabled=true]")
+    assert page.locator("#compare-rows").is_hidden()
+    assert "Could not" not in page.inner_text("#player")
+    assert not errors
+
+
+def test_the_score_band_says_no_goals_yet_on_one_line_until_a_goal(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.wait_for_selector("#scorers:not([hidden])")
+    goals = json.loads(page.evaluate("fetch('/bundle/match.json').then(r => r.text())"))["goals"]
+    if not [g for g in goals if g["t"] <= 1505 / FPS and g.get("team")]:
+        assert page.inner_text("#scorers") == "No goals yet"
+    assert page.locator("#teams-note").is_hidden()  # the clip names both clubs
+    assert not errors
+
+
+def test_a_bundle_that_names_no_clubs_shows_neutral_sides_and_says_teams_are_not_confirmed(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def no_teams(route):
+        body = route.fetch().json()
+        body.pop("teams", None)
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", no_teams)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#teams-note:not([hidden])")
+    assert page.inner_text(".band .home-name") == "Home" and page.inner_text(".band .away-name") == "Away"
+    assert "London" not in page.inner_text(".band") and "Lisbon" not in page.inner_text(".band")
+    assert not errors
+
+
+def test_a_row_where_neither_club_has_any_yet_is_a_grey_track(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def no_shots(route):
+        body = route.fetch().json()
+        for s in body["stats"]:
+            for side in ("home", "away"):
+                s[side]["shots"] = s[side]["shots_on_target"] = 0
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", no_shots)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.click("#lt-stats")
+    page.wait_for_selector("#live-stats:not([hidden]) .stat-row")
+    rows = page.locator("#stat-rows .stat-row")
+    empty = {}
+    for i in range(rows.count()):
+        row = rows.nth(i)
+        empty[row.get_attribute("aria-label").split(":")[0]] = "empty" in row.get_attribute("class").split()
+    assert empty["Shots"] and empty["Shots on target"] and not empty["Passes completed"]
     assert not errors
 
 
