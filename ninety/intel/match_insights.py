@@ -128,7 +128,7 @@ class MatchInsights:
         ]
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
                 for k in ("passer", "receiver"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
