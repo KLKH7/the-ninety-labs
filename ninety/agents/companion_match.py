@@ -153,7 +153,7 @@ TOOL_WORDS = (
         "physical",
         r"\b(?:distance|covered|how far|sprint\w*|fastest|top speed|how fast|heat ?map|work rate|tired"
         r"|ran the most|run the most|running|furthest|farthest|kilomet\w*|km|quickest|stamina|fitness"
-        r"|where (?:has|does|did|is) [\w' ]+ (?:been )?play\w*)\b",
+        r"|where (?:has|does|did|is) [\w' -]+ (?:been )?play\w*)\b",
     ),
     (
         "passing",
@@ -906,11 +906,9 @@ ASKS_RUNNING = {
     ),
 }
 # What the physical tool says when its figures are held: the zone a player was in most. A question
-# asks for that only with a word of place.
-ASKS_ZONE = (
-    r"\b(?:where|zones?|positions?|positioned|heat ?maps?|thirds?|wings?|flanks?|channels?|left|right"
-    r"|middle|centre|center|areas?|parts? of the pitch)\b"
-)
+# asks for that only by asking where: a side or a third alone ("who is on the left?", "who is out
+# of position?") is not a question of where a player was (merge-queue review of #323).
+ASKS_ZONE = r"\b(?:where|whereabouts|zones?|heat ?maps?|positioned)\b"
 
 
 def asked_running(text: str) -> str | None:
@@ -918,42 +916,61 @@ def asked_running(text: str) -> str | None:
     return next((m for m, (words, _) in ASKS_RUNNING.items() if re.search(words, text, re.I)), None)
 
 
-def held_ask(text: str, calls, facts) -> str | None:
-    """Why a physical question cannot be answered, or None. A running figure asked for is held when
-    every fact of it is unsure: the video does not yet follow enough of each named player. A
-    question that asks no figure and no place is answered only while some figure is said: the zone
-    is never the answer to a question that did not ask where (the fact-check never sees the
-    question, so code gates on it here)."""
+def asked_players(text: str, insights) -> set[str] | None:
+    """The players a question names, by a sheet name or a part of one ("Kai") or by a position
+    ("the left-back"), as names; None when it names none."""
+    names = set()
+    for name in insights.sheet_names():
+        parts = [name, *(w for w in name.split() if len(w) > 2)]
+        if any(re.search(rf"\b{re.escape(w)}\b", text, re.I) for w in parts):
+            names.add(name)
+    lowered = text.lower()
+    roles = {role for role, words in ROLE_WORDS if re.search(rf"\b(?:{words})", lowered)}
+    if roles:
+        names |= {p["name"] for p in insights.people.values() if p.get("role") in roles and p.get("name")}
+        return names
+    return names or None
+
+
+def physical_gate(text: str, calls, facts: list[dict], insights) -> tuple[str | None, list[dict]]:
+    """Why a physical question cannot be answered (or None), and the facts in the order to answer
+    from. A running figure asked for is held when every fact of it is unsure: the video does not
+    yet follow enough of each named player. The zone answers only a question of where, about a
+    player it names. A question naming a player hears only about him; one naming none hears the
+    highest figure ("who is the fastest?" is the maximum). The fact-check never sees the question,
+    so code gates on it here."""
     if not any(c["name"] == "physical" for c in calls):
-        return None
+        return None, facts
     sure = {f.get("metric") for f in facts if f.get("confident")}
     metric = asked_running(text)
-    if metric is not None:
-        if metric in sure:
-            return None
-        said = ASKS_RUNNING[metric][1]
-    elif re.search(ASKS_ZONE, text, re.I) or sure & set(ASKS_RUNNING):
-        return None
-    else:
-        said = "running"
-    return (
-        f"A player's {said} isn't available yet: the video can't follow enough of each named "
-        "player to measure it reliably."
-    )
-
-
-def running_first(text: str, facts: list[dict]) -> list[dict]:
-    """A running figure asked for: its facts first, the player the question names first, else the
-    highest value first ("who is the fastest?" is the maximum, not the first by distance)."""
-    metric = asked_running(text)
-    if metric is None:
-        return facts
-    def key(f):
-        if f.get("metric") != metric:
-            return (1, 0, 0.0)
-        named = bool(f.get("player_is")) and re.search(rf"\b{re.escape(f['player_is'])}\b", text, re.I)
-        return (0, not named, -(f.get("value") or 0))
-    return sorted(facts, key=key)
+    zone = metric is None and re.search(ASKS_ZONE, text, re.I)
+    if metric is not None and metric not in sure or metric is None and not zone:
+        said = ASKS_RUNNING[metric][1] if metric else "running"
+        return (
+            f"A player's {said} isn't available yet: the video can't follow enough of each named "
+            "player to measure it reliably."
+        ), facts
+    want = metric or "player_zone"
+    wanted = asked_players(text, insights)
+    if wanted is None and zone:
+        return (
+            "Name a player and I can say where he was most often, in the footage the video named him in."
+        ), facts
+    running = [f for f in facts if f.get("kind") == "running"]
+    if wanted is not None:
+        running = [f for f in running if f.get("player_is") in wanted]
+        named = clubs_named(text, insights)
+        if named:
+            running = [f for f in running if f.get("club") in named]
+        who = {f.get("player_is") for f in running if f.get("metric") == want}
+        if not who:
+            return "The video hasn't named that player over these minutes, so it can't say.", facts
+        if len(who) > 1:  # "Alex", or a position both clubs have: never pick one for the fan
+            return (
+                f"More than one player fits ({', '.join(sorted(who))}): say which one by his full name."
+            ), facts
+    rest = [f for f in facts if f.get("kind") != "running"]
+    return None, sorted(running, key=lambda f: (f.get("metric") != want, -(f.get("value") or 0))) + rest
 
 
 def code_match_answer(
@@ -986,10 +1003,9 @@ def code_match_answer(
             facts,
             key=lambda f: (f.get("kind") != "sheet" or f.get("role") != role, f.get("club") not in named),
         )
-    why = held_ask(question.text, calls, facts)
+    why, facts = physical_gate(question.text, calls, facts, insights)
     if why is not None:  # a figure asked for that is held: say so, never answer something else
         return Answer("unanswerable", why, None, None, None, (), 0.0, float(question.t)), calls
-    facts = running_first(question.text, facts)
     asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
     if asked is not None:
         # A referee question: an offside reading first when it is about offside, then the Laws the
@@ -1080,7 +1096,8 @@ async def answer_match(
         if not calls:
             return calls, None, None, []
         facts = run_tools(insights, calls)
-        if held_ask(question.text, calls, facts) is not None:
+        why, order = physical_gate(question.text, calls, facts, insights)
+        if why is not None:
             return calls, None, None, facts  # code says why it is not available
         # A rules question is the Referee's to answer (ninety/agents/referee.py): the Companion
         # hands the facts over, and the same fact-check gates what comes back.
@@ -1095,10 +1112,18 @@ async def answer_match(
         if not claim.text.strip():
             return calls, claim, None, facts
         verdict = _verify(claim, known, insights)
-        metric = asked_running(question.text) if any(c["name"] == "physical" for c in calls) else None
-        if verdict.ok and metric and all(known.get(i, {}).get("metric") != metric for i in claim.evidence):
-            said = ASKS_RUNNING[metric][1]
-            verdict = Verdict(ok=False, reasons=[f"the question asks for a {said}; the answer cites none"])
+        if verdict.ok and any(c["name"] == "physical" for c in calls):
+            # The answer code would give first is the one the question asks for: the figure (or the
+            # zone) of the player it names, else the highest.
+            first = next((f for f in order if f.get("kind") == "running"), None)
+            cited = [known[i] for i in claim.evidence if known.get(i, {}).get("kind") == "running"]
+            if first is not None and not any(
+                f.get("metric") == first["metric"] and f.get("value") == first.get("value")
+                and (f.get("metric") != "player_zone" or f.get("player_is") == first.get("player_is"))
+                for f in cited
+            ):
+                asked = f"{first.get('player_is')}'s {first['metric']}"
+                verdict = Verdict(ok=False, reasons=[f"the question asks for {asked}; it cites another"])
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
         return calls, claim, verdict, facts
