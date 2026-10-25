@@ -162,8 +162,18 @@ def site(browser, tmp_path_factory):  # noqa: F811
     server.shutdown()
 
 
-def open_viewer(browser, url):  # noqa: F811
+def open_viewer(browser, url, silent=False):  # noqa: F811
+    """`silent`: the bundle without its commentary and stadium bed (every ninety-e2e bundle writes
+    commentary.json since #328), for the case of a match with no sound to offer."""
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    if silent:
+        def no_sound(route):
+            body = route.fetch().json()
+            body.pop("commentary", None)
+            body.pop("stadium", None)
+            route.fulfill(json=body)
+
+        ctx.route("**/manifest.json", no_sound)
     page = ctx.new_page()
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -284,7 +294,7 @@ def test_the_pairing_card_is_up_at_kick_off_then_behind_the_qr_button_or_docked(
 
 
 def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, site):  # noqa: F811
-    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page, errors = open_viewer(browser, site + "?bundle=match/", silent=True)
     assert page.get_attribute("body", "data-screen") == "big"
     for hidden in PANELS:  # on the phone instead
         assert not page.is_visible(hidden), hidden
@@ -443,7 +453,7 @@ def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optiona
 def test_audio_description_stays_reachable_from_the_big_screen_through_the_audio_menu(browser, site):  # noqa: F811
     """No commentary in this bundle: the menu offers Stadium and the audio description persona, by
     keyboard as by pointer, and no subtitles (they are the commentary's)."""
-    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page, errors = open_viewer(browser, site + "?bundle=match/", silent=True)
     assert page.is_visible("#hud-audio") and page.is_hidden("#hud-volume")
     page.focus("#hud-audio")
     page.keyboard.press("Enter")
@@ -497,5 +507,23 @@ def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_h
             cue("said", "audio_description", 90, persona="audio", ev="e6")]
     out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
     assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 15), ("recap", 41, 46)]
+    assert not errors
+    page.context.close()
+
+
+def test_the_audio_menu_takes_focus_when_opened_and_gives_it_back_on_escape(browser, site):  # noqa: F811
+    """WAI-ARIA disclosure: Enter on the Audio button moves focus to the chosen track, Tab moves
+    through the menu's choices, and Escape closes it with focus back on the button."""
+    page, errors = open_viewer(browser, site + "?bundle=commentary/")
+    page.focus("#hud-audio")
+    page.keyboard.press("Enter")
+    focused = page.evaluate("document.activeElement.name + ':' + document.activeElement.value")
+    assert focused == "track:stadium"
+    page.keyboard.press("Tab")  # out of the Audio group into Subtitles (a radio group is one stop)
+    assert page.evaluate("document.activeElement.name") == "subs"
+    page.keyboard.press("Escape")
+    assert page.is_hidden("#audio-menu")
+    assert page.evaluate("document.activeElement.id") == "hud-audio"
+    assert page.get_attribute("#hud-audio", "aria-expanded") == "false"
     assert not errors
     page.context.close()

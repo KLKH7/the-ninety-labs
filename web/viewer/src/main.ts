@@ -341,7 +341,6 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
-  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
   // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
   // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
   let tracks: AudioTracks | null = null;
@@ -352,6 +351,7 @@ async function start() {
     tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
     tracks.described = !!b.audio;
   }
+  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
   const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
   const hud = big
     ? setupHud({

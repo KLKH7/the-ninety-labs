@@ -94,9 +94,14 @@ export function setupHud(opts: {
   $("track-described").hidden = !tracks?.described;
   // Subtitles are the commentary's: offered with it only.
   (menu.querySelectorAll("fieldset")[1] as HTMLElement).hidden = !tracks?.hasCommentary;
-  const setMenu = (open: boolean) => {
+  // Opening moves focus into the menu (to the chosen track), closing returns it to the button, so a
+  // keyboard or screen-reader user lands where the menu is (WAI-ARIA disclosure pattern).
+  const setMenu = (open: boolean, refocus = false) => {
+    if (menu.hidden === !open) return;
     menu.hidden = !open;
     audioBtn.setAttribute("aria-expanded", String(open));
+    if (open) menu.querySelector<HTMLInputElement>("input[name=track]:checked")?.focus();
+    else if (refocus || menu.contains(document.activeElement)) audioBtn.focus();
   };
   audioBtn.addEventListener("click", () => setMenu(menu.hidden));
   menu.addEventListener("change", (e) => {
@@ -157,9 +162,6 @@ export function setupHud(opts: {
       opts.play.setAttribute("aria-label", paused ? "Play" : "Pause");
     },
     closeQr: () => setQr(false),
-    closeMenu: () => setMenu(false),
-    get qrOpen() {
-      return qrIsOpen;
-    },
+    closeMenu: () => setMenu(false, true),
   };
 }

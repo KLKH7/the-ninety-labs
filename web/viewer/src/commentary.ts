@@ -103,8 +103,4 @@ export class AudioTracks {
     }
   }
 
-  stop() {
-    this.voice.pause();
-    this.bed?.pause();
-  }
 }
