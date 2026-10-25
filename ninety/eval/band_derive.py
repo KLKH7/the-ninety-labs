@@ -11,7 +11,8 @@ change the fit or the ratio), are read from `<obs>/broadcast/seed<N>.jsonl` and
 For each camera kind, `detector_derive.gates`: every frame's ground mapping error through its
 estimated camera against the true one, its height ratio, and the band: the 1st to 99th percentile of
 the ratio on frames whose error is within 1.0 m. The same function and rule that set today's band,
-run on today's renders. A test seed is refused.
+run on today's renders. A test seed is refused. A band carries the look it was measured on (lesson
+230): the clips' renderer versions (clip.json) are recorded, and clips of two looks are refused.
 """
 
 from __future__ import annotations
@@ -31,10 +32,14 @@ def _frames(path: Path) -> dict[int, dict]:
 
 def derive(clips: Path, obs: Path, seeds: list[int]) -> dict:
     kinds: dict[str, list] = {"broadcast": [], "fixed": []}
+    looks = set()
     for seed in seeds:
         if refused(seed):
             raise SystemExit(f"test seed {seed}: the band is derived on validation clips only")
         clip = clips / f"seed{seed}"
+        looks.add(_renderer(clip))
+        if len(looks - {None}) > 1:
+            raise SystemExit(f"seed {seed}: clips of renderers {sorted(looks - {None})}: one band per look")
         if (obs / "broadcast" / f"seed{seed}.jsonl").exists():  # each kind may be run on its own
             kinds["broadcast"].append((seed, load_jsonl(obs / "broadcast" / f"seed{seed}.jsonl"),
                                        _frames(clip / "frames.jsonl")))
@@ -43,7 +48,15 @@ def derive(clips: Path, obs: Path, seeds: list[int]) -> dict:
             if (d / f"seed{seed}.jsonl").exists():
                 kinds["fixed"].append((seed, load_jsonl(d / f"seed{seed}.jsonl"),
                                        _frames(clip / "views" / view / "frames.jsonl")))
-    return {"seeds": seeds} | {k: gates(v) for k, v in kinds.items() if v}
+    look = sorted(looks - {None})
+    return {"seeds": seeds, "renderer": look[0] if look else None} | {
+        k: gates(v) for k, v in kinds.items() if v}
+
+
+def _renderer(clip: Path) -> str | None:
+    """The renderer version the clip was drawn with (clip.json), read offline; None without one."""
+    meta = clip / "clip.json"
+    return json.loads(meta.read_text()).get("renderer", {}).get("version") if meta.exists() else None
 
 
 def _view(folder: str, clip: Path) -> str:
@@ -66,7 +79,7 @@ def main(argv: list[str] | None = None) -> None:
     a = ap.parse_args(argv)
     report = derive(a.clips, a.obs, a.seeds)
     a.out.write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps({k: v["band"] for k, v in report.items() if k != "seeds"}))
+    print(json.dumps({k: v["band"] for k, v in report.items() if k not in ("seeds", "renderer")}))
 
 
 if __name__ == "__main__":

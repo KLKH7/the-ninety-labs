@@ -1,0 +1,161 @@
+{
+  "seeds": [
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119
+  ],
+  "clips": {
+    "108": {
+      "frames": 250,
+      "trusted": 65,
+      "trusted_good": 65,
+      "trusted_bad": 0,
+      "good_frames": 250,
+      "median_m": 0.288,
+      "p95_m": 0.474,
+      "worst_m": 0.486
+    },
+    "109": {
+      "frames": 250,
+      "trusted": 100,
+      "trusted_good": 100,
+      "trusted_bad": 0,
+      "good_frames": 250,
+      "median_m": 0.222,
+      "p95_m": 0.351,
+      "worst_m": 0.405
+    },
+    "110": {
+      "frames": 250,
+      "trusted": 27,
+      "trusted_good": 27,
+      "trusted_bad": 0,
+      "good_frames": 137,
+      "median_m": 0.119,
+      "p95_m": 0.229,
+      "worst_m": 0.259
+    },
+    "111": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 0,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    },
+    "112": {
+      "frames": 250,
+      "trusted": 6,
+      "trusted_good": 0,
+      "trusted_bad": 6,
+      "good_frames": 0,
+      "median_m": 42.095,
+      "p95_m": 45.387,
+      "worst_m": 46.201
+    },
+    "113": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 250,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    },
+    "114": {
+      "frames": 250,
+      "trusted": 52,
+      "trusted_good": 33,
+      "trusted_bad": 19,
+      "good_frames": 231,
+      "median_m": 0.792,
+      "p95_m": 1.1,
+      "worst_m": 1.109
+    },
+    "115": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 0,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    },
+    "116": {
+      "frames": 250,
+      "trusted": 85,
+      "trusted_good": 85,
+      "trusted_bad": 0,
+      "good_frames": 174,
+      "median_m": 0.133,
+      "p95_m": 0.217,
+      "worst_m": 0.4
+    },
+    "117": {
+      "frames": 250,
+      "trusted": 70,
+      "trusted_good": 0,
+      "trusted_bad": 70,
+      "good_frames": 0,
+      "median_m": 48.948,
+      "p95_m": 48.955,
+      "worst_m": 48.957
+    },
+    "118": {
+      "frames": 250,
+      "trusted": 72,
+      "trusted_good": 72,
+      "trusted_bad": 0,
+      "good_frames": 216,
+      "median_m": 0.372,
+      "p95_m": 0.596,
+      "worst_m": 0.651
+    },
+    "119": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 0,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    }
+  },
+  "all": {
+    "trusted": 477,
+    "good_frames": 1508,
+    "good_kept": 382,
+    "good_kept_share": 0.2533,
+    "median_m": 0.299,
+    "p95_m": 48.95,
+    "worst_m": 48.957
+  },
+  "clips_with_trusted_over_1m": {
+    "112": {
+      "frames": 6,
+      "worst_m": 46.201
+    },
+    "114": {
+      "frames": 19,
+      "worst_m": 1.109
+    },
+    "117": {
+      "frames": 70,
+      "worst_m": 48.957
+    }
+  }
+}
