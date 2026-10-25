@@ -2949,6 +2949,14 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
   deadline the host enforces on itself, and the cadence at which results are copied back (every
   couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+- **And (Oct 25, the next host):** the self-deletion worked; the host removed itself at exactly its
+  cap. But the demo's frames were still lost:
+  - the laptop's free disk was smaller than the copy;
+  - the copy was held for an approval, and the answer came after the host was gone;
+  - 12 vision lanes ran the host's 32 GB GPU out of memory on 9 of 34 segments.
+
+  So, before a host is created, the receiving disk is checked against the expected copy-back. No
+  copy waits on a question while the host runs, and GPU lanes are sized to the card's memory.
 
 ### 248. A place along the pitch is checked against the pitch before it is cut into thirds
 - **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
