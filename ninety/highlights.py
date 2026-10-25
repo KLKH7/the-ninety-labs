@@ -165,37 +165,76 @@ def _restart_detected(e: dict) -> bool:
     return e["type"] == "kickoff" or e["type"] == "set_piece"
 
 
+# Events that change nobody's possession: a press on the carrier, a touch that does not take the ball
+# (StatsBomb's possession runs on through both; who has it next says whether it changed).
+NO_CHANGE = frozenset({"pressure", "deflection"})
+# Events that end a stoppage's dead ball: what restarted play after them is the side's restart.
+DEAD = frozenset({"out_of_play", "foul", "offside", "goal", "set_piece", "kickoff", "half_time"})
+
+
 def origin(shot: dict, events: list[dict], cut=lambda t0, t1: False) -> str | None:
     """How the shooting side's possession began, walking back from the shot through the confident
-    detected events. A restart the detector saw (ninety/vision/restarts.py: a `kickoff`, or a
-    `set_piece` naming its `restart`) is that restart when the shooting side took it. Without one, a
-    ball out of play is the restart it gives (`restart`), and an opponent's goal is the kick-off.
-    The side's own completed passes and earlier shots keep the possession going; an opponent's
-    failed pass is the ball won in open play. Anything else, or a broadcast cut (`cut(t0, t1)`: one
-    lies between match times t0 and t1) before a live ball, means the start was not seen: None. A
-    ball seen going out before a cut still gives its restart after it, as the event detector links
-    them (ninety/vision/events.py)."""
+    detected events (presses and touches that take nobody the ball, NO_CHANGE, are passed over).
+
+    - A restart the detector saw (ninety/vision/restarts.py: a `kickoff`, or a `set_piece` naming
+      its `restart`) is that restart when the shooting side took it.
+    - A set piece of the side with no kind is read from what stopped play before it: a ball out of
+      play (`restart`), or the other side's foul (a penalty inside the area the side attacks, Law 14,
+      else a free kick, Law 13) or offside (a free kick, Law 11).
+    - Without a restart, a ball out of play is the restart it gives (`restart`), and the other
+      side's goal is the kick-off (Law 8).
+    - The side's own completed passes and earlier shots keep the possession going. The ball won in
+      open play is `open_play`: the other side's failed pass, the side's interception or won
+      tackle, or a change of possession to it that no stoppage came just before.
+
+    Anything else, or a broadcast cut (`cut(t0, t1)`: one lies between match times t0 and t1)
+    between an event and the shot, means the start was not seen: None. Nothing before a cut is read,
+    a ball seen going out included: a condensed match's cut can skip minutes (found on seed 8080's
+    answer key, where a throw-in before a cut was taken for a free kick's after it)."""
     team, attacks = shot["team"], goal_line(shot["x"])
-    before = sorted((e for e in events if e["id"] != shot["id"] and (
+    before = [e for e in sorted((e for e in events if e["id"] != shot["id"] and (
         (e["t"], e["id"]) < (shot["t"], shot["id"])
         or (_restart_detected(e) and e["t"] <= shot["t"] + FRAME_S))), key=lambda e: (e["t"], e["id"]))
+        if e["type"] not in NO_CHANGE]
+    set_piece = False  # the side's set piece of no kind: what stopped play decides it
     for i in range(len(before) - 1, -1, -1):
-        e = before[i]
+        e, prev = before[i], before[i - 1] if i else None
+        if cut(e["t"], shot["t"]):
+            # Nothing is inferred across a cut: in a condensed match it can skip minutes, a foul and
+            # possessions with them. A restart after it is the detector's to see (rule 0).
+            return None
         if e["type"] == "kickoff":
             return "kick_off" if e["team"] == team else None
         if e["type"] == "set_piece":
             kind = e.get("restart")
-            return kind if kind in RESTART_KINDS and e["team"] == team else None
+            if e["team"] != team or set_piece:
+                return None
+            if kind is None:
+                set_piece = True
+                continue
+            return kind if kind in RESTART_KINDS else None
         if e["type"] == "out_of_play":
-            return restart(e, team, attacks, before[i - 1] if i else None)
+            return restart(e, team, attacks, prev)
         if _is_goal(e):
             return "kick_off" if e["team"] != team else None
-        if cut(e["t"], shot["t"]):  # a cut nearer the shot was met first, at a later event
-            return None
+        if e["type"] in ("foul", "offside"):
+            if not set_piece or e["team"] == team:
+                return None  # no free kick of the side's followed it (advantage), or it was the side's
+            in_area = abs(attacks - e["x"]) < AREA_DEPTH_M and abs(e["y"] - CENTRE_Y) < AREA_HALF_WIDTH_M
+            return "penalty_kick" if e["type"] == "foul" and in_area else "free_kick"
+        if set_piece:
+            return None  # a set piece with nothing seen that stopped play before it
         kept = e["type"] == "shot" or (e["type"] == "pass" and e.get("outcome") == "success")
         if e["team"] == team and kept:
             continue
         if e["team"] != team and e["type"] == "pass" and e.get("outcome") == "fail":
+            return "open_play"
+        if e["type"] == "possession_change" and e["team"] == team:
+            if prev is not None and prev["type"] in DEAD:
+                continue  # the change at a restart: the stoppage before it decides
+            return "open_play"
+        if e["team"] == team and (e["type"] == "interception"
+                                  or (e["type"] == "tackle" and e.get("outcome") == "success")):
             return "open_play"
         return None
     return None

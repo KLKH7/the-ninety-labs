@@ -373,14 +373,16 @@ def test_the_possession_runs_on_through_passes_and_a_rebound():
                    ev("r", 12.0, "shot", x=96.0, outcome="on_target")) == "corner"
 
 
-def test_a_cut_between_live_balls_hides_the_start_but_not_a_restart():
+def test_nothing_before_a_cut_is_read_but_a_restart_after_it_is():
     cut_at_9 = lambda t0, t1: t0 < 9.0 <= t1  # noqa: E731
     assert started(ev("p", 5.0, "pass", "away", outcome="fail"), ev("q", 12.0, "pass", outcome="success"),
                    cut=cut_at_9) is None
     out = ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0)
-    assert started(out, ev("q", 12.0, "pass", outcome="success"),
-                   cut=cut_at_9) == "corner"  # a dead ball before the cut, its corner after it
-
+    # A ball out before the cut says nothing: a condensed match's cut can skip a foul and minutes.
+    assert started(out, ev("q", 12.0, "pass", outcome="success"), cut=cut_at_9) is None
+    # The restart the detector saw after the cut is read.
+    assert started(out, restart_ev("r", 10.0, "corner"), ev("q", 12.0, "pass", outcome="success"),
+                   cut=cut_at_9) == "corner"
 
 def test_the_reel_gives_each_moment_its_origin_and_match_json_knows_the_cuts():
     meta = {"fps": 25, "t_start": 0.0, "frames": 750,
@@ -435,3 +437,51 @@ def test_a_set_piece_with_no_kind_gives_no_origin():
 
 def test_a_shot_straight_from_the_kick_off_is_found_at_the_same_instant():
     assert started(restart_ev("z", 20.0, "kick_off")) == "kick_off"  # timed with the strike itself
+
+
+
+# The rest of the answer key's events (and main's possession changes on the live path)
+
+
+def test_presses_and_touches_change_nobodys_possession():
+    assert started(ev("p", 5.0, "pass", "away", outcome="fail"), ev("x", 6.0, "pressure", "away"),
+                   ev("d", 7.0, "deflection", "away")) == "open_play"
+
+
+def test_a_change_of_possession_to_the_side_is_open_play_unless_a_stoppage_came_just_before():
+    assert started(ev("c", 10.0, "possession_change")) == "open_play"
+    assert started(ev("c", 10.0, "possession_change", "away")) is None
+    out = ev("o", 5.0, "out_of_play", "away", x=60.0, y=-0.3)  # then home's throw-in
+    assert started(out, ev("c", 10.0, "possession_change")) == "throw_in"
+
+
+def test_the_side_winning_the_ball_is_open_play():
+    assert started(ev("i", 10.0, "interception")) == "open_play"
+    assert started(ev("k", 10.0, "tackle", outcome="success")) == "open_play"
+    assert started(ev("k", 10.0, "tackle", outcome="fail")) is None
+    assert started(ev("i", 10.0, "interception", "away")) is None
+
+
+def test_a_set_piece_of_no_kind_is_read_from_the_stoppage_before_it():
+    sp = ev("s1", 12.0, "set_piece")  # the answer key's: no kind
+    assert started(ev("f", 8.0, "foul", "away", x=70.0, y=34.0), sp) == "free_kick"
+    assert started(ev("f", 8.0, "foul", "away", x=95.0, y=34.0), sp) == "penalty_kick"  # in the area
+    assert started(ev("f", 8.0, "foul", "away", x=88.4, y=34.0), sp) == "free_kick"  # 16.6 m: outside
+    assert started(ev("f", 8.0, "offside", "away", x=95.0, y=34.0), sp) == "free_kick"  # indirect
+    assert started(ev("f", 8.0, "foul", x=70.0, y=34.0), sp) is None  # its own foul: theirs
+    assert started(ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0), sp) == "corner"
+    assert started(sp) is None  # nothing seen stopped play
+    assert started(ev("f", 8.0, "foul", "away", x=70.0, y=34.0), {**sp, "team": "away"}) is None
+
+
+def test_a_foul_with_no_free_kick_after_it_was_play_on():
+    assert started(ev("f", 8.0, "foul", "away", x=70.0, y=34.0),
+                   ev("p", 9.0, "pass", outcome="success")) is None
+
+
+def test_a_set_piece_of_no_kind_needs_the_stoppage_right_before_it():
+    foul = ev("f", 8.0, "foul", "away", x=70.0, y=34.0)
+    sp = ev("s1", 12.0, "set_piece")
+    assert started(foul, ev("p", 10.0, "pass", outcome="success"), sp) is None  # play went on between
+    assert started(foul, ev("s0", 10.0, "set_piece"), sp) is None  # two set pieces: which, unseen
+    assert started(ev("f", 8.0, "foul", "away", x=95.0, y=34.0 + 21.0), sp) == "free_kick"  # wide of the area

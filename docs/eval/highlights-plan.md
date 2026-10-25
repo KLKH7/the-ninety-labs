@@ -271,6 +271,16 @@ from the ball going out as the fallback. The source and the absence of a time th
 unchanged. The same revision names a moment's side and player only when the side was told surely
 (below).
 
+*Revised again 2026-10-25, before merge, after a development run on seed 8080's answer key over
+the demo edit's segments (no detection, no measurement):* every origin came out null, because the
+rule stopped at event types it did not know. Main's vision now writes `possession_change` (#289),
+and the answer key also has presses, touches, tackles, interceptions, fouls and offsides, and set
+pieces with no kind. The rule now reads those (rules 1 to 5 below). The same run found a wrong
+origin: a ball seen going out before a cut was read as the restart after it, when the condensed
+match's cut had skipped minutes and a foul; nothing before a cut is read now. With those fixes the
+run gave 7 open-play origins that agree with the full answer key and 6 nulls (set pieces whose
+stoppage the edit cut away, which only the restart detector can see), and no wrong origin.
+
 ### The source, and why there is no time threshold
 
 StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,
@@ -292,8 +302,12 @@ Walking back from the shot through the confident detected events, the shooting s
    direct free kick, a penalty) may be timed up to a frame after the shot (25 frames a second, the
    broadcast's precision) and counts. A restart the other side took, or a set piece with no kind,
    means the side's start was not seen. The rules below apply only where no restart was seen;
-1. **goes on** through its own completed passes and its own earlier shots (a rebound);
-2. **began in open play** (`open_play`) at an opponent's failed pass: the ball won back;
+1. **goes on** through its own completed passes and its own earlier shots (a rebound); a press on
+   the carrier and a touch that does not take the ball (`pressure`, `deflection`) change nobody's
+   possession and are passed over;
+2. **began in open play** (`open_play`) where the ball was won back: an opponent's failed pass,
+   the side's interception or won tackle, or a `possession_change` to the side that no stoppage
+   came just before (one that did is the restart's, and the stoppage before it decides);
 3. **began at a restart** at a detected ball out of play (`ninety/vision/events.py` names the side
    that touched it last), if the restart is the shooting side's, by the Laws:
    - over a touchline: a **throw-in** (`throw_in`) for the side that did not touch it last (Law 15);
@@ -303,11 +317,14 @@ Walking back from the shot through the confident detected events, the shooting s
    - which line it went over is the one it is further over, as the engine judges a ball out at a
      corner flag (`ninety/sim/decisions.py`, `restart_cost`);
 4. **began at a kick-off** (`kick_off`) after a goal the other side scored (Law 8);
+4a. a **set piece of no kind** (the answer key's) is read from what stopped play before it: a ball
+   out of play (rule 3), or the other side's foul (`penalty_kick` inside the area the side
+   attacks, Law 14, else `free_kick`, Law 13) or offside (`free_kick`, Law 11). A foul with no set
+   piece of the side after it was play on (advantage), and gives nothing;
 5. otherwise its start **was not seen**: `origin` is null. That covers an opponent's completed pass
    or shot, the side's own failed pass, the side's own goal, a restart that was the opponent's, no
-   event before it, and a broadcast cut between two live-ball events (nothing seen before a cut is
-   linked to anything after it, as the event detector itself rules; a ball seen going out before a
-   cut still gives its restart after it).
+   event before it, and any broadcast cut between an event and the shot: nothing before a cut is
+   read (a restart after it is the detector's to see, rule 0).
 
 **Free kicks, penalties and the kick-offs that start a half** come only from the restart detector
 (rule 0): nothing else in the video shows them. StatsBomb's "From Keeper" and "From Counter" are
