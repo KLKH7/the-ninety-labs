@@ -2576,6 +2576,18 @@ short and actionable. This file is public: no research sources, product names or
   broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
   `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
 
+### 233. A variant is compared with its reference at the same commit, not with the reference's old number
+- **What happened:** the sides plan's spatial variant S was to ship if it beat T1a, recorded as 0.681
+  outfield accuracy. Run again on the branch S was built on, the same observations through the same
+  measure gave T1a 0.731: the tracking and kit code differ between that branch and the one T1a was
+  first run on. Compared with the old number, S (0.750) would have looked 0.07 better; at the same
+  commit it is 0.02 better.
+- **Rule:** a decision rule that compares two variants runs both at one commit, on the same inputs,
+  and the comparison is recorded before the new variant's number is read. A number carried over from
+  another branch is context, never the bar.
+- **Check:** `docs/eval/sides-tactical/SPATIAL-PLAN.md`, Deviations (T1a re-run at the commit, before
+  any S number), and `T1a-validation-r4stack.json` next to `S-validation.json`.
+
 ### 221. A number matched by value and unit alone passes in the wrong role
 - **What happened:** the insight fact-check let a sentence state any number a cited fact held,
   written with that number's unit. A planted claim "6 players against 1 player" passed when the
@@ -2640,6 +2652,19 @@ short and actionable. This file is public: no research sources, product names or
   a separate look at the characters.
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 231. A fallback that leaves cases undecided is scored on the cases it leaves, and its reference is measured first
+- **What happened:** the sides plan fixed a fallback, TB (tactical tracks inherit the broadcast's
+  sides), to ship if the tactical sides stayed below the broadcast's, B. B had never been scored,
+  so the condition could not be checked; scored, B was 0.578 and T1a 0.681 (on different track
+  populations and kit readers: PLAN.md's Oct 25 entry), and the fallback was not needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
+  but 38% of the tactical track-frames are players the broadcast never shows, and they get no side.
+  Judged only on what it decided, TB would have looked as good as B.
+- **Rule:** before a rule that compares with a reference is applied, the reference is measured on
+  the same clips. A variant that can leave a case undecided is scored over every case, undecided
+  ones counted against it, with its coverage reported beside its accuracy.
+- **Check:** `docs/eval/sides-tactical/B-validation.json` and `TB-validation.json`; PLAN.md's dated
+  entry gives both rates for TB.
 
 ### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
 - **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
@@ -2922,6 +2947,34 @@ short and actionable. This file is public: no research sources, product names or
   when the phone reads an event's side without the threshold;
   `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
 
+### 246. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
+
+### 247. A paid machine's cap runs on the machine, and its results leave it as they are made
+- **What happened:** on Oct 24–25 two rented GPU hosts ran past their hard caps. Each cap was a
+  timer on the maintainer's laptop. The first fired 14 min late with the laptop asleep, hit a DNS
+  failure, and exited. The second retried with the laptop kept awake, but the laptop was offline
+  for about 1 h 40 min, so the host billed about 1.5 h past its 2 h cap. Each time, finished work
+  that had not been copied back was lost when the host was finally deleted: the shot-outcome set's
+  renders and its validation scoring.
+- **Rule:** the cap is enforced on the host itself: the first thing a rented host runs is its own
+  deletion at the cap, started before any other work. The laptop's retrying timer is only a second
+  line. Every finished result (a clip's report, a score, a set list) is copied off the host as it
+  is written, never in a batch at the end.
+- **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
+  deadline the host enforces on itself, and the cadence at which results are copied back (every
+  couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+
 ### 248. A place along the pitch is checked against the pitch before it is cut into thirds
 - **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
   capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
@@ -2976,6 +3029,26 @@ short and actionable. This file is public: no research sources, product names or
   and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
   phrasings) fail when the gate's zone, ambiguity or player filter is removed.
 
+### 251. A confidence calibrated on validation is not a guarantee: check what the Laws make impossible
+- **What happened:** on the demo match (seed 8080) the home team's dark purple hoops have white
+  shorts, and the away kit is near-white. Main's kit reader takes one median colour of the shirt
+  patch, and on hoops the white second colour fills it, so both outfield teams read as white. Kit
+  clustering then split "everyone" from a minority (shaded players on the broadcast, the red keeper
+  on the tactical views), and the depth vote named the two cameras' clusters opposite ways: the
+  broadcast saw about 90% home, the views about 95% away, the joined frames 21 away to 1 home. Side
+  confidence on main is a track's colour margin, so tracks far from the minority looked sure, and
+  three events cleared the 0.96 gate at 0.975 and 0.989. The same dry run aired passes of 16 m at
+  3 km/h and of 0 m at 14 km/h at confidence 0.777.
+- **Rule:** a confidence fitted on validation can be confidently wrong on a case validation never
+  held, so hard limits from the Laws and from physics stand beside it and override it: no more than
+  11 players of one side on the pitch (Law 3), no pass shorter than the ball at a player's feet, and
+  no ball averaging faster than it was struck. Each limit is a sourced rule, never a fitted one, and
+  it holds (confidence 0), it does not guess.
+- **Check:** `tests/test_vision_events.py::test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure`
+  (11 kept, 12 held), `::test_a_pass_the_ball_could_not_have_made_is_held` and
+  `::test_the_speed_check_allows_both_ends_position_error_and_no_more`; on the demo's t001350 every
+  event's side confidence is 0 and the three impossible passes are held.
+
 ### 252. A test waits on the state it checks; one read of a screen is a race
 - **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
   `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
@@ -2998,7 +3071,20 @@ short and actionable. This file is public: no research sources, product names or
   shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
   messages (mutant runs, #341 and its follow-up).
 
-### 253. A tolerance taken as the worst over several looks is set by the worst look
+### 253. A rule that walks back through events must stop at a cut
+- **What happened:** the highlights reel's `origin` rule (#324) walked back from a shot through the
+  detected events to find how the attack began. A development run on the demo match found a wrong
+  origin: a throw-in seen before a broadcast cut was read as the free kick after it, because the
+  condensed match's cut had skipped minutes and a foul in between. The run had also given every
+  origin as null before, because the rule stopped at event types it did not know.
+- **Rule:** an event before a cut says nothing about what followed it. A rule that reads backwards
+  through events stops at a cut (a restart after the cut is the restart detector's to see), and the
+  list of event types it understands is checked against the types the source writes, so "null for
+  everything" is noticed.
+- **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
+  fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 254. A tolerance taken as the worst over several looks is set by the worst look
 - **What happened:** the match-gantry plan set the camera-unsure tolerance as the gantry fit's
   largest error over validation clips of two renderer looks, "the larger of both". On today's look
   the fit's gantry is within 1.0 m; on the old 0.3.2 look one clip is 38.4 m off, so the tolerance

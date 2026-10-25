@@ -53,8 +53,33 @@ def test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth(tmp_path):
     assert report["frames"] == 2 and report["camera_ok"] == 2  # it ran the whole path
     assert set(report["seconds"]) == {"load", "detect", "observe", "events", "tracked", "total"}
     assert report["commit"] == "test" and report["cpus"] >= 1
+    assert set(report["restarts"]) >= {"kick_off", "corner", "free_kick"}  # the restart detector ran
     assert any(o.endswith(".jpg") for o in run["opened"])
     assert truth_reads(run) == []
+
+
+def test_the_restarts_are_merged_into_the_detected_events(tmp_path, monkeypatch):
+    # The restart detector's events join events.detect's in time, and a possession change while
+    # the ball lies set for the restart (its dead ball) is left out (restarts.merge).
+    from ninety.vision import events as ev
+    from ninety.vision import live_job, pitch, restarts
+    from ninety.vision.detections import read_detections
+
+    clip, dets = clean_clip(tmp_path)
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    change = {"id": "v00001", "frame": 10, "t": 0.4, "type": "possession_change", "team": "home"}
+    kept = {"id": "v00002", "frame": 30, "t": 1.2, "type": "possession_change", "team": "away"}
+    corner = {"id": "r00001", "frame": 12, "t": 0.48, "type": "set_piece", "restart": "corner",
+              "team": "home"}
+    monkeypatch.setattr(ev, "detect", lambda rows: ([change, kept], {
+        "frames_camera_ok": 2, "events": {}, "named": {}}))
+    monkeypatch.setattr(restarts, "detect", lambda rows: ([corner], {"events": {"corner": 1},
+                                                                       "dead_balls": [[5, 12]]}))
+    found = read_detections(dets)
+    report = live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found))
+    lines = (tmp_path / "out" / "detected.jsonl").read_text().splitlines()
+    assert [json.loads(line)["id"] for line in lines] == ["r00001", "v00002"]
+    assert report["restarts"] == {"corner": 1}
 
 
 @pytest.mark.parametrize("name", [*TRUTH_FILES, "notes.txt"])

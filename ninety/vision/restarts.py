@@ -4,7 +4,8 @@
 
 Reads only the observations file (`ninety.vision.observe`), as `ninety.vision.events` does, and
 writes match_event lines with `source: "vision"`. Nothing here reads ground truth, so it may run on
-the live path (tests/test_vision_live_path.py watches it run); the live job does not call it yet.
+the live path (tests/test_vision_live_path.py watches it run); the live job runs it after
+`events.detect` and writes the merged events (ninety/vision/live_job.py).
 The rules are the Laws' (docs/GROUNDING.md); every tolerance is the measured position error, stated
 before any validation clip was scored (docs/eval/restarts-vision-plan.md). `merge` joins its events
 to `events.detect`'s, leaving out a possession change while the ball lies set for a restart.
@@ -49,12 +50,12 @@ from pathlib import Path
 from statistics import median
 
 from ninety.vision import events as ev
+from ninety.vision import sides
 from ninety.vision.track import (
     FPS,
     MAX_GAP_FRAMES,
     BallPoint,
     Track,
-    assign_teams,
     ball_path,
     read_observations,
     track_players,
@@ -276,7 +277,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     """The detected restarts, and a summary of how they were found."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
-    assign_teams(tracks)
+    sides.assign(tracks, rows)  # the same sides events.detect gives, so a kick-off and a pass agree
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     found: list[dict] = []
