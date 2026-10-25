@@ -33,6 +33,25 @@ CALIBRATION = Path(__file__).with_name("physical_calibration.json")
 
 def labels() -> dict:
     return json.loads(CALIBRATION.read_text()) if CALIBRATION.exists() else {}
+
+
+# The phone card's worst measured top-speed error on tracked footage (docs/eval/companion-tracked.md:
+# 1.5 km/h median, 4.2 worst): the bar a named player's top speed must meet to be said.
+TOP_SPEED_BAR_KMH = 4.2
+
+
+def held(lb: dict, bar: int | None) -> dict[str, str]:
+    """Which figures are held, and why: each against its own label and bar."""
+    out = {}
+    if not lb or bar is None or lb.get("distance_pct", 1e9) > bar:
+        out["player_km"] = f"his distance is measured to ±{lb.get('distance_pct')}%, worse than ±{bar}%"
+    if not lb or bar is None or lb.get("sprints_pct", 1e9) > bar:
+        out["player_sprints"] = f"his sprints are measured to ±{lb.get('sprints_pct')}%, worse than ±{bar}%"
+    if not lb or lb.get("top_kmh", 1e9) > TOP_SPEED_BAR_KMH:
+        out["player_top_kmh"] = (
+            f"his top speed is measured to ±{lb.get('top_kmh')} km/h, worse than ±{TOP_SPEED_BAR_KMH}"
+        )
+    return out
 MIN_SPRINT_S = 1.0
 STEP_S = 1.0  # a step a second: the tracked frames' smoothing, team distance's step (team_stats.STEP_S)
 MAX_STEP_KMH = 12.0 * 3.6  # a step past this is a track jumping, not a player (team_stats.MAX_STEP_MPS)
