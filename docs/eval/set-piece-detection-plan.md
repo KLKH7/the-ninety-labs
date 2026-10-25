@@ -203,6 +203,20 @@ Three holes in the signal above, found by reading it against the engine, not by 
 Known limit, not tested as a pass: where no cut hides the wait, the ball knocked to the spot by
 another player and stopped there reads as a restart at the knock, and the real one is missed.
 
+## Amendment 3 (2026-10-25, after the free-kick clip's first run, validation only)
+
+**Seen:** on validation seed 920108 from 42.44 s the kick-off after the goal was missed on both
+readings: through the true camera the ball on the centre spot moves between frames by up to 0.1 m
+(the ball box's pixel rounding), and amendment 1 required *every* point of the run within
+`BALL_TOL_M` of the run's median. `BALL_TOL_M` is a 90th percentile, so by its own definition about
+one point in ten lies outside it, and a 10-frame run passes about a third of the time. That was a
+mistake in the rule, not a value to tune.
+
+**The rule now:** a point and the run's median each carry up to `BALL_TOL_M` of error, so a point
+may lie up to twice it from the median; and, as the tolerance is a 90th percentile, at least 90% of
+the run's points must lie within that. No new constant: both follow from the tolerance's definition.
+The test split is untouched; the validation clips are re-run with it and both runs are reported.
+
 ## Outcome
 
 ### The clips (by the rule above)
