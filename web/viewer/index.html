@@ -43,12 +43,27 @@
               <span class="pair-line">On your phone: <b id="pair-url"></b> · code <b class="pair-code" id="pair-code"></b></span>
             </div>
           </div>
+          <p class="captions" id="captions" hidden></p>
+          <!-- The audio menu (src/commentary.ts), as a streaming app's audio and subtitles menu. -->
+          <div class="audio-menu" id="audio-menu" role="group" aria-label="Audio and subtitles" hidden>
+            <fieldset>
+              <legend>Audio</legend>
+              <label><input type="radio" name="track" value="stadium" checked /> Stadium</label>
+              <label><input type="radio" name="track" value="commentary" /> Commentary</label>
+            </fieldset>
+            <fieldset>
+              <legend>Subtitles</legend>
+              <label><input type="radio" name="subs" value="off" checked /> Off</label>
+              <label><input type="radio" name="subs" value="on" /> Commentary</label>
+            </fieldset>
+          </div>
           <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->
           <div class="hud" id="hud">
             <div class="hud-scrub" id="hud-scrub"><div class="ticks" id="ticks" aria-hidden="true"></div></div>
             <div class="hud-row">
               <div class="hud-left" id="hud-left"></div>
               <div class="hud-right">
+                <button type="button" class="icon" id="hud-audio" aria-label="Audio and subtitles" aria-expanded="false" aria-controls="audio-menu" hidden></button>
                 <button type="button" class="icon" id="hud-volume" hidden></button>
                 <button type="button" class="icon" id="hud-qr" aria-label="Follow on your phone" aria-expanded="false" aria-controls="pair-card"></button>
                 <button type="button" class="icon" id="hud-full" aria-label="Full screen"></button>

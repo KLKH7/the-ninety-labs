@@ -101,6 +101,16 @@ def test_a_clip_without_segments_is_one_chapter():
 # ---------------------------------------------------------------- in the browser
 
 
+def silent_wav(path, seconds: float, rate: int = 8000):
+    import wave
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\0\0" * int(rate * seconds))
+
+
 @pytest.fixture(scope="module")
 def site(browser, tmp_path_factory):  # noqa: F811
     """dist/ with the cut clip in match mode at match/, the same with its events named a
@@ -128,6 +138,17 @@ def site(browser, tmp_path_factory):  # noqa: F811
         worker.start()
         worker.join()
         assert (www / out / "match.json").exists() == match
+    # The same match with commentary (src/commentary.ts): two lines and a stadium bed, silent wavs.
+    shutil.copytree(www / "match", www / "commentary")
+    for name, seconds in (("c1.wav", 1.0), ("c2.wav", 0.6), ("stadium.wav", 4.0)):
+        silent_wav(www / "commentary" / name, seconds)
+    (www / "commentary" / "commentary.json").write_text(json.dumps({"format": 1, "voice": "test", "lines": [
+        {"id": "c1", "t": 60.3, "t_end": 61.3, "text": "Crowmere break at pace",
+         "audio": "c1.wav", "event": None},
+        {"id": "c2", "t": 61.8, "t_end": 62.4, "text": "Saved", "audio": "c2.wav", "event": None}]}))
+    manifest = json.loads((www / "commentary" / "manifest.json").read_text())
+    (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
+                                                                  "stadium": "stadium.wav"}))
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -384,3 +405,35 @@ def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(b
     assert page.locator("#score-crest-home svg").count() == 1
     assert page.inner_text("#score").startswith("London 0 – 0 Lisbon")
     assert not errors
+
+
+def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optional_subtitles(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=commentary/")
+    assert page.is_visible("#hud-audio") and page.is_visible("#hud-volume")  # the bundle has sound
+    page.click("#hud-audio")
+    assert page.is_checked("input[name=track][value=stadium]")  # off by default
+    assert page.is_checked("input[name=subs][value=off]")
+    seek(page, 20)  # 60.82 s: inside the first line
+    assert page.get_attribute("body", "data-commentary") == ""  # stadium only: no line plays
+    page.check("input[name=track][value=commentary]")
+    page.wait_for_function("document.body.dataset.commentary === 'c1'")
+    assert page.get_attribute("body", "data-bed") == "ducked"  # the crowd sits under the line
+    assert page.is_hidden("#captions")  # subtitles are a second, separate choice
+    page.check("input[name=subs][value=on]")
+    page.wait_for_selector("#captions:not([hidden])")
+    assert page.inner_text("#captions") == "Crowmere break at pace"
+    seek(page, 37)  # 61.5 s: between the lines, no subtitle left on screen
+    page.wait_for_selector("#captions[hidden]", state="attached")
+    assert page.get_attribute("body", "data-commentary") == ""
+    assert page.get_attribute("body", "data-bed") == "full"
+    page.keyboard.press("Escape")
+    assert page.is_hidden("#audio-menu")
+    assert not errors
+    page.context.close()
+
+
+def test_a_bundle_without_commentary_offers_no_audio_menu(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    assert page.is_hidden("#hud-audio") and page.is_hidden("#hud-volume")
+    assert not errors
+    page.context.close()

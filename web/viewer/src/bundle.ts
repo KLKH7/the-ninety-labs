@@ -72,6 +72,10 @@ export interface Manifest {
   teams?: { home: string; away: string };
   /** match.json (ninety/condensed.py), for a condensed match. */
   match?: { chapters: number; goals: number; min_confidence: number } | null;
+  /** commentary.json (src/commentary.ts): pre-rendered commentary lines, for the big screen's
+   * audio menu; `stadium` a crowd-and-whistles bed in video time, when the bundle has one. */
+  commentary?: { count: number } | null;
+  stadium?: string | null;
 }
 
 /** One line of audio.json (ninety/speech/describe.py `Said`). */

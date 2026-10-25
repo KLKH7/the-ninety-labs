@@ -1,6 +1,7 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
+import { AudioTracks, readCommentary } from "./commentary";
 import { setupHud } from "./hud";
 import { pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
@@ -340,6 +341,14 @@ async function start() {
     big,
   );
   // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
+  // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
+  let tracks: AudioTracks | null = null;
+  if (big && (m.commentary?.count || m.stadium)) {
+    const body = m.commentary?.count
+      ? await fetch(new URL("commentary.json", new URL(b.base, location.href))).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      : null;
+    tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
+  }
   const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
   const hud = big
     ? setupHud({
@@ -353,6 +362,7 @@ async function start() {
           qrState.open = open;
           if (!open) qrState.closed = true;
         },
+        audio: tracks,
       })
     : null;
 
@@ -387,6 +397,7 @@ async function start() {
       case "Escape":
         if (!hud) return;
         hud.closeQr();
+        hud.closeMenu();
         qrState.closed = true;
         break;
       case "1":
@@ -445,6 +456,7 @@ async function start() {
         card.classList.toggle("still", reduceMotionBox.checked);
       }
       hud.tick();
+      tracks?.update(v, t, !footage.paused());
     }
 
     const ids = aired.map((c) => c.id).sort().join(" ");
