@@ -956,6 +956,9 @@ function finishSetup() {
   goTo(mine.want);
   const where = { action: "Live", stats: "Stats", story: "Story", ask: "Ask" }[mine.want ?? "action"];
   announce(`Set up. Showing ${where}. Change it any time under More, Redo setup.`);
+  // Focus lands where the fan asked to go, not on the list that has just gone.
+  const to = setup.destination(mine.want);
+  requestAnimationFrame(() => (to.pane ? $(`lt-${to.pane}`) : $(`tab-button-${to.tab}`)).focus());
 }
 
 /** Draws Ask's onboarding at its current question, or hides it once answered or skipped. */
@@ -993,6 +996,10 @@ function renderSetup() {
   $("setup-options").replaceChildren(...options);
 }
 
+// Escape in the setup is "Just show me", as a sheet closes on Escape.
+$("setup").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("setup-skip").click();
+});
 $("setup-skip").addEventListener("click", () => {
   mine.done = true;
   setup.save(mine);
@@ -2215,8 +2222,13 @@ function renderStats(st: MatchData["stats"][number]) {
   };
   // Casual or die-hard (src/setup.ts): a casual fan sees the key groups, a die-hard every one. Only
   // which groups are listed changes; every row shown is the same number either way.
-  const depthOf = (gs: [string, Row[]][]) => (mine.depth === "diehard" ? gs : gs.filter(([g]) => setup.CASUAL_GROUPS.includes(g)));
   const showable = (gs: [string, Row[]][]) => gs.reduce((n, [, rows]) => n + rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a)).length, 0);
+  // When the casual groups have nothing measured yet, a casual fan sees every group rather than an
+  // empty card (the numbers are the same either way).
+  const depthOf = (gs: [string, Row[]][]) => {
+    const casual = gs.filter(([g]) => setup.CASUAL_GROUPS.includes(g));
+    return mine.depth === "diehard" || showable(casual) === 0 ? gs : casual;
+  };
   const items = listOf(depthOf(groups));
   // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
   const halves = block?.insight_stats?.halves;

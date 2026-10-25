@@ -1172,3 +1172,56 @@ def test_with_neutral_sides_the_card_asks_no_club(browser, site):  # noqa: F811
     page.wait_for_function("document.body.dataset.tab === 'insights'")
     assert page.evaluate("document.body.dataset.fav") is None
     assert not errors
+
+
+def test_make_it_yours_targets_are_44pt_its_rows_have_no_accent_and_escape_skips(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#setup:not([hidden])")
+    tall = lambda sel: min(b.bounding_box()["height"] for b in page.locator(sel).all())  # noqa: E731
+    assert tall("#setup .setup-option") >= 44 and tall("#setup-skip") >= 44
+    # No accent colour: the rows are the plain dark card and white type; a club shows only its crest.
+    look = page.evaluate("""() => {
+        const ref = document.createElement('div');
+        ref.style.cssText = 'color: var(--text); background: var(--surface)';
+        document.body.append(ref);
+        const want = [getComputedStyle(ref).color, getComputedStyle(ref).backgroundColor];
+        ref.remove();
+        const rows = [...document.querySelectorAll('#setup .setup-option')].map((b) =>
+            [getComputedStyle(b).color, getComputedStyle(b.closest('ul')).backgroundColor]);
+        return [want, rows]; }""")
+    want, rows = look
+    assert all(r == want for r in rows), (want, rows)  # the theme's text on its plain card
+    page.keyboard.press("Tab")
+    page.focus("#setup .setup-option >> nth=0")
+    page.keyboard.press("Escape")  # as a sheet closes: Just show me
+    assert page.is_hidden("#setup")
+    page.click("#tab-button-radar")
+    page.click("#lt-stats")
+    page.wait_for_selector("#depth")
+    assert tall("#depth ion-segment-button") >= 44
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#setup-redo")
+    assert tall("#setup-redo") >= 44
+    assert not errors
+
+
+def test_make_it_yours_works_when_the_browser_refuses_storage(browser, site):  # noqa: F811
+    """A private window throws on localStorage: setup still asks and answers, for this visit."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    refuse = "Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied'); } });"
+    ctx.add_init_script(refuse)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#setup:not([hidden])")
+    page.locator(".setup-option", has_text="Neither").click()
+    page.locator(".setup-option", has_text="Casual").click()
+    page.locator(".setup-option", has_text="The story").click()
+    page.wait_for_function("document.body.dataset.tab === 'insights'")
+    assert not errors
+    ctx.close()

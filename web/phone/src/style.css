@@ -845,10 +845,11 @@ body[data-setup="open"] #ask-start, body[data-setup="open"] #ask-chips { display
 .setup-skip { display: block; margin: 16px auto 0; min-height: 44px; padding: 0 16px; border: 0; background: none; font: inherit; font-size: 17px; color: var(--text-2); cursor: pointer; }
 
 /* Casual or die-hard: a segmented control in Team Stats' header. */
-#live-stats .section-head .depth { width: 180px; flex: none; }
+#live-stats .section-head .depth { width: 180px; flex: none; min-height: 44px; }
+#live-stats .section-head .depth ion-segment-button { min-height: 44px; }
 
 /* The fan's club: its numbers stand out a little (the club's own colour is already its bar); no
    number changes. */
-body[data-fav="home"] .stat-row .home-v, body[data-fav="away"] .stat-row .away-v { color: var(--text); }
+body[data-fav="home"] .stat-row:not(.unsure) .home-v, body[data-fav="away"] .stat-row:not(.unsure) .away-v { color: var(--text); }
 body[data-fav] .stat-row .v { color: var(--text-2); }
 .row-note { font-size: 15px; color: var(--text-2); margin-left: auto; }
