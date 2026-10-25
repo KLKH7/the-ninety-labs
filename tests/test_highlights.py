@@ -5,8 +5,13 @@ either side of its margin, never exactly on it, where float rounding decides."""
 
 from __future__ import annotations
 
-from ninety import condensed
-from ninety.highlights import Verdict, distance_m, label, reel, verdict_from_report
+import json
+
+import pytest
+
+from ninety import condensed, highlights
+from ninety.highlights import Verdict, distance_m, label, record, reel, verdict_from_report
+from ninety.match.timeline import Timeline
 
 # A measured verdict: the filter live, small errors (1 km/h, 0.5 m, 0.2 m along and across, 0.02 s).
 MEASURED = Verdict(save_filter=True, margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
@@ -156,3 +161,118 @@ def test_match_json_carries_the_reel_of_confident_events_only():
     body = condensed.build(meta, events)
     assert [m["event"] for m in body["highlights"]["moments"]] == ["g"]
     assert body["highlights"]["save_filter"] is False
+
+
+# Recording each moment from the footage (highlights.record)
+
+
+def images_in(folder, n):
+    """n clip images, each its own bytes, so a still can be told apart."""
+    folder.mkdir(parents=True)
+    paths = []
+    for i in range(n):
+        p = folder / f"{i:05d}.jpg"
+        p.write_bytes(f"image {i}".encode())
+        paths.append(p)
+    return paths
+
+
+def moment(eid, t, clip):
+    return {"event": eid, "t": t, "clip": clip}
+
+
+# 50 images: match 60.0 to 61.56 s (images 0 to 39), a cut, then 62.0 to 62.36 s (images 40 to 49).
+CUT = Timeline([{"index": 0, "frame": 1500, "frames": 40}, {"index": 40, "frame": 1550, "frames": 10}], 25)
+
+
+def test_a_moment_is_recorded_as_a_still_at_the_strike_and_its_images(tmp_path):
+    images = images_in(tmp_path / "images", 50)
+    reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    rec = reel["moments"][0]["recording"]
+    # 60.4 s is image 10, 61.4 s image 35 (end exclusive), the strike at 61.0 s image 25.
+    assert rec == {"images": [10, 35], "video_t": [0.4, 1.4], "shot_image": 25,
+                   "poster": "highlights/v2.jpg", "clip": None}
+    assert (tmp_path / "out" / "highlights" / "v2.jpg").read_bytes() == b"image 25"
+
+
+def test_a_window_across_a_cut_runs_on_into_the_next_segment(tmp_path):
+    images = images_in(tmp_path / "images", 50)
+    reel = {"moments": [moment("v5", 62.2, [61.0, 62.3])]}
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    rec = reel["moments"][0]["recording"]
+    assert rec["images"] == [25, 48]  # 62.3 s is image 40 + 7.5: up to 48, exclusive
+    assert rec["shot_image"] == 45
+
+
+def test_a_window_past_the_footage_is_cut_to_it_and_one_outside_it_is_not_recorded(tmp_path):
+    images = images_in(tmp_path / "images", 50)
+    reel = {"moments": [moment("a", 61.0, [53.0, 64.0]), moment("b", 70.0, [62.5, 73.0])]}
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    assert reel["moments"][0]["recording"]["images"] == [0, 50]
+    assert reel["moments"][1]["recording"] is None  # it starts after the last image
+    assert not (tmp_path / "out" / "highlights" / "b.jpg").exists()
+
+
+def test_a_file_name_keeps_letters_digits_dashes_and_underscores_only(tmp_path):
+    images = images_in(tmp_path / "images", 50)
+    reel = {"moments": [moment("../e 7", 61.0, [60.4, 61.4])]}
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    assert reel["moments"][0]["recording"]["poster"] == "highlights/___e_7.jpg"
+
+
+def test_with_ffmpeg_the_window_is_encoded_as_vp9(tmp_path, monkeypatch):
+    images = images_in(tmp_path / "images", 50)
+    calls = []
+    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(highlights.subprocess, "run", lambda cmd, check: calls.append(cmd))
+    reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
+    record(reel, CUT, images, tmp_path / "out", encode=True)
+    assert reel["moments"][0]["recording"]["clip"] == "highlights/v2.webm"
+    (cmd,) = calls
+    assert cmd[cmd.index("-start_number") + 1] == "10" and cmd[cmd.index("-frames:v") + 1] == "25"
+    assert cmd[cmd.index("-framerate") + 1] == "25"
+    assert cmd[cmd.index("-c:v") + 1] == "libvpx-vp9" and "libx264" not in cmd
+    assert cmd[-1] == str(tmp_path / "out" / "highlights" / "v2.webm")
+
+
+def test_without_ffmpeg_or_when_shipping_frames_no_clip_is_encoded(tmp_path, monkeypatch):
+    images = images_in(tmp_path / "images", 50)
+    monkeypatch.setattr(highlights.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
+    monkeypatch.setattr(highlights.shutil, "which", lambda name: None)
+    reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
+    record(reel, CUT, images, tmp_path / "out", encode=True)
+    assert reel["moments"][0]["recording"]["clip"] is None
+
+
+def test_the_bundle_records_every_highlight_and_matches_the_schema(tmp_path):
+    from ninety import e2e
+    from ninety.agents.contracts import schema_validator
+    from tests.e2e_clip import write_clip
+
+    clip, detections, events = write_clip(tmp_path)
+    e2e.main([str(clip), "--out", str(tmp_path / "bundle"), "--detections", str(detections), "--frames",
+              "--events-file", str(events), "--match"])
+    reel = json.loads((tmp_path / "bundle" / "match.json").read_text())["highlights"]
+    schema_validator("highlight_reel").validate(reel)
+    (save,) = reel["moments"]  # e2_clip.py's one shot, a save at 61.2 s, while the filter is off
+    assert save["recording"]["images"] == [0, 75]  # its 11 s window is wider than the 3 s clip
+    assert (tmp_path / "bundle" / save["recording"]["poster"]).exists()
+    assert save["recording"]["clip"] is None  # --frames: the bundle ships frames, so no clip
+
+
+def test_shipping_frames_encodes_no_clip_even_with_ffmpeg(tmp_path, monkeypatch):
+    images = images_in(tmp_path / "images", 50)
+    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(highlights.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
+    reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    assert reel["moments"][0]["recording"]["clip"] is None
+
+
+def test_the_video_times_are_the_whole_images_recorded(tmp_path):
+    images = images_in(tmp_path / "images", 50)
+    reel = {"moments": [moment("v2", 61.0, [60.41, 61.41])]}  # starts a quarter into image 10
+    record(reel, CUT, images, tmp_path / "out", encode=False)
+    rec = reel["moments"][0]["recording"]
+    assert rec["images"] == [10, 36] and rec["video_t"] == [0.4, 1.44]

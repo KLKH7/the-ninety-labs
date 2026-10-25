@@ -18,6 +18,7 @@ STRICT = {
     "agent_trace": "agent_trace.jsonl",
     "companion_message": "companion_message.jsonl",
     "minimap": "minimap.jsonl",
+    "highlight_reel": "highlight_reel.jsonl",
 }
 MIRRORS = {"viewer_question": Question, "viewer_answer": Answer, "agent_trace": TraceStep}
 
