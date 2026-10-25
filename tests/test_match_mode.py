@@ -40,7 +40,7 @@ def event(eid, t, kind, team, outcome=None, confidence=0.9, **more):
 
 EVENTS = [
     event("v1", 60.4, "pass", "home", "success"),
-    event("v2", 61.0, "shot", "home", "goal"),
+    event("v2", 61.0, "shot", "home", "goal", team_confidence=0.99),
     event("v3", 62.2, "pass", "away", "success"),
     event("v4", 62.5, "shot", "home", "goal", confidence=MIN_CONFIDENCE - 0.2),  # unsure: never counts
     event("v5", 62.8, "shot", "away", "on_target"),  # the clip's last frame is 62.96 s
@@ -70,6 +70,11 @@ def test_a_chapter_per_segment_named_from_its_most_telling_confident_event():
 ])
 def test_the_kinds_rank_goal_save_shot_set_piece_build_up(events, kind):
     assert condensed.build(META, events)["chapters"][0]["kind"] == kind
+
+
+def test_a_goal_on_a_side_not_told_surely_counts_for_no_club():
+    unsure = [event("g", 61.0, "shot", "home", "goal", team_confidence=0.3)]
+    assert condensed.build(META, unsure)["goals"] == [{"t": 61.0, "team": None, "event": "g"}]
 
 
 def test_the_scoreline_counts_only_confident_detected_goals():

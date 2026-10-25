@@ -70,6 +70,8 @@ export interface Manifest {
   radar?: { source: string; frames: number; footprints: number } | null;
   /** The clubs' names (src/teams.ts), when the bundle names them. */
   teams?: { home: string; away: string };
+  /** The track ids whose side the fact-checker vouches for (ninety/e2e.py `sides_known`). */
+  sides_known?: string[];
   /** match.json (ninety/condensed.py), for a condensed match. */
   match?: { chapters: number; goals: number; min_confidence: number } | null;
   /** commentary.json (src/commentary.ts): pre-rendered commentary lines, for the big screen's

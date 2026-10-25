@@ -101,6 +101,22 @@ async def model(event, around):
 texts, calls = asyncio.run(describer.upgrades(events, result.cues, model, judge))
 track, refused = describe.describe(events, result.cues, upgrades=texts)
 assert calls and track.said
+
+# The commentary track (ninety/speech/commentary.py): calls from the same detected events and cues.
+from ninety.speech import commentary
+assert commentary.commentary(events, result.cues, {"home": "London", "away": "Lisbon"})["lines"]
+
+# Match mode and the highlights reel (docs/eval/highlights-plan.md, rule 5): from the confident
+# detected events only, with no scorer, simulator or answer key loaded.
+from ninety import condensed, highlights
+_meta = {"fps": 25, "t_start": 0.0, "frames": 1500, "segments": [{"index": 0, "frame": 0, "frames": 1500}]}
+_shots = [{"id": "g", "t": 10.0, "frame": 250, "type": "shot", "team": "home", "x": 94.0, "y": 34.0,
+           "player": None, "outcome": "goal", "ball_speed_kmh": 80.0, "source": "vision", "confidence": 0.9},
+          {"id": "s", "t": 20.0, "frame": 500, "type": "shot", "team": "away", "x": 12.0, "y": 30.0,
+           "player": None, "outcome": "on_target", "ball_speed_kmh": 70.0, "source": "vision",
+           "confidence": 0.9}]
+_body = condensed.build(_meta, _shots, highlights.Verdict(save_filter=True, margins={"T_s": 0.02}))
+assert [m["event"] for m in _body["highlights"]["moments"]] == ["g", "s"]
 """
 
 

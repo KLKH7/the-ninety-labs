@@ -16,7 +16,7 @@ import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, teamNames } from "../../viewer/src/teams";
+import { fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -331,6 +331,8 @@ interface BundleManifest {
   footage: { kind: "video" | "frames"; src: string; frames: number };
   detector?: string | null;
   teams?: unknown;
+  sides_known?: unknown;
+  min_team_confidence?: unknown;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -350,7 +352,21 @@ interface DetectedEvent {
   x?: number;
   y?: number;
   confidence?: number | null;
+  team_confidence?: number | null;
   interceptor?: string | null;
+}
+/** The side threshold the fact-checker uses (the bundle's `min_team_confidence`, from
+ * ninety/agents/factcheck.py); null for a bundle that does not say, where every detected side is unsure. */
+let minTeamConfidence: number | null = null;
+
+/** An event's side, only where the fact-checker would name it (factcheck.side_known): ground truth
+ * (no detection confidence), or a detection whose side was told above the threshold. Else null, and
+ * no screen names a club for it. */
+function sureSide(e: DetectedEvent): "home" | "away" | null {
+  if (e.team !== "home" && e.team !== "away") return null;
+  if (e.confidence === undefined || e.confidence === null) return e.team;
+  const told = e.team_confidence;
+  return minTeamConfidence !== null && typeof told === "number" && told > minTeamConfidence ? e.team : null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
@@ -376,6 +392,8 @@ async function loadBundle() {
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
     Object.assign(teams, teamNames(m.teams));
+    setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
+    minTeamConfidence = typeof m.min_team_confidence === "number" ? m.min_team_confidence : null;
     showTeams();
     const cuts = timeline(m);
     laptop.cuts = cuts;
@@ -1144,10 +1162,13 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** Questions this fan has already asked: never suggested back to them. */
+const asked = new Set<string>();
+
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
-  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
+  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
 }
 
@@ -1190,6 +1211,8 @@ async function ask(text: string) {
   const input = $<HTMLInputElement>("question");
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
+  asked.add(q);
+  renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
   const at = state.card && state.card.player === state.selected ? state.card.t_to : Math.round(Math.max(0, laptop.time()) * 10) / 10;
@@ -1707,12 +1730,14 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 /** A detected event as a play-by-play line (Apple Sports: "Kyle Walker takes a throw-in."), from
  * its own fields only; a player the detection did not name is his club. */
 function playSentence(e: DetectedEvent): string | null {
-  const side = e.team === "home" || e.team === "away" ? e.team : null;
+  const side = sureSide(e);
   // A tracked player nobody has named is "a London player", never the tracker's number; a pass
   // between two of them reaches "a teammate".
   const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
   const low = (t: string) => t.replace(/^A /, "a "); // named() capitalises a sentence's first word
-  const to = (id: string) => (isTrack(id) && e.player && isTrack(e.player) && team(id) === team(e.player) ? "a teammate" : low(named(id)));
+  // "a teammate" only when both sides are vouched for: the id letters are the tracker's votes.
+  const mates = (id: string) => !!e.player && isTrack(id) && isTrack(e.player) && !sideUnsure(id) && !sideUnsure(e.player);
+  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(named(id)));
   switch (e.type) {
     case "pass":
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
@@ -1785,8 +1810,7 @@ function renderInsights() {
   for (const e of plays) {
     const goal = e.type === "shot" && e.outcome === "goal";
     if (key && !goal) continue;
-    const side = e.team === "home" || e.team === "away" ? e.team : null;
-    const { li } = storyItem(side, playSentence(e)!, e.t);
+    const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
     li.dataset.event = e.id;
     if (goal) {
@@ -1852,14 +1876,14 @@ function showMatch(t: number) {
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
   // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
-  // when the detection names no player).
-  const scored = m.goals.filter((g) => g.t <= t && g.team);
+  // when the detection names no player, or "Goal 43′" when its side was not told surely).
+  const scored = m.goals.filter((g) => g.t <= t);
   const scorers = $("scorers");
   scorers.hidden = scored.length === 0;
   const said = scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
-      return `${who ? playerName(who) : teams[g.team!]} ${Math.floor(g.t / 60) + 1}′`;
+      return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
     })
     .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
@@ -1982,22 +2006,27 @@ $("shot-filter").addEventListener("ionChange", (e) => {
 
 function renderShots(t: number) {
   const min = state.match?.min_confidence ?? 1;
-  const all: shotMap.Shot[] = [...bundleEvents.values()]
+  const all: (shotMap.Shot & { sure: boolean })[] = [...bundleEvents.values()]
     .filter((e) => e.type === "shot" && e.t <= t && (e.team === "home" || e.team === "away") && e.x !== undefined && e.y !== undefined && (e.confidence ?? 0) >= min)
-    .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null }));
+    .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null, sure: sureSide(e) !== null }));
   $("shot-map").hidden = all.length === 0;
-  const shown = all.filter((s) => shotFilter === "all" || s.team === shotFilter);
+  // A shot on an unsure side is in "All" only: no club's filter claims it.
+  const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
   const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
   if (key === shotsKey) return;
   shotsKey = key;
   const svg = $("shots") as unknown as SVGSVGElement;
-  shotMap.draw(svg, shown);
+  // Placed and coloured only on a sure side: where a shot sits on the half pitch is read from the
+  // direction its side attacks. An unsure one is listed, not drawn.
+  shotMap.draw(svg, shown.filter((s) => s.sure));
   const goals = shown.filter((s) => s.outcome === "goal").length;
   svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
-      li.textContent = `${momentum.minuteOf(s.t)}′ ${s.player ? playerName(s.player) : teams[s.team]}, ${shotMap.label(s.outcome)}, from the ${zoneFor(s.team, s.x, s.y)}`;
+      // Who and where only on a sure side: the zone is read from that side's direction of attack.
+      const who = s.player ? playerName(s.player) : s.sure ? teams[s.team] : "A shot";
+      li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
   );
