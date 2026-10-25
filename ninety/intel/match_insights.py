@@ -395,8 +395,13 @@ class MatchInsights:
             if kind == "line_break":
                 rows = sorted(rows, key=lambda r: (-r["value"], r["t"]))[:TOP_LINE_BREAKS]
             moments += rows
-        moments.sort(key=lambda r: -r["t"])
-        return {"facts": moments[:MAX_FACTS], "summary": []}
+        # Every goal stays, however many other moments there are: a recap never drops a goal. The
+        # rest fill the remaining places, latest first.
+        goals = [r for r in moments if r["kind"] == "goal"]
+        rest = sorted((r for r in moments if r["kind"] != "goal"), key=lambda r: -r["t"])
+        kept = goals + rest[: max(0, MAX_FACTS - len(goals))]
+        kept.sort(key=lambda r: -r["t"])
+        return {"facts": kept, "summary": []}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)

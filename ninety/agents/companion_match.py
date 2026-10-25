@@ -637,7 +637,8 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     A question of another kind is headed by the lead number, or by nothing."""
     kind = question_kind(question)
     goal = next((f for f in cited if f.get("kind") == "goal" and f.get("club") and f.get("minute")), None)
-    if goal is not None and kind != "who":  # a recap with a goal in it leads with the goal
+    recap = {"key_moments", "goal_build_up"} & set(route(question))
+    if goal is not None and kind != "who" and recap:  # a recap or a goal question leads with the goal
         return f"Goal: {_short(insights, goal['club'])}, minute {goal['minute']}"
     if kind == "who":
         got = next((h for f in cited if (h := _who(f, insights))), None)
