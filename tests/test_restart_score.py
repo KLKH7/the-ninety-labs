@@ -157,3 +157,68 @@ def test_the_command_line_refuses_a_test_clip(tmp_path):
     c = clip(tmp_path, seed=TEST_SEEDS[0])
     with pytest.raises(SystemExit, match="refused"):
         rsc.main([str(c), str(found(tmp_path, {"t": 2.4, "team": "home"}))])
+
+
+def set_piece_clip(tmp_path, kick_at=60, spot=(104.5, 67.5), team="home", name="sp"):
+    """Out over the goal line by the defending side at frame 10, a corner set at `spot` for `team`
+    (the engine's event at frame 30), kicked at `kick_at`."""
+    d = tmp_path / name
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"seed": VALIDATION_SEED}))
+    rows = []
+    for f in range(120):
+        x = spot[0] if f <= kick_at else spot[0] - 0.4 * (f - kick_at)
+        rows.append({"frame": f, "t": round(f / FPS, 2), "ball": {"x": x, "y": spot[1], "z": 0.0}})
+    (d / "frames.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = {"id": "e00001", "t": 0.4, "frame": 10, "type": "out_of_play", "team": "away",
+           "x": 105.0, "y": 60.0, "source": "truth"}
+    setp = {"id": "e00002", "t": 1.2, "frame": 30, "type": "set_piece", "team": team,
+            "x": spot[0], "y": spot[1], "source": "truth"}
+    evs = [out, setp]
+    (d / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in evs))
+    return d
+
+
+def sp(t, team="home", restart="corner"):
+    return {"type": "set_piece", "t": t, "frame": round(t * FPS), "team": team, "restart": restart,
+            "x": 104.5, "y": 67.5}
+
+
+def test_a_true_set_piece_is_timed_at_its_kick_with_its_kind_from_the_answer_key(tmp_path):
+    [t] = rsc.truth_set_pieces(set_piece_clip(tmp_path))
+    assert (t["kind"], t["event_frame"], t["frame"], t["t"]) == ("corner", 30, 60, 2.4)
+
+
+def test_a_set_piece_matches_with_its_kind_and_side_within_the_window_of_the_kick(tmp_path):
+    c = set_piece_clip(tmp_path)
+    right = rsc.score_set_pieces([(c, found(tmp_path, sp(2.4 + rsc.WINDOW_S)))])
+    assert (right["recall"]["k"], right["precision"]["k"], right["timing_error_s"]) == (1, 1, [1.0])
+    at_the_event = rsc.score_set_pieces([(c, found(tmp_path, sp(1.2 - 0.1)))])  # the engine's event
+    assert at_the_event["recall"]["k"] == 0 and at_the_event["recall_time_only"]["k"] == 0
+
+
+def test_the_wrong_kind_or_side_is_counted_apart_and_in_the_confusion(tmp_path):
+    c = set_piece_clip(tmp_path)
+    wrong_kind = rsc.score_set_pieces([(c, found(tmp_path, sp(2.4, restart="free_kick")))])
+    ks = [wrong_kind[r]["k"] for r in ("recall", "recall_side_only", "recall_kind_only")]
+    assert ks == [0, 1, 0]
+    assert wrong_kind["confusion"]["corner"]["free_kick"] == 1
+    assert wrong_kind["clips"][0]["false"][0]["restart"] == "free_kick"
+    wrong_side = rsc.score_set_pieces([(c, found(tmp_path, sp(2.4, team="away")))])
+    ks = [wrong_side[r]["k"] for r in ("recall", "recall_kind_only", "recall_side_only")]
+    assert ks == [0, 1, 0]
+    nothing = rsc.score_set_pieces([(c, found(tmp_path))])
+    assert nothing["confusion"]["corner"]["missed"] == 1
+    assert nothing["per_kind"]["corner"] == {"true": 1, "found": 0}
+
+
+def test_set_pieces_on_a_test_clip_are_refused(tmp_path):
+    c = set_piece_clip(tmp_path)
+    (c / "meta.json").write_text(json.dumps({"seed": 920201}))
+    try:
+        rsc.score_set_pieces([(c, found(tmp_path, sp(2.4)))])
+    except SystemExit as e:
+        assert "refused" in str(e)
+    else:
+        raise AssertionError("a test clip was graded")
+

@@ -24,6 +24,13 @@ the set-piece set's test split (920201 to 920230), or whose seed cannot be read,
 Headline: recall and precision with the side right (type and team, as event_score grades every
 event), with 95% Wilson intervals; beside them, the same with the side not asked, and the timing
 error of each match.
+
+**Set pieces** (`--set-pieces`), by the plan's rule for them: each true `set_piece` is timed at its
+kick as a kick-off is (`kick_frame`), its kind read from the answer key by `restart_kind`
+(ninety/eval/set_piece_set.py: the event that stopped play and where the ball was placed), and a
+detection matches with the same kind (`restart`) and side within WINDOW_S of that kick. Beside the
+headline: the kind not asked, the side not asked, and a confusion table of the kinds over the
+detections matched on time alone.
 """
 
 from __future__ import annotations
@@ -94,10 +101,12 @@ def truth_kickoffs(clip: Path) -> list[dict]:
     return out
 
 
-def match(truth: list[dict], detected: list[dict], sided: bool) -> list[tuple[dict, dict]]:
+def match(truth: list[dict], detected: list[dict], sided: bool,
+          kinded: bool = False) -> list[tuple[dict, dict]]:
     cands = sorted((abs(d["t"] - t["t"]), i, j) for i, t in enumerate(truth) for j, d in enumerate(detected)
                    if abs(d["t"] - t["t"]) <= WINDOW_S + EPS
-                   and (not sided or d["team"] == t["team"]))
+                   and (not sided or d["team"] == t["team"])
+                   and (not kinded or d.get("restart") == t["kind"]))
     used_t, used_d, pairs = set(), set(), []
     for _, i, j in cands:
         if i not in used_t and j not in used_d:
@@ -139,16 +148,91 @@ def score(pairs_of_files: list[tuple[Path, Path]], final_test: bool = False) -> 
     }
 
 
+def truth_set_pieces(clip: Path) -> list[dict]:
+    """Every true set piece whose kick the clip shows, timed at the kick, with its kind."""
+    from ninety.eval.set_piece_set import restarts
+
+    events = _jsonl(clip / "events.jsonl")
+    frames = {r["frame"]: r for r in _jsonl(clip / "frames.jsonl")}
+    kind_at = {r["frame"]: r["kind"] for r in restarts(events)}
+    out = []
+    for e in events:
+        if e["type"] != "set_piece":
+            continue
+        k = kick_frame(e, frames)
+        if k is not None:
+            out.append({"id": e["id"], "team": e["team"], "kind": kind_at[e["frame"]],
+                        "event_frame": e["frame"], "frame": k, "t": frames[k]["t"], "x": e["x"], "y": e["y"]})
+    return out
+
+
+def score_set_pieces(pairs_of_files: list[tuple[Path, Path]], final_test: bool = False) -> dict:
+    from ninety.eval.set_piece_set import KINDS
+
+    refuse_test([clip for clip, _ in pairs_of_files], final_test)
+    kinds = [k for k in KINDS if k != "kick_off"]
+    ways = {"kind_and_side": (True, True), "kind_only": (False, True), "side_only": (True, False),
+            "time_only": (False, False)}
+    hits = dict.fromkeys(ways, 0)
+    n_true = n_det = 0
+    confusion = {k: dict.fromkeys((*kinds, "missed"), 0) for k in kinds}
+    per_kind = {k: {"true": 0, "found": 0} for k in kinds}
+    clips, dts = [], []
+    for clip, found in pairs_of_files:
+        truth = truth_set_pieces(clip)
+        det = [e for e in _jsonl(found) if e["type"] == "set_piece"]
+        n_true, n_det = n_true + len(truth), n_det + len(det)
+        pairs = {w: match(truth, det, sided, kinded) for w, (sided, kinded) in ways.items()}
+        for w in ways:
+            hits[w] += len(pairs[w])
+        dts += [round(d["t"] - t["t"], 2) for t, d in pairs["kind_and_side"]]
+        on_time = {t["id"]: d for t, d in pairs["time_only"]}
+        right = {t["id"] for t, _ in pairs["kind_and_side"]}
+        for t in truth:
+            per_kind[t["kind"]]["true"] += 1
+            per_kind[t["kind"]]["found"] += t["id"] in right
+            d = on_time.get(t["id"])
+            confusion[t["kind"]][(d.get("restart") or "missed") if d else "missed"] += 1
+        used = {d["id"] for _, d in pairs["kind_and_side"]}
+        clips.append({
+            "clip": clip.name, "true": len(truth), "detected": len(det), "matched": len(right),
+            "restarts": [{**t, "found": on_time[t["id"]]["restart"] if t["id"] in on_time else None,
+                          "side_found": on_time[t["id"]]["team"] if t["id"] in on_time else None,
+                          "dt_s": round(on_time[t["id"]]["t"] - t["t"], 2) if t["id"] in on_time else None,
+                          "matched": t["id"] in right} for t in truth],
+            "false": [{"id": d["id"], "frame": d["frame"], "team": d["team"], "restart": d.get("restart"),
+                       "x": d["x"], "y": d["y"]} for d in det if d["id"] not in used],
+        })
+
+    def rate(k: int, n: int) -> dict:
+        return {"k": k, "n": n, "rate": round(k / n, 3) if n else None, "wilson95": wilson(k, n)}
+
+    return {
+        "kind": "set_piece",
+        "window_s": WINDOW_S,
+        "recall": rate(hits["kind_and_side"], n_true),
+        "precision": rate(hits["kind_and_side"], n_det),
+        **{f"recall_{w}": rate(hits[w], n_true) for w in ("kind_only", "side_only", "time_only")},
+        "per_kind": per_kind,
+        "confusion": confusion,
+        "timing_error_s": sorted(dts),
+        "clips": clips,
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Grade detected kick-offs against the answer key.")
     ap.add_argument("pairs", nargs="+", type=Path, help="clip folder, then its restarts.jsonl, repeated")
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--set-pieces", action="store_true",
+                    help="grade set pieces and their kind instead of kick-offs")
     ap.add_argument("--final-test", action="store_true",
                     help="score test seeds (900001-900030, the shot-outcome and set-piece test splits): once")
     a = ap.parse_args(argv)
     if len(a.pairs) % 2:
         raise SystemExit("give a restarts file after each clip folder")
-    report = score(list(zip(a.pairs[::2], a.pairs[1::2], strict=True)), a.final_test)
+    grade = score_set_pieces if a.set_pieces else score
+    report = grade(list(zip(a.pairs[::2], a.pairs[1::2], strict=True)), a.final_test)
     text = json.dumps(report, indent=2) + "\n"
     if a.out:
         a.out.write_text(text, encoding="utf-8")

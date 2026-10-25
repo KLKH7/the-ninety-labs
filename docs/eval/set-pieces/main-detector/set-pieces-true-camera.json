@@ -1,0 +1,220 @@
+{
+  "kind": "set_piece",
+  "window_s": 1.0,
+  "recall": {
+    "k": 2,
+    "n": 4,
+    "rate": 0.5,
+    "wilson95": [
+      0.15,
+      0.85
+    ]
+  },
+  "precision": {
+    "k": 2,
+    "n": 3,
+    "rate": 0.667,
+    "wilson95": [
+      0.21,
+      0.94
+    ]
+  },
+  "recall_kind_only": {
+    "k": 3,
+    "n": 4,
+    "rate": 0.75,
+    "wilson95": [
+      0.3,
+      0.95
+    ]
+  },
+  "recall_side_only": {
+    "k": 2,
+    "n": 4,
+    "rate": 0.5,
+    "wilson95": [
+      0.15,
+      0.85
+    ]
+  },
+  "recall_time_only": {
+    "k": 3,
+    "n": 4,
+    "rate": 0.75,
+    "wilson95": [
+      0.3,
+      0.95
+    ]
+  },
+  "per_kind": {
+    "throw_in": {
+      "true": 1,
+      "found": 0
+    },
+    "goal_kick": {
+      "true": 1,
+      "found": 0
+    },
+    "corner": {
+      "true": 1,
+      "found": 1
+    },
+    "free_kick": {
+      "true": 1,
+      "found": 1
+    },
+    "penalty_kick": {
+      "true": 0,
+      "found": 0
+    }
+  },
+  "confusion": {
+    "throw_in": {
+      "throw_in": 1,
+      "goal_kick": 0,
+      "corner": 0,
+      "free_kick": 0,
+      "penalty_kick": 0,
+      "missed": 0
+    },
+    "goal_kick": {
+      "throw_in": 0,
+      "goal_kick": 0,
+      "corner": 0,
+      "free_kick": 0,
+      "penalty_kick": 0,
+      "missed": 1
+    },
+    "corner": {
+      "throw_in": 0,
+      "goal_kick": 0,
+      "corner": 1,
+      "free_kick": 0,
+      "penalty_kick": 0,
+      "missed": 0
+    },
+    "free_kick": {
+      "throw_in": 0,
+      "goal_kick": 0,
+      "corner": 0,
+      "free_kick": 1,
+      "penalty_kick": 0,
+      "missed": 0
+    },
+    "penalty_kick": {
+      "throw_in": 0,
+      "goal_kick": 0,
+      "corner": 0,
+      "free_kick": 0,
+      "penalty_kick": 0,
+      "missed": 0
+    }
+  },
+  "timing_error_s": [
+    0.08,
+    0.12
+  ],
+  "clips": [
+    {
+      "clip": "seed920101-421",
+      "true": 1,
+      "detected": 1,
+      "matched": 0,
+      "restarts": [
+        {
+          "id": "e00011",
+          "team": "home",
+          "kind": "throw_in",
+          "event_frame": 925,
+          "frame": 933,
+          "t": 37.32,
+          "x": 67.1,
+          "y": 68.0,
+          "found": "throw_in",
+          "side_found": "away",
+          "dt_s": -0.32,
+          "matched": false
+        }
+      ],
+      "false": [
+        {
+          "id": "r00001",
+          "frame": 925,
+          "team": "away",
+          "restart": "throw_in",
+          "x": 67.1,
+          "y": 68.0
+        }
+      ]
+    },
+    {
+      "clip": "seed920108-1061",
+      "true": 1,
+      "detected": 1,
+      "matched": 1,
+      "restarts": [
+        {
+          "id": "e00027",
+          "team": "home",
+          "kind": "free_kick",
+          "event_frame": 1951,
+          "frame": 1994,
+          "t": 79.76,
+          "x": 15.14,
+          "y": 10.55,
+          "found": "free_kick",
+          "side_found": "home",
+          "dt_s": 0.12,
+          "matched": true
+        }
+      ],
+      "false": []
+    },
+    {
+      "clip": "seed920106-4570",
+      "true": 1,
+      "detected": 0,
+      "matched": 0,
+      "restarts": [
+        {
+          "id": "e00078",
+          "team": "home",
+          "kind": "goal_kick",
+          "event_frame": 5280,
+          "frame": 5321,
+          "t": 212.84,
+          "x": 5.5,
+          "y": 34.0,
+          "found": null,
+          "side_found": null,
+          "dt_s": null,
+          "matched": false
+        }
+      ],
+      "false": []
+    },
+    {
+      "clip": "seed920109-3109",
+      "true": 1,
+      "detected": 1,
+      "matched": 1,
+      "restarts": [
+        {
+          "id": "e00035",
+          "team": "home",
+          "kind": "corner",
+          "event_frame": 3937,
+          "frame": 3942,
+          "t": 157.68,
+          "x": 104.5,
+          "y": 0.5,
+          "found": "corner",
+          "side_found": "home",
+          "dt_s": 0.08,
+          "matched": true
+        }
+      ],
+      "false": []
+    }
+  ]
+}

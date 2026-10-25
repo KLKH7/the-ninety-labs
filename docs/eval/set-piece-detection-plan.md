@@ -313,3 +313,39 @@ detections. Every clip rendered here at `65247ba` passes `ninety-validate`.
 - **Correction to amendment 2's figures** (read then from the gantries by eye): measured as
   distances, the live fit's gantry is 16.6 m from the true one on the possession sample, 22.4 m on
   the throw-in clip and 11.4 m on the corner clip; each true gantry lies inside the search grid.
+
+## The detector on main measured on these clips (2026-10-25)
+
+While this branch was open, `main` merged its own restart detector in the same module
+(`ninety/vision/restarts.py`, #320 for kick-offs and #325 for set pieces, Kian's, with its plan
+[restarts-vision-plan.md](restarts-vision-plan.md) and the schema's optional `restart` kind). This
+branch's own detector (above) is set aside for it, by the maintainer's decision; its reports are kept
+in `set-pieces/set-aside-detector/`. What this branch still adds: the four rendered validation clips,
+`label_detections.py`, `true_camera.py`, and the set-piece grading that plan describes ("same kind
+and side, within 1.0 s of the true kick", `restart_score.py --set-pieces`; the kick-off grading is
+unchanged). Nothing in that detector was changed or tuned on these clips.
+
+Same clips, same observations (the live ones are today's live path: the merge changed only the fixed
+lenses' band), drawn labels as detections, graded at the true kick
+([main-detector/](set-pieces/main-detector/)):
+
+| Restart | Live | True camera (diagnostic) |
+|---|---|---|
+| kick-off after a goal | **found**, side right, 0.12 s from the kick | **found**, the same |
+| free kick | **found**, kind and side right, 0.12 s | **found**, the same |
+| corner | missed: no trusted camera | **found**, kind and side right, 0.08 s |
+| goal kick | missed: refused by Law 16's check | missed, the same |
+| throw-in | missed: no trusted camera | found as a throw-in 0.32 s early, **wrong side** |
+
+- **Live:** kick-offs 1 of 1; set pieces 1 of 4 (Wilson 95% 0.05 to 0.70), precision 1 of 1; no
+  false restart. **True camera:** kick-offs 1 of 1; set pieces 2 of 4, precision 2 of 3.
+- **The kind is right on every set piece found** (1 of 1 live, 3 of 3 through the true camera).
+- **Why each is missed:**
+  - the camera fit (the throw-in and corner clips, live);
+  - the side naming (`track.assign_teams`), which is shared with every other event:
+    - on the goal-kick clip, two home centre-backs (h3, h4) are given the away side, so "no
+      opponent in the penalty area" (Law 16) refuses the kick;
+    - on the throw-in clip every side is flipped, so the throw-in is found under the wrong side.
+- **Timing at the kick** (that plan's rule, also open question 2 above) puts every found restart
+  within 0.12 s. Graded instead at the answer key's event, as event_score does, only the corner
+  (which the engine writes as its taker strikes it) would match.
