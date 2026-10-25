@@ -85,8 +85,12 @@
           <li>Two fixed whole-pitch tactical views beside the broadcast give the players; the broadcast gives the
             ball and the events. The two cameras are joined on the pitch.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association.md">Join</a></li>
-          <li>Passes, shots and the ball going out are detected from possession, from the pixels alone, and the live path
-            loads detected events only; a test fails if it ever opens the answer key.
+          <li>Events are read from possession, from the pixels alone. On the frozen test clips, scored once:
+            passes <data value="7" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.tp" data-fmt="int">7</data> found of <data value="13" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>; the only shot,
+            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, was missed (read as a pass); the ball going out was detected
+            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.out_of_play.fp" data-fmt="int">1</data> time where it did not go out.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">Event report</a></li>
+          <li>The live path loads detected events only; a test fails if it ever opens the answer key.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_live_reads_no_truth.py">Test</a></li>
         </ul>
         <p class="label">Not yet</p>
@@ -132,6 +136,7 @@
             <data value="10" data-src="docs/eval/ablation-agents.json" data-key="arms.one agent.aired" data-fmt="int">10</data>; the graph aired
             <data value="1" data-src="docs/eval/ablation-agents.json" data-key="arms.graph.false_aired" data-fmt="int">1</data> of
             <data value="24" data-src="docs/eval/ablation-agents.json" data-key="arms.graph.aired" data-fmt="int">24</data>.
+            A small sample: ten minutes of play an arm, graded by the same checks and Judge the graph uses.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/ablation-agents.md">Ablation</a></li>
           <li>A claim resting on a low-confidence detection, or naming a team whose side is unsure, is held back.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_confidence_gate.py">Test</a></li>
@@ -168,17 +173,10 @@
         <p class="label">Runs today</p>
         <ul>
           <li>Analyst, casual and audio-description personas in the viewer. Audio description speaks only fact-checked
-            lines, each close to its play and placed in stereo where the ball is, in one neural voice:
-            <data value="0.54" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p50_s" data-fmt="2">0.54</data> s
-            a line at the median,
-            <data value="0.85" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p95_s" data-fmt="2">0.85</data> s
-            at the slow end.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/speech-latency.md">Speech latency</a></li>
-          <li>A Personalizer agent over <abbr title="Agent2Agent protocol">A2A</abbr> writes per-persona variants in English
-            and Spanish; each passes the fact-checker again before it airs.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/personalizer.md">Evaluation</a></li>
-          <li>A phone companion, deployed: a radar of the whole pitch from the video's tracked positions, player cards,
-            hidden-stat cards with "Why?", and questions answered from code's facts. Team distance is shown with
+            lines, each close to its play and placed in stereo where the ball is.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/describe.py">Describer</a></li>
+          <li>A phone companion, deployed, following the clip the big screen plays: a radar of the whole pitch from the
+            video's tracked positions, player cards, and questions answered from code's facts. Team distance is shown with
             &plusmn;<data value="21" data-src="ninety/intel/team_distance_calibration.json" data-key="within_pct" data-fmt="int">21</data>%,
             its measured worst case.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/team_distance_calibration.json">Calibration</a>,
@@ -186,10 +184,22 @@
         </ul>
         <p class="label">Not yet</p>
         <ul>
+          <li><span class="tag progress">in progress</span> One pinned neural voice for every line, pre-generated:
+            <data value="0.54" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p50_s" data-fmt="2">0.54</data> s
+            a line at the median,
+            <data value="0.85" data-src="docs/eval/speech-latency.json" data-key="build.lines.synth_p95_s" data-fmt="2">0.85</data> s
+            at the slow end. The deployed replay was built before it, and the phone reads aloud in the device's own voice.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/speech-latency.md">Speech latency</a></li>
+          <li><span class="tag progress">in progress</span> A Personalizer agent over <abbr title="Agent2Agent protocol">A2A</abbr>
+            writing per-persona variants in English and Spanish, each re-checked before it airs; evaluated live, where some
+            casual variants were dropped by the re-check. Behind a flag: not yet in the demo chain or deployed.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/personalizer.md">Evaluation</a></li>
+          <li><span class="tag progress">in progress</span> Hidden-stat cards with "Why?" on the phone (built and tested
+            on the phone's mock; not in the deployed replay yet).</li>
           <li><span class="tag progress">in progress</span> The phone's Companion agent airing its own fact-checked
             sentences (so far every answer measured live was code's own).</li>
           <li><span class="tag planned">planned</span> Player cam, a single-metric view and a voice per language.</li>
-        </ul>
+</ul>
       </li>
     </ol>
   </div>
@@ -421,7 +431,7 @@
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/mcp/match_server.py">MCP server</a></td></tr>
           <tr><th scope="row">Azure AI Speech</th>
-            <td>One pinned neural voice for audio description and read-aloud on the phone</td>
+            <td>One pinned neural voice for audio description lines, pre-generated at build time</td>
             <td><span class="tag running">running</span></td>
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/tts.py">Speech</a></td></tr>
           <tr><th scope="row">Azure Container Apps</th>
