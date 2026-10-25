@@ -68,9 +68,9 @@ def _inside(mi) -> Callable[[int], dict]:
     (the merge queue's review of #318), as well as every shot's side known."""
     base = _summary(mi.shots, "shots", "inside_box")
 
-    def at(m: int) -> dict:
-        out = base(m)
-        rows = [r for r in mi.shots(1, m)["summary"] if r.get("metric") == "shots"]
+    def at(m: int, lo: int = 1) -> dict:
+        out = base(m, lo)
+        rows = [r for r in mi.shots(lo, m)["summary"] if r.get("metric") == "shots"]
         out["confident"] = out["confident"] and all(r.get("inside_exact", True) for r in rows)
         return out
 
