@@ -203,16 +203,19 @@ def test_the_zone_says_it_is_of_the_footage_the_video_named_him_in():
     ]
 
 
-def _zone_reply(mi, q):
-    """A model that plans the physical tool and answers with the first zone sentence."""
+def _zone_reply(mi, q, who=None):
+    """A model that plans the physical tool and answers with a zone sentence (the first, or who's)."""
     import asyncio
     import json
 
     from ninety.agents.contracts import Question
 
-    zone = next(f for f in mi.physical(1, 20)["facts"] if f["metric"] == "player_zone")
+    zone = next(
+        f for f in mi.physical(6, 20)["facts"]
+        if f["metric"] == "player_zone" and who in (None, f["player_is"])
+    )
     replies = [
-        json.dumps({"tools": [{"name": "physical", "minute_from": 1, "minute_to": 20}]}),
+        json.dumps({"tools": [{"name": "physical", "minute_from": 6, "minute_to": 20}]}),
         json.dumps({"text": cm.code_texts(zone)[0], "evidence": [zone["id"]]}),
     ]
 
@@ -231,17 +234,45 @@ def test_the_model_answering_a_held_figure_with_the_zone_falls_back_to_not_avail
 
 
 @pytest.mark.parametrize(
-    "q", ["Where has Kai Terrow been playing?", "Where did Theo Cindell play?",
-          "Show me the heat map"],
+    "q, who",
+    [("Where did Theo Cindell play?", "Theo Cindell"), ("Where has Theo been playing?", "Theo Cindell"),
+     ("Where has London Athletic's left-back been playing?", None)],
 )
-def test_a_question_of_place_still_gets_the_zone(q):
+def test_a_question_of_place_about_one_player_gets_his_zone(q, who):
     from ninety.agents.contracts import Question
 
     mi = _standin()
     a, calls = cm.code_match_answer(Question("s", None, q, 60.0 * 20 - 1), mi)
     assert "physical" in [c["name"] for c in calls]
     assert a.status == "verified" and "most often in their" in a.text
-    assert _zone_reply(mi, q).source == "model"
+    who = who or a.text.split(" was most often")[0]
+    assert a.text.startswith(who)
+    assert _zone_reply(mi, q, who).source == "model"
+    # the model telling another player's zone is refused: code answers about the one asked
+    other = next(f["player_is"] for f in mi.physical(6, 20)["facts"]
+                 if f["metric"] == "player_zone" and f["player_is"] != who)
+    r = _zone_reply(mi, q, other)
+    assert r.source == "code" and r.answer.text.startswith(who)
+
+
+# The merge queue's delta review of #323: a side alone leaked into the zone, and a question naming
+# a player (or several, or none) got another player's zone.
+@pytest.mark.parametrize(
+    "q, says",
+    [
+        ("Show me the heat map", "Name a player"),
+        ("Where does Alex play?", "More than one player fits"),
+        ("Where has the left-back been playing?", "More than one player fits"),
+        ("Where does Kai play?", "Name a player"),
+        ("Who is on the left?", "isn't available yet"),
+        ("How much has the left back done?", "isn't available yet"),
+        ("Who is out of position?", "isn't available yet"),
+    ],
+)
+def test_the_zone_is_never_another_players_or_an_answer_to_a_side(q, says):
+    r = _zone_reply(_standin(), q)
+    assert r.source == "code" and r.answer.status == "unanswerable" and says in r.answer.text
+    assert r.answer.headline is None
 
 
 def test_the_top_speed_bar_is_the_worst_measured_track_on_the_clip():
@@ -289,7 +320,7 @@ def test_with_only_top_speed_said_the_fastest_is_the_maximum_and_not_the_distanc
     assert cited["value"] == max(f["value"] for f in rows)
     # a model answering "fastest" with a zone sentence is refused, even though the zone is true
     r = _zone_reply(mi, "Who is the fastest player?")
-    assert r.source == "code" and "the question asks for a top speed; the answer cites none" in r.reasons
+    assert r.source == "code" and any("player_top_kmh; it cites another" in x for x in r.reasons)
 
 
 @pytest.mark.parametrize("q", ["Who has been the best player?", "Who is working hardest?"])
@@ -300,6 +331,7 @@ def test_a_question_asking_no_place_is_never_answered_with_the_zone(q):
     assert r.source == "code" and r.answer.status == "unanswerable" and r.answer.headline is None
 
 
-def test_once_a_figure_is_said_a_question_asking_no_place_is_answered(monkeypatch):
+def test_once_a_figure_is_said_a_question_asking_no_figure_and_no_place_is_still_not_answered(monkeypatch):
     monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10})
-    assert _zone_reply(_standin(), "Who has been the best player?").source == "model"
+    r = _zone_reply(_standin(), "Who has been the best player?")
+    assert r.source == "code" and r.answer.status == "unanswerable"
