@@ -229,11 +229,13 @@ def _other(team: str) -> str:
     return "away" if team == "home" else "home"
 
 
-def ends_at_goal(p: BallPoint, end: BallPoint, holder: Track | None, side: str) -> bool:
+def ends_at_goal(p: BallPoint, end: BallPoint, holder: Track | None, side: str,
+                 tracks: list[Track] = ()) -> bool:
     """Amendment 3 (docs/eval/shot-outcomes-plan.md): the move from the strike at p ends at the goal
     `side` attacks: the line from p to its end crosses that goal line between the widened posts,
     from within SHOT_MAX_M, and the move ends with a keeper's spell inside that goal's penalty area
-    (Law 1) or with the ball over that goal line."""
+    (Law 1) or with the ball over that goal line. A keeper is rule 5's (outcomes.keeper_of,
+    amendment 6): marked keeper, or the player nearest that goal line inside its area."""
     if not 0.0 <= p.x <= PITCH_X:
         return False
     gx = PITCH_X if _attacks_right(side) else 0.0
@@ -244,11 +246,12 @@ def ends_at_goal(p: BallPoint, end: BallPoint, holder: Track | None, side: str) 
         return False
     if holder is None:
         return outcomes.behind(end, side) > 0
-    return holder.keeper and abs(end.x - gx) <= outcomes.PENALTY_AREA_X
+    keepers = {id(t) for t in outcomes.keeper_of(list(tracks), end.frame, _other(side))}
+    return (holder.keeper or id(holder) in keepers) and abs(end.x - gx) <= outcomes.PENALTY_AREA_X
 
 
 def shot_side(path: list[BallPoint], i: int, team: str, end: BallPoint | None,
-              holder: Track | None) -> str | None:
+              holder: Track | None, tracks: list[Track] = ()) -> str | None:
     """The side a strike at path[i] is a shot for, or None (amendment 3): the side attacking the goal
     it heads for (the engine's convention, the one `assign_teams` names sides by), tested toward
     both goals so a side read wrong does not make a shot a pass; by its first SHOT_LOOK_S
@@ -258,7 +261,7 @@ def shot_side(path: list[BallPoint], i: int, team: str, end: BallPoint | None,
             return side
     if end is not None:
         for side in (team, _other(team)):
-            if ends_at_goal(path[i], end, holder, side):
+            if ends_at_goal(path[i], end, holder, side, tracks):
                 return side
     return None
 
@@ -398,7 +401,7 @@ def detect(rows: list[dict], join_breaks: bool = True,
         # Where his move ended: over a line first, else at the next spell.
         end = path[index[gone]] if gone is not None else path[index[b.first]] if b is not None else None
         holder = b.track if gone is None and b is not None else None
-        shooter = shot_side(path, i, team, end, holder)
+        shooter = shot_side(path, i, team, end, holder, tracks)
         shot = shooter is not None
         # The kit's side stands where the goal agrees with it; where it does not, the side is unsure.
         side_conf = a.track.side_confidence if shooter == team else None

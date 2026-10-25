@@ -192,13 +192,13 @@ def goal_y(path: list[BallPoint], i: int, team: str, look: int) -> float | None:
 
 def keeper_of(tracks: list[Track], frame: int, defending: str | None) -> list[Track]:
     """The defending keeper candidates at a frame: tracks marked keeper (kit unlike either side,
-    in a penalty area), and the defending side's player nearest its goal line inside its penalty
-    area."""
+    in a penalty area), and the player nearest the goal line `defending` defends inside its penalty
+    area, whatever his kit's side (amendment 6: the goal decides, as in amendment 3)."""
     out = [t for t in tracks if t.keeper and t.at(frame) is not None]
     if defending is None:
         return out
     line = PITCH_X if not attacks_right(defending) else 0.0
-    inside = [t for t in tracks if t.team == defending and t.at(frame) is not None
+    inside = [t for t in tracks if t.at(frame) is not None
               and abs(t.at(frame)[0] - line) <= PENALTY_AREA_X]
     if inside:
         out.append(min(inside, key=lambda t: abs(t.at(frame)[0] - line)))

@@ -417,3 +417,23 @@ def test_a_kick_off_by_the_scorers_side_adds_no_evidence_to_a_goal_seen_in_the_n
     assert goals[0]["confidence"] == round(1 - (1 - 0.8) * (1 - 0.8), 3)
     _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=True, taker=BLUE))
     assert goals[0]["confidence"] == 0.8  # the line alone
+
+
+# Amendment 6: a keeper the kit did not mark is still the player nearest his goal line in his area.
+
+
+def test_a_save_by_a_keeper_whose_kit_reads_as_an_outfield_side_is_a_save():
+    # No green keeper: the player who takes the lofted shot has his kit read as blue (the shooter's
+    # side), and is the nearest to the goal line inside that penalty area, so he is the keeper
+    # (rule 5, by the goal, not the kit).
+    rows = shot_scene(lofted((102.7, 34.0)), others=[(103.0, 34.0), (95.0, 20.0)])
+    for r in rows:
+        r["players"][9]["rgb"] = BLUE  # the crowd's 8, the shooter, then him
+    shots, goals, _, _ = run(rows)
+    assert goals == [] and [(s["team"], s["outcome"]) for s in shots] == [("home", "on_target")]
+
+
+def test_a_player_further_from_the_goal_line_than_another_in_the_area_is_no_keeper():
+    # The same move ending with a red player at 102.7 while another stands nearer the line, at 104.5.
+    shots, _, types, _ = run(shot_scene(lofted((102.7, 34.0)), others=[(103.0, 34.0), (104.5, 20.0)]))
+    assert shots == [] and "pass" in types
