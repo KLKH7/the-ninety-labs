@@ -409,7 +409,7 @@ only the trust test and the placing run again.
 | On the pitch | each box's foot point (players) or centre one radius up (ball) through a trusted frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
 | Two views (tactical camera, planned for the demo) | each lens detected on its own (optionally as a 2 x 2 grid of overlapping tiles, boxes merged back) and placed on the pitch; a player or ball seen by both lenses merged when the two places differ by less than both measurements can miss by (each box's 99th-percentile ground-point error, measured on validation, carried to the pitch through its view's camera; [fuse-gate.md](eval/fuse-gate.md)) | `ninety/vision/tiles.py`, `ninety/vision/fuse.py` |
 | Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
-| Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
+| Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames; a possession change when a spell is the other side's and no out of play or cut lies between ([eval/possession-change-plan.md](eval/possession-change-plan.md)) | `ninety/vision/events.py` |
 
 Events are graded by the rules above (Vision scoring), unchanged: same type and team within 1.0 s,
 spot within 1.0 m (strict) of the ball at the detected time. Pitch positions use the pixel
@@ -426,7 +426,9 @@ Measured with the camera fit, the height band (0.901 to 1.002) and the trust gat
 | Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67. **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
-| Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
+| Possession changes | 1 of 5 found, none false (recall 0.20, 95% 0.04 to 0.62; strict, lenient and time-only the same), scored once with a rule that adds no constant ([eval/possession-change.md](eval/possession-change.md)). By phase: open play 1 of 4, at a restart 0 of 1 (not claimed: after an out of play or a cut no change is told). Three of the five are on 900003, whose camera is trusted on 4 frames. The open-play miss on 900001 is the keeper's save: the shot before it is read as a pass whose ball goes over the goal line (the false out of play below), so no change is told after it. **Without seed 900001:** 0 of 3. Not set or checked on validation clips: their observations were not on the machine that scored it |
+| Interceptions | not detected: the answer key records one only when a pass is taken short of where it was aimed, which the picture does not show; a failed pass names its `interceptor` |
+| Outside the detector's scope | 2 pressures, a deflection, a tackle and a set piece, counted as misses |
 | Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check's worst trusted frame on validation is 8.2 m (observed, under the 8.5 m set beforehand), against 55 m with heights alone. **That is not a bound:** frames wrong the same way agree with each other and pass together, and a wrong frame can make its good neighbour fail instead. On the test set it removes 4 of the 8 frames heights alone trusted there; **the 4 left, on 900003, are about 46 m wrong** (frames 5970 to 5976), wrong the same way, and make no event. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159). This is a second look at the test set: the check was planned because #187's test score showed these frames, so 900002's 1 to 0 is not held-out evidence |
 | Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
 | Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
@@ -450,7 +452,7 @@ turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses th
 over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
 drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
 does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
-the true camera. Possession changes and pressure are not detected; who acted is, as a track
+the true camera. Pressure is not detected, nor possession changes at restarts; who acted is, as a track
 (below), never as a shirt number.
 
 ### Who: team and track
