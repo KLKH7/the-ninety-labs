@@ -110,3 +110,34 @@ def test_a_shot_within_the_error_of_the_areas_line_leaves_the_inside_count_unsai
 def test_a_shot_of_unknown_side_is_inside_the_nearer_goals_area():
     assert shot_map.inside_box(10.0, 34.0, None) and shot_map.inside_box(95.0, 34.0, None)
     assert not shot_map.inside_box(40.0, 34.0, None)
+
+
+def test_an_unsure_inside_count_takes_no_number_after_took():
+    # The merge queue's re-review of #318: with the inside count unsure, the total filled its slot.
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    near = shot(9, "home", 105 - 16.5 - 0.8, 34)
+    fact = shot_map.summary(shot_map.shots([shot(1, "home", 94, 34), near]), 1, 90)["all"]
+    assert not fact["inside_exact"]
+    fx = Fixture(7, "OAK", "FEN")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    for k in (1, 2):
+        text = f"There were 2 shots {SPAN} {k} shot{'s' if k > 1 else ''} from inside the penalty area."
+        assert not verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok, text
+
+
+def test_a_shot_of_unknown_side_names_no_club():
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    [row] = shot_map.shots([shot(1, "away", 94.0, 34.0, side=0.9)])
+    assert row["team"] is None
+    fact = {**row, "club": None}
+    fx = Fixture(7, "OAK", "FEN")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    said = "In minute 11, Lisbon Esportes shot from 11 m out, where the posts were 37 degrees apart."
+    assert not verify(Claim(said, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok
+    assert shot_map.near_box_line(105 - 16.5 - 0.8, 34.0, None)

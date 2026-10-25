@@ -15,15 +15,24 @@ Distance is the tracked distance of the footage shown, with team distance's meas
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from ninety.intel import overloads
 from ninety.intel.scene import FPS, minute_of
 from ninety.intel.stats import SPRINT_THRESHOLD_KMH
 
 SPRINT_KMH = SPRINT_THRESHOLD_KMH  # one source, one constant (stats.py, GROUNDING I22)
+# The labels the phone says with each figure, measured on held-out simulated matches against the
+# truth (ninety/eval/physical_eval.py --calibrate, docs/eval/physical.md).
+CALIBRATION = Path(__file__).with_name("physical_calibration.json")
+
+
+def labels() -> dict:
+    return json.loads(CALIBRATION.read_text()) if CALIBRATION.exists() else {}
 MIN_SPRINT_S = 1.0
 STEP_S = 1.0  # a step a second: the tracked frames' smoothing, team distance's step (team_stats.STEP_S)
 MAX_STEP_KMH = 12.0 * 3.6  # a step past this is a track jumping, not a player (team_stats.MAX_STEP_MPS)

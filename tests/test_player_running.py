@@ -88,3 +88,77 @@ def test_a_sprint_sentence_binds_the_count_and_the_threshold(said, ok):
                                "How many sprints has Kai Terrow made?"])
 def test_running_questions_route_to_the_physical_tool(q):
     assert "physical" in cm.route(q)
+
+
+def _standin():
+    import json
+
+    from ninety.eval.companion_tools import STANDIN
+    from ninety.intel.match_insights import MatchInsights
+
+    return MatchInsights.from_dict(json.loads(STANDIN.read_text()))
+
+
+def test_named_players_running_is_held_while_its_grading_is_worse_than_team_distances():
+    # docs/eval/physical.md: the name rule leaves pieces of a player's track unnamed, so his distance
+    # can miss most of his running (±87% today, against team distance's ±21%).
+    mi = _standin()
+    facts = mi.physical(1, mi.minutes)["facts"]
+    held = [f for f in facts if f["metric"] in ("player_km", "player_top_kmh", "player_sprints")]
+    assert held and all(not f["confident"] and f["why_held"] for f in held)
+    assert all(cm.code_texts(f) == [] for f in held)
+    assert all(f["confident"] for f in facts if f["metric"] == "player_zone")
+
+
+def test_the_gate_opens_when_named_players_are_measured_well_enough(monkeypatch):
+    mi = _standin()
+    good = {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10}
+    monkeypatch.setattr(physical, "labels", lambda: good)
+    km = next(f for f in mi.physical(1, mi.minutes)["facts"] if f["metric"] == "player_km")
+    assert km["confident"] and km["within_pct"] == 10 and km["also"] == [[10, "%"]]
+
+
+def test_a_players_top_speed_is_the_fastest_of_his_pieces_not_their_sum():
+    a = physical.rows(frames([0.0, 5.0, 10.0], track="h-t1"))
+    b = physical.rows(frames([50.0, 57.0, 64.0], track="h-t2"))
+    people = {"h-t1": {"team": "home", "name": "Kai Terrow"}, "h-t2": {"team": "home", "name": "Kai Terrow"}}
+    top = next(r for r in physical.players(a + b, people, 1, 90) if r["metric"] == "player_top_kmh")
+    assert top["value"] == pytest.approx(7.0 * 3.6, abs=0.1)
+
+
+def test_the_zone_is_where_his_own_team_attacks():
+    # x = 95 is home's final third, away's own third.
+    home = physical.rows(frames([95.0, 95.5, 96.0], track="h-t1", team="home"))
+    away = physical.rows(frames([95.0, 95.5, 96.0], track="a-t1", team="away"))
+    people = {
+        "h-t1": {"team": "home", "name": "Kai Terrow"},
+        "a-t1": {"team": "away", "name": "Zane Kirrick"},
+    }
+    got = physical.players(home + away, people, 1, 90)
+    zones = {r["team"]: r["third"] for r in got if r["metric"] == "player_zone"}
+    assert zones == {"home": "final", "away": "own"}
+
+
+@pytest.mark.parametrize(
+    "fact, said",
+    [
+        ({"metric": "player_sprints", "value": 4, "unit": "times", "also": [[25.2, "km/h"]]},
+         "did not sprint above 25.2 km/h from minute 1 to minute 21."),
+        ({"metric": "player_zone", "value": None, "unit": None, "third": "own", "channel": "right"},
+         "was most often in their final third on the left from minute 1 to minute 21."),
+    ],
+)
+def test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it(fact, said):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    fx = Fixture(7, "OAK", "FEN")
+    lb = fx.sheet("home")[4]
+    who = {"track": "h-t5", "team": "home", "name": lb.name, "role": "LB", "position": "left-back",
+           "sheet_name": lb.name, "say": lb.name}
+    people = {"h-t5": who}
+    f = {"id": "x", "kind": "running", "team": "home", "club": "London Athletic", "player": "h-t5",
+         "player_is": lb.name, "minute_from": 1, "minute_to": 21, "confident": True, **fact}
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert not verify(Claim(f"{lb.name} {said}", ["x"]), {"x": f}, fx.clubs, people, names).ok

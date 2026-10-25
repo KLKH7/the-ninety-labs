@@ -123,7 +123,7 @@ class MatchInsights:
         facts["save"] = scoring.saves(events)
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
                 for k in ("passer", "receiver", "assister"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
@@ -295,7 +295,7 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, as broadcasters count possession."""
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
         return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
 
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
@@ -338,16 +338,26 @@ class MatchInsights:
         """Each named player's distance (km, from the footage shown, with its measured label), top
         speed, sprints above 25.2 km/h and the zone he was in most, over the minutes."""
         team = self.team(club)
-        pct = team_stats_mod.within_pct()
         clubs = self.fixture.clubs
+        lb, bar = physical.labels(), team_stats_mod.within_pct()
+        # A named player's figures are said only when the grading of named players (docs/eval/
+        # physical.md) is no worse than team distance's accepted label: the name rule leaves pieces of
+        # a player's track unnamed, so his sum can miss most of his running (GROUNDING I22).
+        held = not lb or bar is None or lb.get("distance_pct", 1e9) > bar
         facts = []
         for r in physical.players(self.facts.get("running", ()), self.people, minute_from, minute_to):
             if team not in (None, r["team"]):
                 continue
             r = {**r, "club": clubs[r["team"]]}
-            if r["metric"] == "player_km" and pct is not None:
-                r["also"] = [[pct, "%"]]
-                r["within_pct"] = pct
+            if r["metric"] in ("player_km", "player_top_kmh", "player_sprints"):
+                if held:
+                    r["confident"] = False
+                    r["why_held"] = (
+                        f"named players' running is measured to ±{lb.get('distance_pct')}% of the truth, "
+                        f"worse than team distance's ±{bar}%"
+                    )
+                elif r["metric"] == "player_km":
+                    r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
             facts.append(r)
         return {"facts": facts, "summary": []}
 
@@ -389,8 +399,13 @@ class MatchInsights:
             if kind == "line_break":
                 rows = sorted(rows, key=lambda r: (-r["value"], r["t"]))[:TOP_LINE_BREAKS]
             moments += rows
-        moments.sort(key=lambda r: -r["t"])
-        return {"facts": moments[:MAX_FACTS], "summary": []}
+        # Every goal stays, however many other moments there are: a recap never drops a goal. The
+        # rest fill the remaining places, latest first.
+        goals = [r for r in moments if r["kind"] == "goal"]
+        rest = sorted((r for r in moments if r["kind"] != "goal"), key=lambda r: -r["t"])
+        kept = goals + rest[: max(0, MAX_FACTS - len(goals))]
+        kept.sort(key=lambda r: -r["t"])
+        return {"facts": kept, "summary": []}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)
