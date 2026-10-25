@@ -146,7 +146,7 @@ def test_a_save_under_the_event_gate_is_unsure():
 def test_a_scorebug_reading_is_never_confident_until_the_reader_is_measured(monkeypatch):
     change = {"id": "s1", "t": 1300.0, "type": "score_change", "team": "home",
               "score": {"home": 1, "away": 0}, "confidence": 0.95, "source": "vision"}
-    assert scoring.SCOREBUG_MEASURED is False  # flipped only by the measurement (docs/eval/scorebug-plan.md)
+    assert scoring.SCOREBUG_MEASURED is False  # flipped only by the reader's measurement (planned, #356)
     (row,) = scoring.scorebug([change])
     assert (row["home"], row["away"], row["confident"]) == (1, 0, False)
     monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", True)

@@ -125,9 +125,10 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
     }
 
 
-# The score as the broadcast's scorebug shows it (ninety/vision/scorebug.py, `score_change`: read from
-# the graphic's pixels, never counted from goals). Said only once the reader's accuracy is measured on
-# validation clips (docs/eval/scorebug-plan.md); until then a score question points at the scorebug.
+# The score as the broadcast's scorebug shows it, from `score_change` events read from the graphic's
+# pixels, never counted from goals. Planned: the reader and its event come in #356, not on main yet,
+# so nothing emits a `score_change` today. Said only once the reader's accuracy is measured on
+# validation clips (#356's plan); until then a score question points at the scorebug.
 SCOREBUG_MEASURED = False
 
 
