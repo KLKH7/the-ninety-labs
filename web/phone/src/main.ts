@@ -590,6 +590,12 @@ function spot(side: "home" | "away", x: number, y: number): string {
   return `${flank} · ${depth}`;
 }
 
+const POSITION_WORDS: Record<string, string> = {
+  GK: "Goalkeeper", RB: "Right back", CB: "Centre back", LB: "Left back", RWB: "Right wing-back", LWB: "Left wing-back",
+  DM: "Defensive midfielder", CM: "Centre midfielder", AM: "Attacking midfielder", RM: "Right midfielder", LM: "Left midfielder",
+  RW: "Right winger", LW: "Left winger", ST: "Striker", CF: "Centre forward",
+};
+
 function renderRoster(roster: string[]) {
   const avg = averagePositions();
   const button = (id: string) => {
@@ -607,11 +613,14 @@ function renderRoster(roster: string[]) {
     num.textContent = sheet?.number !== undefined ? String(sheet.number) : unnamed ? "" : shirt(id);
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
+    // A sheet player with a shirt but no name is his position in words ("Goalkeeper"), never
+    // "London 1" beside a "1" already in the number column.
+    const roleOnly = !!sheet && !sheet.name && !!sheet.position;
+    name.textContent = roleOnly ? POSITION_WORDS[sheet!.position!] ?? sheet!.position! : unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
     // Apple Sports' line-up: the position after the name, quiet ("GK"); from the team sheet only.
     const where = document.createElement("span");
     where.className = sheet?.position ? "where pos" : "where";
-    where.textContent = sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
+    where.textContent = roleOnly ? "" : sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
     b.append(num, name, where);
     b.setAttribute("aria-label", playerName(id));
     if (at) {
