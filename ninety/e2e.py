@@ -66,7 +66,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ninety import condensed, radar
+from ninety import condensed, highlights, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
@@ -191,6 +191,18 @@ def teams_of(meta: dict) -> dict | None:
     params = meta.get("params", {})
     home, away = params.get("home_code"), params.get("away_code")
     return {"home": home, "away": away} if home and away else None
+
+def clubs_of(meta: dict) -> dict[str, str] | None:
+    """The sides as the Describer says them ({"home": "London", ...}): the short names of the clubs
+    the clip was rendered with (ninety/intel/teamsheet.py), or None for a clip without known codes."""
+    from ninety.intel import teamsheet
+
+    teams = teams_of(meta)
+    try:
+        return {side: teamsheet.short_name(code) for side, code in teams.items()} if teams else None
+    except ValueError:  # a code no team sheet knows: the sides are said as "home" and "away"
+        return None
+
 
 def load_clip(clip_dir: Path) -> Clip:
     meta = json.loads((clip_dir / "clip.json").read_text())
@@ -663,7 +675,8 @@ async def run(args: argparse.Namespace) -> dict:
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades)
+    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades,
+                                       clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
@@ -684,7 +697,10 @@ async def run(args: argparse.Namespace) -> dict:
     write_jsonl(out / "events.jsonl", events)
     match_info = None
     if args.match:
-        body = condensed.build(clip.meta, events)
+        verdict = None
+        if args.highlights_verdict:
+            verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
+        body = condensed.build(clip.meta, events, verdict)
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
@@ -698,7 +714,8 @@ async def run(args: argparse.Namespace) -> dict:
                 body["lineup"] = lineup
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
-                      "min_confidence": body["min_confidence"]}
+                      "min_confidence": body["min_confidence"],
+                      "highlights": len(body["highlights"]["moments"])}
     cards_info = None
     if args.cards:
         cards = read_cards(args.cards)
@@ -788,6 +805,9 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--highlights-verdict", type=Path, default=None,
+                    help="the highlights measurement's report (docs/eval/shot-flight.json): turns on the "
+                         "save filter and the labels it passed; without it every save is in, unlabelled")
     ap.add_argument("--cards", type=Path, default=None,
                     help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
     ap.add_argument("--team-stats", type=Path, default=None,
