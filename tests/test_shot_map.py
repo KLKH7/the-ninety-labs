@@ -153,8 +153,18 @@ def test_the_stats_row_of_shots_inside_is_unsure_when_a_shot_is_near_the_line():
     body = json.loads(STANDIN.read_text())
     near = shot(9, "home", 105 - 16.5 - 0.8, 34, side=0.99)
     sure = shot(1, "home", 94, 34, side=0.99)
-    body["facts"]["shot"] = shot_map.shots([sure, near])
-    for r in body["facts"]["shot"]:
-        r["club"] = "London Athletic"
-    row = next(r for r in stats_table(MatchInsights.from_dict(body))["rows"] if r["key"] == "shots_inside")
-    assert not row["series"][-1]["confident"]
+    clubs = {"home": "London Athletic", "away": "Lisbon Esportes"}
+
+    def row_for(events):
+        body["facts"]["shot"] = shot_map.shots(events)
+        for r in body["facts"]["shot"]:
+            r["club"] = clubs[r["team"]]
+        rows = stats_table(MatchInsights.from_dict(body))["rows"]
+        return next(r for r in rows if r["key"] == "shots_inside")["series"][-1]
+
+    assert not row_for([sure, near])["confident"]
+    # The same near the area line at away's end (x = 0) leaves away's count, and so the row, unsure.
+    away_near = shot(8, "away", 16.5 + 0.8, 34, side=0.99)
+    away_sure = shot(7, "away", 10, 34, side=0.99)
+    assert not row_for([sure, away_sure, away_near])["confident"]
+    assert row_for([sure, away_sure])["confident"]

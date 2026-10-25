@@ -98,3 +98,13 @@ def test_only_a_recap_or_a_goal_question_is_headed_by_the_goal():
         "Where has the ball been?", [goal], mi).startswith("Goal: ")
     assert not cm.headline("Who scored?", [goal], mi).startswith("Goal: ")  # a who question names who
     assert cm.headline("What have I missed?", [{**goal, "minute": None}], mi) is None
+
+
+def test_thirteen_goals_all_stay_though_the_cap_is_twelve():
+    lon = {"team": "home", "club": "London Athletic", "confident": True}
+    goals = [
+        {"id": f"goal:g{k}", "kind": "goal", "minute": 1 + k, "t": 60.0 * (1 + k), **lon} for k in range(13)
+    ]
+    shot = {"id": "shot:late", "kind": "shot", "minute": 20, "t": 1190.0, "value": 18, **lon}
+    got = _planted({"goal": goals, "shot": [shot]}).key_moments(1, 21)["facts"]
+    assert sorted(f["id"] for f in got if f["kind"] == "goal") == sorted(g["id"] for g in goals)
