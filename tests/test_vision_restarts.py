@@ -233,6 +233,16 @@ def test_the_kind_does_not_depend_on_how_long_the_cut_was():
     assert kinds(short) == kinds(long) == ["corner"]
 
 
+def test_a_set_ball_whose_place_jitters_within_its_error_is_still_set():
+    """The ball's box rounds to the pixel, so a still ball's place moves by up to twice its error
+    from frame to frame, and one point in ten may lie further (BALL_TOL_M is a 90th percentile)."""
+    rows = open_play() + set_ball((52.5, 34.0), (52.0, 34.4), toward=(40.0, 34.0))
+    for k, r in enumerate(r for r in rows if r["frame"] >= AFTER and r["frame"] < AFTER + 20):
+        off = 0.9 * rs.BALL_TOL_M * (1 if k % 2 else -1)  # within its error of the spot, so twice it apart
+        r["ball"][0]["y"] = 34.0 + (5 * rs.BALL_TOL_M if k in (7, 15) else off)  # two in twenty further
+    assert kinds(rows) == ["kick_off"]
+
+
 def test_a_ball_merely_slow_in_open_play_is_no_restart():
     """After a restart, a player stops the ball and stands over it, then passes: no new cue."""
     rows = open_play() + set_ball((60.0, 20.0), (59.2, 20.4), after=10)

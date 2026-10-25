@@ -215,6 +215,8 @@ mistake in the rule, not a value to tune.
 **The rule now:** a point and the run's median each carry up to `BALL_TOL_M` of error, so a point
 may lie up to twice it from the median; and, as the tolerance is a 90th percentile, at least 90% of
 the run's points must lie within that. No new constant: both follow from the tolerance's definition.
+The share is counted as "at most one point in ten further, rounded up", so a run growing frame by
+frame may hold one such point from its start (found on a planted scene, before any clip was re-run).
 The test split is untouched; the validation clips are re-run with it and both runs are reported.
 
 ## Outcome
@@ -247,3 +249,33 @@ The fault is the camera fit's, outside this plan (R3, `ninety/vision/pitch.py`);
   measured by the same rule on the true-camera reading of the possession sample, and the scored
   diagnostic uses that same reading (lesson 227). On the live path they are not yet measured: if the
   fit is fixed, they are re-measured on its reading before any live restart number is read.
+
+### Validation, first two clips (amendment 3's rule; the corner and goal-kick clips are still rendering)
+
+Drawn labels as detections throughout. [validation-live.md](set-pieces/validation-live.md) is the
+live path; [validation-true-camera.md](set-pieces/validation-true-camera.md) the diagnostic.
+
+| Clip | Restart | Live camera | Live: found as | Strict match | Why not |
+|---|---|---|---|---|---|
+| 920101 from 16.84 s | throw-in | 0 of 352 frames trusted | - | no | no camera |
+| 920108 from 42.44 s | free kick | 731 of 743 trusted | free kick, home, 0.05 m off | no | 1.68 s after the truth's event |
+| 920108 from 42.44 s | kick-off after a goal | (same) | kick-off, home, 0.53 m off its nearest home player | no | 2.92 s after the truth's event |
+
+- **The kind is right on every restart found** (2 of 2 live, 3 of 3 through the true camera), and
+  nothing is matched, because every found restart is later than the truth's by more than event_score's
+  1.0 s. The detector's time is the kick (the true ball first moves 1.76 s and 3.0 s after the
+  truth's events, 2 and 2 frames after the detected ones); the truth's is when the ball is set and its
+  taker ready. Neither the window nor the detected time is moved for it (above, "Scoring"): it is
+  open question 2.
+- **The throw-in, through the true camera,** is found 0.32 s after the truth, 0.06 m away, as a
+  throw-in, but under the wrong side: `events.py`'s side naming is flipped on that clip (every pass
+  there is `away`, the truth's `home`), and the restart takes its taker's side.
+- **False restarts:** live, the two above (late, not false in kind). Through the true camera also a
+  free kick on the throw-in clip: `events.py` reads the thrown ball's ground point, metres past the
+  far touchline, as out of play; that cue admits the next still ball, a team-mate's first touch.
+- **Amendment 3's effect:** with amendment 1's every-point rule, the kick-off was not found on either
+  reading (its run kept breaking on the ball box's pixel jitter); everything else is as above.
+- **The camera fit is per clip, not per look:** it fails on the throw-in clip and the possession
+  sample, and holds on 920108. Live tolerances still cannot be measured by the plan's rule (its
+  clip has no trusted frame), so the live run uses the true-camera reading's tolerances, a mismatch
+  the plan names (lesson 227).

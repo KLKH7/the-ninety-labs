@@ -13,7 +13,8 @@ ran on any clip; nothing reads ground truth.
    events.py reads a cut, or `camera.shot` changes), or the clip's first frame (a kick-off only).
    Only the fact of a cut is read, never how long it is: that length is the wait the edit left out.
 2. Then a set ball: the ball seen on at least STILL_FRAMES frames in a row, slower than
-   events.CARRY_MPS, every position within BALL_TOL_M of the run's median (a set ball stays put),
+   events.CARRY_MPS, nine in ten of its positions within twice BALL_TOL_M of the run's median (a
+   set ball stays put, its place known to BALL_TOL_M nine times in ten),
    the median on the field (within BALL_TOL_M of its lines), not held up in a player's hands.
 3. Then the restart: the ball moves off faster than CARRY_MPS with a player within CONTROL_M: the
    taker. Its time is the strike (Laws 8, 13 to 17: in play when kicked and it clearly moves), its
@@ -68,6 +69,10 @@ GOAL_AREA_X, GOAL_AREA_HALF_Y = 5.5, 9.16
 # the live fit's reading once it places this look, before any live restart number is read.
 BALL_TOL_M = 0.06
 LINE_TOL_M = 0.48
+# BALL_TOL_M is a 90th percentile, so it bounds 90% of the points of a still ball; a point and the
+# run's median each carry up to it, so a point may lie twice it from the median; one point in ten,
+# rounded up, may lie further (plan, amendment 3).
+TOL_SHARE = 0.9
 # A set ball is still on this many frames in a row (design, set before any run: 0.4 s; a pass rolls
 # past at pass speed for none, and the engine's shortest wait over a placed ball is longer).
 STILL_FRAMES = 10
@@ -192,7 +197,8 @@ def set_balls(path: list[BallPoint], rows_at: dict[int, dict], tracks: list[Trac
             return False
         pts = [path[j] for j in cur] + [path[i]]
         mx, my = statistics.median(q.x for q in pts), statistics.median(q.y for q in pts)
-        return all(math.hypot(q.x - mx, q.y - my) <= BALL_TOL_M for q in pts)
+        far = sum(math.hypot(q.x - mx, q.y - my) > 2 * BALL_TOL_M for q in pts)
+        return far <= math.ceil((1 - TOL_SHARE) * len(pts))
 
     out = []
     for run in _runs(path, cut_frames, still):
