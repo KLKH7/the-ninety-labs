@@ -118,3 +118,13 @@ reach is set down beforehand from committed measurements, not from speeds:
 - 2026-10-23, before anything was scored or committed: the v2 test set was already scored once
   (PR #210), so the detector is not re-run on it. Two options were weighed (that run's detections,
   or ours-freeze on the validation clips); Carlos chose that run's detections.
+- 2026-10-24, before anything was scored: main was merged into this branch (merge 939d7eef, main
+  76e91265), so the speed error measures the vision path the demo runs. Since this plan's base
+  (0f101db) main changed the camera fit in `observe.py` and `pitch.py` (#229, #250, #270, #285) and
+  the ball path's drawn-over-a-player test in `track.py`; `events.py` and the scorers are
+  unchanged. Two observation runs started on the old code were stopped and are not used. The
+  observations are instead those of the ball height session's run (PR #226), made at main
+  a8719457 from the same detections and arguments, whose `observe.py` (d6e065b9), `pitch.py`
+  (f7ec71de), `track.py` (cf0be765) and `detections.py` (17ed58cc) are those of this branch after
+  the merge. Each file is used only if its sha256 matches the list that run publishes, and it holds
+  one line per frame of its clip. Carlos approved both changes.
