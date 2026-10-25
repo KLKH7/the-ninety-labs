@@ -9,6 +9,8 @@ is) and each frame 3 more (pan, tilt, focal length).
 
     line_points(rgb, boxes)        white-marking pixels, with players and the ball masked out
     fit_clip(points_by_frame, ...) the gantry and every frame's pan, tilt and focal length
+    shot_starts(thumbnails)        where the camera cuts, from how much the picture changes
+    fit_shots(points, ..., starts) fit_clip on each shot alone: a new gantry after every cut
     fit_fixed(static, points, ...) a fixed lens (the tactical camera): one camera for the clip
 
 Each frame is fitted by Gauss-Newton on the pixel distance from every marking pixel to the nearest
@@ -645,6 +647,67 @@ def fit_clip(points: list[np.ndarray], width: int, height: int,
         if fit.ok:
             last = fit.view
     return g, fits
+
+
+# ---------------------------------------------------------------------------------------------
+# Camera cuts: a clip is fitted shot by shot
+
+# A broadcast cuts between cameras. Across a cut the gantry and the aim change at once, so one
+# gantry for the clip fits neither side and tracking from the last frame starts from a camera that
+# is gone (lesson 159). A cut is found from the picture alone: within a shot the camera pans and
+# zooms smoothly and the picture changes little from one frame to the next; across a cut it
+# changes at once. The measure is the pairwise frame difference of the shot-boundary literature
+# (Zhang, Kankanhalli and Smoliar 1993; Lienhart 1999), on a coarse image so that a pan of a few
+# pixels moves it little: the mean absolute difference, in grey levels (0 to 255), between two
+# frames' greyscale thumbnails of CUT_THUMB cells. It and CUT_THRESHOLD were chosen on validation
+# clips by the rule written first in docs/eval/camera-cuts-plan.md: no candidate separated the 5
+# cuts there from every other frame (a whip pan behind the goal changes the picture as much), so
+# the one with the fewest errors was adopted, at the geometric middle of its best interval
+# (17.87 to 26.19): no cut missed, that whip pan the one false cut.
+CUT_THUMB = (32, 18)  # cells across and down (design, a candidate fixed before measuring)
+CUT_THRESHOLD = 21.634
+
+
+def thumbnail(rgb: np.ndarray, cells: tuple[int, int] = CUT_THUMB) -> np.ndarray:
+    """(down, across) mean grey level of each cell, the image cropped to whole cells."""
+    across, down = cells
+    g = rgb.astype(float).mean(-1)
+    H, W = g.shape
+    g = g[: H // down * down, : W // across * across]
+    return g.reshape(down, H // down, across, W // across).mean((1, 3))
+
+
+def cut_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """Mean absolute difference between two thumbnails, in grey levels."""
+    return float(np.abs(a - b).mean())
+
+
+def shot_starts(thumbs: list[np.ndarray], threshold: float | None = None) -> list[int]:
+    """Indices of each shot's first frame: 0, then every frame at least `threshold` (default
+    CUT_THRESHOLD) from the frame before it."""
+    thr = CUT_THRESHOLD if threshold is None else threshold
+    return [0] + [i for i in range(1, len(thumbs)) if cut_distance(thumbs[i - 1], thumbs[i]) >= thr]
+
+
+def fit_shots(points: list[np.ndarray], width: int, height: int, starts: list[int],
+              anchor_every: int = 25) -> tuple[list[tuple | None], list[FrameFit]]:
+    """fit_clip on each shot alone (shots begin at `starts`): its own gantry from its own frames
+    and tracking from its first frame, as on a clip's first frame. Nothing carries across a cut.
+    A shot with too few markings anywhere to place a camera gets none (its gantry None); with a
+    single shot that is still an error, as in fit_clip."""
+    bounds = list(starts) + [len(points)]
+    gantries: list[tuple | None] = []
+    fits: list[FrameFit] = []
+    for a, b in zip(bounds[:-1], bounds[1:], strict=True):
+        try:
+            g, f = fit_clip(points[a:b], width, height, anchor_every=anchor_every)
+        except ValueError:
+            if len(starts) == 1:
+                raise
+            g, f = None, [FrameFit(None, None, len(p), False) for p in points[a:b]]
+        gantries.append(g)
+        fits += f
+    return gantries, fits
 
 
 # ---------------------------------------------------------------------------------------------

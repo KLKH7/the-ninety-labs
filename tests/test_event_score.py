@@ -374,3 +374,22 @@ def test_a_clip_the_broadcast_cut_is_graded_across_its_recorded_cut():
         score(truth, [det("d1", 3.0, x=ball_x(3.0))], clip, cuts=[{"first_frame": 60, "last_frame": 68}])
     with pytest.raises(ValueError, match="consecutive"):
         score(truth, [det("d1", 3.0, x=ball_x(3.0))], clip)
+
+
+def test_possession_changes_are_split_into_open_play_and_at_a_restart():
+    truth = [ev("e1", 1.0, "set_piece", "away"), ev("e2", 1.0, "possession_change", "away"),
+             ev("e3", 2.0, "possession_change", "home"),
+             ev("e4", 3.0, "set_piece", "home"), ev("e5", 3.0, "possession_change", "away")]
+    detected = [det("v1", 2.1, "possession_change", "home"), det("v2", 1.1, "possession_change", "away")]
+    phase = score(truth, detected)["time_only"]["per_type"]["possession_change"]["by_phase"]
+    # e5 shares a moment with a set piece of the other side: won in play, not given at a restart.
+    assert phase["open_play"] == {"true": 2, "tp": 1, "fn": 1, "recall": 0.5}
+    assert phase["at_restart"] == {"true": 1, "tp": 1, "fn": 0, "recall": 1.0}
+    assert "by_phase" not in score(truth, detected)["time_only"]["per_type"]["set_piece"]
+
+
+def test_the_engine_gives_possession_changes_at_restarts_and_in_play(seed7):
+    # The split's premise on a real match (lesson 41): both kinds occur in seed 7's five minutes,
+    # and every restart one shares its moment with a restart of its own side.
+    phase = score(seed7.events, [])["time_only"]["per_type"]["possession_change"]["by_phase"]
+    assert phase["open_play"]["true"] > 0 and phase["at_restart"]["true"] > 0
