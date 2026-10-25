@@ -144,3 +144,32 @@ from the repo. In their place are digits cropped from frames our own renderer dr
   0.82, under the bar, as the Arial raster did.
 
 No threshold changed. The demo development check is re-run once the linux face is in.
+
+## Validation, first version (8f5c0d23): 0 of 16 goals (2026-10-25)
+
+A ran the reader as first pushed (8f5c0d23: font rasters, the plate found by its width, no
+constrained reading) on all 80 clips of the shot-outcome set's validation split (seeds 910001 to
+910008), on the pod. Graded on the Mac (`docs/eval/scorebug-validation-8f5c0d23.json`):
+
+| Measure | Result |
+|---|---|
+| Score changes | 0 of 16 goals found (95% 0.00 to 0.19), no false change |
+| Digits right, of samples read | 627 of 627 |
+| Samples unread | 254 of 881 (29%) |
+
+**Why, by the true digit in each unread cell:**
+- 0: 1,413 read, 46 unread;
+- 2: 54 read, 2 unread;
+- 1: 0 read, 241 unread;
+- 3: 0 read, 6 unread.
+
+The first version never read a pod-rendered 1 or 3. After each goal, the scorer's new digit (mostly
+a 1) was unread, so no new score was ever held. These are faults 1 and 3 of the amendments above
+(the pod's 1 is not Arial's; a 3 is near an 8). They were found on the demo's development check and
+fixed in f4ce4c23 (committed 22:41Z). A's validation outputs were written at 22:50Z and first read
+at about 23:50Z, so the fixes came before this result was seen, and nothing in the reader has been
+changed because of it.
+
+**The current reader is not yet measured on validation.** That needs the linux face and the
+validation images on a Linux machine; the images are not on the Mac. Same clips, same grader,
+nothing tuned on them. The run, when it happens, is reported beside this one.
