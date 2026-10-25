@@ -556,7 +556,7 @@ TEMPLATES = {
     "player_km": [rf"has covered {_N} km", r"from the footage shown", rf"give or take {_N}%"],
     "player_top_kmh": [rf"reached a top speed of {_N} km/h"],
     "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
-    "player_zone": [rf"was most often {_THIRD}"],
+    "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
     "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
     "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],

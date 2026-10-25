@@ -162,3 +162,35 @@ def test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it(fact, said):
          "player_is": lb.name, "minute_from": 1, "minute_to": 21, "confident": True, **fact}
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
     assert not verify(Claim(f"{lb.name} {said}", ["x"]), {"x": f}, fx.clubs, people, names).ok
+
+
+@pytest.mark.parametrize(
+    "q", ["How far has Kai Terrow run?", "Who is the fastest player?", "How many sprints?"]
+)
+def test_a_held_figure_asked_for_is_not_available_never_another_answer(q):
+    # The merge queue's third review of #323: a distance question was answered with the zone.
+    from ninety.agents.contracts import Question
+
+    mi = _standin()
+    a, calls = cm.code_match_answer(Question("s", None, q, 60.0 * 20 - 1), mi)
+    assert "physical" in [c["name"] for c in calls]
+    assert a.status == "unanswerable" and "isn't available yet" in a.text and a.headline is None
+
+
+def test_each_figure_is_held_on_its_own_label():
+    bar = 21
+    held = physical.held({"distance_pct": 10, "sprints_pct": 30, "top_kmh": 2}, bar)
+    assert set(held) == {"player_sprints"}
+    worse_top = physical.TOP_SPEED_BAR_KMH + 1
+    held = physical.held({"distance_pct": 30, "sprints_pct": 10, "top_kmh": worse_top}, bar)
+    assert set(held) == {"player_km", "player_top_kmh"}
+    assert set(physical.held({"distance_pct": 30, "sprints_pct": 10, "top_kmh": 1}, bar)) == {"player_km"}
+
+
+def test_the_zone_says_it_is_of_the_footage_the_video_named_him_in():
+    z = {"metric": "player_zone", "player_is": "Kai Terrow", "third": "own", "channel": "right",
+         "minute_from": 1, "minute_to": 20, "confident": True}
+    assert cm.code_texts(z) == [
+        "Kai Terrow was most often in their own third on the right from minute 1 to minute 20, in the "
+        "footage the video named him in."
+    ]

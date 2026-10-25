@@ -58,8 +58,8 @@ MATCH_TOOLS = (
     "physical",
 )
 TOOL_HELP = {
-    "physical": "each named player's running: distance in km (from the footage shown, give or take its "
-    "measured error), top speed in km/h, sprints above 25.2 km/h, and the zone he was in most",
+    "physical": "the zone each named player was in most, of the footage the video named him in; a "
+    "player's distance, top speed and sprints are not available yet",
     "passing": "what the passes did: progressive passes, passes into the final third, long balls and "
     "passes intercepted, each club's count (unsure while the video could not tell whose some were) and "
     "the total; and the pairs of named players who passed to each other most",
@@ -136,7 +136,7 @@ TOOL_WORDS = (
     (
         "physical",
         r"\b(?:distance|covered|how far|sprint\w*|fastest|top speed|how fast|heat ?map|work rate|tired"
-        r"|ran the most|running)\b",
+        r"|ran the most|running|where (?:has|does|did|is) [\w' ]+ (?:been )?play\w*)\b",
     ),
     (
         "passing",
@@ -779,7 +779,10 @@ def code_texts(fact: dict) -> list[str]:
         return [f"{fact['player_is']} sprinted {_plural(fact['value'], 'time')} above 25.2 km/h {span}."]
     if metric == "player_zone":
         where = "in the centre" if fact["channel"] == "centre" else f"on the {fact['channel']}"
-        return [f"{fact['player_is']} was most often in their {fact['third']} third {where} {span}."]
+        return [
+            f"{fact['player_is']} was most often in their {fact['third']} third {where} {span}, in the "
+            "footage the video named him in."
+        ]
     if metric in PASS_WORDS:
         n = fact["value"]
         what, verb = PASS_WORDS[metric]
@@ -858,6 +861,30 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     return [{"name": n, "club": None, "minute_from": lo, "minute_to": hi} for n in names]
 
 
+# What a fan calls each running figure the physical tool may hold (merge-queue review of #323).
+ASKS_RUNNING = {
+    "player_km": (r"\b(?:distance|covered|how far|ran the most|running)\b", "distance"),
+    "player_top_kmh": (r"\b(?:fastest|top speed|how fast|quickest)\b", "top speed"),
+    "player_sprints": (r"\bsprint\w*\b", "sprint count"),
+}
+
+
+def held_ask(text: str, calls, facts) -> str | None:
+    """Why a question about a held running figure cannot be answered, or None. Held means every fact
+    of that figure is unsure: the video does not yet follow enough of each named player."""
+    if not any(c["name"] == "physical" for c in calls):
+        return None
+    for metric, (words, said) in ASKS_RUNNING.items():
+        if re.search(words, text, re.I):
+            rows = [f for f in facts if f.get("metric") == metric]
+            if not rows or not any(f.get("confident") for f in rows):
+                return (
+                    f"A player's {said} isn't available yet: the video can't follow enough of each named "
+                    "player to measure it reliably."
+                )
+    return None
+
+
 def code_match_answer(
     question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
@@ -888,6 +915,9 @@ def code_match_answer(
             facts,
             key=lambda f: (f.get("kind") != "sheet" or f.get("role") != role, f.get("club") not in named),
         )
+    why = held_ask(question.text, calls, facts)
+    if why is not None:  # a figure asked for that is held: say so, never answer something else
+        return Answer("unanswerable", why, None, None, None, (), 0.0, float(question.t)), calls
     asked = referee.topic(question.text) if any(c["name"] == "referee" for c in calls) else None
     if asked is not None:
         # A referee question: an offside reading first when it is about offside, then the Laws the
@@ -978,6 +1008,8 @@ async def answer_match(
         if not calls:
             return calls, None, None, []
         facts = run_tools(insights, calls)
+        if held_ask(question.text, calls, facts) is not None:
+            return calls, None, None, facts  # code says why it is not available
         # A rules question is the Referee's to answer (ninety/agents/referee.py): the Companion
         # hands the facts over, and the same fact-check gates what comes back.
         rules = any(c["name"] == "referee" for c in calls)
