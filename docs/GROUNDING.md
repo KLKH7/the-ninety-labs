@@ -270,6 +270,23 @@ analytics definitions, implemented in our own words.
 | I17 | **Possession share**: a team's detected passes over both teams' detected passes in the window, the pass ratio Opta publishes as possession, not time on the ball (StatsBomb, "Does Possession % Matter?", reports Opta's method as this ratio, confirmed to them by Opta; Deltatre's time-based figure differs, Slate 2014; *verify* which passes Opta counts: all, or completed only). A pass counts for its team only when its side passed the fact-checker's side gate (factcheck.side_known, 0.96); a pass whose side is unknown could be either team's, so the share has bounds and is stated only when no pass of the window is in doubt (I1) | StatsBomb on Opta's possession; *verify* | stat | ✅ `tests/test_possession_territory.py` |
 | I18 | **Territory by third**: of the seconds of footage shown (one a second, the tracked frames' smoothing; the tracked frames hold the ball wherever the footage does, short gaps filled within the tracker's own limit), the share with the ball in each third of the pitch's length (Law 1) along the direction a team attacks; seconds with the ball within the players' position error (1.26 m, I1) of a third's line are counted apart and give the share its bounds, said as a range ("between 25% and 31% of the footage shown"), as team distance is "from the footage shown" (I16). The phone's momentum strip, by half, is `ninety/match/territory.py` | L1; I1; I16 | stat | ✅ `tests/test_possession_territory.py` |
 
+### Highlights: the reel and its labels
+
+`ninety/highlights.py`, from detected events only, never ground truth. The rule and every threshold
+were fixed before any measurement in [highlights-plan.md](eval/highlights-plan.md), which has the
+full citations; kind **design** below means a choice, not a published figure. A label is given only
+when its number clears the threshold by more than vision's measured 95th percentile error of it.
+
+| ID | Rule | Source | Kind | Test |
+|---|---|---|---|---|
+| H1 | **A save is in the reel** only when the ball beat even the quickest dive: its flight time `T = d / v` is at most `T_DIVE_S` = 0.97 s. The filter is used only once the measurement passed its gates (95th percentile of the flight-time error at most 0.10 s, at least 90% of saves on the same side of 0.97 s, at least 20 saves); until then every save is in and listed fastest first | Ibrahim, Kingma, de Boode, Faber and van Dieën 2019, *Frontiers in Sports and Active Living* 1:15 (10 elite keepers diving to low balls: 0.972 s); the gates are the plan's | stat (*verify*: whether the paper's time includes the reaction; see the plan) | `tests/test_highlights.py` |
+| H2 | **`d`** is the straight-line distance from where the shot was struck to the centre of the goal it attacks | D3 (a shot is an option within 40 m of the goal's centre), lesson 138 | stat | `tests/test_highlights.py::test_each_moment_carries_its_numbers_and_its_clip` |
+| H3 | **`SCREAMER` / `LONG-RANGE`**: a goal struck surely outside the penalty area (more than 16.5 m from the goal line, or more than 20.16 m from the goal's centre line, past the position error), `d` at least 25 m or under it | Law 1 (the area); outside the area is Opta's long range (31.7% of 2024/25 Premier League shots); the 25 m is *design* | design | `tests/test_highlights.py::test_a_screamer_is_a_goal_outside_the_area_from_25_m` |
+| H4 | **`ROCKET`**: vision's shot speed over 100 km/h (a goal or a save); **`THUNDERBOLT`**: a goal that is both a screamer and a rocket | the Bundesliga's "fast" shot graphic (Haschemi et al. 2023); the word is *design* | design | `tests/test_highlights.py::test_a_thunderbolt_is_a_screamer_that_is_also_a_rocket` |
+| H5 | **`REFLEX SAVE`**: a save whose `T` is under 0.41 s, a footballer's slowest choice reaction | P12 (0.32 to 0.41 s, Lesiakowski 2017) | stat | `tests/test_highlights.py::test_a_reflex_save_beats_a_footballers_reaction` |
+| H6 | **`TAP-IN`**: a goal struck within 5.5 m of the goal line and 9.16 m of the goal's centre line, past the position error | Law 1 (the goal area) | rule | `tests/test_highlights.py::test_a_tap_in_is_a_goal_from_inside_the_six_yard_box` |
+| H7 | A moment's clip runs 8 s before the strike to 3 s after, so the build-up is on screen | *design* | design | `tests/test_highlights.py::test_each_moment_carries_its_numbers_and_its_clip` |
+
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.

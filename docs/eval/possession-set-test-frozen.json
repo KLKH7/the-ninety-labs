@@ -1,0 +1,616 @@
+{
+ "name": "possession-set",
+ "split": "test",
+ "render_commit": "65247ba36343c640fe7673c772a1cbc0ac19c07e",
+ "render": {
+  "views": null,
+  "set": [
+   "stadium=broadcast",
+   "dead_ball_cut=false"
+  ]
+ },
+ "clips": [
+  {
+   "split": "test",
+   "seed": 920201,
+   "start": 1620.0,
+   "seconds": 10.0,
+   "dir": "test/seed920201-40500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920201,
+   "start": 1790.0,
+   "seconds": 10.0,
+   "dir": "test/seed920201-44750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920202,
+   "start": 540.0,
+   "seconds": 10.0,
+   "dir": "test/seed920202-13500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920202,
+   "start": 1370.0,
+   "seconds": 10.0,
+   "dir": "test/seed920202-34250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920203,
+   "start": 310.0,
+   "seconds": 10.0,
+   "dir": "test/seed920203-7750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920203,
+   "start": 740.0,
+   "seconds": 10.0,
+   "dir": "test/seed920203-18500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920204,
+   "start": 780.0,
+   "seconds": 10.0,
+   "dir": "test/seed920204-19500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920204,
+   "start": 1470.0,
+   "seconds": 10.0,
+   "dir": "test/seed920204-36750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920205,
+   "start": 700.0,
+   "seconds": 10.0,
+   "dir": "test/seed920205-17500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920205,
+   "start": 1840.0,
+   "seconds": 10.0,
+   "dir": "test/seed920205-46000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920206,
+   "start": 460.0,
+   "seconds": 10.0,
+   "dir": "test/seed920206-11500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920206,
+   "start": 1410.0,
+   "seconds": 10.0,
+   "dir": "test/seed920206-35250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920207,
+   "start": 1190.0,
+   "seconds": 10.0,
+   "dir": "test/seed920207-29750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920207,
+   "start": 1370.0,
+   "seconds": 10.0,
+   "dir": "test/seed920207-34250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920208,
+   "start": 1490.0,
+   "seconds": 10.0,
+   "dir": "test/seed920208-37250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920208,
+   "start": 1840.0,
+   "seconds": 10.0,
+   "dir": "test/seed920208-46000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920209,
+   "start": 640.0,
+   "seconds": 10.0,
+   "dir": "test/seed920209-16000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920209,
+   "start": 1490.0,
+   "seconds": 10.0,
+   "dir": "test/seed920209-37250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920210,
+   "start": 650.0,
+   "seconds": 10.0,
+   "dir": "test/seed920210-16250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920210,
+   "start": 1520.0,
+   "seconds": 10.0,
+   "dir": "test/seed920210-38000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920211,
+   "start": 250.0,
+   "seconds": 10.0,
+   "dir": "test/seed920211-6250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920211,
+   "start": 1130.0,
+   "seconds": 10.0,
+   "dir": "test/seed920211-28250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920212,
+   "start": 1140.0,
+   "seconds": 10.0,
+   "dir": "test/seed920212-28500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920212,
+   "start": 1310.0,
+   "seconds": 10.0,
+   "dir": "test/seed920212-32750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920213,
+   "start": 80.0,
+   "seconds": 10.0,
+   "dir": "test/seed920213-2000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920213,
+   "start": 760.0,
+   "seconds": 10.0,
+   "dir": "test/seed920213-19000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920214,
+   "start": 1030.0,
+   "seconds": 10.0,
+   "dir": "test/seed920214-25750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920214,
+   "start": 1320.0,
+   "seconds": 10.0,
+   "dir": "test/seed920214-33000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920215,
+   "start": 790.0,
+   "seconds": 10.0,
+   "dir": "test/seed920215-19750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920215,
+   "start": 1630.0,
+   "seconds": 10.0,
+   "dir": "test/seed920215-40750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920216,
+   "start": 330.0,
+   "seconds": 10.0,
+   "dir": "test/seed920216-8250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920216,
+   "start": 1360.0,
+   "seconds": 10.0,
+   "dir": "test/seed920216-34000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920217,
+   "start": 1090.0,
+   "seconds": 10.0,
+   "dir": "test/seed920217-27250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920217,
+   "start": 1870.0,
+   "seconds": 10.0,
+   "dir": "test/seed920217-46750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920218,
+   "start": 130.0,
+   "seconds": 10.0,
+   "dir": "test/seed920218-3250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920218,
+   "start": 1130.0,
+   "seconds": 10.0,
+   "dir": "test/seed920218-28250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920219,
+   "start": 40.0,
+   "seconds": 10.0,
+   "dir": "test/seed920219-1000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920219,
+   "start": 1160.0,
+   "seconds": 10.0,
+   "dir": "test/seed920219-29000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920220,
+   "start": 100.0,
+   "seconds": 10.0,
+   "dir": "test/seed920220-2500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920220,
+   "start": 710.0,
+   "seconds": 10.0,
+   "dir": "test/seed920220-17750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920221,
+   "start": 1460.0,
+   "seconds": 10.0,
+   "dir": "test/seed920221-36500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920221,
+   "start": 1470.0,
+   "seconds": 10.0,
+   "dir": "test/seed920221-36750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920222,
+   "start": 500.0,
+   "seconds": 10.0,
+   "dir": "test/seed920222-12500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920222,
+   "start": 870.0,
+   "seconds": 10.0,
+   "dir": "test/seed920222-21750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920223,
+   "start": 590.0,
+   "seconds": 10.0,
+   "dir": "test/seed920223-14750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920223,
+   "start": 750.0,
+   "seconds": 10.0,
+   "dir": "test/seed920223-18750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920224,
+   "start": 650.0,
+   "seconds": 10.0,
+   "dir": "test/seed920224-16250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920224,
+   "start": 1520.0,
+   "seconds": 10.0,
+   "dir": "test/seed920224-38000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920225,
+   "start": 330.0,
+   "seconds": 10.0,
+   "dir": "test/seed920225-8250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920225,
+   "start": 360.0,
+   "seconds": 10.0,
+   "dir": "test/seed920225-9000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920226,
+   "start": 10.0,
+   "seconds": 10.0,
+   "dir": "test/seed920226-250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920226,
+   "start": 370.0,
+   "seconds": 10.0,
+   "dir": "test/seed920226-9250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920227,
+   "start": 570.0,
+   "seconds": 10.0,
+   "dir": "test/seed920227-14250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920227,
+   "start": 910.0,
+   "seconds": 10.0,
+   "dir": "test/seed920227-22750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920228,
+   "start": 800.0,
+   "seconds": 10.0,
+   "dir": "test/seed920228-20000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920228,
+   "start": 1200.0,
+   "seconds": 10.0,
+   "dir": "test/seed920228-30000",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920229,
+   "start": 980.0,
+   "seconds": 10.0,
+   "dir": "test/seed920229-24500",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920229,
+   "start": 1170.0,
+   "seconds": 10.0,
+   "dir": "test/seed920229-29250",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920230,
+   "start": 190.0,
+   "seconds": 10.0,
+   "dir": "test/seed920230-4750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  },
+  {
+   "split": "test",
+   "seed": 920230,
+   "start": 1670.0,
+   "seconds": 10.0,
+   "dir": "test/seed920230-41750",
+   "renderer": null,
+   "digest": null,
+   "meta_json_sha256": null
+  }
+ ],
+ "rendered": 0,
+ "count": 60
+}
