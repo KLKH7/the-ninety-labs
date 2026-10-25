@@ -30,6 +30,7 @@ from ninety.intel import (
     passing,
     physical,
     roles,
+    scoring,
     shape,
     shot_map,
     style,
@@ -118,28 +119,16 @@ class MatchInsights:
         facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
         facts["running"] = physical.rows(f.frames)  # each track's running, per minute (I22)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
-        facts["goal"] = [
-            {
-                "id": f"goal:{e['id']}",
-                "kind": "goal",
-                "team": e["team"],
-                "minute": int(float(e["t"]) // 60) + 1,
-                "t": round(float(e["t"]), 2),
-                "event": e["id"],
-                "event_confidence": e.get("confidence"),
-                "team_confidence": e.get("team_confidence"),
-                "player": e.get("player"),
-                "confident": True,
-            }
-            for e in events
-            if e.get("type") == "goal"
-        ]
+        facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
+        facts["save"] = scoring.saves(events)
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs[r["team"]]
-                for k in ("passer", "receiver"):
+                for k in ("passer", "receiver", "assister"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
+                if r.get("kind") == "goal" and r.get("player") in people:
+                    r["scorer_is"] = people[r["player"]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
         mi = cls(clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames))
         from ninety.intel.stats_table import stats_table
@@ -361,6 +350,21 @@ class MatchInsights:
                 r["within_pct"] = pct
             facts.append(r)
         return {"facts": facts, "summary": []}
+
+    def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The score after minute_to (said only when no goal's side is in doubt), each goal up to then
+        with its scorer and assist, oldest first, and each club's saves over the minutes."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]
+        summary = [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
+        summary += [
+            {**r, "club": clubs[t]}
+            for t, r in scoring.save_counts(self.facts.get("save", ()), minute_from, minute_to).items()
+            if team in (None, t)
+        ]
+        timeline = sorted((g for g in goals if team in (None, g["team"])), key=lambda g: g["t"])
+        return {"facts": timeline[:MAX_FACTS], "summary": summary}
 
     def halves(self, minute_from: int = 1, minute_to: int | None = None, club: str | None = None) -> dict:
         """The same summaries for each half (Law 7's 45 minutes) up to minute_to (the match so far

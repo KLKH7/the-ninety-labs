@@ -21,7 +21,7 @@ from ninety.agents import referee
 from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
-from ninety.intel.teamsheet import POSITIONS
+from ninety.intel.teamsheet import POSITIONS, short_name
 
 
 def companion_match_agent(client):
@@ -58,8 +58,11 @@ MATCH_TOOLS = (
     "physical",
     "halves",
     "key_moments",
+    "score",
 )
 TOOL_HELP = {
+    "score": "the score after minute_to (unsure while a goal's side is in doubt), each goal with its scorer "
+    "and the pass that made it (an assist), and each club's goalkeeper's saves",
     "halves": "the first half against the second (Law 7's 45 minutes): where the ball was, the shots and "
     "what the passes did in each",
     "key_moments": "the key moments, latest first: goals, shots, regains that led to a shot, one-twos and "
@@ -102,6 +105,11 @@ TOOL_WORDS = (
         "referee",
         r"\b(?:offside|onside|referee|ref|var|foul\w*|hand ?ball|penalty|pen|rules?|law|booked|booking"
         r"|yellow|red card|sent off|dive|dived)\b",
+    ),
+    (
+        "score",
+        r"\b(?:what(?:'s| is) the score|the score|scoreline|who scored|scorers?|assists?|assisted|saves?"
+        r"|how many goals|who(?:'s| is) (?:winning|ahead)|are .{1,30} (?:winning|level))\b",
     ),
     ("goal_build_up", r"\b(?:goals?|scor\w*|equali[sz]\w*|that finish)\b"),
     (
@@ -381,6 +389,11 @@ FOLLOW_UPS = {
         "And in the last ten minutes?",
         "How are {club} playing?",
     ),
+    "score": (
+        "Why did {club} score?",
+        "How many shots have there been?",
+        "What have I missed?",
+    ),
     "halves": (
         "Where has the ball been?",
         "How many shots have there been?",
@@ -621,7 +634,7 @@ def _who(f: dict, insights) -> str | None:
         return f.get("name")
     # passer_is / player_is hold a name only past the role gate, else the role ("London Athletic's
     # left-back"): the headline says what the sentence may say, with the club's short name.
-    who = f.get("player_is") or f.get("passer_is")
+    who = f.get("scorer_is") or f.get("player_is") or f.get("passer_is")
     if not who:
         return None
     for club in insights.fixture.clubs.values():
@@ -636,6 +649,10 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     unit for how many or how fast, the place for where; the supporting number stays in the sentence.
     A question of another kind is headed by the lead number, or by nothing."""
     kind = question_kind(question)
+    sc = next((f for f in cited if f.get("metric") == "score" and f.get("confident")), None)
+    if sc is not None and kind != "who":  # "what's the score?": the score itself
+        fx = insights.fixture
+        return f"{short_name(fx.home_code)} {sc['home']}, {short_name(fx.away_code)} {sc['away']}"
     goal = next((f for f in cited if f.get("kind") == "goal" and f.get("club") and f.get("minute")), None)
     if goal is not None and kind != "who":  # a recap with a goal in it leads with the goal
         return f"Goal: {_short(insights, goal['club'])}, minute {goal['minute']}"
@@ -841,7 +858,26 @@ def code_texts(fact: dict) -> list[str]:
         text = fact["text"]
         return [text] if fact["law"] == "our cameras" else [f"The Laws say that {text[0].lower()}{text[1:]}"]
     if kind == "goal":
-        return [f"{club} scored in minute {fact['minute']}."]
+        m = fact["minute"]
+        out = []
+        if fact.get("scorer_is") and fact.get("assister_is"):
+            out.append(
+                f"{fact['scorer_is']} scored for {club} in minute {m}, from {fact['assister_is']}'s pass."
+            )
+        if fact.get("scorer_is"):
+            out.append(f"{fact['scorer_is']} scored for {club} in minute {m}.")
+        return [*out, f"{club} scored in minute {m}."]
+    if metric == "score":
+        cl = fact["clubs"]
+        h, a, m = fact["home"], fact["away"], fact["minute"]
+        if not h and not a:
+            return [f"By minute {m}, neither {cl['home']} nor {cl['away']} had scored."]
+        return [
+            f"By minute {m}, {cl['home']} had scored {_plural(h, 'goal')} and {cl['away']} "
+            f"{_plural(a, 'goal')}."
+        ]
+    if metric == "saves":
+        return [f"{club} made {_plural(fact['value'], 'save')} {span}."]
     if metric == "opponents_bypassed_by_player":
         if fact.get("rank") != 1 or not fact.get("leads") or not fact.get("player_is"):
             return []
@@ -937,13 +973,15 @@ def code_match_answer(
                     t=question.t,
                     suggest=suggest,
                 ), calls
+    # A goal's story ("why did they score?"): the goal with the strongest thing before it, when the
+    # goal build-up is what was asked (a "what's the score?" is the score's to answer).
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
-    if goal is not None:
+    if goal is not None and calls and calls[0]["name"] == "goal_build_up":
         for f in facts:
-            if f is goal or f.get("team") != goal["team"]:
+            if f is goal or f.get("team") != goal["team"] or f.get("kind") == "goal":
                 continue
             for text in code_texts(f):
-                lead = text[0].lower() + text[1:]
+                lead = text[0].lower() + text[1:] if text.split()[0] in ("In", "From") else text
                 combined = f"{goal['club']} scored in minute {goal['minute']}. Just before it, {lead}"
                 if _verify(Claim(combined, [goal["id"], f["id"]]), known, insights).ok:
                     return _match_answer(
