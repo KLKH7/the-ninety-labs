@@ -45,6 +45,10 @@ RETRY_WAIT_S = 3.0  # design: when a 429 gives no Retry-After; F0 refills over a
 # product "Azure Speech", meter "S1 Neural Text To Speech Characters", northcentralus, read
 # 2026-10-23). The resource is F0 today, whose first 0.5 M characters a month are free.
 USD_PER_CHAR = 15 / 1_000_000
+# voice.FORMAT is constant-bitrate MP3 at 48 kbit/s, so a file's length in seconds is its size over
+# 6,000 bytes (the few header bytes make it a little long, which errs toward more silence).
+MP3_BITS_PER_S = 48_000
+assert "48kbitrate" in voice.FORMAT, "MP3_BITS_PER_S follows voice.FORMAT"
 
 Synth = Callable[[str], tuple[bytes, float]]  # SSML -> (audio, seconds the request took)
 
@@ -163,14 +167,27 @@ def write(bundle: Path, synth: Synth | None = None, cache: Path | None = None,
 
 def _point_commentary_at_audio(bundle: Path, index: dict[str, dict]) -> None:
     """Each commentary call's `audio` (commentary.json, the big-screen player's format): its file,
-    or None when its synthesis failed and the player shows the caption alone."""
+    or None when its synthesis failed and the player shows the caption alone; and each call re-timed
+    to its audio's own length (`commentary.refit`), dropping any that would then overlap."""
+    from ninety.speech import commentary
+
     path = bundle / "commentary.json"
     if not path.is_file():
         return
     body = json.loads(path.read_text())
+    measured = {}
     for line in body["lines"]:
-        line["audio"] = (index.get(voice.key(line["text"])) or {}).get("file")
+        entry = index.get(voice.key(line["text"])) or {}
+        line["audio"] = entry.get("file")
+        if entry:
+            measured[line["id"]] = entry["bytes"] * 8 / MP3_BITS_PER_S
+    body = commentary.refit(body, measured)
     path.write_text(json.dumps(body, indent=1) + "\n")
+    manifest = bundle / "manifest.json"
+    if manifest.is_file():
+        doc = json.loads(manifest.read_text())
+        doc["commentary"] = commentary.summary(body)
+        manifest.write_text(json.dumps(doc, indent=2) + "\n")
 
 
 def estimate(bundle: Path, cache: Path | None = None) -> dict:

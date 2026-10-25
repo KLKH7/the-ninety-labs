@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from ninety.speech import bundle, commentary
+from ninety.speech import bundle, commentary, describe
 from ninety.speech.commentary import GAP_S, MAX_LAG_S
 
 CLUBS = {"home": "London", "away": "Lisbon"}
@@ -135,3 +135,115 @@ def test_a_restart_names_the_side_taking_it_only_when_sure(restart, sure, unsure
     # vision's set piece (#325): `team` is the side taking it; a null side confidence is unsure.
     assert texts([ev("v1", 10.0, "set_piece", side=0.99, restart=restart)]) == [sure]
     assert texts([ev("v1", 10.0, "set_piece", side=None, restart=restart)]) == [unsure]
+
+
+# --- review of #328: each pins what a mutant got past -------------------------------------------
+
+def test_a_line_lasts_as_long_as_it_takes_to_say_and_the_next_waits_a_second_of_silence():
+    events = [ev("v1", 10.0, "shot", outcome="on_target"), ev("v2", 11.0, "shot", outcome="off_target")]
+    first, second = lines(events)
+    said = describe.estimated_seconds(first["text"])
+    assert first["t"] == 10.0 and first["t_end"] == pytest.approx(10.0 + said, abs=0.01)
+    assert second["t"] == pytest.approx(first["t_end"] + 1.0, abs=0.01)  # the earliest start, 1 s of silence
+
+
+def test_a_call_that_would_start_more_than_two_seconds_late_is_dropped():
+    goal = ev("v1", 10.0, "goal", team="away")  # "Goal! Lisbon score!" holds the voice ~1.3 s, then 1 s
+    free = round(10.0 + describe.estimated_seconds("Goal! Lisbon score!") + 1.0, 2)
+    just_in = ev("v2", round(free - 1.99, 2), "out_of_play", y=34.0, x=105.0)
+    too_late = ev("v3", round(free - 2.02, 2), "out_of_play", y=34.0, x=105.0)
+    assert [line["event"] for line in lines([goal, just_in])] == ["v1", "v2"]
+    assert [line["event"] for line in lines([goal, too_late])] == ["v1"]
+
+
+def test_a_call_falls_back_to_its_short_form_to_fit_before_a_goal():
+    goal = ev("v1", 20.0, "goal")
+    shot = ev("v2", 17.9, "shot", outcome="on_target")  # the full form would run into the goal
+    said = {line["event"]: line for line in lines([goal, shot])}
+    assert said["v2"]["text"] == "London shoot." and said["v2"]["short"] is True
+
+
+def test_only_vision_detections_with_a_confidence_are_called():
+    for row in (ev("v1", 10.0, "goal", conf=None), {**ev("v2", 10.0, "goal"), "source": "truth"}):
+        body = commentary.commentary([row], [], CLUBS)
+        assert body["lines"] == [] and "vision detection" in body["refused"][0]["reason"]
+
+
+@pytest.mark.parametrize(("x", "y", "said"), [
+    (60.0, 68.0, "It's gone out for a throw."), (60.0, 1.5, "It's gone out for a throw."),  # within 2 m
+    (104.9, 0.5, "It's gone out of play."), (1.0, 67.0, "It's gone out of play."),  # by a corner flag
+    (105.0, 34.0, "It's gone out of play."), (60.0, 3.0, "It's gone out of play."),
+])
+def test_a_throw_is_called_only_over_a_touchline_clear_of_the_goal_lines(x, y, said):
+    assert texts([ev("v1", 10.0, "out_of_play", x=x, y=y)]) == [said]
+
+
+def test_half_time_and_a_blocked_shot_are_called():
+    assert texts([ev("v1", 10.0, "shot", outcome="blocked"), ev("v2", 40.0, "half_time")]) == [
+        "London shoot, blocked.", "Half-time."]
+
+
+@pytest.mark.parametrize("cue", [
+    {"verified": None}, {"verified": True, "evidence": ["nope"]}, {"verified": True, "evidence": []},
+    {"verified": True, "persona": "casual"}, {"verified": True, "lang": "es"},
+])
+def test_an_insight_is_said_only_as_the_verified_english_analyst_claim_on_known_events(cue):
+    events = [ev("v3", 10.0, "pass", player="h-t4", receiver="h-t8", outcome="success",
+                 end_x=78.0, end_y=34.0)]
+    base = {"id": "insight-m-v3", "kind": "insight", "persona": "analyst", "t_in": 10.0, "lang": "en",
+            "text": "h-t4 plays it 12 m to h-t8.", "evidence": ["v3"]}
+    assert texts(events, [{**base, **cue}]) == []
+    assert len(texts(events, [{**base, "verified": True}])) == 1
+
+
+def test_lines_are_spaced_on_the_videos_clock_across_a_cut():
+    from ninety.match.timeline import Timeline
+
+    # The ball goes out at 99 s; the picture cuts from 100.56 s to the restart at 130 s.
+    timeline = Timeline([{"index": 0, "frame": 2450, "frames": 64},
+                         {"index": 64, "frame": 3250, "frames": 100}], 25)
+    out = ev("v1", 99.0, "out_of_play", y=68.0)
+    restart = ev("v2", 130.2, "set_piece", restart="throw_in")
+    first, second = commentary.commentary([out, restart], [], CLUBS, timeline)["lines"]
+    # One voice on screen, though they are 31 s apart in the match: on the video's clock the restart
+    # waits for the first line and its second of silence.
+    said = describe.estimated_seconds(first["text"])
+    assert timeline.to_video(second["t"]) >= timeline.to_video(first["t"]) + said + 1.0 - 0.01
+    assert first["t"] == 99.0 and second["v"] == pytest.approx(timeline.to_video(second["t"]), abs=0.02)
+
+
+def test_once_voiced_a_line_whose_audio_runs_long_drops_the_lower_priority_one_after_it():
+    body = commentary.commentary([ev("v1", 10.0, "shot", outcome="on_target"), ev("v2", 12.9, "out_of_play",
+                                                                                     x=105.0)], [], CLUBS)
+    assert len(body["lines"]) == 2
+    body = commentary.refit(body, {"cm-v1": 3.0})  # the shot's audio is 3 s, not the estimate
+    assert [line["id"] for line in body["lines"]] == ["cm-v1"] and body["lines"][0]["t_end"] == 13.0
+    assert body["dropped"][-1]["id"] == "cm-v2"
+
+
+def test_the_estimate_cli_calls_nothing_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    commentary.write(commentary.commentary([ev("v1", 10.0, "goal")], [], CLUBS), tmp_path)
+
+    def no_azure():
+        raise AssertionError("--estimate must not reach Azure")
+
+    monkeypatch.setattr(bundle, "azure_synth", no_azure)
+    bundle.main([str(tmp_path), "--estimate", "--cache", str(tmp_path / "cache")])
+    assert json.loads(capsys.readouterr().out)["by_kind"]["commentary"] == 1
+    assert not (tmp_path / "speech.json").exists() and not (tmp_path / "speech").exists()
+
+
+def test_a_line_never_starts_before_its_moment():
+    (line,) = lines([ev("v1", 10.004, "shot", outcome="on_target")])
+    assert line["t"] >= 10.004 and line["v"] >= 10.004
+
+
+def test_voicing_the_bundle_times_each_call_by_its_audio(tmp_path):
+    from tests.test_speech import FakeSynth
+
+    shot = ev("v1", 10.0, "shot", outcome="on_target")
+    commentary.write(commentary.commentary([shot], [], CLUBS), tmp_path)
+    bundle.write(tmp_path, synth=FakeSynth(), cache=tmp_path / "cache", sleep=lambda s: None)
+    (line,) = json.loads((tmp_path / "commentary.json").read_text())["lines"]
+    heard = (tmp_path / line["audio"]).stat().st_size * 8 / bundle.MP3_BITS_PER_S
+    assert line["t_end"] == pytest.approx(line["t"] + heard, abs=0.011)

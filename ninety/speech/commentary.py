@@ -9,7 +9,8 @@ each line's text, so `text` is exactly what is said.
 
 What it says, and only this:
 - a detected goal, shot or restart (kickoff, out of play, set piece, half-time), each line written
-  here by code from one detection at or above the confidence gate (`factcheck.MIN_CONFIDENCE`), passed
+  here by code from one vision detection (source "vision", with a confidence) at or above the
+  confidence gate (`factcheck.MIN_CONFIDENCE`), passed
   through the fact-checker's code half and its confidence gate (`factcheck.check`,
   `confidence_gate`). A club is named only when that event's side was told surely
   (`factcheck.side_known`), and never a player: the live path has no name it can vouch for yet;
@@ -22,27 +23,37 @@ Pace (design, the Coordinator's brief): one voice; a line starts within MAX_LAG_
 leaves at least GAP_S of silence before the next. Lines are placed by priority (goals, then shots,
 then restarts, then insights) and, within one, in time order; a line that cannot fit falls back to
 its short form, then is dropped with the reason. So a goal is never crowded out by an insight.
+
+Time: lines are placed on the VIDEO's clock (match time through the clip's Timeline), since a
+condensed match cuts dead balls and two moments either side of a cut are seconds apart on screen
+however far apart in the match; each line also carries its match time `t` for the player. Lengths
+are estimated from the words; once the bundle is voiced, `refit` replaces each estimate with the
+audio's own length and drops, lowest priority first, any line that would then overlap.
 """
 
 from __future__ import annotations
 
 import json
+import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety.agents.factcheck import Claim, check, confidence_gate, side_known
+from ninety.agents.perceive import MATCH_M
 from ninety.match.facts import compact
+from ninety.match.timeline import Timeline
 from ninety.speech import describe, voice
 
 FORMAT = 1
 PRIORITY = {"goal": 0, "shot": 1, "restart": 2, "insight": 3}
-RESTARTS = ("kickoff", "out_of_play", "set_piece", "half_time")
 MAX_LAG_S = describe.MAX_LAG_S  # the Describer's limit: a line said late is about the wrong play
 GAP_S = 1.0  # design: the silence a commentator leaves between calls, so the crowd is heard
-# A pitch line, in metres from the near touchline or the left goal line (schemas/match_event: x 0..105,
-# y 0..68). Vision places an out-of-play event where the ball crossed; within a metre of a touchline
-# it went over the touchline, where Law 15 restarts play with a throw-in.
-TOUCHLINE_M = 1.0
+PITCH_X, PITCH_Y = describe.PITCH_LENGTH_M, describe.PITCH_WIDTH_M
+# Where vision places an event, to within the event scorer's lenient spot rule (2 m: docs/EVALUATION.md,
+# perceive.MATCH_M). A ball out within it of a touchline, and further than it from either goal line,
+# went over the touchline, where Law 15 restarts play with a throw-in; any other ball out is only out.
+NEAR_M = MATCH_M
 SHOT_SAID = {"on_target": "on target", "off_target": "wide", "blocked": "blocked"}
 # A detected set piece's restart (schemas/match_event.schema.json `restart`), with its taker's side
 # and without it.
@@ -53,6 +64,7 @@ RESTART_SAID = {
     "free_kick": ("Free kick to {side}.", "A free kick."),
     "penalty_kick": ("Penalty to {side}!", "A penalty!"),
 }
+Seconds = Callable[[str], float]  # what is said -> how long it takes to say
 
 
 @dataclass(frozen=True)
@@ -81,12 +93,21 @@ class Line:
     short: bool
     t_event: float
     evidence: list[str]
+    v: float  # video seconds the call starts: the clock lines are spaced on
+    v_end: float
     audio: str | None = None  # the call's audio, relative to the bundle: set by ninety/speech/bundle.py
 
 
 def _side(event: dict) -> str | None:
     """"home" or "away" when the event's side was told surely; else None, and no side is said."""
     return event["team"] if event.get("team") in ("home", "away") and side_known(event) else None
+
+
+def _out(event: dict) -> str:
+    x, y = event["x"], event["y"]
+    touchline = y <= NEAR_M or y >= PITCH_Y - NEAR_M
+    clear_of_goal_lines = NEAR_M < x < PITCH_X - NEAR_M
+    return "It's gone out for a throw." if touchline and clear_of_goal_lines else "It's gone out of play."
 
 
 def event_versions(event: dict) -> tuple[str, list[str]] | None:
@@ -104,8 +125,7 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
     if kind == "half_time":
         return "restart", ["Half-time."]
     if kind == "out_of_play":
-        over_touchline = event["y"] <= TOUCHLINE_M or event["y"] >= describe.PITCH_WIDTH_M - TOUCHLINE_M
-        return "restart", ["It's gone out for a throw." if over_touchline else "It's gone out of play."]
+        return "restart", [_out(event)]
     if kind == "set_piece":
         # Which restart (vision's `restart`, #325): `team` is the side taking it, named only when sure.
         said = RESTART_SAID.get(event.get("restart") or "")
@@ -116,8 +136,7 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
     return None
 
 
-def calls(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = None
-          ) -> tuple[list[Call], list[dict]]:
+def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]:
     """Every call the commentator may make, each checked, and what was refused and why."""
     known = {e["id"]: compact(e) for e in events}
     by_id = {e["id"]: e for e in events}
@@ -129,7 +148,7 @@ def calls(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = N
             claim = Claim(text, evidence)
             verdict = check(claim, known)
             if verdict.ok:
-                verdict = confidence_gate(claim, known)
+                verdict = confidence_gate(claim, known)  # it holds an unsure detection too
             if verdict.ok:
                 ok.append(text)
             else:
@@ -141,24 +160,30 @@ def calls(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = N
         written = event_versions(event)
         if written is None:
             continue
+        if event.get("source") != "vision" or event.get("confidence") is None:
+            reason = "not a vision detection with a confidence: the commentary calls only those"
+            refused.append({"evidence": [event["id"]], "text": None, "reason": reason})
+            continue
         kind, versions = written
-        versions = checked(versions, [event["id"]])  # the confidence gate holds an unsure detection
+        versions = checked(versions, [event["id"]])
         if versions:
             out.append(Call(event["id"], event["t"], kind, [event["id"]], versions, _side(event) is not None))
     for cue in cues:
-        if cue.get("kind") != "insight" or cue.get("persona") not in (None, "analyst"):
+        # The Producer's insight, in English: the Personalizer's persona and language variants are
+        # versions of the same claim, and a commentator calls a moment once.
+        if cue.get("kind") != "insight" or cue.get("persona") != "analyst" or cue.get("lang", "en") != "en":
             continue
+        evidence = list(cue.get("evidence") or [])
         if cue.get("verified") is not True:
-            refused.append({"evidence": cue["evidence"], "text": cue["text"], "reason": "not verified"})
+            refused.append({"evidence": evidence, "text": cue.get("text"), "reason": "not verified"})
             continue
-        if not cue["evidence"] or any(i not in by_id for i in cue["evidence"]):
-            refused.append({"evidence": cue["evidence"], "text": cue["text"],
-                            "reason": "cites unknown events"})
+        if not evidence or any(i not in by_id for i in evidence):
+            refused.append({"evidence": evidence, "text": cue.get("text"), "reason": "cites unknown events"})
             continue
-        versions = checked([cue["text"]], list(cue["evidence"]))
+        versions = checked([cue["text"]], evidence)
         if versions:
-            sides = all(side_known(by_id[i]) for i in cue["evidence"])
-            out.append(Call(cue["id"], cue["t_in"], "insight", list(cue["evidence"]), versions, sides))
+            sides = all(side_known(by_id[i]) for i in evidence)
+            out.append(Call(cue["id"], cue["t_in"], "insight", evidence, versions, sides))
     return out, refused
 
 
@@ -168,45 +193,76 @@ def said(call: Call, n: int, clubs: dict[str, str] | None) -> str:
     return describe.spoken(call.versions[n], call.sides, compact=n > 0, clubs=clubs)
 
 
+def _up(t: float) -> float:
+    """A time to the hundredth, never earlier than `t`: a line never starts before its moment."""
+    return math.ceil(round(t * 100, 6)) / 100
+
+
 def schedule(found: list[Call], clubs: dict[str, str] | None = None,
-             duration=describe.estimated_seconds) -> tuple[list[Line], list[dict]]:
-    """Place each call by priority, then time: at the earliest start within MAX_LAG_S of its moment
-    that leaves GAP_S of silence on both sides of every line already placed; its short form if the
-    full one does not fit; else dropped, with why."""
+             duration: Seconds = describe.estimated_seconds,
+             timeline: Timeline | None = None) -> tuple[list[Line], list[dict]]:
+    """Place each call by priority, then time, on the video's clock: at the earliest start within
+    MAX_LAG_S of its moment that leaves GAP_S of silence on both sides of every line already placed;
+    its short form if the full one does not fit; else dropped, with why."""
+    video = timeline.to_video if timeline else (lambda t: t)
+    match = timeline.to_match if timeline else (lambda v: v)
     placed: list[Line] = []
     dropped: list[dict] = []
     for call in sorted(found, key=lambda c: (PRIORITY[c.kind], c.t, c.key)):
+        at = video(call.t)
         line = None
         for n in range(len(call.versions)):
             text = said(call, n, clubs)
             seconds = duration(text)
-            start = _first_gap(placed, call.t, seconds)
+            start = _first_gap(placed, at, seconds)
             if start is not None:
+                start = _up(start)
+                end = _up(start + seconds)
                 event = None if call.kind == "insight" else call.key
-                line = Line(f"cm-{call.key}", round(start, 2), round(start + seconds, 2), text, event,
-                            call.kind, PRIORITY[call.kind], n > 0, call.t, call.evidence)
+                t = _up(match(start))
+                line = Line(f"cm-{call.key}", t, _up(t + seconds), text, event, call.kind,
+                            PRIORITY[call.kind], n > 0, call.t, call.evidence, start, end)
                 break
         if line is None:
             dropped.append({"id": call.key, "t": call.t, "reason": "no room within the lag limit"})
             continue
         placed.append(line)
-    return sorted(placed, key=lambda line: line.t), dropped
+    return sorted(placed, key=lambda line: line.v), dropped
 
 
-def _first_gap(placed: list[Line], t: float, seconds: float) -> float | None:
-    """The earliest start in [t, t + MAX_LAG_S] with GAP_S clear of every placed line, or None."""
-    starts = [t] + [p.t_end + GAP_S for p in placed if t <= p.t_end + GAP_S <= t + MAX_LAG_S]
+def _first_gap(placed: list[Line], at: float, seconds: float) -> float | None:
+    """The earliest start in [at, at + MAX_LAG_S] with GAP_S clear of every placed line, or None."""
+    starts = [at] + [p.v_end + GAP_S for p in placed if at <= p.v_end + GAP_S <= at + MAX_LAG_S]
     for start in sorted(starts):
         end = start + seconds
-        if all(end + GAP_S <= p.t or start >= p.t_end + GAP_S for p in placed):
+        if all(end + GAP_S <= p.v or start >= p.v_end + GAP_S for p in placed):
             return start
     return None
 
 
-def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = None) -> dict:
+def refit(body: dict, seconds: dict[str, float]) -> dict:
+    """The track with each line's measured length (`seconds`, by line id, from its audio) in place
+    of the estimate: kept by priority, then time; a line that would now overlap one kept before it
+    is dropped, with why. Starts never move: a line is said at its moment or not at all."""
+    kept: list[dict] = []
+    for line in sorted(body["lines"], key=lambda li: (li["priority"], li["v"], li["id"])):
+        length = seconds.get(line["id"])
+        if length is not None:
+            line = {**line, "v_end": _up(line["v"] + length), "t_end": _up(line["t"] + length)}
+        if all(line["v_end"] + GAP_S <= k["v"] or line["v"] >= k["v_end"] + GAP_S for k in kept):
+            kept.append(line)
+        else:
+            body["dropped"].append({"id": line["id"], "t": line["t_event"],
+                                    "reason": "its audio runs longer than estimated: no room"})
+    body["lines"] = sorted(kept, key=lambda li: li["v"])
+    return body
+
+
+def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = None,
+               timeline: Timeline | None = None) -> dict:
     """commentary.json's body for a bundle's detected events and live cues."""
-    found, refused = calls(events, cues, clubs)
-    lines, dropped = schedule(found, clubs)
+    found, refused = calls(events, cues)
+    lines, dropped = schedule(found, clubs, timeline=timeline)
     return {"format": FORMAT, "voice": voice.VOICE, "gap_s": GAP_S, "max_lag_s": MAX_LAG_S,
             "lines": [asdict(line) for line in lines], "dropped": dropped, "refused": refused}
 
@@ -214,5 +270,9 @@ def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | Non
 def write(body: dict, out: Path) -> dict:
     """commentary.json in `out`; returns the summary for the bundle's manifest."""
     (out / "commentary.json").write_text(json.dumps(body, indent=1) + "\n")
+    return summary(body)
+
+
+def summary(body: dict) -> dict:
     return {"count": len(body["lines"]), "dropped": len(body["dropped"]), "refused": len(body["refused"]),
             "chars": sum(len(line["text"]) for line in body["lines"])}

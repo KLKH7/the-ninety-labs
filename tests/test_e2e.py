@@ -409,3 +409,21 @@ def test_the_bundle_has_a_commentary_track_from_its_checked_events(tmp_path):
     # The fixture's shot (e2, on target, detected at 0.9) carries no side confidence, so no club is said.
     shots = [line["text"] for line in body["lines"] if line["kind"] == "shot"]
     assert shots == ["A shot, on target."]
+
+
+def test_the_commentary_hears_the_clips_clubs_and_timeline_and_never_the_audio_cues(tmp_path, monkeypatch):
+    from ninety.speech import commentary
+
+    seen = []
+    real = commentary.commentary
+
+    def spy(events, cues, clubs=None, timeline=None):
+        seen.append((cues, clubs, timeline))
+        return real(events, cues, clubs, timeline)
+
+    monkeypatch.setattr(commentary, "commentary", spy)
+    monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
+    run(tmp_path)
+    ((cues, clubs, timeline),) = seen
+    assert clubs == {"home": "London", "away": "Lisbon"} and timeline is not None
+    assert not [c for c in cues if c.get("kind") == "audio_description"]

@@ -683,7 +683,8 @@ async def run(args: argparse.Namespace) -> dict:
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
 
-    commentary_info = commentary.write(commentary.commentary(events, cues, clubs_of(clip.meta)), out)
+    commentary_info = commentary.write(
+        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta)), out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)
