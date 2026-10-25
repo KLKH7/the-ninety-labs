@@ -404,6 +404,14 @@ def check(
         )
         if a and b and not reverse and re.search(rf"\b{re.escape(b)} passed to {re.escape(a)}\b", claim.text):
             reasons.append(f"{b} to {a} is not a cited pair")
+        # Each saying of the pair carries its own count straight after it, so two cited pairs cannot
+        # trade counts (merge-queue review of #321).
+        if a and b:
+            said = rf"\b{re.escape(a)} passed to {re.escape(b)}\b(?: ({_N}) times?\b)?"
+            for m in re.finditer(said, claim.text):
+                if m.group(1) is None or float(m.group(1)) != f.get("value"):
+                    reasons.append(f"{a} to {b} is {f.get('value')} times, said straight after the pair")
+                    break
         if "of the passes the video could name both players of" not in claim.text:
             reasons.append("a pass pair says it counts only the passes the video could name both players of")
 
