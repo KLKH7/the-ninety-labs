@@ -370,6 +370,16 @@ def check(
     if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
         reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
 
+    # A pass pair says who passed to whom, in that order, and that it counts only named passes.
+    for f in cited:
+        if f.get("metric") != "pair_passes":
+            continue
+        a, b = f.get("passer_is"), f.get("receiver_is")
+        if a and b and not re.search(rf"\b{re.escape(a)} passed to {re.escape(b)}\b", claim.text):
+            reasons.append(f"the pair is {a} to {b}, said in that order")
+        if "of the passes the video could name both players of" not in claim.text:
+            reasons.append("a pass pair says it counts only the passes the video could name both players of")
+
     # A fact whose side the video could not tell names no club (a shot measured to the nearer goal):
     # a club may be named only when another cited fact is that club's (merge-queue review of #318).
     if any(f.get("side_known") is False and f.get("team") is None for f in cited):
