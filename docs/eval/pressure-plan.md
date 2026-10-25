@@ -68,3 +68,25 @@ said so here. Development numbers on stand-in observations only; no test number.
 ## Outcome
 
 To be written after the runs, below this line, without changing anything above.
+
+### Outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `0326b9b`)
+
+Development numbers on **stand-in observations** built from the answer key, validation only; not a
+vision result. Strict matching (lenient gives the same here).
+
+| Run | True | Detected | Found (recall, 95%) | Right (precision, 95%) |
+|---|---:|---:|---|---|
+| M1, 30 windows, noise 0.188 m | 55 | 53 | 32 (0.58, 0.45 to 0.70) | 32 (0.60, 0.47 to 0.72) |
+| M1, no noise | 55 | 55 | 40 (0.73, 0.60 to 0.83) | 40 (0.73, 0.60 to 0.83) |
+| M2, 4 rendered clips, noise | 6 | 4 | 2 (0.33, 0.10 to 0.70) | 2 (0.50, 0.15 to 0.85) |
+| M2, no noise | 6 | 7 | 4 (0.67, 0.30 to 0.90) | 4 (0.57, 0.25 to 0.84) |
+
+**Bar met** on M1 with noise (0.58 and 0.60, both at least 0.5): `pressure` is in `events.WRITTEN`.
+Of M1's 21 false pressures with noise, 7 fall in a window's first 8 s for a side the engine had
+written one for in the 8 s before it (the memory a clip cannot see). Names on matched events of
+all three kinds (M1, noise): 48 right, 1 wrong, 30 left null.
+
+**For review (Kian):** pressure now reaches the agents and the stats (PPDA counts `pressure`
+events) from the broadcast, which shows 5 to 8 players: a detected pressure is one the picture
+shows, not every one in the match. Its confidence is halved beyond 0.74 m, where a halved score
+falls under the fact-checker's 0.5 gate. The interval is wide and the M2 sample is small.

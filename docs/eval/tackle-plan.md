@@ -73,3 +73,27 @@ said so here. Development numbers on stand-in observations only; no test number.
 ## Outcome
 
 To be written after the runs, below this line, without changing anything above.
+
+### Outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `0326b9b`)
+
+Development numbers on **stand-in observations** built from the answer key, validation only; not a
+vision result. Strict matching (lenient gives the same here).
+
+| Run | True | Detected | Found (recall, 95%) | Right (precision, 95%) | Outcome right |
+|---|---:|---:|---|---|---|
+| M1, 30 windows, noise 0.188 m | 44 | 2 | 1 (0.02, 0.00 to 0.12) | 1 | 0 of 1 |
+| M1, no noise | 44 | 44 | 40 (0.91, 0.79 to 0.96) | 40 (0.91, 0.79 to 0.96) | 34 of 40 |
+| M2, 4 rendered clips, noise | 6 | 0 | 0 | none | |
+| M2, no noise | 6 | 6 | 6 | 6 | 6 of 6 |
+
+**Bar missed** (recall 0.02 against 0.5), so `tackle` is not in `events.WRITTEN`: built, tested and
+measured, not written by the live path. With exact places the rule finds 9 tackles in 10 and calls
+the outcome 34 of 40; every one kept both tracks through the contact. With fresh noise every frame it
+finds almost none: of the 43 missed, 34 were balls taken off a dribble and 9 knocked loose. Why is not
+measured yet; the likely causes are the noise's speed jitter (about 2 m/s over the speed window)
+against the 6 m/s strike test, and spells broken by the same jitter. Exact places also show the double count the plan expected: 42 of 44 detected tackles
+also start a detected pass, false by the engine's definition.
+
+**Open, for review:** the noise model (as in interception-plan.md). Kian: with a tackle detected, the
+pass the detector also writes at that spell's end is false by the engine's definition; should the
+tackle replace it? That changes the pass rule and its published numbers, so it is not changed here.

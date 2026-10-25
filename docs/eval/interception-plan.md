@@ -135,3 +135,27 @@ clears the bar and `events.TARGET_PACE` is 6 m/s. Its error leans one way: 102 o
 recoveries it calls interceptions (a ball the passer struck softer than 6 m/s on arrival, or lofted).
 So on a perfect ball path about one detected interception in four is a recovery, before any position
 error (M1, M2 below).
+
+### M1 and M2 (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `0326b9b`)
+
+Development numbers on **stand-in observations** built from the answer key, validation only; not a
+vision result. Strict matching (lenient gives the same here).
+
+| Run | True | Detected | Found (recall, 95%) | Right (precision, 95%) |
+|---|---:|---:|---|---|
+| M1, 30 windows, noise 0.188 m | 25 | 99 | 13 (0.52, 0.33 to 0.70) | 13 (0.13, 0.08 to 0.21) |
+| M1, no noise | 25 | 61 | 17 (0.68, 0.48 to 0.83) | 17 (0.28, 0.18 to 0.40) |
+| M2, 4 rendered clips, noise | 2 | 5 | 2 | 2 |
+| M2, no noise | 2 | 7 | 2 | 2 |
+
+**Bar missed** (precision 0.13 against 0.5), so `interception` is not in `events.WRITTEN`: it is built
+and tested, and measured with `detect(..., kinds=TURNOVERS)`, but the live path does not write it.
+Of the 99 detected on M1 with noise, 34 sit on a true recovery (M0's lean, now with a noisy ball),
+and the rest mostly on false failed passes: with fresh noise every frame the spells break (pass
+precision falls from 0.64 to 0.34 on the same windows), and every false failed pass to the other side
+can carry an interception. 5 of the 25 true ones were detected only as possession changes.
+
+**Open, for review:** the noise is drawn fresh each frame. Real position error is mostly a camera
+offset that persists over frames, so this stand-in is probably harsher on speeds than the video is;
+whether to add a persistent-offset model is a change to what is measured, and would need an
+amendment here before any run.
