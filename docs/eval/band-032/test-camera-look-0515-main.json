@@ -1,0 +1,76 @@
+{
+  "seeds": [
+    900001,
+    900002,
+    900003,
+    900004,
+    900005
+  ],
+  "clips": {
+    "900001": {
+      "frames": 250,
+      "trusted": 115,
+      "trusted_good": 61,
+      "trusted_bad": 54,
+      "good_frames": 196,
+      "median_m": 0.94,
+      "p95_m": 1.75,
+      "worst_m": 1.768
+    },
+    "900002": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 101,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    },
+    "900003": {
+      "frames": 250,
+      "trusted": 0,
+      "trusted_good": 0,
+      "trusted_bad": 0,
+      "good_frames": 0,
+      "median_m": null,
+      "p95_m": null,
+      "worst_m": null
+    },
+    "900004": {
+      "frames": 250,
+      "trusted": 30,
+      "trusted_good": 30,
+      "trusted_bad": 0,
+      "good_frames": 160,
+      "median_m": 0.266,
+      "p95_m": 0.727,
+      "worst_m": 0.835
+    },
+    "900005": {
+      "frames": 250,
+      "trusted": 9,
+      "trusted_good": 9,
+      "trusted_bad": 0,
+      "good_frames": 250,
+      "median_m": 0.06,
+      "p95_m": 0.185,
+      "worst_m": 0.213
+    }
+  },
+  "all": {
+    "trusted": 154,
+    "good_frames": 707,
+    "good_kept": 100,
+    "good_kept_share": 0.1414,
+    "median_m": 0.747,
+    "p95_m": 1.745,
+    "worst_m": 1.768
+  },
+  "clips_with_trusted_over_1m": {
+    "900001": {
+      "frames": 54,
+      "worst_m": 1.768
+    }
+  }
+}

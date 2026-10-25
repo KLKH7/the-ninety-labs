@@ -174,3 +174,69 @@ its branch tests to be exactly main's `fit_clip`), and its one-shot test fits fo
 test clip 900001 are also fitted here with main's code, and every frame's camera matrix must equal
 track B's; only the matrices are compared, nothing on the test clip is judged or read. If any
 differs, track B's fits are not used and the derivation waits for this machine's.
+
+### Identity check (before use)
+
+Fitted here with main's code, every frame's camera matrix and marking verdict equal track B's: seed
+110, 0 of 250 differ; test clip 900001, 0 of 250 differ (only the matrices compared). Track B's fits
+are used as the amendment says; every input's sha256 is in [band-032/inputs.sha256](band-032/inputs.sha256)
+and [band-broadcast-032-observations.sha256](band-broadcast-032-observations.sha256).
+
+### The band (stand-in, label boxes)
+
+`uv run python -m ninety.eval.band_derive --clips <clips> --obs <obs> --seeds 108 ... 119 --out
+docs/eval/band-broadcast-032.json`: **(0.901, 0.994)**, renderer 0.3.2, 3,000 frames, 1,508 good,
+from 7 clips (108, 109, 110, 113, 114, 116, 118; 111, 112, 115, 117 and 119 have no good frame).
+Above the "too few" line (500 frames, 6 clips). For comparison only, renderer 0.3's old band from
+ours-v2's boxes on 0.3.0 was (0.901, 1.002).
+
+Candidates on these frames ([band-broadcast-032.json](band-broadcast-032.json)): B1 markings keeps
+98.5% of good frames and trusts 354 bad (worst 54.0 m); B2 heights 97.9%, 315 bad (93.9 m); **B3
+96.5%, 266 bad (49.0 m)**. B3 keeps more than 90%, so it stays.
+
+### The bar on validation (B3, then `agree`; [band-032/validation.json](band-032/validation.json))
+
+1. Good frames kept: 1,455 of 1,508, **96.5%: met** (bar 90%).
+2. Worst trusted frame: **48.96 m: not met** (bar 8.5 m). Clips with trusted frames over 1 m: 117
+   (all 250, about 49 m), 112 (3, to 48.8 m), 114 (8, to 1.1 m), 116 (4, to 1.25 m).
+
+Seed 117's true camera is the reverse angle (`frames.jsonl`, `angle: reverse`, in the far stand). It
+is fitted as the main gantry turned half a turn about the centre spot, where Law 1's markings are
+the same, so markings and heights both pass, and every frame agrees with its neighbours: the failure
+track B found on 900003 (lessons 148, 159). It does not depend on the band. Main's band trusts 70 of
+its frames too ([band-032/validation-main-band.json](band-032/validation-main-band.json)), and on
+these clips keeps 382 of 1,508 good frames (25.3%). By the plan, the bar's miss means **the
+proposal recommends against adopting this band as it stands**, on top of the amendment's stand-in
+limit.
+
+### Mutation run (before the test set; [band-032/mutation.txt](band-032/mutation.txt))
+
+11 of 11 killed: the 0.3.2 band set to main's, to the old band or moved at its low end; the default
+look set to 0.3.2; `place` ignoring its band; `--regate` or the fit path ignoring `--look`; any look
+accepted; B3's markings dropped; `band_derive` allowing two looks or not recording the renderer.
+
+### The test set, scored once (an estimate under the box mismatch, not a replacement for 0.25)
+
+Track B's one-shot fits of the frozen five (ours-v2's committed detections), judged by
+`observe --regate --look <look>`, graded by [band-032/grade.py](band-032/grade.py) and
+`ninety.eval.event_report`:
+
+| Seed | Main (0.5.15 band): trusted (good, bad) | Proposed (0.3.2 band): trusted (good, bad) | Good frames in clip | Proposed: median / p95 / worst |
+|---|---|---|---|---|
+| 900001 | 115 (61, 54) | 177 (177, 0) | 196 | 0.15 / 0.75 / 0.98 m |
+| 900002 | 0 | 101 (101, 0) | 101 | 0.11 / 0.34 / 0.41 m |
+| 900003 | 0 | 0 | 0 | - |
+| 900004 | 30 (30, 0) | 153 (153, 0) | 160 | 0.18 / 0.72 / 0.91 m |
+| 900005 | 9 (9, 0) | 250 (250, 0) | 250 | 0.08 / 0.23 / 0.38 m |
+| all | 154 (100, 54), worst 1.77 m | **681 (681, 0), worst 0.98 m** | 707 | 0.11 / 0.60 / 0.98 m |
+
+Passes, strict (lenient the same): main **2 of 13, 1 false, F1 0.25** (reproduces #298); proposed
+**5 of 13, 2 false, F1 0.50** (900001: 2 found, 2 false; 900005: 3 found); published (event-report-v2)
+7 of 13, 1 false, F1 0.67. Shots: proposed 0 of 1 and 1 false; main 0 of 1. Possession changes: 1 of 5
+both, 0 false proposed and 1 false main. Files: [band-032/](band-032/) (`test-camera-look-*.json`,
+`test-events-look-*.json`).
+
+**Not adopted, and not adoptable here:** the band is from label boxes (amendment), and it misses
+the validation bar on the reverse angle (above). What would make it adoptable: ours-v2 detections of
+108 to 119 (the amendment's command), the band re-derived and the bar re-checked; the reverse angle
+needs an absolute reference whatever the band (lesson 159).
