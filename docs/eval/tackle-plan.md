@@ -97,3 +97,9 @@ also start a detected pass, false by the engine's definition.
 **Open, for review:** the noise model (as in interception-plan.md). Kian: with a tackle detected, the
 pass the detector also writes at that spell's end is false by the engine's definition; should the
 tackle replace it? That changes the pass rule and its published numbers, so it is not changed here. The first run drew its noise from the platform's generator, which is not the same on every machine (lesson 46), and gave 1 of 44 found; the committed report is the rerun with portable draws, from the same commit's code. Two draws of the same noise moving a rate this much is the measure's own spread.
+
+## Amendment 1, 2026-10-25 (before any run of it)
+
+The stand-in's noise model gains an error shared across each frame and over each clip, and the bar is
+read on M4 (equal shares) instead of M1; the rule, its constants and the bar's numbers are unchanged.
+Written once, in [interception-plan.md](interception-plan.md), "Amendment 1".

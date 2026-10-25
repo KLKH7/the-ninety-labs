@@ -90,3 +90,9 @@ all three kinds (M1, noise): 46 right, 2 wrong, 26 left null. The first run drew
 events) from the broadcast, which shows 5 to 8 players: a detected pressure is one the picture
 shows, not every one in the match. Its confidence is halved beyond 0.74 m, where a halved score
 falls under the fact-checker's 0.5 gate. The interval is wide and the M2 sample is small.
+
+## Amendment 1, 2026-10-25 (before any run of it)
+
+The stand-in's noise model gains an error shared across each frame and over each clip, and the bar is
+read on M4 (equal shares) instead of M1; the rule, its constants and the bar's numbers are unchanged.
+Written once, in [interception-plan.md](interception-plan.md), "Amendment 1".

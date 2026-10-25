@@ -159,3 +159,51 @@ can carry an interception. 4 of the 25 true ones were detected only as possessio
 offset that persists over frames, so this stand-in is probably harsher on speeds than the video is;
 whether to add a persistent-offset model is a change to what is measured, and would need an
 amendment here before any run.
+
+## Amendment 1, 2026-10-25: noise shared across a frame and over a clip (written before any run of it)
+
+Applies to all three plans (pressure-plan.md and tackle-plan.md point here). Nothing in the rules,
+their constants or the bar changes. Only the stand-in's noise model does.
+
+**Why.** M1 and M2 draw each object's error afresh every frame, independently of every other
+object. Most of the position error comes from the camera fit, which every object in a frame
+shares: one fit places all of them (lesson 159: frames wrong the same way pass together). A shared
+error moves the holder, the ball and the presser together, so distances between them, and speeds
+measured relative to a player, are untouched. Independent noise breaks spells that a shared error
+leaves whole. The detector's own speeds and distances read differently under each model, and two
+of the three bars were decided by this model choice. The share of each kind of error has not been
+measured: the validation observations that would show it are not on this machine.
+
+**The model.** For object i in frame t of a clip, the error on each axis is
+b + c_t + d_{i,t}, each part Gaussian with mean 0, drawn with `fmath.Random` (seed 1, as M1):
+- **b, persistent:** one draw per clip, shared by every object and every frame (a camera offset);
+- **c_t, frame:** one draw per frame, shared by every object in it (calibration jitter, which moves
+  every foot point together: `track.GATE_M`'s note, up to about 0.5 m between neighbouring frames);
+- **d_{i,t}, object:** one draw per object per frame, as M1's (where a box's foot point lands).
+
+The total per-axis variance stays M1's, sigma = 0.188 m (the measured 0.221 m median radial error),
+split by shares (persistent, frame, object) that sum to 1:
+
+| Run | Shares | What it stands for |
+|---|---|---|
+| M1 (run, above) | 0, 0, 1 | every error independent: the harshest on spells |
+| **M3** | 1, 0, 0 | all error one offset per clip: the gentlest; relative places exact |
+| **M4** | 1/3, 1/3, 1/3 | no part measured, so equal shares (*design*) |
+
+Each is run on M1's 30 windows (every player seen) and M2's 4 rendered clips (what the broadcast
+shows), graded exactly as M1, and written to `docs/eval/turnovers-dev.json` beside M1 and M2
+(which stay, unchanged).
+
+**The bar, from now on.** The bar itself does not change: strict recall and precision both at least
+0.5. It is read on **M4 with every player seen**, which replaces M1 for the decision. A kind is in
+`events.WRITTEN` exactly when it meets the bar on M4. Pressure is taken out if it misses; an
+interception or a tackle is put in if it meets it. M1 and M3 are reported beside it as the two
+ends, and the outcome says how far apart they are. With the plan's equal shares, the decision
+rests on a design value. The outcome says so, and the shares are re-measured when validation
+observations from the detector are available (the frame part is each frame's mean error over its
+objects, the persistent part that mean averaged over the clip). That re-measure gets its own
+amendment, written before its run.
+
+**Also reported,** for the tackle question: in M4, how often a ball at a player's feet reads faster
+than ARRIVE_MPS over the speed window. That is the cause the tackle outcome names as likely but
+unmeasured.
