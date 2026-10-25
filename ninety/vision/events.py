@@ -55,7 +55,6 @@ from ninety.vision.track import (
     MAX_GAP_FRAMES,
     BallPoint,
     Track,
-    assign_teams,
     ball_path,
     read_observations,
     track_players,
@@ -303,9 +302,7 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
     what it does (ninety/eval/attribution_derive.py); the live path always runs with it."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
-    teams = assign_teams(tracks)
-    if sides.whole_pitch(rows):  # the tactical views: kit and position combined (sides.py)
-        teams["spatial_changed"] = sides.apply(tracks, teams, rows)
+    teams = sides.assign(tracks, rows)  # on the tactical views, kit and position combined (sides.py)
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     sp = spells(path, tracks)

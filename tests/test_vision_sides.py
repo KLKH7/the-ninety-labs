@@ -112,3 +112,52 @@ def test_law_3_judges_the_sides_s_gives_too():
     tracks, info, r = sided(twelve)
     sides.apply(tracks, info, r)
     assert info["law3"] is not None and all(t.side_confidence == 0.0 for t in tracks if t.team is not None)
+
+
+REDDISH = [195.0, 31.0, 43.0]  # within noise of the red kit: the kit alone says away
+
+
+def test_detect_names_a_pass_by_the_sides_s_gives_on_the_tactical_views():
+    # The wiring in events.detect: the reddish player stands deepest of all in home's half and
+    # passes 12 m to a blue team-mate. The kit vote alone calls him away (a pass lost to the other
+    # side); S calls him home, and the pass is home's, completed, at S's confidence.
+    from ninety.vision import events as ev
+
+    scene = TEAMS + [(5.0, 60.0, REDDISH), (17.0, 60.0, BLUE)]
+    r, bx = [], 5.3
+    for f in range(60):
+        if f > 20:
+            bx = min(bx + 12.0 / 25, 16.7)
+        r += rows(scene, frames=1, ball=(bx, 60.0))
+        r[-1] |= {"frame": f, "t": f / 25}
+    tracks = tr.track_players(r)
+    tr.assign_teams(tracks)
+    assert next(t for t in tracks if t.xy[0][0] == 5.0).team == "away"  # the premise
+    tracks = tr.track_players(r)
+    teams = sides.assign(tracks, r)
+    him = next(t for t in tracks if t.xy[0][0] == 5.0)
+    assert him.team == "home" and teams["spatial_changed"] >= 1
+    events, summary = ev.detect(r)
+    (p,) = [e for e in events if e["type"] == "pass"]
+    assert (p["team"], p["outcome"], p["team_confidence"]) == ("home", "success", him.side_confidence)
+    assert summary["teams"]["spatial_changed"] == teams["spatial_changed"]
+
+
+def test_a_kick_off_is_named_by_the_same_sides_as_the_passes():
+    # restarts.detect takes its sides from sides.assign too: the reddish taker inside the centre
+    # circle, in home's half at the kick-off, is home there as in events.detect, not away by kit alone.
+    from ninety.vision import restarts as rs
+
+    scene = ([(35 + 3 * k, 10.0 + 12 * k, BLUE) for k in range(5)]
+             + [(62 + 3 * k, 10.0 + 12 * k, RED) for k in range(5)] + [(45.0, 34.0, REDDISH)])
+    r = rows(scene, frames=40, ball=(52.5, 34.0))
+    for f in range(30, 40):  # then the ball is played back
+        r[f]["ball"][0]["x"] = 52.5 - 0.4 * (f - 29)
+    tracks = tr.track_players(r)
+    tr.assign_teams(tracks)
+    assert next(t for t in tracks if t.xy[0][0] == 45.0).team == "away"  # the premise
+    tracks = tr.track_players(r)
+    sides.assign(tracks, r)
+    him = next(t for t in tracks if t.xy[0][0] == 45.0)
+    (k,) = rs.detect(r)[0]
+    assert (k["type"], k["team"], k["team_confidence"]) == ("kickoff", "home", him.side_confidence)

@@ -16,6 +16,11 @@ observations only:
 (ninety/eval/sides_spatial.py). The side is home when P >= 0.5, and `side_confidence` is max(P, 1 - P):
 on validation (leave one clip out) that confidence was within 0.037 of the accuracy it claims,
 frame-weighted over the plan's bins. Keepers keep `assign_teams`' side (the half they stand in).
+
+Not handled: a change of ends. The depth and kick-off evidence, like `assign_teams`' naming, take
+home to defend x = 0 for the whole clip, as our engine plays it (it never changes ends). The Laws
+have the teams change ends for the second half (Law 8): a clip spanning half-time would name its
+second half backwards, and would have to be split there and the second half's naming turned round.
 """
 
 from __future__ import annotations
@@ -83,6 +88,15 @@ def whole_pitch(rows: list[dict]) -> bool:
     """Whether the observations are the tactical views merged (ninety/vision/fuse.py names each box's
     view): the only input S was fitted and measured on. The broadcast keeps `assign_teams`' sides."""
     return any("views" in d or "view" in d for r in rows for d in r["players"])
+
+
+def assign(tracks: list[tr.Track], rows: list[dict]) -> dict:
+    """Every live stage's sides (events, the radar's tracked frames, restarts): `assign_teams`, then
+    on the tactical views S on top. One function, so no two stages can name a track differently."""
+    teams = tr.assign_teams(tracks)
+    if whole_pitch(rows):
+        teams["spatial_changed"] = apply(tracks, teams, rows)
+    return teams
 
 
 def p_home(x: list[float], weights=WEIGHTS) -> float:

@@ -44,11 +44,11 @@ from pathlib import Path
 from statistics import median
 
 from ninety.vision import events as ev
+from ninety.vision import sides
 from ninety.vision.track import (
     FPS,
     BallPoint,
     Track,
-    assign_teams,
     ball_path,
     read_observations,
     track_players,
@@ -161,7 +161,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     """The detected restarts, and a summary of how they were found."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
-    assign_teams(tracks)
+    sides.assign(tracks, rows)  # the same sides events.detect gives, so a kick-off and a pass agree
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     found: list[dict] = []
