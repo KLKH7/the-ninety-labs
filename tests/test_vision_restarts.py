@@ -283,11 +283,11 @@ def test_a_throw_in_is_the_side_holding_the_ball_on_the_touchline():
 def test_a_kick_hidden_by_the_taker_for_up_to_a_second_is_still_seen():
     rows = set_scene(FREE_KICK, ball_at=(40.0, 20.0))
     kick = SET + STOPPAGE - 1
-    hidden = rs.KICK_GAP_FRAMES - 1
+    hidden = tr.MAX_GAP_FRAMES - 1  # the tracker's wait for a hidden player, the rule's source
     for r in rows[kick + 1:kick + 1 + hidden]:
         r["ball"] = []
     assert [e.get("restart") for e in rs.detect(rows)[0]] == ["free_kick"]
-    for r in rows[kick + 1:kick + 3 + rs.KICK_GAP_FRAMES]:
+    for r in rows[kick + 1:kick + 3 + tr.MAX_GAP_FRAMES]:
         r["ball"] = []  # lost longer than that: whether it was kicked is not seen
     assert rs.detect(rows)[0] == []
 
@@ -298,3 +298,57 @@ def test_a_ball_seen_rolling_to_a_stop_after_a_cut_does_not_open_the_picture():
     for k, r in enumerate(cut[SET - 1:SET + 2]):  # seen rolling in for three frames, then still
         r["ball"] = [{"bbox": [0, 500, 8, 508], "score": 0.8, "x": 40.0 - 4.0 + 1.0 * k, "y": 20.0}]
     assert rs.detect(cut)[0] == []
+
+
+def test_each_place_has_the_position_error_and_no_more():
+    e, d = rs.POSITION_ERROR_M, 0.05
+    arc_in, arc_out = (rs.CORNER_ARC_M + e - d) / math.sqrt(2), (rs.CORNER_ARC_M + e + d) / math.sqrt(2)
+    assert rs.place_kind(PX - arc_in, arc_in) == "corner"
+    assert rs.place_kind(PX - arc_out, arc_out) == "free_kick"
+    assert rs.place_kind(rs.GOAL_AREA_X + e - d, CY) == "goal_kick"
+    assert rs.place_kind(rs.GOAL_AREA_X + e + d, CY) == "free_kick"
+    assert rs.place_kind(40.0, 68.0 - e + d) == "throw_in"  # the far touchline too
+    assert rs.place_kind(40.0, 68.0 - e - d) == "free_kick"
+
+
+def test_an_opponent_is_held_to_9_15_m_only_beyond_the_position_error():
+    at = {"ball_at": (40.0, 20.0)}
+    edge = rs.CIRCLE_M - rs.POSITION_ERROR_M
+    assert rs.detect(set_scene(FREE_KICK + [(40.0, 20.0 + edge + 0.1, BLUE)], **at))[0] != []
+    assert rs.detect(set_scene(FREE_KICK + [(40.0, 20.0 + edge - 0.1, BLUE)], **at))[0] == []
+
+
+def test_a_taker_must_be_within_reach_of_the_ball():
+    reach = rs.ev.CONTROL_M + rs.POSITION_ERROR_M
+    for d, n in ((reach - 0.2, 1), (reach + 0.2, 0)):
+        moved = [(40.0 - d, 20.0, RED) if (x, y) == (39.4, 20.0) else (x, y, c) for x, y, c in FREE_KICK]
+        assert len(rs.detect(set_scene(moved, ball_at=(40.0, 20.0)))[0]) == n
+
+
+def test_an_attacker_inside_the_area_by_less_than_the_error_does_not_stop_a_goal_kick():
+    edge = [(rs.PENALTY_AREA_X - rs.POSITION_ERROR_M + 0.2, 30.0, RED)]
+    found, _ = rs.detect(set_scene(GOAL_KICK + edge, ball_at=(3.0, CY + 3.0), kick_dx=1.0))
+    assert [e.get("restart") for e in found] == ["goal_kick"]
+
+
+def test_a_corner_at_the_other_end_is_the_other_side_with_its_taker_named():
+    mirrored = [(PX - x, 68.0 - y, RED if c == BLUE else BLUE) for x, y, c in CORNER]
+    found, _ = rs.detect(set_scene(mirrored, ball_at=(0.5, 67.5), kick_dx=1.0))
+    assert [(e.get("restart"), e["team"]) for e in found] == [("corner", "away")]
+    home, _ = rs.detect(set_scene(CORNER, ball_at=(PX - 0.5, 0.5)))
+    assert home[0]["player"] is not None and home[0]["confidence"] == 0.8  # the ball detection's score
+
+
+def test_a_keeper_holding_the_ball_in_his_goal_area_is_not_a_goal_kick():
+    keeper = [(2.0, CY + 2.0, WHITE)] + GOAL_KICK[1:]
+    rows = set_scene(keeper, ball_at=(2.3, CY + 2.3), kick_dx=1.0)
+    assert [e.get("restart") for e in rs.detect(rows)[0]] == ["goal_kick"]  # the ball on the grass
+    for r in rows[SET:SET + STOPPAGE]:  # now drawn over him: in his hands
+        r["ball"][0]["bbox"] = [2, 10, 8, 16]
+    assert rs.detect(rows)[0] == []
+
+
+def test_a_set_piece_names_no_taker_when_nobody_of_its_side_is_at_the_ball():
+    no_taker = [p for p in CORNER if p[:2] != (PX - 1.5, 1.5)]
+    found, _ = rs.detect(set_scene(no_taker, ball_at=(PX - 0.5, 0.5)))
+    assert [(e.get("restart"), e["player"], e["team_confidence"]) for e in found] == [("corner", None, None)]

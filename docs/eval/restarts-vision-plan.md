@@ -109,3 +109,16 @@ off the field. Throw-ins on the far side need the ball's height (planned).
 **Grading set pieces** waits for #299's `restart_kind`, which reads each true set piece's kind from
 the stoppage before it: same kind and side, within 1.0 s of the true kick, by the same rule as
 kick-offs.
+
+**Second audit (independent, on the set pieces), what changed and what is recorded.** Fixed: the
+taker is named only within reach of the ball (the corner, goal-kick or penalty taker had no
+distance limit); a keeper at the ball with it drawn over him for most of the still is his hold,
+not a set ball, for every kind (it had covered free kicks and throw-ins only); tests now catch all
+12 of its mutants. Recorded, not changed:
+- The rule that the clip's start is no stoppage was chosen from the demo's segments. Validation
+  windows open 2 s before the stoppage, so it does not touch them.
+- A free kick within 1.26 m of a touchline reads as a throw-in.
+- A kick hidden by the taker is timed at the last still sighting, up to 1 s before the strike.
+- A wait shown uncut but shorter than 4 s is not found.
+- A set piece's confidence is the ball detection's score alone; its arrangement is a gate, not a
+  share.

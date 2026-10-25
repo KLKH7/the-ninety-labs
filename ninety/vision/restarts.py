@@ -106,6 +106,7 @@ class Still:
     score: float  # the ball detection's median score over it
     sightings: int
     opens: bool = False  # it is what a picture opens on, just after a cut
+    held: float = 0.0  # the share of its sightings drawn over a player (track.BallPoint.on_player)
 
 
 def cut_frames(rows: list[dict]) -> list[int]:
@@ -150,7 +151,8 @@ def stills(path: list[BallPoint], cuts: list[int], shots: tuple[int, ...] = ()) 
             j += 1  # a lone sighting off the spot
         if played and (run[-1].frame - run[0].frame + 1) / FPS >= MIN_STILL_S:
             out.append(Still(run[0].frame, run[-1].frame, median(b.x for b in run),
-                             median(b.y for b in run), median(b.score for b in run), len(run), opens(i)))
+                             median(b.y for b in run), median(b.score for b in run), len(run), opens(i),
+                             sum(b.on_player for b in run) / len(run)))
         i = max(j, i + 1)
     return out
 
@@ -226,12 +228,18 @@ def set_piece_arrangement(kind: str, s: Still, tracks: list[Track]) -> dict | No
     - free kick (Law 13): the side of the nearest player, within reach of the ball (GROUNDING P6);
       no opponent within 9.15 m;
     - throw-in (Law 15): the side of the player holding it, the same way; no opponent within 2 m.
-    For either, the nearest a keeper in his own penalty area is his hold (Law 12): not a set piece."""
+    For either, the nearest a keeper in his own penalty area is his hold (Law 12): not a set piece.
+    For any, a keeper at the ball with it drawn over him for most of the still holds it in his hands
+    (more than half: *design*): his hold, not a set ball. The taker is named only when a player of
+    the side is within reach of the ball."""
     e = POSITION_ERROR_M
     seen = [(t, t.at(s.last)) for t in tracks if t.team is not None]
     seen = [(t, q) for t, q in seen if q is not None]
     near = sorted(seen, key=lambda tq: math.hypot(tq[1][0] - s.x, tq[1][1] - s.y))
+    at_ball = [t for t, q in near if math.hypot(q[0] - s.x, q[1] - s.y) <= ev.CONTROL_M + e]
     end_x = 0.0 if s.x < CENTRE[0] else ev.PITCH_X
+    if at_ball and at_ball[0].keeper and s.held > 0.5:
+        return None  # in the keeper's hands most of the time (Law 12): his hold, not a set ball
     if kind in ("corner", "penalty_kick"):
         team = _attacker_at(s.x)
     elif kind == "goal_kick":
@@ -255,7 +263,7 @@ def set_piece_arrangement(kind: str, s: Still, tracks: list[Track]) -> dict | No
         inside = [t for t, q in seen if _in_penalty_area(q, end_x, e) and not (t.keeper and t.team != team)]
         if len(inside) > 1:
             return None
-    mates = [t for t, _ in near if t.team == team]
+    mates = [t for t in at_ball if t.team == team]
     return {"team": team, "taker": mates[0] if mates else None}
 
 
