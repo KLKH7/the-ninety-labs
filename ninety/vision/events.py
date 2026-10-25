@@ -221,6 +221,44 @@ def heads_for_goal(path: list[BallPoint], i: int, team: str) -> bool:
     return POST_Y[0] - SHOT_MARGIN_M <= y <= POST_Y[1] + SHOT_MARGIN_M
 
 
+def _other(team: str) -> str:
+    return "away" if team == "home" else "home"
+
+
+def ends_at_goal(p: BallPoint, end: BallPoint, holder: Track | None, side: str) -> bool:
+    """Amendment 3 (docs/eval/shot-outcomes-plan.md): the move from the strike at p ends at the goal
+    `side` attacks: the line from p to its end crosses that goal line between the widened posts,
+    from within SHOT_MAX_M, and the move ends with a keeper's spell inside that goal's penalty area
+    (Law 1) or with the ball over that goal line."""
+    if not 0.0 <= p.x <= PITCH_X:
+        return False
+    gx = PITCH_X if _attacks_right(side) else 0.0
+    if abs(gx - p.x) > SHOT_MAX_M:
+        return False
+    y = outcomes.line_y(p, end, side)
+    if y is None or not POST_Y[0] - SHOT_MARGIN_M <= y <= POST_Y[1] + SHOT_MARGIN_M:
+        return False
+    if holder is None:
+        return outcomes.behind(end, side) > 0
+    return holder.keeper and abs(end.x - gx) <= outcomes.PENALTY_AREA_X
+
+
+def shot_side(path: list[BallPoint], i: int, team: str, end: BallPoint | None,
+              holder: Track | None) -> str | None:
+    """The side a strike at path[i] is a shot for, or None (amendment 3): the side attacking the goal
+    it heads for (the engine's convention, the one `assign_teams` names sides by), tested toward
+    both goals so a side read wrong does not make a shot a pass; by its first SHOT_LOOK_S
+    (`heads_for_goal`), else by where its move ends (`ends_at_goal`)."""
+    for side in (team, _other(team)):
+        if heads_for_goal(path, i, side):
+            return side
+    if end is not None:
+        for side in (team, _other(team)):
+            if ends_at_goal(path[i], end, holder, side):
+                return side
+    return None
+
+
 def out_of_play(path: list[BallPoint]) -> list[int]:
     """Indices into path where the ball has gone over a line: the first of OUT_FRAMES frames in a
     row with its centre beyond a line by more than BALL_R. A ball drawn over a player is not
@@ -303,7 +341,8 @@ def detect(rows: list[dict], join_breaks: bool = True,
     cut_at = [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
     heights = outcomes.heights_by_frame(rows, path)
     others = outcomes.context_tracks(context_rows)
-    strikes = [s.last for s in sp if s.track.team and heads_for_goal(path, index[s.last], s.track.team)]
+    strikes = [s.last for s in sp if s.track.team
+               and any(heads_for_goal(path, index[s.last], side) for side in ("home", "away"))]
     goals: list[tuple[int, int, str]] = []  # (strike frame, last frame searched, team): no out of play there
     for a, b in zip(sp, sp[1:] + [None] if sp else [], strict=True):
         team = a.track.team
@@ -316,7 +355,13 @@ def detect(rows: list[dict], join_breaks: bool = True,
             continue  # he got it back himself: a touch, not a pass
         if join_breaks and b is not None and may_continue(a.track, b.track):
             continue  # perhaps him again in a new track: no pass can be told
-        shot = heads_for_goal(path, i, team)
+        # Where his move ended: over a line first, else at the next spell.
+        end = path[index[gone]] if gone is not None else path[index[b.first]] if b is not None else None
+        holder = b.track if gone is None and b is not None else None
+        shooter = shot_side(path, i, team, end, holder)
+        shot = shooter is not None
+        # The kit's side stands where the goal agrees with it; where it does not, the side is unsure.
+        side_conf = a.track.side_confidence if shooter == team else None
         result = None
         if shot:
             # The net is searched up to the next cut or the next shot, past any spell (outcomes.judge).
@@ -324,9 +369,10 @@ def detect(rows: list[dict], join_breaks: bool = True,
             bounds = [f for f in strikes if f > a.last] + ([next_cut + 1] if next_cut is not None else [])
             goal_stop = min(bounds, default=None)
             stop = b.first if b is not None else (cut + 1 if cut is not None else None)
-            result = outcomes.judge(path, i, stop, goal_stop, team, tracks, heights, int(SHOT_LOOK_S * FPS),
-                                    b.track if b is not None else None, gone, others,
-                                    restart_stop=min((f for f in strikes if f > a.last), default=None))
+            result = outcomes.judge(path, i, stop, goal_stop, shooter, tracks, heights,
+                                    int(SHOT_LOOK_S * FPS), b.track if b is not None else None, gone, others,
+                                    restart_stop=min((f for f in strikes if f > a.last), default=None),
+                                    end_point=end)
         is_goal = result is not None and result.outcome == "goal"
         # A restart seen later (a kick-off, goal kick or corner) says where his ball went, even when
         # the picture lost it or cut away first (outcomes.first_restart).
@@ -339,13 +385,12 @@ def detect(rows: list[dict], join_breaks: bool = True,
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)
         if shot:
-            event("shot", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence,
+            event("shot", a.last, shooter, path[i].x, path[i].y, conf, side_conf,
                   ball_speed_kmh=speed, player=who, outcome=result.outcome)
             if is_goal:
                 g = result.goal
-                event("goal", g["frame"], team, g["x"], g["y"], g["confidence"], a.track.side_confidence,
-                      player=who)
-                goals.append((a.last, goal_stop if goal_stop is not None else rows[-1]["frame"] + 1, team))
+                event("goal", g["frame"], shooter, g["x"], g["y"], g["confidence"], side_conf, player=who)
+                goals.append((a.last, goal_stop if goal_stop is not None else rows[-1]["frame"] + 1, shooter))
             continue
         if gone is not None:
             g = path[index[gone]]

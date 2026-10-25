@@ -116,17 +116,15 @@ def _runs(points: list[BallPoint], ok: list[bool]) -> list[list[int]]:
 
 def line_evidence(after: list[BallPoint], heights: dict, team: str) -> tuple[float, int, float] | None:
     """The first run of IN_NET_FRAMES frames in the net (rules 1 to 3): (score, the index of the
-    frame the ball crossed the line on its way there, y where it rests), the score halved near a
-    post and halved again where no frame's height is known; None if the ball never rests in the net."""
-    flags = [in_mouth(p, heights.get(p.frame), team) for p in after]
+    frame the ball crossed the line on its way there, y where it rests), the score the mean ball
+    score over the run (amendment 3: no halvings); None if the ball never rests in the net."""
+    # A ball drawn over a player is passed over (amendment 3): one in the keeper's hands, placed on
+    # the ground, lands behind the line by its height times the camera's slope (as events.out_of_play).
+    flags = [(False, False) if p.on_player else in_mouth(p, heights.get(p.frame), team) for p in after]
     for run in _runs(after, [f[0] for f in flags]):
         if len(run) < IN_NET_FRAMES:
             continue
         score = sum(after[k].score for k in run) / len(run)
-        if any(flags[k][1] for k in run):
-            score /= 2
-        if all(heights.get(after[k].frame) is None for k in run):
-            score /= 2
         # The goal is when the whole ball crossed the line (Law 10), not when it came to rest: the
         # first frame of the unbroken stretch over the line that ends in the run.
         cross = run[0]
@@ -165,6 +163,16 @@ def turns(path: list[BallPoint], k: int) -> bool:
         return True
     cos = (va[0] * vb[0] + va[1] * vb[1]) / (sa * sb)
     return cos < math.cos(math.radians(TURN_DEG))
+
+
+def line_y(p: BallPoint, q: BallPoint, team: str) -> float | None:
+    """Where the line from p through q, carried on, crosses the goal line `team` attacks; None if it
+    heads away from it."""
+    gx = goal_line(team)
+    dx = q.x - p.x
+    if dx == 0 or (gx - p.x) / dx <= 0:
+        return None
+    return p.y + (q.y - p.y) * (gx - p.x) / dx
 
 
 def goal_y(path: list[BallPoint], i: int, team: str, look: int) -> float | None:
@@ -310,19 +318,20 @@ def first_restart(path: list[BallPoint], i: int, stop: int | None, team: str,
 def judge(path: list[BallPoint], i: int, stop: int | None, goal_stop: int | None, team: str,
           tracks: list[Track], heights: dict, look: int, next_holder: Track | None,
           out_frame: int | None, player_tracks: list[Track] | None = None,
-          restart_stop: int | None = None) -> Outcome:
+          restart_stop: int | None = None, end_point: BallPoint | None = None) -> Outcome:
     """One shot struck at path[i]. `stop` is the frame where its run ends (the next spell's first
     frame, or a cut), None at the clip's end; `next_holder` that spell's player; `out_frame` the
     frame the ball was seen out of play before `stop`, if any. The net is searched up to
     `goal_stop` (the next cut or shot), past any spell: a keeper standing by a ball at rest in his
     net reads as having it at his feet. The restart that follows (plan, amendment 2) is searched up
-    to `restart_stop` (the next strike), across cuts, and decides when it is seen."""
+    to `restart_stop` (the next strike), across cuts, and decides when it is seen. `end_point` is
+    where the move ended (amendment 3): the line to it counts for on target too."""
     end = _index(path, stop)
     players = player_tracks if player_tracks is not None else tracks
     restart = first_restart(path, i, restart_stop, team, players)
     after = path[i + 1:_index(path, goal_stop)]
-    gy = goal_y(path, i, team, look)
-    on_target = gy is not None and abs(gy - CENTRE[1]) <= GOAL_HALF - BALL_R + E_Y
+    lines = [goal_y(path, i, team, look), line_y(path[i], end_point, team) if end_point is not None else None]
+    on_target = any(gy is not None and abs(gy - CENTRE[1]) <= GOAL_HALF - BALL_R + E_Y for gy in lines)
     # A touch first: the first turn of the path before it reaches the line.
     touched = None
     for k in range(i + 1, min(end, len(path))):
