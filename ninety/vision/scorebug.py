@@ -65,7 +65,7 @@ MIN_NCC, MIN_MARGIN = 0.85, 0.05
 SAMPLE_FRAMES = FPS  # about once a second
 STABLE = 2  # samples in a row: a reading held for a second outlasts the 0.5 s pop and 0.42 s slide
 W_S = 1.0  # event_score.WINDOW_S: the renderer shows a goal's score from its own frame
-LOOKBACK_S = 10.0  # design: well over a shot's 1 to 3 s flight to the goal
+LOOKBACK_S = 10.0  # design (not measured): well over a shot's 1 to 3 s flight to the goal
 OTHER_SIDE = frozenset({"pass", "shot", "possession_change", "tackle", "interception"})
 
 
@@ -149,6 +149,7 @@ def changes(samples: list[Sample], first_frame_showing=None) -> tuple[list[dict]
     value)` gives the first frame in (lo, hi] whose reading of `side` is `value` (frame-accurate
     timing); without it a change is timed at the first sample that shows it."""
     held: tuple[int, int] | None = None
+    last_held: Sample | None = None  # the last sample that read the held score
     run: list[Sample] = []
     out, odd = [], 0
     for smp in samples:
@@ -156,42 +157,58 @@ def changes(samples: list[Sample], first_frame_showing=None) -> tuple[list[dict]
         if None in key:
             run = []
             continue
+        if key == held:
+            last_held = smp
         run = run + [smp] if run and (run[-1].home, run[-1].away) == key else [smp]
         if len(run) == STABLE and key != held:
-            if held is not None:
+            if held is None:  # the first score held: what the bug shows when the footage starts
+                conf = float(np.mean([np.mean(list(r.ncc.values())) for r in run]))
+                out.append({"frame": run[0].frame, "t": run[0].t, "team": None,
+                            "score": {"home": key[0], "away": key[1]}, "confidence": round(conf, 3)})
+            else:
                 dh, da = key[0] - held[0], key[1] - held[1]
                 if sorted((dh, da)) == [0, 1]:
                     side = "home" if dh else "away"
                     first = run[0]
                     frame, t = first.frame, first.t
-                    if first_frame_showing and prev_before(samples, first) is not None:
-                        lo = prev_before(samples, first)
-                        found = first_frame_showing(lo.frame, first.frame, side, key[0] if dh else key[1])
+                    # Searched from the last sample that still read the old score: an unread sample
+                    # between (the pop, a stinger) may already be after the goal.
+                    if first_frame_showing and last_held is not None:
+                        value = key[0] if dh else key[1]
+                        found = first_frame_showing(last_held.frame, first.frame, side, value)
                         if found is not None:
                             frame, t = found
                     conf = float(np.mean([r.ncc[side] for r in run]))
                     out.append({"frame": frame, "t": t, "team": side,
                                 "score": {"home": key[0], "away": key[1]}, "confidence": round(conf, 3)})
+                    held, last_held = key, smp
                 else:
+                    # Not one goal on one side: a misread (a two-digit score is wider than the cell,
+                    # so 10 can read as 1), counted and never adopted, so later goals still count
+                    # from the score last held.
                     odd += 1
-            held = key
+                continue
+            held, last_held = key, smp
     return out, {"samples": len(samples), "unread": sum(1 for s in samples if None in (s.home, s.away)),
                  "inconsistent": odd, "first_held": None}
 
 
-def prev_before(samples: list[Sample], smp: Sample) -> Sample | None:
-    i = samples.index(smp)
-    return samples[i - 1] if i > 0 else None
-
-
 def score_events(changes_: list[dict]) -> list[dict]:
-    """match_event lines for the changes (type `score_change`). A change has no place on the pitch:
-    it is placed at the centre mark, where the restart it brings is taken (Law 8)."""
-    return [{"id": f"s{n:05d}", "t": c["t"], "frame": c["frame"], "type": "score_change", "team": c["team"],
-             "team_confidence": None, "player": None, "receiver": None, "x": 52.5, "y": 34.0,
-             "end_x": None, "end_y": None, "outcome": None, "ball_speed_kmh": None, "score": c["score"],
-             "source": "vision", "confidence": c["confidence"]}
-            for n, c in enumerate(changes_, start=1)]
+    """match_event lines: the first score held (`score_read`, no side: so a viewer joining at any
+    point sees the score) and each change (`score_change`, the side that scored). Neither has a
+    place on the pitch: both are placed at the centre mark, where a goal's restart is taken (Law 8).
+    `team_confidence` of a change is the reader's: its side is which digit changed, a pixel reading."""
+    out = []
+    for n, c in enumerate(changes_, start=1):
+        e = {"id": f"s{n:05d}", "t": c["t"], "frame": c["frame"],
+             "type": "score_read" if c["team"] is None else "score_change"}
+        if c["team"] is not None:
+            e |= {"team": c["team"], "team_confidence": c["confidence"]}
+        e |= {"player": None, "receiver": None, "x": 52.5, "y": 34.0, "end_x": None, "end_y": None,
+              "outcome": None, "ball_speed_kmh": None, "score": c["score"], "source": "vision",
+              "confidence": c["confidence"]}
+        out.append(e)
+    return out
 
 
 def look_back(events: list[dict], team: str, t: float) -> tuple[dict | None, dict | None]:
@@ -216,8 +233,14 @@ def look_back(events: list[dict], team: str, t: float) -> tuple[dict | None, dic
     return shot, (passes[-1] if passes else None)
 
 
-def reconcile(events: list[dict], score_changes: list[dict]) -> tuple[list[dict], dict]:
-    """The events with each score change confirming, adding or holding back a goal (see above)."""
+def reconcile(events: list[dict], score_events_: list[dict]) -> tuple[list[dict], dict]:
+    """The events with each score change confirming, adding or holding back a goal (see above). A
+    `score_read` stays in the scorebug's own file: it has no side, which every detected event has."""
+    score_changes = [c for c in score_events_ if c["type"] == "score_change"]
+    if not any(c["type"] == "score_read" for c in score_events_):
+        # No score was ever read (a fixed tactical view draws no bug, or none was legible): the
+        # scorebug says nothing, so no goal is confirmed, added or held back.
+        return list(events), {"confirmed": 0, "added": 0, "held": [], "scorebug": "unread"}
     goals = [e for e in events if e["type"] == "goal"]
     used: set[str] = set()
     out = [e for e in events if e["type"] != "goal"]
@@ -236,7 +259,7 @@ def reconcile(events: list[dict], score_changes: list[dict]) -> tuple[list[dict]
         shot, assist = look_back(events, c["team"], c["t"])
         added += 1
         out.append({"id": f"g{added:05d}", "t": c["t"], "frame": c["frame"], "type": "goal",
-                    "team": c["team"], "team_confidence": None,
+                    "team": c["team"], "team_confidence": c["confidence"],
                     "player": shot.get("player") if shot else None,
                     "receiver": None, "assist": assist.get("player") if assist else None,
                     "x": ev_goal_x(c["team"]), "y": 34.0, "end_x": None, "end_y": None, "outcome": None,
@@ -280,7 +303,14 @@ def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None) -> tuple[
                     return f, by_frame[f]["t"]
         return None
 
-    picks = rows[::SAMPLE_FRAMES]
+    # A sample every SAMPLE_FRAMES match frames, and the first frame after each cut (the frame
+    # numbers jump there), so a clip with cuts is sampled by time, not by picture count.
+    picks, last, prev = [], None, None
+    for r in rows:
+        if last is None or r["frame"] - last >= SAMPLE_FRAMES or r["frame"] != prev + 1:
+            picks.append(r)
+            last = r["frame"]
+        prev = r["frame"]
     samples = [sample(r) for r in picks]
     found, summary = changes(samples, first_showing)
     held = next(((s.home, s.away) for s in samples if None not in (s.home, s.away)), None)

@@ -4,14 +4,14 @@
   "title": "MatchEvent",
   "description": "One football event, either from the simulator's ground-truth data or detected by the vision pipeline. Coordinates are pitch metres: x 0..105 toward the right goal, y 0..68 from the near touchline.",
   "type": "object",
-  "required": ["id", "t", "type", "team", "x", "y", "source"],
+  "required": ["id", "t", "type", "x", "y", "source"],
   "properties": {
     "id": { "type": "string" },
     "t": { "type": "number", "minimum": 0, "description": "Seconds since kick-off." },
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul", "half_time", "score_change"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection", "offside", "foul", "half_time", "score_change", "score_read"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "team_confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Detected events only, optional: how firmly the side was told from the video, 0 to 1 (a score, not a probability; ninety/vision/track.py, assign_teams). Ground truth leaves it out." },
@@ -29,9 +29,14 @@
     "cause": { "type": ["string", "null"], "enum": ["offside", "foul_likely", "foul", "unknown", null], "description": "Detected free kicks and penalties only, optional: why it was given, as far as tracking can tell (ninety/intel/restart_cause.py): offside from the offside reading of the last completed pass, foul for a penalty, foul_likely otherwise, unknown when the reading was too close to call. Never names a fouler." },
     "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
     "assist": { "type": ["string", "null"], "description": "Goals only, optional: the player whose completed pass the scorer shot from, by look-back over detected events (ninety/vision/scorebug.py, reconcile); null when not told." },
-    "score": { "type": "object", "required": ["home", "away"], "additionalProperties": false, "properties": { "home": { "type": "integer", "minimum": 0 }, "away": { "type": "integer", "minimum": 0 } }, "description": "score_change only: the score the broadcast's scorebug shows from this frame (ninety/vision/scorebug.py). The only source a scoreline may be shown from." },
+    "score": { "type": "object", "required": ["home", "away"], "additionalProperties": false, "properties": { "home": { "type": "integer", "minimum": 0 }, "away": { "type": "integer", "minimum": 0 } }, "description": "score_change and score_read only (required there, absent elsewhere): the score the broadcast's scorebug shows from this frame, read from its pixels (ninety/vision/scorebug.py). The only source a scoreline may be shown from; never counted from goals." },
     "source": { "type": "string", "enum": ["truth", "vision"] },
     "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    { "if": { "properties": { "type": { "const": "score_read" } } }, "else": { "required": ["team"] } },
+    { "if": { "properties": { "type": { "enum": ["score_change", "score_read"] } } },
+      "then": { "required": ["score"] }, "else": { "not": { "required": ["score"] } } }
+  ]
 }

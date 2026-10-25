@@ -55,3 +55,30 @@ detector missed gets its scorer by look-back. Nothing on the live path reads the
 - **Development check, not a result:** demo seed 8080, the 44:06 to 45:09 segment rendered on the
   Mac at 3a27753b. 1 of 1 change found, 0.04 s after the goal; digits 59 of 59 read samples right;
   5 of 64 samples unread.
+
+## Changes after R4's review and an independent audit (2026-10-25, before any validation score)
+
+- **The first score held is a `score_read` event** (no side), so a viewer who joins at any point
+  sees the score. It stays in the scorebug's own file: every detected event has a side and it has
+  none. `team` is now required on every type but `score_read`, and `score` is required on
+  `score_change` and `score_read` and absent elsewhere (schema `allOf`, tested both ways).
+- **A change's side is a pixel reading** (which digit changed), so its `team_confidence` is the
+  reader's confidence, and so is an added goal's.
+- **Shown only once measured.** No screen or voice shows a score from these events until the
+  validation measurement above is in: reads right per change, with a Wilson interval. Until then
+  the existing pointer ("the scorebug shows the score") stands.
+- **Audit fixes:**
+  - A held score that changes other than by one goal is never adopted, so a misread does not move
+    the count. A two-digit score is wider than the cell, so a 10 can read as 1.
+  - The back-scan starts from the last sample that read the old score.
+  - Sampling goes by frame number, plus the first frame after each cut.
+  - With no score ever read (a fixed tactical view draws no bug), the reconcile changes nothing.
+  - The audit's 8 surviving mutants are all killed now.
+- **Known limits, stated before measuring:**
+  - Scores of 10 or more are not read (the goal from 9 to 10 is lost; later goals still count).
+  - The look-back can name an earlier shot's shooter when the scoring shot itself was missed and
+    no event of the other side came between.
+  - The tactical views have no scorebug.
+- **Licence, pending a decision:** the digit templates are rasters of Helvetica Bold and Arial
+  Bold (THIRD_PARTY_NOTICES.md). If they are not acceptable, they are replaced by digits cropped
+  from our own renders.
