@@ -17,12 +17,10 @@ digit, a dash, the away digit and the away code, left to right, from `score = [h
 (ninety/render/clip.py), so the left digit is home's.
 
 **Reading a digit.** Each digit cell is compared, by normalised cross-correlation over a few pixels
-of shift, with templates of the ten digits rasterised from the two faces Chromium's `sans-serif`
-resolves to where we render: Helvetica Bold on the Mac; on the Linux render pods most digits are
-Arial Bold's shapes but the 1 is DejaVu Sans Bold's (found on the demo's development check, before
-any validation score; docs/eval/scorebug-plan.md), so all three faces are compared
-(`scorebug_glyphs.json`, made by `--make-glyphs`; only the 24 x 16 digit rasters are committed,
-no font). A reading counts when its best
+of shift, with templates of the ten digits cropped from frames our own renderer draws
+(`scorebug_glyphs.json`, made by ninety/vision/scorebug_templates.py from a training clip's scene):
+one set for each machine that renders, since Chromium's `sans-serif` is a different face on a Mac
+and on Linux. No font and no OCR model is used. A reading counts when its best
 correlation is at least MIN_NCC and beats the best other digit by MIN_MARGIN.
 
 **A change of score.** The digits are read every SAMPLE_FRAMES frames. A score holds once STABLE
@@ -362,42 +360,15 @@ def read_clip(clip: Path, glyphs: dict[str, np.ndarray] | None = None,
     return score_events(found), summary
 
 
-def make_glyphs(out: Path = GLYPHS, dejavu: str | None = None) -> None:
-    """Rasterise the ten digits from font files (run once, on a Mac with Helvetica and Arial Bold,
-    and DejaVu Sans Bold from matplotlib's wheel, the vision group's: `--dejavu <path>`). Only the
-    24 x 16 rasters are written."""
-    from PIL import Image, ImageDraw, ImageFont
-    faces = {"helvetica-bold": ("/System/Library/Fonts/Helvetica.ttc", 1),
-             "arial-bold": ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0)}
-    if dejavu:
-        faces["dejavu-bold"] = (dejavu, 0)
-    raster = {}
-    for name, (path, index) in faces.items():
-        font = ImageFont.truetype(path, 16, index=index)
-        digits = []
-        for d in range(10):
-            im = Image.new("L", (CELL_W, CELL_H), 0)
-            ImageDraw.Draw(im).text((2, CELL_H / 2), str(d), fill=255, font=font, anchor="lm")
-            digits.append(np.asarray(im).tolist())
-        raster[name] = digits
-    out.write_text(json.dumps({"made_by": "python -m ninety.vision.scorebug --make-glyphs",
-                               "size": [CELL_H, CELL_W], "faces": raster}) + "\n")
-
-
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Read the score from the broadcast's scorebug.")
-    ap.add_argument("clip", type=Path, nargs="?", help="a staged clip folder (index.jsonl, images/)")
+    ap.add_argument("clip", type=Path, help="a staged clip folder (index.jsonl, images/)")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--summary", type=Path)
-    ap.add_argument("--make-glyphs", action="store_true", help="rasterise the digit templates")
-    ap.add_argument("--dejavu", help="with --make-glyphs: matplotlib's DejaVuSans-Bold.ttf")
     ap.add_argument("--held", help="the score held when this footage starts, home-away (e.g. 2-1)")
     ap.add_argument("--events", type=Path, help="detected.jsonl: reconcile its goals with the score changes")
     ap.add_argument("--reconciled", type=Path, help="where to write the reconciled events (with --events)")
     a = ap.parse_args(argv)
-    if a.make_glyphs:
-        make_glyphs(dejavu=a.dejavu)
-        return
     held = tuple(int(v) for v in a.held.split("-")) if a.held else None
     found, summary = read_clip(a.clip, held=held)
     if a.out:

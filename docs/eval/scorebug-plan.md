@@ -125,3 +125,22 @@ broadcast read in pieces keeps its count: the demo's segments are read in match 
 
 Report: `runs/scorebug-8080/dev-check.json` (local). The validation measurement is still to come;
 these rules are what it measures.
+
+## Templates from our own renders (2026-10-25, the Coordinator's licence decision)
+
+The digit templates rasterised from Helvetica Bold, Arial Bold and DejaVu Sans Bold are removed
+from the repo. In their place are digits cropped from frames our own renderer draws
+(`ninety/vision/scorebug_templates.py`):
+- each set comes from one training clip's scene (its seed, parameters and first frame's camera);
+- the frames show 0-9 to 9-0 and go through the renderer's whole picture path;
+- the cells are cropped as the reader sees them;
+- the clip, frame, renderer commit, Chromium version and machine are recorded in
+  `scorebug_glyphs.json`, and test seeds are refused.
+
+- **mac face:** training seed 10's scene, rendered on the Mac (Darwin arm64, Chromium 141, GPU).
+  On the Mac-rendered demo segment it reads 0.996 to 0.999 (the font rasters gave 0.94 to 0.98).
+- **linux face:** to be rendered on the short pod, the Linux machine, by the same command. Until
+  then pod-rendered footage is read only as far as the Mac face reaches: on the demo, its 1 reads
+  0.82, under the bar, as the Arial raster did.
+
+No threshold changed. The demo development check is re-run once the linux face is in.

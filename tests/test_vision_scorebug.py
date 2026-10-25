@@ -19,7 +19,10 @@ from ninety.vision import scorebug as sb
 GLYPHS = sb.load_glyphs()
 
 
-def frame(home, away, goal_w=0, face="arial-bold", h=720, w=1280, pop=0.0):
+FACE = next(iter(GLYPHS))  # a face cropped from our own renders (scorebug_templates.py)
+
+
+def frame(home, away, goal_w=0, face=FACE, h=720, w=1280, pop=0.0):
     """A 720-line frame: a mid-grey picture, the plate goal_w px right of its 28 px margin, digits.
     `pop` (0 to 1) lifts and enlarges the home digit as render.js does in a goal's first 0.5 s."""
     g = np.full((h, w), 120.0)
@@ -362,3 +365,18 @@ def test_footage_that_starts_with_a_held_score_continues_it():
     assert summary["last_held"] == [3, 1]
     straight = [S(0, 3, 1), S(1, 3, 1)]  # the goal came between the two pieces of footage
     assert [c["team"] for c in sb.changes(straight, held_start=(2, 1))[0]] == ["home"]
+
+
+def test_the_templates_are_cropped_from_our_renders_of_training_scenes():
+    from ninety.render.splits import split_of
+    body = json.loads(sb.GLYPHS.read_text())
+    assert body["faces"] and set(body["faces"]) == set(body["sources"])  # every face says where it came from
+    for source in body["sources"].values():
+        assert split_of(int(source["seed"])) == "train" and source["renderer_commit"]
+
+
+def test_the_template_tool_crops_the_cells_the_reader_reads():
+    from ninety.vision import scorebug_templates as st
+    cells = st.crop_cells(frame(6, 3))
+    for side, d in (("home", 6), ("away", 3)):
+        assert sb._ncc(cells[side], GLYPHS[FACE][d]) > 0.99  # the crop is the template it was drawn from

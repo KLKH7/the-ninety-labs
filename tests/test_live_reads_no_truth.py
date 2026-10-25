@@ -136,7 +136,7 @@ def _bug_frame(home, away):  # the plate, its underline and two digits, as rende
     for value, side in ((home, "home"), (away, "away")):
         y, x = top + 20 - scorebug.CELL_H // 2, x0 + scorebug.DIGIT_X[side] - 2
         g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W] = _np.maximum(
-            g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W], _glyphs["arial-bold"][value])
+            g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W], next(iter(_glyphs.values()))[value])
     return g
 _staged = _Path(tempfile.mkdtemp()) / "staged"
 (_staged / "images").mkdir(parents=True)
