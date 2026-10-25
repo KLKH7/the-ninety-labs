@@ -215,6 +215,7 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     ctx = browser.new_context(viewport=PHONE_SIZE)
     laptop = ctx.new_page()
     laptop.goto(f"{mock_site}mock-laptop.html?code={MOCK_CODE}")
+    laptop.wait_for_function("window.ninetyLaptop")  # the laptop answers before the phone asks
     phone = ctx.new_page()
     errors = watch(phone)
     phone.goto(f"{mock_site}?mock=1&clip=mock")
@@ -232,6 +233,9 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone.wait_for_selector("body[data-state=live]")
     phone.wait_for_function("document.querySelector('#map').dataset.dots === '22'")
     assert phone.get_attribute("#map", "data-source") == "mock"
+    # The status settles once the laptop's clock has come through (it says "Waiting" until then):
+    # wait for that state, then read its words, rather than reading whatever the first frame showed.
+    phone.wait_for_function("['paused', 'synced'].includes(document.querySelector('#status').dataset.state)")
     assert phone.text_content("#status") in ("Paused", "Synced")  # in words, though only trouble shows
     assert not errors
 
