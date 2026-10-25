@@ -679,7 +679,8 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     unit for how many or how fast, the place for where; the supporting number stays in the sentence.
     A question of another kind is headed by the lead number, or by nothing."""
     kind = question_kind(question)
-    winning = re.search(r"\b(?:winning|ahead|in front|leading|lead)\b", question, re.I)
+    # "Who's winning?" asks the score; "who is winning the battle in midfield?" does not.
+    winning = re.search(r"\b(?:winning|ahead|in front|leading)\s*\??\s*$", question, re.I)
     if any(f.get("metric") == "score" for f in cited) and (kind != "who" or winning):  # never a scoreline
         spotted = any(f.get("kind") == "goal" for f in cited)
         return "Goals spotted by vision" if spotted else "See the scorebug"
