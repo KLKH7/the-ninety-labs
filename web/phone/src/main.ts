@@ -1222,8 +1222,9 @@ function renderChips() {
   const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
   const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
   const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
-  $("ask-players").replaceChildren(...most.map((p, i) => chip(playerQuestions(p.id)[i % 3], null)));
-  $("ask-players").hidden = $("ask-players-title").hidden = most.length === 0;
+  const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
+  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
@@ -1839,7 +1840,7 @@ function renderKeyMoments(plays: DetectedEvent[]) {
   type Moment = { t: number; team: "home" | "away" | null; text: string; goal: boolean };
   const goals: Moment[] = plays
     .filter((e) => e.type === "shot" && e.outcome === "goal")
-    .map((e) => ({ t: e.t, team: e.team === "home" || e.team === "away" ? e.team : null, text: playSentence(e)!, goal: true }));
+    .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })); // a club's colour only on a side told surely
   const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
   const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
   $("key-moments").hidden = moments.length === 0;
@@ -2200,7 +2201,8 @@ function renderSquad() {
   // The Scout's numbers ride in insight_stats (#338); top-level kept for a bundle that has them there.
   const m = m0 ? { ...m0, player_stats: m0.insight_stats?.player_stats ?? m0.player_stats, pass_network: m0.insight_stats?.pass_network ?? m0.pass_network } : null;
   const sheet = Object.entries(teamSheet);
-  const key = `${sheet.length}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}`;
+  const net0 = m?.pass_network?.[networkSide];
+  const key = `${sheet.length}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
   if (key === squadKey) return;
   squadKey = key;
   // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
@@ -2214,9 +2216,13 @@ function renderSquad() {
     name.textContent = fullName(teams[side]);
     const nums = document.createElement("span");
     nums.className = "teaser-shirts";
-    nums.setAttribute("aria-label", shirts.length ? `${shirts.length} named` : "");
+    if (shirts.length) {
+      nums.setAttribute("role", "list");
+      nums.setAttribute("aria-label", `Shirts ${shirts.join(", ")}`);
+    }
     for (const n of shirts.slice(0, 11)) {
       const b = document.createElement("b");
+      b.setAttribute("role", "listitem");
       b.textContent = String(n);
       nums.append(b);
     }
@@ -2245,7 +2251,7 @@ function renderSquad() {
     ul.className = "stat-list";
     for (const p of top) {
       const li = document.createElement("li");
-      li.className = team(p.id);
+      li.className = sideUnsure(p.id) ? "" : team(p.id); // a club's dot only on a side told surely
       li.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="who-name"></span><span class="v"></span>';
       li.querySelector(".who-name")!.textContent = playerName(p.id);
       li.querySelector(".v")!.textContent = fmt(p[k] as number);
@@ -2259,8 +2265,11 @@ function renderSquad() {
 
   // Pass network: each player at his average position, a line per pair as thick as their passes.
   const net = m?.pass_network?.[networkSide];
-  $("pass-network").hidden = !m?.pass_network;
-  if (!net) return;
+  // The card shows while either club has a network; a club without one shows an empty pitch never.
+  $("pass-network").hidden = !(m?.pass_network?.home?.nodes.length || m?.pass_network?.away?.nodes.length);
+  $("network").toggleAttribute("hidden", !net?.nodes.length);
+  $("network-rows").hidden = !net?.nodes.length;
+  if (!net?.nodes.length) return;
   const svg = $("network") as unknown as SVGSVGElement;
   const NS = "http://www.w3.org/2000/svg";
   svg.setAttribute("viewBox", "-3 -3 111 74");

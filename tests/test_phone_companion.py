@@ -963,6 +963,9 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     assert page.locator("#network .node").count() == 2 and page.locator("#network .link").count() == 1
     assert page.inner_text("#network-rows .who-name >> nth=0") == "Abel Keeper and Abel Nine"
     assert "6 passes" in page.inner_text("#network-rows")
+    page.click("#network-side ion-segment-button[value=away]")  # the other club's network
+    page.wait_for_function("document.querySelector('#network-rows').textContent.includes('Bruno')")
+    assert page.locator("#network .node.away").count() == 2
     assert page.is_visible("#network-named")  # said so, as the Scout's named_passes_only asks
     assert not errors
     ctx.close()
@@ -1018,5 +1021,36 @@ def test_the_stats_period_toggle_shows_a_half_on_its_own_only_when_the_scout_wro
     assert page.locator("#summary-rows .stat-row").count() > 1  # Live's summary stays the whole match
     page.click("#stats-period ion-segment-button[value=match]")
     page.wait_for_function("document.querySelectorAll('#stat-rows .stat-row').length > 1")
+    assert not errors
+    ctx.close()
+
+
+def test_live_s_shot_card_draws_only_shots_on_a_side_told_surely(browser, site):  # noqa: F811
+    """e2 is on a side told surely, e7 on one that was not: Live draws e2 only, as Stats does."""
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.wait_for_selector("#live-shots:not([hidden])")
+    assert page.locator("#live-shots-svg circle.shot").count() == 1
+    assert page.locator("#shots circle.shot").count() == 1  # the Stats map agrees
+    assert not errors
+
+
+def test_a_key_moment_goal_on_an_unsure_side_carries_no_club_s_colour(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def unsure_goal(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal"} if r["id"] == "e7" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", unsure_goal)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#key-moments:not([hidden]) .moment-row.goal")
+    row = page.locator("#key-rows .moment-row.goal").first
+    assert "neutral" in row.get_attribute("class").split()  # not the tracker's side vote
     assert not errors
     ctx.close()
