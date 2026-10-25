@@ -539,8 +539,10 @@ is held, and the Describer's shape line says "one side". Tracked frames carry no
 yet, so on the live path every shape line says "one side" until they do. A track id (`a-t9`)
 encodes the side by its letter, from the tracker's vote. The agents keep it, as naming the track is
 how they say who, but no screen reads a club from it unless the bundle vouches for that track
-(`sides_known`, lesson 245): otherwise the viewer and the phone say "a player". **Known residual:**
-the radar still colours each dot by the tracker's vote.
+(`sides_known`, lesson 245): otherwise the viewer and the phone say "a player". An event's own side
+is named on the phone only above the same threshold, which the bundle carries
+(`min_team_confidence`). **Known residual:** the radar still colours each dot by the tracker's vote,
+and its screen-reader summary and the phone's answer pictures still name a dot's club from it.
 
 **Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
 is looked at again: the fact-checker re-runs R3's event detection (`ninety.vision.events.detect`,

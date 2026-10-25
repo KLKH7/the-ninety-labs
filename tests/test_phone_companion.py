@@ -45,7 +45,11 @@ def site(browser, tmp_path_factory):  # noqa: F811
             "player": "a-t3", "receiver": None, "intended": None, "interceptor": None, "deflected_by": None,
             "x": 70.0, "y": 20.0, "end_x": 60.0, "end_y": 25.0, "outcome": "fail", "ball_speed_kmh": 40.0,
             "source": "vision", "confidence": 0.9}
-    events.write_text(events.read_text() + json.dumps(sure) + "\n")
+    # Two passes the detector named nobody for: one side told surely, one not (lesson 245).
+    nobody = {**sure, "player": None, "outcome": "success", "end_x": 75.0, "end_y": 22.0, "team": "home"}
+    told = {**nobody, "id": "e5", "t": 61.6, "frame": 1540, "team_confidence": 0.99}
+    unsure = {**nobody, "id": "e6", "t": 61.8, "frame": 1545, "team_confidence": 0.3}
+    events.write_text(events.read_text() + "".join(json.dumps(e) + "\n" for e in (sure, told, unsure)))
     meta = json.loads((clip / "clip.json").read_text())
     (clip / "clip.json").write_text(json.dumps({**meta, "segments": SEGMENTS}))
     tracked = root / "tracked.json"
@@ -632,7 +636,11 @@ def test_the_shot_map_draws_detected_shots_up_to_the_clock_toward_one_goal(brows
     assert dot.get_attribute("class") == "shot home on"
     assert float(dot.get_attribute("cx")) == 34 and float(dot.get_attribute("cy")) == 25
     assert "saved" in page.inner_text("#shot-list")
+    assert "from the" not in page.inner_text("#shot-list")  # where from needs the side's direction
     page.locator("#shot-filter ion-segment-button[value=away]").click()
+    page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
+    # Its side was never told (no team_confidence), so not even home's filter claims it (lesson 245).
+    page.locator("#shot-filter ion-segment-button[value=home]").click()
     page.wait_for_function("document.querySelectorAll('#shots circle.shot').length === 0")
     # Rewound to before the shot (61.2 s), there is none to show.
     page.click("#lt-pitch")
@@ -753,4 +761,17 @@ def test_team_distance_says_how_close_it_is_measured(browser, site):  # noqa: F8
     row.wait_for()
     assert row.locator(".within").inner_text().strip() == "±15%"  # quiet, after the label; no caption
     assert row.get_attribute("aria-label").endswith(", measured to within 15 percent")
+    assert not errors
+
+
+def test_the_play_by_play_names_a_club_only_for_a_side_told_surely(browser, site):  # noqa: F811
+    # Merge-queue review of #319: an event with no player was said as its club from its own team
+    # field, whatever its side confidence. Now only above the fact-checker's threshold.
+    laptop, page, errors = phone(browser, site, laptop_t=62.8)
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play")
+    plays = {li.get_attribute("data-event"): (li.inner_text(), li.get_attribute("class"))
+             for li in page.locator("#insights .play").all()}
+    assert "Crowmere completes a pass." in plays["e5"][0] and "home" in plays["e5"][1].split()
+    assert "A player completes a pass." in plays["e6"][0] and "neutral" in plays["e6"][1].split()
     assert not errors

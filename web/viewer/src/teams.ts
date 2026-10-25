@@ -57,7 +57,7 @@ export function setSidesKnown(ids: unknown): void {
   sidesKnown = Array.isArray(ids) ? new Set(ids.filter((i): i is string => typeof i === "string")) : null;
 }
 
-const sideUnsure = (id: string): boolean => sidesKnown !== null && id.includes("-t") && !sidesKnown.has(id);
+export const sideUnsure = (id: string): boolean => sidesKnown !== null && id.includes("-t") && !sidesKnown.has(id);
 
 /** A player as a fan reads him: the name or role a payload gives (`names`), otherwise his club and
  * shirt ("Lisbon 7"), or for a tracked player his club and the tracker's number ("Lisbon player

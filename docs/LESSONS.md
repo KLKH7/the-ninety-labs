@@ -2909,8 +2909,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** the bundle lists the track ids whose side the gate vouches for (`sides_known`: each the
   actor of an event told surely, and named by no event that did not vouch for him). The viewer and
   the phone name a club only for those ids; every other tracked player is "a player" ("Player 12"
-  as a title). A writer that names a side and a screen that names it from an id ask the same rule.
+  as a title). An event's own side (`team`) is named the same way: the bundle carries the
+  fact-checker's threshold (`min_team_confidence`), and the phone's play-by-play, story colours and
+  shot list name a club only above it ("A player completes a pass"; an unsure shot is in "All"
+  only, with no zone). A writer that names a side and a screen that names it ask the same rule.
 - **Check:** `tests/test_viewer.py::test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen`
   and `tests/test_phone_companion.py::test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone`
-  fail when the screens ignore the list; `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club`
-  pins the list.
+  fail when the screens ignore the list, and
+  `tests/test_phone_companion.py::test_the_play_by_play_names_a_club_only_for_a_side_told_surely`
+  when the phone reads an event's side without the threshold;
+  `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.

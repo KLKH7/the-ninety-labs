@@ -70,7 +70,7 @@ from ninety import condensed, highlights, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict, side_known
+from ninety.agents.factcheck import MIN_CONFIDENCE, MIN_TEAM_CONFIDENCE, Claim, Verdict, side_known
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected, territory
@@ -758,6 +758,7 @@ async def run(args: argparse.Namespace) -> dict:
         "teams": teams_of(clip.meta),
         # The track ids a screen may name by club (`sides_known`); every other one is "a player".
         "sides_known": sides_known(events),
+        "min_team_confidence": MIN_TEAM_CONFIDENCE,  # the phone names an event's side only above it
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
