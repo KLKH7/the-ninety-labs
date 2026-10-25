@@ -73,7 +73,13 @@ QUOTES = {'"': "&quot;", "'": "&apos;"}
 
 # Lower is more important: what keeps its place when there is no time for everything.
 PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4,
-            "shape": 4}
+            "set_piece": 4, "shape": 4}
+# A detected set piece (ninety/vision/restarts.py) by its kind, and why a free kick or penalty was
+# given as far as tracking can tell (ninety/intel/restart_cause.py). A foul is never said to be
+# anyone's: tracking sees positions, not contact.
+RESTART_NAMES = {"corner": "Corner", "goal_kick": "Goal kick", "throw_in": "Throw-in",
+                 "free_kick": "Free kick", "penalty_kick": "Penalty"}
+CAUSE_WORDS = {"offside": "for offside", "foul_likely": "likely for a foul", "foul": "for a foul"}
 # A shape change is said only when it is larger than tracking error could make it: each minute's
 # value is within the position error (ninety/intel/shape.POSITION_ERROR_M, 1.26 m) of the truth, so
 # their difference is within twice that, 2.52 m; the smallest whole-metre change past it is 3 m.
@@ -185,6 +191,12 @@ def event_versions(event: dict) -> list[str]:
         return [f"{who} tackles{target}, {place}.", f"{who} tackles{target}."]
     if kind == "kickoff":
         return [f"Kick-off, {who}.", ]
+    if kind == "set_piece":
+        name = RESTART_NAMES.get(event.get("restart") or "", "Set piece")
+        side = f" to {event['team']}" if side_known(event) else ""
+        why = CAUSE_WORDS.get(event.get("cause") or "", "")
+        head = f"{name}{side}" + (f", {why}" if why else "")
+        return [f"{head}, {place}.", f"{head}."]
     return []
 
 

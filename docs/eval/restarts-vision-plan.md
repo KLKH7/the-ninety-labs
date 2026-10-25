@@ -130,3 +130,24 @@ not a set ball, for every kind (it had covered free kicks and throw-ins only); t
 - A wait shown uncut but shorter than 4 s is not found.
 - A set piece's confidence is the ball detection's score alone; its arrangement is a gate, not a
   share.
+
+## A free kick's cause (2026-10-25, before any validation score)
+
+The Coordinator asked for this, from Kian's idea. Each detected free kick gets a `cause`
+(`ninety/intel/restart_cause.py`, Laws 11 to 13). It is read from the offside reading
+(`ninety.intel.offside`) of the last pass before the free kick, since the restart before:
+- offside gives `offside`;
+- too close to call, or offside with an opponent untracked, gives `unknown`;
+- otherwise (onside, a pass straight from a restart, no reading, a later pass, no pass) gives
+  `foul_likely`.
+
+A penalty is `foul` (Law 14). There is no new tolerance: the offside call uses its own
+`CALL_M`, the error of comparing two tracked positions. The sentence says "Free kick to away,
+likely for a foul" and never names a fouler, because tracking sees positions, not contact.
+
+**Measured on validation, against the answer key:** a true free kick's cause is the type of the
+stoppage before it (`offside` or `foul`). Each matched free kick's detected cause is tabled
+against it: `right` is offside read as offside plus a foul read as `foul_likely`, over those not
+left `unknown`; `unknown` is counted apart. One limit is known before measuring: a free kick read
+from a pass that was itself missed (no pass detected) is always `foul_likely`. That is right for
+fouls and wrong for offsides whose pass vision did not see.
