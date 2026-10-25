@@ -54,6 +54,9 @@ class Verdict:
     quantity's 95th percentile error (None: not measured, so no label rests on it)."""
     save_filter: bool = False
     margins: dict[str, float | None] = field(default_factory=dict)
+    # True once `origin` has been graded against the answer key on validation clips (plan, Amendment 2,
+    # "Graded"). Until then no moment carries one, so no caption or screen can say how an attack began.
+    origins: bool = False
 
     def margin(self, key: str) -> float | None:
         return self.margins.get(key)
@@ -274,7 +277,7 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
             # (factcheck.side_known); origin still compares the detector's sides.
             "event": e["id"], "t": e["t"], "team": e.get("team") if sure else None,
             "player": e.get("player") if sure else None,
-            "kind": kind, "why": why, "origin": origin(e, events, cut),
+            "kind": kind, "why": why, "origin": origin(e, events, cut) if verdict.origins else None,
             "label": tag[0] if tag else kind.upper(), "label_detail": tag[1] if tag else None,
             "d_m": round(d, 1), "v_kmh": v, "T_s": None if T is None else round(T, 2),
             "clip": [round(max(0.0, e["t"] - BEFORE_S), 2), round(e["t"] + AFTER_S, 2)],
@@ -283,6 +286,7 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
                    key=lambda m: (m["T_s"] is None, m["T_s"] or 0.0, m["t"]))
     return {"save_filter": verdict.save_filter,
             "labels": any(m is not None for m in verdict.margins.values()),
+            "origins": verdict.origins,
             "moments": moments, "saves_by_pace": [m["event"] for m in saves], "saves_left_out": left_out}
 
 

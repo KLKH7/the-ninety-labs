@@ -292,6 +292,15 @@ pull request; they are frozen from here, and nothing has been scored on a valida
 so "pre-registered" here means *stated in this plan before any validation or test scoring*, not
 before every look at output.
 
+### `origins`: withheld until graded (R4's review)
+
+Like `labels`, the reel carries an `origins` flag, false until origin has been graded against the answer
+key on validation clips (below). While it is false every moment's `origin` is null, so no caption
+(code or model) and no screen says how an attack began, and the fact-checker refuses every restart
+word. Origin compares the detector's sides, which are not yet reliable (Law 3 guard, #308), and has not
+been measured; the flag keeps the unmeasured claim off screen. `highlights.origin` itself is graded
+offline over the answer key's events and is unaffected.
+
 ### The source, and why there is no time threshold
 
 StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,

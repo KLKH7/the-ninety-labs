@@ -389,9 +389,11 @@ def test_the_reel_gives_each_moment_its_origin_and_match_json_knows_the_cuts():
             "segments": [{"index": 0, "frame": 0, "frames": 250},
                          {"index": 250, "frame": 500, "frames": 500}]}
     events = [ev("p", 5.0, "pass", "away", outcome="fail"), ev("s", 21.0, "shot", x=94.0, outcome="goal")]
-    body = condensed.build(meta, events)  # a cut from 10 s to 20 s, between the pass and the shot
+    graded = Verdict(origins=True)
+    body = condensed.build(meta, events, graded)  # a cut from 10 s to 20 s, between the pass and the shot
     assert body["highlights"]["moments"][0]["origin"] is None
-    assert reel(events)["moments"][0]["origin"] == "open_play"  # the same with no cut
+    assert reel(events, graded)["moments"][0]["origin"] == "open_play"  # the same with no cut
+    assert reel(events)["moments"][0]["origin"] is None and reel(events)["origins"] is False  # not graded
     cut = condensed.cut_between(Timeline.of_clip(meta))
     assert cut(5.0, 21.0) and not cut(1.0, 9.0) and not cut(20.0, 29.0)
 

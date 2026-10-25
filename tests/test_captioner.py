@@ -14,6 +14,9 @@ from ninety.highlights import Verdict as Measured
 from ninety.highlights import reel
 
 MEASURED = Measured(save_filter=True, margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
+# Origin graded against the answer key (plan, Amendment 2): only then does a moment carry one.
+GRADED = Measured(save_filter=True, origins=True,
+                  margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
 
 
 def ev(eid, t, kind="pass", team="home", player="h4", x=60.0, y=34.0, confidence=0.9, side=0.99, **more):
@@ -219,7 +222,7 @@ def corner_scene():
     """The scene, with a corner before it: the ball out over home's attacking line off away."""
     events, _ = scene()
     events = [ev("o1", 59.0, "out_of_play", team="away", player=None, x=105.3, y=60.0), *events]
-    return events, reel(events, MEASURED)
+    return events, reel(events, GRADED)
 
 
 def test_a_caption_may_name_the_restart_the_attack_came_from():
@@ -351,7 +354,16 @@ def test_a_sure_side_is_named():
 def test_the_code_caption_names_a_penalty():
     events, _ = scene()
     events = [{**ev("r1", 61.0, "set_piece", player=None), "restart": "penalty_kick"}, *events[1:]]
-    r = reel(events, MEASURED)
+    r = reel(events, GRADED)
     assert r["moments"][0]["origin"] == "penalty_kick"
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
     assert out[0]["text"].endswith(", from the penalty spot.")
+
+
+def test_until_origin_is_graded_no_moment_carries_one_and_no_caption_says_how_the_attack_began():
+    events, _ = corner_scene()
+    r = reel(events, MEASURED)  # measured shots, but origin not graded
+    assert r["origins"] is False and r["moments"][0]["origin"] is None
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert "corner" not in out[0]["text"] and ", from" not in out[0]["text"]
+    assert reel(events, GRADED)["moments"][0]["origin"] == "corner"
