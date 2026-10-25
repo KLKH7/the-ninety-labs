@@ -3,7 +3,7 @@
 // position, a card or a flow field computed from the ground-truth data (AGENTS.md: the answer key
 // is for training and grading only).
 
-import type { AnswerMessage, Flow, Minimap, PlayerCard, Question, RelayMessage, Team } from "./types";
+import type { AnswerMessage, Flow, InsightCard, Minimap, PlayerCard, Question, RelayMessage, Team } from "./types";
 
 /** Why the relay closed, from the API's close codes (ninety/api/companion.py, relay). */
 export type Closed = "unknown-code" | "room-full" | "expired" | "refused" | "lost" | "not-joined";
@@ -31,6 +31,8 @@ export interface Feed {
   card(clip: string, player: string, tTo: number): Promise<PlayerCard>;
   flow(clip: string, team: Team, tFrom: number, tTo: number): Promise<Flow>;
   ask(question: Question): Promise<AnswerMessage>;
+  /** The hidden-stat cards pushed so far, up to match time `tTo`. */
+  insights(clip: string, tTo: number): Promise<InsightCard[]>;
 }
 
 /** A payload computed from the ground-truth data reached the phone; it is never shown. */
@@ -72,6 +74,9 @@ export function guarded(feed: Feed, seen: (payload: unknown) => void = () => {})
     // An answer carries no source of its own: the UI asks only once the clip's minimap passed the
     // guard (main.ts), and the API refuses questions about ground-truth clips when deployed (503).
     ask: async (q) => record(await feed.ask(q)),
+    // A card carries no positions' source of its own (its `source` is its author, code or model):
+    // the Scout builds cards only from tracked facts, and the fact-checker passed each one.
+    insights: async (clip, tTo) => (await feed.insights(clip, tTo)).map((c) => record(c)),
   };
 }
 
@@ -147,5 +152,10 @@ export class HttpFeed implements Feed {
       body: JSON.stringify(question),
     });
     return json(response);
+  }
+
+  async insights(clip: string, tTo: number): Promise<InsightCard[]> {
+    const body = await json<{ cards: InsightCard[] }>(await fetch(this.url(`api/insights/${encodeURIComponent(clip)}`, { t_to: tTo })));
+    return body.cards;
   }
 }

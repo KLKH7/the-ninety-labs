@@ -114,7 +114,7 @@ def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
 def test_the_report_is_strict_json_and_names_the_false_claims():
     text = ab.results(BODY)
     json.loads(text)  # strict: allow_nan=False would have raised on NaN
-    md = ab.report(BODY, "scripted models")
+    md = ab.report({**BODY, "agent_definitions": {}}, "scripted models")
     assert "| one agent | 2 | 1/2 (50%)" in md and "| graph | 1 | 0/1 (0%)" in md
     assert "199 km/h" in md
 
@@ -158,6 +158,15 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
     body = json.loads((tmp_path / "ablation-agents.json").read_text())
     assert body["arms"]["one agent"]["false_aired"] == 1 and body["arms"]["graph"]["false_aired"] == 0
     assert "ninety-analyst" in body["ran"] and "ninety-tactician" in body["ran"]
+    # Each agent's version and definition fingerprint, in the data and in the report (lesson 216).
+    from ninety.agents import evidence, foundry
+
+    roles = {"ninety-analyst", "ninety-moment-analyst", "ninety-tactician", "ninety-challenger",
+             "ninety-judge"}
+    assert body[evidence.KEY] == {n: e for n, e in foundry.load_registry().items() if n in roles}
+    md = evidence.read(tmp_path / "ablation-agents.md")
+    data = evidence.read(tmp_path / "ablation-agents.json")
+    assert md[1] == "recorded" and data[0] == md[0]
     assert (tmp_path / "ablation-agents.md").read_text().startswith("# Ablation: one agent")
     assert order[:2] == ["token", "simulate"] and order.count("token") == 1  # signed in once, first
     assert len(body["commit"]) == 40 and body["commit"] in (tmp_path / "ablation-agents.md").read_text()

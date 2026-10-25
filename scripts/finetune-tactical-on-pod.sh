@@ -63,8 +63,9 @@ run)
   echo "== $(date -u +%FT%TZ) export: each view, every 5th frame, the live path's 2x2 tiles ($(cat "$WORK/tiles/COMMIT"))"
   rm -rf "$WORK/coco-$name"
   mapfile -t clips < "$WORK/data-$name/clips.txt"
-  PYTHONPATH=$WORK/tiles "$py" -m ninety.vision.coco_export "${clips[@]}" --out "$WORK/coco-$name" \
-    --config "$WORK/data-$name/config.json" --tiles
+  # from the tiles folder: python -m puts the working directory first on the path (PLAN.md, Deviations)
+  (cd "$WORK/tiles" && PYTHONPATH=$WORK/tiles "$py" -m ninety.vision.coco_export "${clips[@]}" \
+    --out "$WORK/coco-$name" --config "$WORK/data-$name/config.json" --tiles)
   "$py" - "$dest/machine.json" "$name" <<'EOF'
 import datetime as dt, json, subprocess, sys, torch
 smi = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True).stdout.splitlines()
