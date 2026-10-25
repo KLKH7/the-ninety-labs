@@ -279,3 +279,34 @@ live path; [validation-true-camera.md](set-pieces/validation-true-camera.md) the
   sample, and holds on 920108. Live tolerances still cannot be measured by the plan's rule (its
   clip has no trusted frame), so the live run uses the true-camera reading's tolerances, a mismatch
   the plan names (lesson 227).
+
+### Validation, all four clips (the final rule; the test split is not rendered or scored)
+
+Seeds 920101 from 16.84 s (throw-in), 920108 from 42.44 s (free kick, kick-off after a goal),
+920106 from 182.8 s (goal kick), 920109 from 124.36 s (corner): 5 restarts, drawn labels as
+detections. Every clip rendered here at `65247ba` passes `ninety-validate`.
+
+| Restart | Live camera (trusted frames) | Live | True camera |
+|---|---|---|---|
+| throw-in | 0 of 352 | missed: no camera | found 0.32 s late, 0.06 m, as a throw-in, **wrong side** |
+| free kick | 731 of 743 | found as a free kick, right side, 0.05 m, **1.68 s late** | the same, 0.01 m |
+| kick-off after a goal | (same clip) | found as a kick-off, right side, 0.53 m, **2.92 s late** | the same |
+| goal kick | 315 of 352 | found as a goal kick, right side, 0.14 m, **1.60 s late** | the same, 0.02 m |
+| corner | 0 of 352 | missed: no camera | **matched** (strict), as a corner, 0.16 s, 0.00 m |
+
+- **Matched (type and team within 1.0 s, strict 1.0 m):** live **0 of 5**; true camera **1 of 5**.
+  Counts only (n = 5; one restart of each kind but the penalty, which validation has none of).
+- **The kind is right on every restart found** (3 of 3 live, 5 of 5 true camera), and no found
+  restart is the wrong kind; the confusion tables in the two reports have nothing off the diagonal.
+- **Time is the main loss.** Every free kick, goal kick and kick-off is found at the kick, 1.6 to
+  2.9 s after the truth's event, which is when the ball is set and the taker ready. The corner, struck
+  off the run-up as the taker arrives (the engine writes it then), is the one placed kick in time.
+- **No camera** is the other: the live fit trusted no frame of two clips of four (and of the
+  possession sample); on the other two it trusted 87 to 98% of frames and placed the set ball within
+  0.05 to 0.14 m.
+- **False restarts:** live 3 in 4 clips, all the late ones above (right kind, wrong time); through
+  the true camera 5, those plus the wrong-sided throw-in and a free kick admitted by `events.py`
+  reading a thrown ball as out of play.
+- **Against the bar:** nothing here decides the default; `--restarts` stays off and set pieces stay
+  `planned` in the challenge map. To go on it needs the test split rendered, the camera fit working
+  on this look, and an answer to open question 2 (which moment a set piece is).

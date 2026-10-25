@@ -1,11 +1,13 @@
 {
  "split": "validation",
  "date": "2026-10-25",
- "git_commit": "b2e73a0d8ebd88aa4827111dbadbe8da9f965cab",
+ "git_commit": "56a404a5456f3679dcc063c5b87b305c2209634f",
  "note": "",
  "clips": [
   "seed920101-421",
-  "seed920108-1061"
+  "seed920108-1061",
+  "seed920106-4570",
+  "seed920109-3109"
  ],
  "per_type": {
   "strict": {
@@ -22,11 +24,11 @@
     "distance_m": null
    },
    "set_piece": {
-    "true": 2,
-    "detected": 1,
+    "true": 4,
+    "detected": 2,
     "tp": 0,
-    "fp": 1,
-    "fn": 2,
+    "fp": 2,
+    "fn": 4,
     "precision": 0.0,
     "recall": 0.0,
     "f1": 0.0,
@@ -48,11 +50,11 @@
     "distance_m": null
    },
    "set_piece": {
-    "true": 2,
-    "detected": 1,
+    "true": 4,
+    "detected": 2,
     "tp": 0,
-    "fp": 1,
-    "fn": 2,
+    "fp": 2,
+    "fn": 4,
     "precision": 0.0,
     "recall": 0.0,
     "f1": 0.0,
@@ -74,11 +76,11 @@
     "distance_m": null
    },
    "set_piece": {
-    "true": 2,
-    "detected": 1,
+    "true": 4,
+    "detected": 2,
     "tp": 0,
-    "fp": 1,
-    "fn": 2,
+    "fp": 2,
+    "fn": 4,
     "precision": 0.0,
     "recall": 0.0,
     "f1": 0.0,
@@ -89,6 +91,30 @@
  },
  "by_kind": {
   "throw_in": {
+   "true": 1,
+   "strict_and_kind_right": 0,
+   "time_only": 0,
+   "kind_right_of_time_matched": 0,
+   "no_camera": 1,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.79
+   ]
+  },
+  "goal_kick": {
+   "true": 1,
+   "strict_and_kind_right": 0,
+   "time_only": 0,
+   "kind_right_of_time_matched": 0,
+   "no_camera": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.79
+   ]
+  },
+  "corner": {
    "true": 1,
    "strict_and_kind_right": 0,
    "time_only": 0,
@@ -142,7 +168,7 @@
    "free_kick": 0,
    "penalty_kick": 0,
    "kick_off": 0,
-   "missed": 0
+   "missed": 1
   },
   "corner": {
    "throw_in": 0,
@@ -151,7 +177,7 @@
    "free_kick": 0,
    "penalty_kick": 0,
    "kick_off": 0,
-   "missed": 0
+   "missed": 1
   },
   "free_kick": {
    "throw_in": 0,
@@ -181,7 +207,7 @@
    "missed": 1
   }
  },
- "false_per_clip": 1.0,
+ "false_per_clip": 0.75,
  "restarts": [
   {
    "id": "seed920101-421/e00011",
@@ -237,6 +263,41 @@
     "kind": "kick_off",
     "distance_m": 0.53
    }
+  },
+  {
+   "id": "seed920106-4570/e00078",
+   "frame": 5280,
+   "type": "set_piece",
+   "team": "home",
+   "kind": "goal_kick",
+   "camera_ok": true,
+   "strict": false,
+   "lenient": false,
+   "time_only": null,
+   "found_kind": null,
+   "nearest_dt_s": 1.6,
+   "nearest_kind": "goal_kick",
+   "either_side": {
+    "dt_s": 1.6,
+    "team": "home",
+    "kind": "goal_kick",
+    "distance_m": 0.14
+   }
+  },
+  {
+   "id": "seed920109-3109/e00035",
+   "frame": 3937,
+   "type": "set_piece",
+   "team": "home",
+   "kind": "corner",
+   "camera_ok": false,
+   "strict": false,
+   "lenient": false,
+   "time_only": null,
+   "found_kind": null,
+   "nearest_dt_s": null,
+   "nearest_kind": null,
+   "either_side": null
   }
  ],
  "false": [
@@ -257,6 +318,15 @@
    "kind": "kick_off",
    "x": 52.01,
    "y": 33.8
+  },
+  {
+   "id": "seed920106-4570/r00001",
+   "frame": 5320,
+   "type": "set_piece",
+   "team": "home",
+   "kind": "goal_kick",
+   "x": 5.54,
+   "y": 33.87
   }
  ]
 }
