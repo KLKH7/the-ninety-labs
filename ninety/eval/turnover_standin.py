@@ -21,11 +21,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import random
 from pathlib import Path
 
 from ninety.eval import event_score
 from ninety.eval.event_score import wilson
+from ninety.sim import fmath
 from ninety.vision import events as ev
 from ninety.vision import track as tr
 from ninety.vision.track import BallPoint
@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SET = ROOT / "docs" / "eval" / "possession-set.json"  # written by #299 (ninety/eval/possession_set.py)
 # The players' measured median position error on ours-v2's validation clips (0.221 m,
 # docs/eval/attribution-derive.json) over a 2-D Gaussian's median radius, sqrt(2 ln 2) sigma.
-NOISE_M = round(0.221 / math.sqrt(2 * math.log(2)), 3)
+NOISE_M = round(0.221 / math.sqrt(2 * fmath.log(2)), 3)
 assert NOISE_M == 0.188
 KIT = {"home": [200.0, 30.0, 40.0], "away": [40.0, 60.0, 190.0]}
 SCORE = 0.9  # every stand-in box: above the detector's 0.5 floor, so the gate is not what is measured
@@ -104,7 +104,7 @@ def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = 
     """Observation rows (ninety.vision.observe's shape) from answer-key frames: each player and the
     ball at its true place plus Gaussian noise, a kit colour per side, the camera ok. With
     `broadcast`, only what the picture shows (visibility above 0), with the drawn boxes."""
-    rng = random.Random(seed)
+    rng = fmath.Random(seed)  # portable draws: the report is the same on every machine (lesson 46)
     rows = []
     for f in frames:
         players = []
