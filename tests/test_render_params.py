@@ -240,7 +240,8 @@ def test_training_kit_draws_are_unchanged_by_the_broadcast_rule():
     for s in list(range(1, 121)) + [2001, 3001, 4001, 8001, 900001]:
         for c in ("normal", "low", None):
             p = sample_params(s) if c is None else sample_params(s, kit_contrast=c)
-            d = {k: v for k, v in p.to_dict().items() if k not in ("home_code", "away_code")}
+            # edge_stingers (0.5.19) is a setting, never a draw
+            d = {k: v for k, v in p.to_dict().items() if k not in ("home_code", "away_code", "edge_stingers")}
             h.update(json.dumps(d, sort_keys=True).encode())
     assert h.hexdigest() == "4f11f5522698c3f5bcc041be96211dfec58aec86a5d8ddaa5c1047b0821f9e6c"
 
@@ -285,13 +286,14 @@ def test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on():
 
 
 def test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws(monkeypatch):
-    """Seeds 1-300 in broadcast: the shirts differ as colours and as seen, and each keeper is far
-    from both shirts as seen. A seed whose kits already looked apart is drawn exactly as before."""
+    """Seeds 1-300 in broadcast: the shirts differ as colours, as drawn and as seen, and each keeper
+    is far from every outfield colour. A seed whose kits already passed is drawn exactly as before."""
     from ninety.render import params as P
 
     plain = {}
     with monkeypatch.context() as m:
         m.setattr(P, "_kits_seen_apart", lambda p, seed: p)
+        m.setattr(P, "broadcast_kits_ok", lambda *a: True)  # the "before": no redraw, no refusal
         for seed in range(1, 301):
             plain[seed] = P.sample_params(seed, kit_contrast="broadcast")
     changed = 0
@@ -299,11 +301,11 @@ def test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its
         p = P.sample_params(seed, kit_contrast="broadcast")
         assert P.kits_differ(p.home_kit.shirt, p.away_kit.shirt, "broadcast"), seed
         assert P.kits_seen_apart(p.home_kit, p.home_pattern, p.away_kit, p.away_pattern), seed
-        seen = (P.visible_shirt(p.home_kit, p.home_pattern), P.visible_shirt(p.away_kit, p.away_pattern))
+        assert P.broadcast_kits_ok(p.home_kit, p.home_pattern, p.away_kit, p.away_pattern,
+                                   p.home_gk, p.away_gk), seed  # the keepers' rule is part of it
         q = plain[seed]
-        if P.kits_seen_apart(q.home_kit, q.home_pattern, q.away_kit, q.away_pattern):
+        if P.broadcast_kits_ok(q.home_kit, q.home_pattern, q.away_kit, q.away_pattern, q.home_gk, q.away_gk):
             assert p == q, seed
         else:
             changed += 1
-            assert all(P.color_distance(k.shirt, o) >= 0.5 for k in (p.home_gk, p.away_gk) for o in seen)
     assert 0 < changed < 300  # the rule bites on some seeds and leaves the rest alone

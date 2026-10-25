@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import colorsys
 import random
+import re
 from dataclasses import asdict, dataclass, field, fields, replace
 
 LIGHTING = ("day", "dusk", "night", "overcast")
@@ -102,6 +103,9 @@ class RenderParams:
     # cut would thin the crowded and keeper windows unevenly and change what a test set measures.
     # `ninety-render` (viewer and demo clips) turns it on for every seed outside the test set.
     dead_ball_cut: bool = False
+    # A stinger over a clip's first and last frames, so clips cut back to back (the demo match's
+    # segments) join on one, as the broadcast marks every jump in time (lesson 187). Demo only.
+    edge_stingers: bool = False
     kit_contrast: str = "normal"
     home_kit: Kit = Kit("#c8102e", "#ffffff", "#c8102e")
     away_kit: Kit = Kit("#1d4ed8", "#1d4ed8", "#ffffff")
@@ -231,6 +235,33 @@ def kits_seen_apart(home: Kit, home_pattern: str, away: Kit, away_pattern: str) 
     return kits_differ(visible_shirt(home, home_pattern), visible_shirt(away, away_pattern), "broadcast")
 
 
+def drawn_colours(kit: Kit, pattern: str) -> set[str]:
+    """Each colour a team's shirt is drawn in: its own, and its trim where a pattern shows it."""
+    trim = kit.shorts if kit.shorts.lower() != kit.shirt.lower() else NEUTRAL_TRIM
+    return {kit.shirt.lower()} | ({trim.lower()} if PATTERN_SHARE[pattern] > 0 else set())
+
+
+GRASS = "#3f7a2a"
+KEEPER_DISTANCE = 0.5  # sample_kits's own keeper rule
+
+
+def broadcast_kits_ok(home: Kit, home_pattern: str, away: Kit, away_pattern: str,
+                      hgk: Kit, agk: Kit) -> bool:
+    """Broadcast kits a viewer tells apart as drawn (lesson 243): every colour one team's shirt is
+    drawn in passes the broadcast test against every colour of the other's, and the shirts as seen
+    (pattern mixed in) pass it too; each keeper's shirt is KEEPER_DISTANCE from every outfield
+    colour, from the grass and from the other keeper."""
+    outfield = drawn_colours(home, home_pattern) | drawn_colours(away, away_pattern)
+    if not all(kits_differ(a, b, "broadcast")
+               for a in drawn_colours(home, home_pattern) for b in drawn_colours(away, away_pattern)):
+        return False
+    if not kits_seen_apart(home, home_pattern, away, away_pattern):
+        return False
+    keepers_apart = color_distance(hgk.shirt, agk.shirt) >= KEEPER_DISTANCE
+    return keepers_apart and all(color_distance(k.shirt, o) >= KEEPER_DISTANCE
+                                 for k in (hgk, agk) for o in (*outfield, GRASS))
+
+
 def sample_kits(rng: random.Random, contrast: str) -> tuple[Kit, Kit, Kit, Kit]:
     for _ in range(10_000):
         home, away = _random_color(rng), _random_color(rng)
@@ -331,10 +362,10 @@ def sample_params(seed: int, **overrides) -> RenderParams:
 def _kits_seen_apart(p: RenderParams, seed: int) -> RenderParams:
     """Broadcast kits that pass on their base colours can still look alike once the pattern is on
     them (seed 8080: purple hoops in white over white shorts, against a white shirt). Redraw from
-    their own stream until the shirts differ both as colours and as seen: the away kit first,
-    keeping the home kit; if no away kit suits it, both. The keepers are redrawn with them. A seed
-    that already passes keeps every draw, and only broadcast kits are tested."""
-    if kits_seen_apart(p.home_kit, p.home_pattern, p.away_kit, p.away_pattern):
+    their own stream until broadcast_kits_ok: the away kit first, keeping the home kit; if no away
+    kit suits it, both. The keepers are redrawn with them. A seed that already passes keeps every
+    draw, and only broadcast kits are tested."""
+    if broadcast_kits_ok(p.home_kit, p.home_pattern, p.away_kit, p.away_pattern, p.home_gk, p.away_gk):
         return p
     fix = random.Random(f"render-kits-seen-{seed}")
     for attempt in range(20_000):
@@ -342,14 +373,23 @@ def _kits_seen_apart(p: RenderParams, seed: int) -> RenderParams:
         home_pattern, away_pattern = fix.choice(PATTERNS), fix.choice(PATTERNS)
         if attempt < 2_000:  # keep the home kit while one away kit suits it
             home, home_pattern = p.home_kit, p.home_pattern
-        if not (kits_differ(home.shirt, away.shirt, "broadcast")
-                and kits_seen_apart(home, home_pattern, away, away_pattern)):
-            continue
-        seen = (visible_shirt(home, home_pattern), visible_shirt(away, away_pattern))
-        if all(color_distance(k.shirt, o) >= 0.5 for k in (hgk, agk) for o in seen):
+        if kits_differ(home.shirt, away.shirt, "broadcast") and broadcast_kits_ok(
+                home, home_pattern, away, away_pattern, hgk, agk):
             return replace(p, home_kit=home, home_pattern=home_pattern, away_kit=away,
                            away_pattern=away_pattern, home_gk=hgk, away_gk=agk)
     raise RuntimeError("could not draw kits that look apart")  # pragma: no cover
+
+
+KIT_FIELDS = ("home_kit", "away_kit", "home_gk", "away_gk")
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def kit_of(text: str) -> Kit:
+    """A kit from `--set home_kit=#1b2f5b/#ffffff/#1b2f5b` (shirt/shorts/socks)."""
+    parts = text.split("/")
+    if len(parts) != 3 or not all(HEX.match(c) for c in parts):
+        raise ValueError(f"a kit is shirt/shorts/socks as #rrggbb, got {text!r}")
+    return Kit(*(c.lower() for c in parts))
 
 
 def apply_overrides(p: RenderParams, overrides: dict) -> RenderParams:
@@ -364,6 +404,8 @@ def apply_overrides(p: RenderParams, overrides: dict) -> RenderParams:
         group, _, key = k.partition(".")
         if group in nested and key in nested[group]:
             sub_kw[group][key] = v
+        elif k in KIT_FIELDS and isinstance(v, str):
+            top_kw[k] = kit_of(v)
         elif k in top_fields and k not in nested:
             top_kw[k] = v
         else:
@@ -390,9 +432,14 @@ def validate(p: RenderParams) -> None:
     for name in ("home_pattern", "away_pattern"):
         if getattr(p, name) not in PATTERNS:
             raise ValueError(f"{name} must be one of {PATTERNS}, got {getattr(p, name)!r}")
-    for name in ("camera_cut", "dead_ball_cut"):
+    for name in ("camera_cut", "dead_ball_cut", "edge_stingers"):
         if not isinstance(getattr(p, name), bool):
             raise ValueError(f"{name} must be true or false")
+    if p.kit_contrast == "broadcast" and not broadcast_kits_ok(
+            p.home_kit, p.home_pattern, p.away_kit, p.away_pattern, p.home_gk, p.away_gk):
+        raise ValueError("broadcast kits a viewer could not tell apart as drawn (lesson 243): "
+                         f"{p.home_kit} {p.home_pattern} v {p.away_kit} {p.away_pattern}, "
+                         f"keepers {p.home_gk.shirt} {p.away_gk.shirt}")
     for name, ok in PLANNED.items():
         if getattr(p, name) not in ok:
             raise NotImplementedError(f"render parameter {name}={getattr(p, name)!r} is planned, not built")
