@@ -289,6 +289,9 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+- **Again (Oct 23):** `uv run ruff check . | tail -1 && git commit ... && git push` committed and
+  pushed a branch with 2 lint errors: `tail` succeeded, so `&&` went on. Gate on the command itself
+  (`uv run ruff check . && ...`), never on a pipe that trims its output.
 
 ### 30. Run the commands you document
 - **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
@@ -2843,7 +2846,61 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
   when the overlap test or the merge is mutated.
 
-### 242. A side the voice holds is held on every screen, or the gate protects only one of them
+### 242. On a machine other sessions share, stop your own processes by id, never by a pattern
+- **What happened:** three sessions simulated and rendered on one laptop at once. To stop its own
+  background wait loops, one session ran `pkill -f "until \["`. The pattern matches every process
+  whose command line holds `until [`, so the other sessions' wait loops alive then were killed
+  too, each reporting a failure (exit 144) that looked like its own job had failed.
+- **Rule:** stop a process you started by the id you were given when it started (the task id, or
+  `$!` saved at launch), or by a pattern that only your own command can match (its seed range, its
+  output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
+- **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
+  folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. An id that is a place in an order moves when anything is added before it
+- **What happened:** adding possession changes to the detected events regenerated the M1 clip's
+  fixture, and every event after the first change moved up one id. The failure table pinned its
+  evidence pass as `SIDE = "v00005"`, "a second completed pass in the minute": that id became the
+  out of play, which the agents' view drops, and every CI shard failed with `KeyError: 'v00005'`.
+  The PR's local run covered the vision tests, not the workflow tests that read the same fixture.
+- **Rule:** an event is chosen by what it is (its type, outcome, minute, order among its kind),
+  never by a detected id, which is only its place in the clip. When a fixture is regenerated,
+  every reader of it is found (`grep -rn <fixture name>` and the modules those tests call) and
+  their tests are run in the same change (lesson 91).
+- **Check:** `tests/test_workflow_failures.py::test_the_ground_picks_its_passes_by_what_they_are_not_by_id`
+  plants an event before the side pass and still finds the passes at 66.88 s and 73.72 s; with
+  the old fixed ids put back, the file fails to collect.
+- **Again, the next day:** `ninety/eval/describe_eval.py` (#268, merged after the fixture changed)
+  read which detections are real from event-report-v2's pairs, whose ids are the older detector's.
+  Its own guard refused them (`v00005 is not the event it matched`), as it should. The fix grades
+  the current detector (`docs/eval/event-report-v3.json`, written by `possession_report` beside its
+  report, passes checked equal to v2) and reads that; the guard is unchanged. A merge from main is
+  where a new reader of a changed fixture arrives: rerun every test that reads it after each one.
+
+### 244. A camera fitted from symmetric markings has a twin; and a band measured on one look misjudges another
+- **What happened:** the broadcast fit was made to follow camera cuts (`observe --cuts`). On the
+  test set every cut was found, and the old 46 m-wrong frames of seed 900003 went. But that clip's
+  last shot is a reverse angle (a camera in the far stand). Law 1's markings are the same after a
+  half turn about the centre spot, so the near gantry turned that way draws identical lines. The fit
+  found that twin, the markings and the players' heights both passed, and 20 frames were trusted
+  about 44 m wrong. Validation had 5 cuts and no reverse angle, so nothing there could show it.
+  Scoring it also showed main's own baseline had moved: #270's height band, measured on renderer
+  0.5.15, rejects most right frames on the frozen test set (renderer 0.3.2). Main's pass F1 there is
+  0.25, while the docs still said 0.67.
+- **Rule:**
+  - Before a fit is trusted on a new kind of view, list the views its model cannot tell apart (here,
+    any camera and its half turn about the centre spot). Each needs a cue the symmetry changes, or
+    is refused.
+  - Validation for a change must hold every kind of case the change opens up (here, every kind of
+    second angle), not just whichever ones the seeds happened to draw.
+  - A threshold measured on one look is re-measured before it judges clips of another, and a
+    published number is re-run when a change to its pipeline lands (lesson 215).
+- **Check:**
+  - `tests/test_vision_pitch.py::test_a_reverse_angle_draws_the_same_markings_as_the_main_camera_turned_about_the_centre_spot`.
+  - `docs/eval/camera-cuts-plan.md`, Outcome: the test set re-judged three ways, and the cut
+    following off by default until it passes its bar.
+
+### 245. A side the voice holds is held on every screen, or the gate protects only one of them
 - **What happened:** the side gate (lesson 218) kept unsure sides out of the Describer's voice and
   out of the agents' claims, but the screens named them anyway. The viewer and the phone turn a
   track id into a club from its first letter (`h-t8` became "a London player"), and that letter is

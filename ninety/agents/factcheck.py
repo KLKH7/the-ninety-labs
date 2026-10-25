@@ -705,6 +705,31 @@ def check(
     return Verdict(ok=not reasons, reasons=reasons)
 
 
+# The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said
+# of: a "rocket" only of a ROCKET or a THUNDERBOLT (a screamer that is also a rocket), and so on.
+# Words for what vision does not measure yet (where the ball crossed the goal mouth, the woodwork)
+# or that no number defines (worldie) may be said of no moment (docs/eval/highlights-plan.md).
+LABEL_WORDS = tuple((re.compile(p, re.I), frozenset(labels)) for p, labels in (
+    (r"\bthunderbolts?\b", ("THUNDERBOLT",)),
+    (r"\bscreamers?\b", ("SCREAMER", "THUNDERBOLT")),
+    (r"\blong[\s-]ranger?\b|\bfrom\s+(?:distance|range)\b", ("LONG-RANGE", "SCREAMER", "THUNDERBOLT")),
+    (r"\brockets?\b|\brocketed\b|\bpiledrivers?\b|\bblistering\b|\bthunderous\b|\bfierce\b|\bpowerful\b"
+     r"|\bhammer(?:ed|s)?\b|\bblast(?:ed|s)?\b|\bnet[\s-]?buster\b", ("ROCKET", "THUNDERBOLT")),
+    (r"\breflex(?:es)?\b|\bpoint[\s-]blank\b", ("REFLEX SAVE",)),
+    (r"\btap[\s-]?in\b|\btapped\s+in\b|\bpoacher'?s?\b", ("TAP-IN",)),
+    (r"\btop\s+bins\b|\btop\s+corner\b|\bbottom\s+corner\b|\bupper\s+90\b|\bcrossbar\b|\boff\s+the\s+(?:bar|post)\b"
+     r"|\bwoodwork\b|\bpost\b|\bworldie\b|\bwonder[\s-]?goal\b|\bgolazo\b|\bbanger\b|\bbelter\b", ()),
+))
+
+
+def label_reasons(text: str, label: str) -> list[str]:
+    """A caption may use a fan's word only of a moment the code gave that label: what earns it is
+    a measured number (ninety/highlights.py), never the writer's taste."""
+    return [f"'{m.group()}' is not said of a {label}: the code gave this moment no such label"
+            for pattern, labels in LABEL_WORDS if label not in labels
+            for m in [pattern.search(text)] if m]
+
+
 def confidence_gate(
     claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE, team_view: bool = False
 ) -> Verdict:
