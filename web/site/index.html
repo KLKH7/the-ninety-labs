@@ -85,11 +85,12 @@
           <li>Two fixed whole-pitch tactical views beside the broadcast give the players; the broadcast gives the
             ball and the events. The two cameras are joined on the pitch.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association.md">Join</a></li>
-          <li>Events are read from possession, from the pixels alone. On the frozen test clips, scored once:
-            passes <data value="7" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.tp" data-fmt="int">7</data> found of <data value="13" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>; the only shot,
-            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, was missed (read as a pass); the ball going out was detected
-            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.out_of_play.fp" data-fmt="int">1</data> time where it did not go out.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">Event report</a></li>
+          <li>Events are read from possession, from the pixels alone. On the frozen test clips with today's code:
+            passes <data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> found of <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>, and the only shot,
+            <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, missed. The camera-trust band, re-measured on our newer renders, rejects
+            most right frames on the test set's older ones.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">Event report</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts-plan.md">why</a></li>
           <li>The live path loads detected events only; a test fails if it ever opens the answer key.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_live_reads_no_truth.py">Test</a></li>
         </ul>
@@ -246,14 +247,15 @@
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association/grade.json">data</a></td>
           </tr>
           <tr>
-            <th scope="row">Passes detected from the pixels, strict matching</th>
-            <td><data value="7" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.tp" data-fmt="int">7</data> of
-              <data value="13" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data> found,
-              <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.fp" data-fmt="int">1</data> false;
+            <th scope="row">Passes detected from the pixels, strict matching, today's code</th>
+            <td><data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> of
+              <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data> found,
+              <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.fp" data-fmt="int">1</data> false;
               <abbr title="the harmonic mean of precision and recall">F-score</abbr>
-              <data value="0.67" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.67</data>,
-              below the plan's target, and measured before the camera fit's latest changes</td>
-            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">report</a></td>
+              <data value="0.25" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.25</data>, below the plan's target. Before the camera-trust band changed it was
+              <data value="0.67" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.67</data>
+              (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">earlier report</a>); that no longer holds on today's code</td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">data</a></td>
           </tr>
           <tr>
             <th scope="row">Team claims held because the side is unsure (validation clips)</th>
