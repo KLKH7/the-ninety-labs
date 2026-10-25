@@ -3071,3 +3071,21 @@ short and actionable. This file is public: no research sources, product names or
   everything" is noticed.
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 254. A 90th-percentile tolerance bounds nine points in ten, not every point
+- **What happened:** a set-piece detector (#330, closed for the one on main) called a ball set when
+  every position of a 10-frame run lay within its tolerance of the run's median, and the tolerance was
+  the 90th percentile of the ball's position error. By that definition about one point in ten lies
+  outside it, so a still ball passed about a third of the time; and a point is compared with the
+  median, which carries its own error. On validation the kick-off on the centre spot was missed, its
+  run broken by the ball box's pixel jitter.
+- **Rule:** a tolerance is used for what its statistic says. A percentile bounds that share of the
+  points, so a test over many points allows the rest; and a distance between two estimates allows
+  both their errors. The rule is derived from the definition, never fitted to the clip that showed it.
+- **Check:** a still-ball rule bounded by a percentile is tested on a planted ball jittering within
+  that tolerance, with a point or two beyond it, and must still call it still. #330's
+  `docs/eval/set-piece-detection-plan.md` (branch `claude/vision-set-pieces-track-e-a5a8ab`),
+  amendment 3, has the miss and the derivation. `restarts.py` on main bounds every point of a still
+  spell by `STILL_M`, the players' 90th percentile (1.26 m), so the same question applies to it; it
+  is measured on [set-piece-validation.md](eval/set-piece-validation.md), where no restart was lost
+  to its still rule.

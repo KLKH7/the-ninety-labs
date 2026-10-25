@@ -1,0 +1,12 @@
+{
+ "what": "share of tracked player-frames whose side is the true player's: true-camera observations, each foot point paired with the nearest true player within 0.5 m (grading only)",
+ "detections": "the drawn labels, score 1",
+ "main_assign_teams": {"seed920101-421": [2841, 4764, 0.596], "seed920108-1061": [5877, 6041, 0.973],
+                       "seed920106-4570": [956, 2250, 0.425], "seed920109-3109": [1230, 2453, 0.501]},
+ "pr283_kit_reader_R4_and_sides_assign": {"seed920101-421": [2891, 4775, 0.605], "seed920108-1061": [5876, 5989, 0.981],
+                                          "seed920106-4570": [740, 2444, 0.303], "seed920109-3109": [952, 2448, 0.389]},
+ "kits": {"seed920101-421": "kit_contrast low: home #1a1a1a halves, away #1a1e49 halves",
+          "seed920108-1061": "home #1a1a1a sash, away #f2f2f2 sash",
+          "seed920106-4570": "home #1a1a1a halves (white shorts), away #f2f2f2 hoops",
+          "seed920109-3109": "home #f2f2f2 solid, away #200e1c halves (white shorts)"}
+}
