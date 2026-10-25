@@ -514,14 +514,29 @@ side is wrong on 5 of 16 passes, even after the side naming was re-derived ([eva
 step A). The remaining cause is how the kit's colour is read from the image (`observe.kit_rgb`).
 A team-level claim inherits that error, which the fact-checker cannot see.
 
-**Side confidence** (`team_confidence`, an optional field on detected events). It is the weaker of
-two margins: how much nearer the holder's kit is to its own side's colour than to the other side's,
-and how one-sided the clip's vote on which colour is home was. A keeper's is how far he stands from
-halfway. Defined before it was measured; no threshold is set from it. **It does not tell a wrong
-side from a right one well:** on validation the 5 wrong sides score 0.431 to 0.96, and the 11 right
-ones score 0.447 to 0.985. It ranks a right side above a wrong one in 60% of (wrong, right) pairs,
-where 50% is chance ([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on it alone
-does not protect a team-level claim.
+**Side confidence** (`team_confidence`, an optional field on detected events). On the broadcast
+it is the weaker of two clip-level numbers (`track.assign_teams`): how surely the two kit clusters
+each hold one team (`soundness`: how far apart the kits are, and the share of tracks nearer their
+own kit than halfway to the other), and how one-sided the clip's vote on which colour is home was.
+A keeper's is how far he stands from halfway. The kit is read from both colours of the shirt (R4,
+adopted by its plan's rule, [kit-colour.md](eval/kit-colour.md)): on the 13 validation clips, 6
+clips sound against 4 for the single median it replaced (R0), side accuracy 0.894 by track-frames
+(R0 0.815), pass teams right 12 of 16 (11), and the confidence ranks a right side above a wrong one
+in 81% of pairs (R0 55%). **On the tactical views** the side is S (`ninety/vision/sides.py`): a
+logistic over the kit, how deep the player stands, and his half at a kick-off, fitted on tactical1's
+23 validation clips. Leave one clip out, its outfield accuracy is 0.750 against 0.731 for the kit
+alone at the same commit, its confidence is within 0.037 of the accuracy it claims (calibration
+error, frame-weighted over the bins), and 6 tracks reach 0.96, all right
+([SPATIAL-PLAN.md](eval/sides-tactical/SPATIAL-PLAN.md); the possession graph G was measured and not
+adopted). Events, the radar's tracked frames and kick-offs all take their sides from one function
+(`sides.assign`), so no two stages name a track differently. **Not handled: a change of ends.**
+Both namings take home to defend x = 0 for the whole clip, as our engine plays it (it never changes
+ends); the Laws have the teams change ends for the second half (Law 8), so a clip spanning half-time
+would name its second half backwards. Before R4, the old colour margin did not tell a wrong side from
+a right one: on validation the 5 wrong sides scored 0.431 to 0.96 and the 11 right ones 0.447 to
+0.985, a right side ranked above a wrong one in 60% of pairs, where 50% is chance
+([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on a confidence alone does not
+protect a team-level claim; the hard limits below stand beside it.
 
 **The agents see it, and a team claim waits for a sure side** (audit Q3). `ninety/match/facts.compact`
 passes `team_confidence` to the agents, and the fact-checker's confidence gate holds any claim that

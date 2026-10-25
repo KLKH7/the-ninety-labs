@@ -174,7 +174,7 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   reverse angle as the main camera's mirror).
 - The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
   off until the shot-flight measurement runs.
-- Team sides good enough to air most team claims (a spatial side model is in open #283).
+- Team sides good enough to air most team claims (a spatial side model is built, #283, but its sides are right for about 0.75 of tracks on validation and its confidence does not separate right from wrong, so the 0.96 gate still holds back most team-named claims).
 - The demo match rendered, with its render checks and its detected events.
 - Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
 - The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera
