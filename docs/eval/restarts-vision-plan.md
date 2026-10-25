@@ -1,4 +1,8 @@
-# Restarts from the video: the rules, written before any restart was scored
+# Restarts from the video: the rules, stated before any validation score
+
+The plan, the code and the first tests were committed together (702be708), after a development
+check on the demo match (seed 8080, recorded below), so this plan claims only that its design values
+were stated before any validation clip was scored, not that they came before all development.
 
 Automatic event detection finds passes, shots and out of play (`ninety/vision/events.py`). It does
 not see the ball put back in play. A kick-off matters most: after a goal the side that conceded kicks
@@ -7,7 +11,17 @@ between, is a goal the video itself shows (the goal rule of PR #271 reads it so)
 `ninety/vision/restarts.py`, kick-offs first; corners, goal kicks, throw-ins and free kicks follow
 by the same rules, each added here before it is scored.
 
-## The detector (live path: observations only, no ground truth)
+## The detector (observations only, no ground truth)
+
+It reads only what the video gives (`observations.jsonl`), so it can run on the live path, but it is
+not yet wired in: nothing outside its tests calls `restarts.detect` or `restarts.merge` today
+(`ninety/vision/live_job.py` writes passes, shots, out of play and possession changes only).
+
+**Possession changes** (`events.possession_changes`, PR #289) leave out a change across an out of
+play or a cut. A change inside a restart's still spell is the restart being set up: after a goal the
+other side's taker stands at the ball, and his spell begins there. `restarts.merge(events,
+restarts, dead_balls)` leaves those out, with `dead_balls` the still spells from `detect`'s summary
+(Laws 8 and 13 to 17: the ball is in play only once kicked and clearly moving).
 
 - **A still ball.** Ball sightings (`track.ball_path`), none more than `events.SPELL_GAP_FRAMES`
   (6) apart and none across a cut of the broadcast's edit, each within `STILL_M` of the run's
