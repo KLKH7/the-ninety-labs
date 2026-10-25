@@ -109,3 +109,31 @@ track-frames belong to players the broadcast never shows, and get none. By the r
 T1a is at least B, so the fallback is not taken: **sides come from the tactical views with #202's
 reader (T1a)**, which needs #202 on main. The calibration tables are in each variant's json for the
 0.96 gate's owner.
+
+### Oct 25, after review: what the result shows and what it does not
+
+The numbers above stand (the merge queue recomputed them from the json); three things about them
+were stated too strongly.
+
+- **The order of writing cannot be shown from git.** The plan, its Oct 23 deviation and every result
+  above were committed together (667e4be0, Oct 23 22:16 ET). The plan's header says 19:34 ET, and
+  the heading "Oct 24 (the commit time)" above is wrong: that entry is in the same commit and was
+  written after B and TB were read. The decision rule (T1 replaces the broadcast if it is at least
+  B) is the one fixed in the Oct 23 entry and was not changed, but its pre-registration rests on the
+  text, not on git.
+- **T1a and B are not compared like for like.** The tactical views track about twice the
+  track-frames (117,783 against 56,791), including players the broadcast never shows, and B reads
+  the kit with the single median (R0) while T1a uses #202's two-colour reader (R4). "T1a is at least
+  B" says the views with R4 told more track-frames right than the broadcast with R0 did; it does not
+  separate the camera from the reader.
+- **The side confidence barely tells a right side from a wrong one, and that is the headline.**
+  T1a: accuracy 0.681; the confidence ranks a right track above a wrong one in 61.8% of pairs (50%
+  is chance; B 60.8%); the largest confidence of a wrong track is 0.996 (B 1.0); 8% of right
+  tracks are above 0.96 (B 3.6%), and of the 39 tracks above it 0.897 are right (B: 22, 0.636).
+  11 of 23 clips are sound and 4 flipped. A wrong side can pass the fact-checker's 0.96 gate
+  (`factcheck.side_known`) on either camera, so the gate is unchanged and Law 3 (#308) stands beside
+  it as a backstop. The plan promised Hanley–McNeil's 95% interval on the ordering; it is not
+  computed here (main has the ordering only).
+
+Nothing here changes the live path. What the live path uses on the views is S (#283: R4 and a
+spatial model, outfield accuracy 0.750, calibration error 0.037, SPATIAL-PLAN.md), measured after this.

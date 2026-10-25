@@ -2979,8 +2979,8 @@ short and actionable. This file is public: no research sources, product names or
 ### 231. A fallback that leaves cases undecided is scored on the cases it leaves, and its reference is measured first
 - **What happened:** the sides plan fixed a fallback, TB (tactical tracks inherit the broadcast's
   sides), to ship if the tactical sides stayed below the broadcast's, B. B had never been scored,
-  so the condition could not be checked; scored, B was 0.578 and T1a 0.681, and the fallback was not
-  needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
+  so the condition could not be checked; scored, B was 0.578 and T1a 0.681 (on different track
+  populations and kit readers: PLAN.md's Oct 25 entry), and the fallback was not needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
   but 38% of the tactical track-frames are players the broadcast never shows, and they get no side.
   Judged only on what it decided, TB would have looked as good as B.
 - **Rule:** before a rule that compares with a reference is applied, the reference is measured on
