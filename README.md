@@ -136,6 +136,7 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | What | Number | Evidence |
 |---|---|---|
 | Broadcast detector (ours-freeze), test set of 30 clips, 7,500 frames | ball recall 0.884 (95% 0.877 to 0.891), player recall 0.997 | [finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md) |
+| Ball mostly hidden, same detector and test set (still the weakness) | recall 0.425 (229 / 539, 95% 0.384 to 0.467) | [finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md) |
 | Tactical-view detector (ours-tactical), adopted by the pre-registered rule, test set of 28 clips | ball recall 0.692 (963 / 1,392, 95% 0.667 to 0.716), player recall 0.998 | [finetune-tactical](docs/eval/finetune-tactical/RESULTS.md) |
 | Broadcast player tracks paired with the same man on the tactical views, 7 validation clips | 144 / 179 paired (80.4%, 95% 74 to 86%); 4 / 144 pairs wrong (2.8%, 95% 1 to 7%) | [association.md](docs/eval/association.md) |
 | Passes detected from pixels, frozen test set's five clips | strict F1 0.67 (7 of 13 found, 1 false), below the 0.70 target; measured before the camera fit's blur and gate B3 | [detector-plan.md](docs/eval/detector-plan.md) |
@@ -144,23 +145,26 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
-| Personalizer over A2A, live | 19 / 19 claims answered, p95 4.6 s in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
+| Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | 19 / 19 claims answered, p95 4.6 s in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
 | Read-aloud in the pinned neural voice | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
 
-**Running on `main`, deployed** (every green `main` deploys one image: the API, the MCP server,
-the viewer, the phone and the Replay bundle): the seeded match engine; the broadcast and two fixed
-whole-pitch tactical views, rendered with exact ground truth and render checks in CI
+**Runs on `main`:** the seeded match engine; the broadcast and two fixed whole-pitch tactical
+views, rendered with exact ground truth and render checks in CI
 ([decision 0001](docs/decisions/0001-synthetic-data.md)); frozen test sets and the data contract;
 vision from pixels to events, with the tactical views giving the players and the broadcast the ball
-and the events; the stats engine and the hidden stats; the multi-agent graph with the
-fact-checking agent in the demo bundle (`ninety-e2e`, replayable without Azure); the viewer in
-match mode, graphics drawn on the footage, analyst, casual and audio-description personas; the
-phone companion: radar, Insights cards, Ask, and read-aloud.
+and the events; the live detection job for one clip (built, not deployed); the stats engine and the
+hidden stats; the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
+replayable without Azure); the Personalizer over A2A (evaluated live; off in `ninety-e2e` and not
+deployed).
+
+**Ships in the image every green `main` deploys:** the API, the match MCP server, the viewer (match
+mode, graphics drawn on the footage, analyst, casual and audio-description personas) with its
+Replay bundle, and the phone companion (radar, Insights cards, Ask, read-aloud).
 
 **Not yet, or not measured:**
 
-- The Companion's own sentences: the committed live run (v2) aired no model sentence, all 32
-  answers were code's checked ones ([companion-tools.md](docs/eval/companion-tools.md)). The v3
+- The Companion's own sentences: the committed live run (v2) aired no model sentence; of its 32
+  answers, 24 were code's verified sentence and 8 code's "unanswerable" reply ([companion-tools.md](docs/eval/companion-tools.md)). The v3
   run is not committed; v4, where the model chooses among code's checked sentences, is not on
   `main` and its evaluation is pending.
 - Event detection at the 0.70 target, and re-measured since the camera fit changed; shot outcomes,
@@ -168,9 +172,12 @@ phone companion: radar, Insights cards, Ask, and read-aloud.
 - Team sides good enough to air most team claims (a spatial side model is in open #283).
 - The demo match rendered, with its render checks and its detected events.
 - Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
+- The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera
+  fit is about 14 m wrong in every frame ([gate-b3.md](docs/eval/gate-b3.md)).
 - Known engine gaps at the freeze: too much sideways passing, long shots taken with no defender
-  screening the goal, no change of ends at half-time, and one seed's keeper acceleration
-  ([issue #297](https://github.com/KLKH7/the-ninety-labs/issues/297)). See
+  screening the goal, no change of ends at half-time (and `ninety/sim/touches.py` and
+  `ninety/render/edit.py` do not yet treat `half_time` as a stop), and one seed's keeper
+  acceleration ([issue #297](https://github.com/KLKH7/the-ninety-labs/issues/297)). See
   [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
 
 ## License
