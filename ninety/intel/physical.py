@@ -35,9 +35,11 @@ def labels() -> dict:
     return json.loads(CALIBRATION.read_text()) if CALIBRATION.exists() else {}
 
 
-# The phone card's worst measured top-speed error on tracked footage (docs/eval/companion-tracked.md:
-# 1.5 km/h median, 4.2 worst): the bar a named player's top speed must meet to be said.
-TOP_SPEED_BAR_KMH = 4.2
+# The phone card's worst measured top-speed error on tracked footage, the largest of its 15 tracks on
+# one 10 s clip with the shipped smoothing (docs/eval/companion-tracked.json, by_smoothing 25,
+# peak_kmh max; median 1.5, p90 4.2): the bar a named player's top speed must meet to be said. The
+# label it is held against is the worst of its graded cases too, so the two are the same statistic.
+TOP_SPEED_BAR_KMH = 7.7
 
 
 def held(lb: dict, bar: int | None) -> dict[str, str]:
