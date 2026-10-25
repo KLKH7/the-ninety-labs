@@ -43,6 +43,10 @@ KIT = {"home": [200.0, 30.0, 40.0], "away": [40.0, 60.0, 190.0]}
 SCORE = 0.9  # every stand-in box: above the detector's 0.5 floor, so the gate is not what is measured
 NOISE_SEED = 1
 KINDS = ("interception", "pressure", "tackle", "possession_change", "pass")
+# Amendment 1 (docs/eval/interception-plan.md): the error's shares of variance that are one offset per
+# clip, one shift per frame shared by every object in it, and each object's own. M1 is all object.
+SHARES = {"m1": (0.0, 0.0, 1.0), "m3": (1.0, 0.0, 0.0), "m4": (1 / 3, 1 / 3, 1 / 3)}
+DECIDES = "m4"  # the run each plan's bar is read on, from amendment 1
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -100,25 +104,33 @@ def m0(matches: list[Path]) -> dict:
     return out
 
 
-def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = NOISE_SEED) -> list[dict]:
+def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = NOISE_SEED,
+                 shares: tuple[float, float, float] = SHARES["m1"]) -> list[dict]:
     """Observation rows (ninety.vision.observe's shape) from answer-key frames: each player and the
     ball at its true place plus Gaussian noise, a kit colour per side, the camera ok. With
-    `broadcast`, only what the picture shows (visibility above 0), with the drawn boxes."""
+    `broadcast`, only what the picture shows (visibility above 0), with the drawn boxes. The noise's
+    per-axis variance sigma² is split by `shares` into one offset for the clip, one shift per frame
+    shared by every object, and each object's own (amendment 1). The shared parts come from their
+    own generator, so the objects' draws, and M1's rows, are the same whatever the shares."""
     rng = fmath.Random(seed)  # portable draws: the report is the same on every machine (lesson 46)
+    shared = fmath.Random(f"{seed}-shared")
+    clip_sd, frame_sd, own_sd = (sigma * math.sqrt(s) for s in shares)
+    bx, by = shared.gauss(0, clip_sd), shared.gauss(0, clip_sd)
     rows = []
     for f in frames:
+        fx, fy = bx + shared.gauss(0, frame_sd), by + shared.gauss(0, frame_sd)
         players = []
         for k, p in enumerate(f["players"]):
             if broadcast and not (p.get("bbox") and p.get("visibility", 0) > 0):
                 continue
             box = p["bbox"] if broadcast else [20 * k, 0, 20 * k + 10, 30]
-            players.append({"bbox": box, "score": SCORE, "x": p["x"] + rng.gauss(0, sigma),
-                            "y": p["y"] + rng.gauss(0, sigma), "rgb": KIT[p["team"]]})
+            players.append({"bbox": box, "score": SCORE, "x": p["x"] + fx + rng.gauss(0, own_sd),
+                            "y": p["y"] + fy + rng.gauss(0, own_sd), "rgb": KIT[p["team"]]})
         b, ball = f["ball"], []
         if not broadcast or (b.get("bbox") and b.get("visibility", 0) > 0):
             box = b["bbox"] if broadcast else [0, 500, 8, 508]
-            ball.append({"bbox": box, "score": SCORE, "x": b["x"] + rng.gauss(0, sigma),
-                         "y": b["y"] + rng.gauss(0, sigma)})
+            ball.append({"bbox": box, "score": SCORE, "x": b["x"] + fx + rng.gauss(0, own_sd),
+                         "y": b["y"] + fy + rng.gauss(0, own_sd)})
         rows.append({"frame": f["frame"], "t": f["t"], "camera": {"ok": True}, "players": players,
                      "ball": ball})
     return rows
@@ -190,12 +202,25 @@ def diagnostics(truth: list[dict], detected: list[dict], report: dict, frames: l
             "false_pressures_from_unseen_memory": memory, "false_pressures": len(false_pr)}
 
 
+def fast_at_feet(rows: list[dict], frames: list[dict]) -> dict:
+    """Of the frames where a player truly has the ball at his feet and the ball is seen, how many read
+    it leaving at ARRIVE_MPS or faster, the speed the tackle rule takes for a strike (amendment 1)."""
+    path = tr.ball_path(rows)
+    index = {p.frame: i for i, p in enumerate(path)}
+    held = [index[f["frame"]] for f in frames if f.get("possessor") and f["frame"] in index]
+    speeds = [ev._speed_kmh(path, i) for i in held]
+    return {"fast": sum(1 for v in speeds if v is not None and v / 3.6 >= ev.ARRIVE_MPS),
+            "of": sum(1 for v in speeds if v is not None)}
+
+
 def score_clip(name: str, frames: list[dict], truth: list[dict], sigma: float, broadcast: bool,
-               history: list[dict] | None = None) -> dict:
-    rows = observations(frames, sigma, broadcast)
+               history: list[dict] | None = None, shares: tuple[float, float, float] = SHARES["m1"]) -> dict:
+    rows = observations(frames, sigma, broadcast, shares=shares)
     detected, _ = ev.detect(rows, kinds=ev.TURNOVERS)
     report = event_score.score(truth, detected, frames)
     clip = {"clip": name, "events": {}}
+    if shares != SHARES["m1"]:
+        clip["fast_at_feet"] = fast_at_feet(rows, frames)
     clip["diagnostics"] = diagnostics(truth, detected, report, frames, history or [])
     for rule in ("strict", "lenient", "time_only"):
         clip["events"][rule] = {k: {m: v[m] for m in ("true", "detected", "tp", "fp", "fn")}
@@ -275,28 +300,34 @@ def main(argv: list[str] | None = None) -> None:
               "label": "development numbers on stand-in observations (validation only), not vision results",
               "commit": event_score.git_commit(), "noise_m": NOISE_M, "m0": m0(matches)}
     if not a.m0_only:
-        for sigma, tag in ((NOISE_M, "noise"), (0.0, "exact")):
+        runs = [(NOISE_M, SHARES["m1"], "m1_", "m2_", "_noise"), (0.0, SHARES["m1"], "m1_", "m2_", "_exact"),
+                *((NOISE_M, SHARES[k], f"{k}_windows", f"{k}_rendered", "") for k in ("m3", "m4"))]
+        for sigma, shares, win, ren, tag in runs:
             m1 = []
             for c in clips:
                 m = a.matches / f"seed{c['seed']}"
                 frames, truth = window(m, c["start"], c["seconds"])
                 history = read_jsonl(m / "events.jsonl")
                 name = f"seed{c['seed']}-{round(c['start'] * 25)}"
-                m1.append(score_clip(name, frames, truth, sigma, False, history))
+                m1.append(score_clip(name, frames, truth, sigma, False, history, shares))
             m2 = []
             for d in a.rendered:
                 frames, truth = read_jsonl(d / "frames.jsonl"), read_jsonl(d / "events.jsonl")
                 seed = int(d.name.split("-")[0].removeprefix("seed"))
                 history = read_jsonl(a.matches / f"seed{seed}" / "events.jsonl")
-                m2.append(score_clip(d.name, frames, truth, sigma, True, history))
-            for name, cl in (("m1", m1), ("m2", m2)):
-                report[f"{name}_{tag}"] = {
+                m2.append(score_clip(d.name, frames, truth, sigma, True, history, shares))
+            for name, cl in ((win.rstrip("_"), m1), (ren.rstrip("_"), m2)):
+                report[f"{name}{tag}"] = {
                     "clips": len(cl),
                     **{rule: pooled(cl, rule) for rule in ("strict", "lenient", "time_only")},
                     "diagnostics": pooled_diagnostics(cl),
                     "names": {k: sum(c["names"][k] for c in cl) for k in ("right", "wrong", "null")},
                     "sides_right": [sum(c["sides_right"] for c in cl), sum(c["sides_of"] for c in cl)],
                     "per_clip": [{k: v for k, v in c.items() if k != "detected"} for c in cl]}
+                if shares != SHARES["m1"]:
+                    report[f"{name}{tag}"]["shares"] = list(shares)
+                    report[f"{name}{tag}"]["fast_at_feet"] = {
+                        k: sum(c["fast_at_feet"][k] for c in cl) for k in ("fast", "of")}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.with_suffix(".json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(json.dumps({"m0": {k: v for k, v in report["m0"].items() if k != "rules"}

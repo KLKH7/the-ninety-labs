@@ -5,6 +5,7 @@ with the engine's interceptions on planted passes whose answer is known before i
 from __future__ import annotations
 
 import json
+import math
 
 from ninety.eval import turnover_standin as ts
 from ninety.vision import events as ev
@@ -59,3 +60,72 @@ def test_m0_counts_each_rules_disagreements_against_the_engines_interceptions(tm
     assert 0.85 * ev.roll_distance(15.0, 0.0) < 40.0
     assert [out["rules"][n]["disagree"] for n in ev.STAND_INS] == [1, 0, 0, 0]
     assert out["chosen"] == "pace10" and out["beats_constant_rules"]
+
+
+# Amendment 1: the noise's shares of one offset per clip, one shift per frame, each object's own.
+
+
+def still_frames(n, players=3):
+    return [frame(f, [(f"h{k}", "home", 10.0 + 5 * k, 20.0) for k in range(players)], (50.0, 30.0))
+            for f in range(n)]
+
+
+def errors(rows, frames):
+    """Per frame, each object's (dx, dy) from its true place: players in order, then the ball."""
+    out = []
+    for r, f in zip(rows, frames, strict=True):
+        e = [(p["x"] - q["x"], p["y"] - q["y"]) for p, q in zip(r["players"], f["players"], strict=True)]
+        out.append(e + [(r["ball"][0]["x"] - f["ball"]["x"], r["ball"][0]["y"] - f["ball"]["y"])])
+    return out
+
+
+def close(a, b):
+    return abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9
+
+
+def test_a_clips_offset_moves_every_object_in_every_frame_the_same_way():
+    frames = still_frames(5)
+    err = errors(ts.observations(frames, ts.NOISE_M, False, shares=ts.SHARES["m3"]), frames)
+    first = err[0][0]
+    assert all(close(e, first) for row in err for e in row) and first != (0.0, 0.0)
+
+
+def test_a_frames_shift_moves_every_object_in_it_together_and_changes_between_frames():
+    frames = still_frames(5)
+    err = errors(ts.observations(frames, ts.NOISE_M, False, shares=(0.0, 1.0, 0.0)), frames)
+    assert all(close(e, row[0]) for row in err for e in row)
+    assert not close(err[0][0], err[1][0])
+
+
+def test_m1_is_each_objects_own_noise_and_its_rows_are_the_ones_m1_was_run_with():
+    frames = still_frames(5)
+    rows = ts.observations(frames, ts.NOISE_M, False, shares=ts.SHARES["m1"])
+    assert rows == ts.observations(frames, ts.NOISE_M, False)  # the default, as M1 ran
+    err = errors(rows, frames)
+    assert not close(err[0][0], err[0][1])
+
+
+def test_every_split_keeps_the_measured_spread():
+    # Pooled over many clips (seeds), so the clip's one offset is drawn many times too.
+    frames = still_frames(4, players=3)
+    for name, shares in ts.SHARES.items():
+        assert abs(sum(shares) - 1.0) < 1e-12
+        xs = [e[0] for seed in range(600)
+              for row in errors(ts.observations(frames, ts.NOISE_M, False, seed=seed, shares=shares), frames)
+              for e in row]
+        sd = math.sqrt(sum(x * x for x in xs) / len(xs))
+        assert abs(sd - ts.NOISE_M) < 0.06 * ts.NOISE_M, (name, sd)
+
+
+def test_the_shared_parts_take_no_draw_from_the_objects_so_m1s_rows_never_move():
+    # M1 was run before amendment 1: its rows are the objects' generator's draws, in order (x then y
+    # for each player, then the ball), with nothing drawn between them.
+    from ninety.sim import fmath
+
+    frames = still_frames(3, players=2)
+    rng = fmath.Random(ts.NOISE_SEED)
+    want = [[(rng.gauss(0, ts.NOISE_M), rng.gauss(0, ts.NOISE_M)) for _ in range(3)] for _ in frames]
+    got = errors(ts.observations(frames, ts.NOISE_M, False, shares=ts.SHARES["m4"]), frames)
+    m1 = errors(ts.observations(frames, ts.NOISE_M, False), frames)
+    assert all(close(a, b) for ra, rb in zip(m1, want, strict=True) for a, b in zip(ra, rb, strict=True))
+    assert not all(close(a, b) for ra, rb in zip(got, want, strict=True) for a, b in zip(ra, rb, strict=True))
