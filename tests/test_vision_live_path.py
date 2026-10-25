@@ -25,7 +25,7 @@ LIVE = ["ninety/vision/flight.py",
         "ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
         "ninety/vision/events.py", "ninety/vision/tracked_frames.py", "ninety/vision/live_job.py",
         "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/join.py",
-        "ninety/vision/restarts.py"]
+        "ninety/vision/restarts.py", "ninety/vision/match_gantry.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 
@@ -176,6 +176,25 @@ def test_the_image_stage_opens_no_truth_file(tmp_path):
         observe.main([{str(clip)!r}, "--detections", {str(dets)!r}, "--out", {str(out)!r}])
         obs = track.read_observations({str(out)!r})
         events.detect(obs)
+        OUT = {{"rows": len(obs), "camera_ok": sum(r["camera"]["ok"] for r in obs)}}
+    """)
+    assert run["out"]["rows"] == 2 and run["out"]["camera_ok"] == 2  # it ran the whole stage
+    assert any(o.endswith(".jpg") for o in run["opened"])
+    assert truth_reads(run) == []
+
+
+def test_the_match_gantry_and_observe_through_it_open_no_truth_file(tmp_path):
+    clip = tmp_path / "clip"
+    dets = synthetic_clip(clip)
+    gantry, out = tmp_path / "gantry.json", tmp_path / "obs.jsonl"
+    run = run_audited(f"""
+        from ninety.vision import match_gantry, observe, pitch, track
+        pitch.find_gantry = lambda anchors, w, h, score=None: (58.0, -37.0, 16.0)  # tested elsewhere
+        match_gantry.main(["--clip", {str(clip)!r}, "--detections", {str(dets)!r},
+                           "--clip", {str(clip)!r}, "--detections", {str(dets)!r}, "--out", {str(gantry)!r}])
+        observe.main([{str(clip)!r}, "--detections", {str(dets)!r}, "--out", {str(out)!r},
+                      "--match-gantry", {str(gantry)!r}])
+        obs = track.read_observations({str(out)!r})
         OUT = {{"rows": len(obs), "camera_ok": sum(r["camera"]["ok"] for r in obs)}}
     """)
     assert run["out"]["rows"] == 2 and run["out"]["camera_ok"] == 2  # it ran the whole stage

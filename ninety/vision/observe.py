@@ -18,7 +18,11 @@ also cuts between cameras. With `--cuts`, a cut is found where the picture chang
 (pitch.shot_starts) and each shot is fitted on its own (pitch.fit_shots), its index written as
 `camera.shot`. It is off by default: on validation it trusted a tight lens's frames 1 to 1.3 m
 wrong, and on the test set a reverse angle 44 m wrong, the mirror of the main camera through the
-centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 244). A
+centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 244).
+With `--match-gantry <file>` (ninety.vision.match_gantry: one gantry from all of a match's clips),
+every shot is fitted through that gantry instead of its own, and a shot whose own fit disagrees
+with it is `camera.unsure` and not trusted (pitch.fit_match_shots; off by default,
+docs/eval/match-gantry-plan.md). A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
 through that one camera.
@@ -198,10 +202,13 @@ def place(row: dict, band: tuple[float, float] = HEIGHT_BAND, markings: bool = T
     return row
 
 
-def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: bool = False) -> list[dict]:
+def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: bool = False,
+            gantry: tuple | None = None) -> list[dict]:
     """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
     `fixed` for a lens that never moves (the tactical camera), else the broadcast camera; `cuts`
-    to fit the broadcast shot by shot at the cuts the images show (off by default, above)."""
+    to fit the broadcast shot by shot at the cuts the images show (off by default, above);
+    `gantry` the match's broadcast gantry (pitch.fit_match_gantry), through which every shot is
+    fitted, a shot that disagrees with it marked `camera.unsure` and not trusted (off by default)."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
     rgbs, points, thumbs = [], [], []
@@ -219,7 +226,12 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
-    if not fixed:
+    checks = None
+    if not fixed and gantry is not None:
+        starts = pitch.shot_starts(thumbs) if cuts else [0]
+        checks, fits = pitch.fit_match_shots(points, W, H, starts, gantry)
+        gantries = [c.gantry for c in checks]
+    elif not fixed:
         starts = pitch.shot_starts(thumbs) if cuts else [0]
         gantries, fits = pitch.fit_shots(points, W, H, starts)
     else:
@@ -243,9 +255,20 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
                              if fit.view else None)},
             "players": players, "ball": balls,
         }, FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND, markings=not fixed))
+    for r, k in zip(rows, shot_of, strict=True):
+        if checks is not None and checks[k].unsure:
+            r["camera"]["unsure"] = True
     rows = agree(rows)
     rows[0]["gantry"] = None if gantries[0] is None else [round(v, 3) for v in gantries[0]]
-    if len(starts) > 1:
+    if checks is not None:
+        rows[0]["gantry"] = [round(v, 3) for v in gantry]
+        rows[0]["match_gantry"] = True
+        rows[0]["shots"] = [{"frame": rows[s]["frame"],
+                             "gantry": None if c.gantry is None else [round(v, 3) for v in c.gantry],
+                             "distance_m": c.distance_m, "ok_own": c.ok_own, "ok_match": c.ok_match,
+                             "unsure": c.unsure}
+                            for s, c in zip(starts, checks, strict=True)]
+    elif len(starts) > 1:
         rows[0]["shots"] = [{"frame": rows[s]["frame"],
                              "gantry": None if g is None else [round(v, 3) for v in g]}
                             for s, g in zip(starts, gantries, strict=True)]
@@ -261,6 +284,8 @@ def _r(v) -> float | None:
 def main(argv: list[str] | None = None) -> None:
     from PIL import Image
 
+    from ninety.vision import match_gantry
+
     ap = argparse.ArgumentParser(description="Place a clip's detections on the pitch from its images.")
     ap.add_argument("clip", type=Path, nargs="?", help="the clip's folder (images/)")
     ap.add_argument("--detections", type=Path)
@@ -270,6 +295,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--cuts", action="store_true",
                     help="the broadcast: fit each shot on its own at the cuts the images show "
                          "(off by default)")
+    ap.add_argument("--match-gantry", type=Path, default=None,
+                    help="the broadcast: the match's gantry (python -m ninety.vision.match_gantry); "
+                         "every shot is fitted through it and checked against it (off by default)")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
                          "without the camera fit (its cameras are kept)")
@@ -287,8 +315,9 @@ def main(argv: list[str] | None = None) -> None:
             ap.error("a clip and --detections, or --regate")
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
+        gantry = match_gantry.read(a.match_gantry) if a.match_gantry else None
         rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")),
-                       fixed=a.fixed, cuts=a.cuts)
+                       fixed=a.fixed, cuts=a.cuts, gantry=gantry)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")

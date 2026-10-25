@@ -11,6 +11,8 @@ is) and each frame 3 more (pan, tilt, focal length).
     fit_clip(points_by_frame, ...) the gantry and every frame's pan, tilt and focal length
     shot_starts(thumbnails)        where the camera cuts, from how much the picture changes
     fit_shots(points, ..., starts) fit_clip on each shot alone: a new gantry after every cut
+    fit_match_gantry(anchors)      one gantry for a match, from every clip's anchors pooled
+    fit_match_shots(points, ...)   each shot through the match gantry; "camera unsure" if it disagrees
     fit_fixed(static, points, ...) a fixed lens (the tactical camera): one camera for the clip
 
 Each frame is fitted by Gauss-Newton on the pixel distance from every marking pixel to the nearest
@@ -506,10 +508,12 @@ def _judge(view: View, pts: np.ndarray) -> FrameFit:
     return FrameFit(view, round(med, 3), len(pts), bool(len(pts) >= MIN_POINTS and med <= MAX_MEDIAN_PX))
 
 
-def find_gantry(anchors: list[np.ndarray], width: int, height: int) -> tuple[float, float, float]:
+def find_gantry(anchors: list[np.ndarray], width: int, height: int,
+                score: list[np.ndarray] | None = None) -> tuple[float, float, float]:
     """The gantry that lets the anchor frames fit best. Every grid gantry is ranked by how well
     the anchor with the most markings fits from it (its best aim and lens); the best few are
-    scored on several anchors; the winner is refined jointly with every anchor that fits it."""
+    scored on several anchors (`score`, by default the GANTRY_SCORE_FRAMES with most markings);
+    the winner is refined jointly with every anchor that fits it."""
     anchors = sorted((a for a in anchors if len(a) >= MIN_POINTS), key=len, reverse=True)
     if not anchors:
         raise ValueError("no frame shows enough pitch markings to place the camera")
@@ -521,7 +525,8 @@ def find_gantry(anchors: list[np.ndarray], width: int, height: int) -> tuple[flo
         return search(a, width, height, gantry=g, keep=1)[0]
 
     first = sorted(grid, key=lambda g: cost(fitted(g, anchors[0]), anchors[0]))[:GANTRY_FINALISTS]
-    some = anchors[:GANTRY_SCORE_FRAMES]
+    some = ([_sample(a, SEARCH_POINTS) for a in score[:GANTRY_SCORE_FRAMES]] if score
+            else anchors[:GANTRY_SCORE_FRAMES])
     g = min(first, key=lambda g: sum(cost(fitted(g, a), a) for a in some))
     views = [fitted(g, a) for a in anchors]
     keep = [k for k, (v, a) in enumerate(zip(views, anchors, strict=True))
@@ -623,11 +628,12 @@ def polish_gantry(g, views: list[View], anchors: list[np.ndarray], step_m: float
 
 
 def fit_clip(points: list[np.ndarray], width: int, height: int,
-             anchor_every: int = 25) -> tuple[tuple, list[FrameFit]]:
+             anchor_every: int = 25, gantry: tuple | None = None) -> tuple[tuple, list[FrameFit]]:
     """The gantry and one FrameFit per frame, in order. Each frame starts from the last good
     one, held near it by STEP_SD; a frame that fits badly from there (a camera cut, a fast pan) is
-    searched afresh with the gantry fixed, and kept only if that search fits."""
-    g = find_gantry(points[::anchor_every], width, height)
+    searched afresh with the gantry fixed, and kept only if that search fits. A given `gantry`
+    (the match's, fit_match_gantry) is used instead of finding one from the clip's frames."""
+    g = gantry if gantry is not None else find_gantry(points[::anchor_every], width, height)
     fits: list[FrameFit] = []
     last: View | None = None
     for pts in points:
@@ -708,6 +714,85 @@ def fit_shots(points: list[np.ndarray], width: int, height: int, starts: list[in
         gantries.append(g)
         fits += f
     return gantries, fits
+
+
+# ---------------------------------------------------------------------------------------------
+# A match: one gantry for all its clips, and a shot that disagrees with it is "camera unsure"
+
+# A broadcast match has one main camera on one gantry. A clip that shows one end of the pitch
+# cannot pin it (distance along the line of sight trades against zoom), so the gantry is fitted
+# once from every clip's anchors pooled (docs/eval/match-gantry-plan.md). Over MATCH_ANCHORS in
+# all, each clip's anchors are thinned evenly to an equal share (design: about three of today's
+# longest clips; it bounds the joint fit's cost on a whole match).
+MATCH_ANCHORS = 64
+# A shot whose own gantry is further than this from the match's, and which the match gantry
+# explains worse than its own does, is "camera unsure": its frames are not trusted. The value is the
+# gantry fit's measured precision: the largest distance from today's fitted gantry to the true one
+# on validation clips whose camera is the main gantry throughout, over both looks measured, rounded
+# up to 0.1 m (the plan's rule; Outcome there has each clip's distance).
+SHOT_GANTRY_M = 38.5
+
+
+def match_anchors(anchors_by_clip: list[list[np.ndarray]]) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """All the match's anchors, and the ones the finalist gantries are scored on: round-robin
+    across clips (each clip's anchor with most markings, clips in order of that count, then each
+    clip's second best...). With one clip that is its anchors with most markings, as find_gantry
+    takes them, and nothing is thinned."""
+    clips = [[a for a in c if len(a) >= MIN_POINTS] for c in anchors_by_clip]
+    clips = [c for c in clips if c]
+    if len(clips) > 1:
+        share = math.ceil(MATCH_ANCHORS / len(clips))
+        clips = [c if len(c) <= share else [c[k] for k in np.linspace(0, len(c) - 1, share).astype(int)]
+                 for c in clips]
+    ranked = sorted((sorted(c, key=len, reverse=True) for c in clips), key=lambda c: len(c[0]),
+                    reverse=True)
+    score = [c[k] for k in range(max(map(len, ranked), default=0)) for c in ranked if k < len(c)]
+    return [a for c in clips for a in c], score
+
+
+def fit_match_gantry(anchors_by_clip: list[list[np.ndarray]], width: int,
+                     height: int) -> tuple[float, float, float]:
+    """The match's gantry from every clip's anchors (each clip's frames at every 25th index)."""
+    pooled, score = match_anchors(anchors_by_clip)
+    return find_gantry(pooled, width, height, score=score)
+
+
+@dataclass(frozen=True)
+class ShotCheck:
+    gantry: tuple | None  # the shot's own gantry, as fit_clip finds it; None without markings
+    distance_m: float | None  # from the match gantry
+    ok_own: int  # frames whose markings fit through the shot's own gantry
+    ok_match: int  # and through the match gantry
+    unsure: bool
+
+
+def fit_match_shots(points: list[np.ndarray], width: int, height: int, starts: list[int],
+                    gantry: tuple, anchor_every: int = 25) -> tuple[list[ShotCheck], list[FrameFit]]:
+    """Each shot fitted through the match `gantry`, and checked against its own fit: unsure when
+    its own gantry is over SHOT_GANTRY_M away and explains more of its frames than the match
+    gantry does (a tie goes to the match gantry). An unsure shot's frames are not ok. A shot
+    without markings enough for its own gantry cannot disagree."""
+    bounds = list(starts) + [len(points)]
+    checks: list[ShotCheck] = []
+    fits: list[FrameFit] = []
+    for a, b in zip(bounds[:-1], bounds[1:], strict=True):
+        shot = points[a:b]
+        try:
+            own, own_fits = fit_clip(shot, width, height, anchor_every=anchor_every)
+        except ValueError:
+            own, own_fits = None, []
+        f = own_fits if own == tuple(gantry) else fit_clip(shot, width, height, gantry=tuple(gantry))[1]
+        if own is None:
+            checks.append(ShotCheck(None, None, 0, sum(x.ok for x in f), False))
+        else:
+            d = math.dist(own, gantry)
+            n_own, n_match = sum(x.ok for x in own_fits), sum(x.ok for x in f)
+            unsure = d > SHOT_GANTRY_M and n_match < n_own
+            checks.append(ShotCheck(own, round(d, 3), n_own, n_match, unsure))
+            if unsure:
+                f = [FrameFit(x.view, x.median_px, x.points, False) for x in f]
+        fits += f
+    return checks, fits
 
 
 # ---------------------------------------------------------------------------------------------
