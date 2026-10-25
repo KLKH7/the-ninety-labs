@@ -142,9 +142,10 @@ def test_the_scorebug_reads_a_staged_clip_and_opens_no_truth(tmp_path):
         from pathlib import Path
         from ninety.vision import scorebug
         found, summary = scorebug.read_clip(Path({str(clip)!r}))
-        OUT = {{"changes": len(found), "samples": summary["samples"]}}
+        OUT = {{"types": [e["type"] for e in found], "samples": summary["samples"]}}
     """)
-    assert run["out"]["changes"] == 1 and run["out"]["samples"] > 0  # it did the work
+    assert run["out"]["types"] == ["score_read", "score_change"]  # it did the work
+    assert run["out"]["samples"] > 0
     assert truth_reads(run) == []
 
 
