@@ -1184,10 +1184,13 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** Questions this fan has already asked: never suggested back to them. */
+const asked = new Set<string>();
+
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
-  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
+  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
 }
 
@@ -1230,6 +1233,8 @@ async function ask(text: string) {
   const input = $<HTMLInputElement>("question");
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
+  asked.add(q);
+  renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
   const at = state.card && state.card.player === state.selected ? state.card.t_to : Math.round(Math.max(0, laptop.time()) * 10) / 10;

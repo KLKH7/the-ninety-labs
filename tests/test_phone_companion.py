@@ -774,6 +774,16 @@ def test_team_distance_says_how_close_it_is_measured(browser, site):  # noqa: F8
     assert not errors
 
 
+def test_a_question_already_asked_is_not_suggested_again(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    page.click("#tab-button-ask")
+    first = page.locator("#ask-chips .chip").first.inner_text()
+    ask(page, first)
+    suggested = [c.inner_text() for c in page.locator("#ask-chips .chip").all()]
+    assert first not in suggested and len(suggested) == 3
+    assert not errors
+
+
 # --- thin real data: an empty card is hidden, never a dash, an error or a guess -----------------
 
 

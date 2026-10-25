@@ -142,7 +142,9 @@ def test_ninety_e2e_adds_the_read_aloud_audio_only_when_asked(tmp_path, monkeypa
     e2e.main([*base, "--out", str(tmp_path / "spoken"), "--voice-audio"])
     manifest = json.loads((tmp_path / "spoken" / "manifest.json").read_text())
     said = json.loads((tmp_path / "spoken" / "audio.json").read_text())["said"]
-    wanted = {voice.normalise(s["spoken"]) for s in said} | set(sb.FIXED)
+    calls = json.loads((tmp_path / "spoken" / "commentary.json").read_text())["lines"]
+    wanted = ({voice.normalise(s["spoken"]) for s in said} | {voice.normalise(c["text"]) for c in calls}
+              | set(sb.FIXED))
     assert said and manifest["speech"]["lines"] == len(wanted)
     assert "speech.json" in manifest["files"]
 
