@@ -3,10 +3,11 @@
     uv run python -m ninety.vision.restarts <observations.jsonl> --out restarts.jsonl
 
 Reads only the observations file (`ninety.vision.observe`), as `ninety.vision.events` does, and
-writes match_event lines with `source: "vision"`. Nothing here reads ground truth: this is the live
-path (tests/test_vision_live_path.py watches it run). The rules are the Laws' (docs/GROUNDING.md);
-every tolerance is the measured position error, set before any restart was scored
-(docs/eval/restarts-vision-plan.md).
+writes match_event lines with `source: "vision"`. Nothing here reads ground truth, so it may run on
+the live path (tests/test_vision_live_path.py watches it run); the live job does not call it yet.
+The rules are the Laws' (docs/GROUNDING.md); every tolerance is the measured position error, stated
+before any validation clip was scored (docs/eval/restarts-vision-plan.md). `merge` joins its events
+to `events.detect`'s, leaving out a possession change while the ball lies set for a restart.
 
 **Still.** A restart is taken with the ball stationary on its spot (Laws 8, 13, 15 to 17). A still
 spell is a run of ball sightings, none more than KICK_GAP_FRAMES apart and none across a cut of
@@ -284,6 +285,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     shots = tuple(q["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1)
     spells = stills(path, cut_frames(rows), shots)
     kinds = {k: 0 for k in ("kick_off", "corner", "goal_kick", "penalty_kick", "free_kick", "throw_in")}
+    dead: list[list[int]] = []  # each found restart's still spell: the ball dead and set
 
     def event(kind: str, s: Still, team: str, taker: Track | None, conf: float) -> None:
         e = {"id": "", "t": t_of[s.last], "frame": s.last,
@@ -295,6 +297,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
         if kind != "kick_off":
             e["restart"] = kind
         found.append(e)
+        dead.append([s.first, s.last])
 
     for s in spells:
         kind = place_kind(s.x, s.y)
@@ -319,13 +322,21 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
         "on_centre_mark": kinds["kick_off"],
         "still_at": kinds,
         "events": {k: sum(1 for e in found if (e.get("restart") or "kick_off") == k) for k in kinds},
+        "dead_balls": dead,
     }
     return found, summary
 
 
-def merge(events: list[dict], restarts: list[dict]) -> list[dict]:
-    """One time-ordered stream of the two detectors' events, each keeping its own id."""
-    return sorted(events + restarts, key=lambda e: (e["frame"], e["type"]))
+def merge(events: list[dict], restarts: list[dict], dead_balls: list[list[int]] = ()) -> list[dict]:
+    """One time-ordered stream of the two detectors' events, each keeping its own id. The ball is
+    not in play while it lies set for a restart, until it is kicked and clearly moves (Laws 8 and
+    13 to 17), so a possession change `events.detect` gives inside a restart's still spell
+    (`dead_balls`, from `detect`'s summary) is the restart being set up (the taker's spell beginning
+    at the ball), not one side winning it from the other: it is left out. events.possession_changes
+    leaves out only changes across an out of play or a cut; this adds the set ball."""
+    def set_up(e: dict) -> bool:
+        return e["type"] == "possession_change" and any(a <= e["frame"] <= b for a, b in dead_balls)
+    return sorted([e for e in events if not set_up(e)] + restarts, key=lambda e: (e["frame"], e["type"]))
 
 
 def main(argv: list[str] | None = None) -> None:

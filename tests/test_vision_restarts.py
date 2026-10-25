@@ -394,3 +394,42 @@ def test_a_keeper_is_no_evidence_that_his_side_stands_in_its_half():
 
 def test_a_kick_off_confidence_is_the_ball_score_times_the_law_8_share():
     assert rs.detect(scene(LAW8))[0][0]["confidence"] == 0.8  # every player where Law 8 puts him
+
+
+def test_a_possession_change_while_the_ball_is_set_is_the_restart_not_a_change():
+    from ninety.vision import events as ev
+    rows = scene(LAW8)
+    for r in rows[50:SET]:  # before it, red holds the ball at (70, 34) in play: his spell
+        r["ball"] = [{"bbox": [0, 500, 8, 508], "score": 0.8, "x": 70.3, "y": 34.0}]
+    found, summary = rs.detect(rows)
+    events, _ = ev.detect(rows)
+    [(a, b)] = summary["dead_balls"]
+    changes = [e for e in events if e["type"] == "possession_change"]
+    assert [e["frame"] for e in changes if a <= e["frame"] <= b] != []  # the premise: events gives one
+    merged = rs.merge(events, found, summary["dead_balls"])
+    assert [e for e in merged if e["type"] == "possession_change" and a <= e["frame"] <= b] == []
+    assert [e["id"] for e in rs.merge(events, found)] == [e["id"] for e in sorted(
+        events + found, key=lambda e: (e["frame"], e["type"]))]  # without the dead balls, nothing is dropped
+    other = {"id": "v99999", "frame": a + 1, "type": "pass"}  # only possession changes are dropped
+    assert other in rs.merge(events + [other], found, summary["dead_balls"])
+
+
+def test_the_side_confidence_is_the_takers_and_a_taker_with_a_rival_as_near_is_unnamed():
+    duller = [44.0, 62.0, 186.0]  # the taker's shirt a little off his kit: his side less firmly told
+    set_up = [(x, y, duller) if (x, y) == (CX - 0.6, CY) else (x, y, c) for x, y, c in LAW8]
+    rows = scene(set_up)
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    taker = next(t for t in tracks if t.at(SET + 1) == (CX - 0.6, CY))
+    assert taker.team == "home" and taker.side_confidence < 1.0  # the premise
+    [k] = rs.detect(rows)[0]
+    assert k["team_confidence"] == taker.side_confidence and k["player"] is not None
+    crowded = LAW8 + [(CX - 0.6, CY + 1.0, BLUE)]  # a team-mate within the position error of as near
+    [k] = rs.detect(scene(crowded))[0]
+    assert k["player"] is None and k["team"] == "home"
+
+
+def test_a_set_piece_still_is_a_dead_ball_too():
+    found, summary = rs.detect(set_scene(FREE_KICK, ball_at=(40.0, 20.0)))
+    assert [e.get("restart") for e in found] == ["free_kick"]
+    assert summary["dead_balls"] == [[SET, found[0]["frame"]]]

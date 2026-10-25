@@ -85,11 +85,12 @@
           <li>Two fixed whole-pitch tactical views beside the broadcast give the players; the broadcast gives the
             ball and the events. The two cameras are joined on the pitch.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association.md">Join</a></li>
-          <li>Events are read from possession, from the pixels alone. On the frozen test clips, scored once:
-            passes <data value="7" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.tp" data-fmt="int">7</data> found of <data value="13" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>; the only shot,
-            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, was missed (read as a pass); the ball going out was detected
-            <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.out_of_play.fp" data-fmt="int">1</data> time where it did not go out.
-            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">Event report</a></li>
+          <li>Events are read from possession, from the pixels alone. On the frozen test clips with today's code:
+            passes <data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> found of <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data>, and the only shot,
+            <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.shot.true" data-fmt="int">1</data>, missed. The camera-trust band, re-measured on our newer renders, rejects
+            most right frames on the test set's older ones.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">Event report</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts-plan.md">why</a></li>
           <li>The live path loads detected events only; a test fails if it ever opens the answer key.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_live_reads_no_truth.py">Test</a></li>
         </ul>
@@ -140,11 +141,6 @@
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/ablation-agents.md">Ablation</a></li>
           <li>A claim resting on a low-confidence detection, or naming a team whose side is unsure, is held back.
             <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_confidence_gate.py">Test</a></li>
-        </ul>
-        <p class="label">Not yet</p>
-        <ul>
-          <li><span class="tag progress">in progress</span> The fact-checker evaluation re-run on the current Judge
-            (the numbers below are from an earlier version).</li>
         </ul>
       </li>
 
@@ -246,14 +242,15 @@
             <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/association/grade.json">data</a></td>
           </tr>
           <tr>
-            <th scope="row">Passes detected from the pixels, strict matching</th>
-            <td><data value="7" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.tp" data-fmt="int">7</data> of
-              <data value="13" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data> found,
-              <data value="1" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.fp" data-fmt="int">1</data> false;
+            <th scope="row">Passes detected from the pixels, strict matching, today's code</th>
+            <td><data value="2" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.tp" data-fmt="int">2</data> of
+              <data value="13" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.true" data-fmt="int">13</data> found,
+              <data value="1" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.fp" data-fmt="int">1</data> false;
               <abbr title="the harmonic mean of precision and recall">F-score</abbr>
-              <data value="0.67" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.67</data>,
-              below the plan's target, and measured before the camera fit's latest changes</td>
-            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">report</a></td>
+              <data value="0.25" data-src="docs/eval/camera-cuts/event-report-after.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.25</data>, below the plan's target. Before the camera-trust band changed it was
+              <data value="0.67" data-src="docs/eval/event-report-v2.json" data-key="pooled.strict.pass.f1" data-fmt="2">0.67</data>
+              (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/event-report-v2.md">earlier report</a>); that no longer holds on today's code</td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/camera-cuts/event-report-after.json">data</a></td>
           </tr>
           <tr>
             <th scope="row">Team claims held because the side is unsure (validation clips)</th>
@@ -272,32 +269,32 @@
       <table>
         <caption id="fc-cap">Claims whose truth is known, each citing the event it describes, from the
           <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">fact-checker evaluation</a>
-          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on an earlier
-          version of the Judge; the re-run on the current one is pending</caption>
+          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on the
+          Judge as it is published today; every true claim it rejected used a tone word the facts do not show</caption>
         <thead>
           <tr><th scope="col">What</th><th scope="col">Code checks alone</th><th scope="col">Code checks and Judge</th></tr>
         </thead>
         <tbody>
           <tr>
             <th scope="row">Planted false claims kept off air (some by a Judge service error, failing closed)</th>
-            <td><data value="32" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">32</data> of
-              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
-            <td><data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
-              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
+            <td><data value="56" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">56</data> of
+              <data value="170" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">170</data></td>
+            <td><data value="170" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">170</data> of
+              <data value="170" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">170</data></td>
           </tr>
           <tr>
             <th scope="row">True claims wrongly rejected, leaving out claims held back when the Judge service failed</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
-            <td><data value="7" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">7</data> of
-              <data value="105" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">105</data></td>
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
+            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">14</data> of
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">129</data></td>
           </tr>
           <tr>
             <th scope="row">True claims held back or rejected, counting service failures</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
-            <td><data value="17" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">17</data> of
-              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
+            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">14</data> of
+              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
           </tr>
         </tbody>
       </table>
@@ -308,12 +305,14 @@
 
     <h3>The phone's Companion</h3>
     <p>On held-out fan questions, code chose the right tool for
-      <data value="26" data-src="docs/eval/companion-tools.json" data-key="code.right" data-fmt="int">26</data> of
+      <data value="28" data-src="docs/eval/companion-tools.json" data-key="code.right" data-fmt="int">28</data> of
       <data value="32" data-src="docs/eval/companion-tools.json" data-key="code.questions" data-fmt="int">32</data>. In the
-      committed live run of the published Companion, all
-      <data value="32" data-src="docs/eval/companion-tools.json" data-key="model.answers.code:verified+code:unanswerable" data-fmt="int">32</data>
-      answers shown were code's own checked sentences: no model sentence aired. A newer Companion, where the model
-      chooses among sentences code has already checked, is not measured on <code>main</code> yet.
+      committed live run of the Companion, the model chose among sentences code had already checked:
+      <data value="19" data-src="docs/eval/companion-tools.json" data-key="model.answers.model:verified" data-fmt="int">19</data>
+      answers aired as the model's choice,
+      <data value="18" data-src="docs/eval/companion-tools.json" data-key="model.choice.model.from_labelled_tool" data-fmt="int">18</data>
+      of them from the question's labelled tool. Code now refuses any answer that is not one of its checked sentences
+      word for word; a re-run with that gate is pending.
       <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/companion-tools.md">Evaluation</a></p>
   </div>
 </section>
