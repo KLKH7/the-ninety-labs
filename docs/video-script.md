@@ -17,8 +17,8 @@ Rules for every shot, from [BRIEF.md](BRIEF.md#submission-checklist) and
 
 Status of each shot was re-checked against `main` at `76e91265` (Oct 24; first written at `b4d9402`, Oct 19).
 **Capturable** means it can be recorded from `main` today; **not yet** names what has to land first.
-Two voice lines (beats 2 and 3) say more than their evidence file and are marked **check before
-recording**: they need a decision on the wording, not new work.
+Beats 2 and 3 were reworded on Oct 24 so the voice says no more than its evidence file; each
+beat's status says why.
 
 ## Beats
 
@@ -50,22 +50,23 @@ recall 0.997, [finetune-v2freeze](eval/finetune-v2freeze/PLAN.md)). Say "players
 render request, new renders of exactly that scene, then the before and after score on the same
 frozen test set.
 
-**Voice (37 words).** "Our match engine plays the football and writes the truth for every frame.
-Where the detector fails, a Data agent orders more of exactly those scenes. One round on hidden
-balls lifts recall from `[before]` to `[after]`."
+**Voice (47 words).** "Our match engine plays the football and writes the truth for every frame.
+Where the detector fails, a Data agent orders more of exactly those scenes. More synthetic footage
+lifts hidden-ball recall from 0.50 to 0.58; aiming it at the failures has not beaten random scenes
+yet."
 
 **Needs.** Targeted round 1 with its before and after on the frozen test set (PLAN, Oct 21); the
 Vision Auditor's failure clusters; the Data agent and render job (on `main`). Numbers
 `[from the round-1 vision report]`.
 
-**Status: capturable, but the voice line overstates it (check before recording).** Round 1 has a
+**Status: capturable.** Round 1 has a
 result ([round1/RESULT.md](eval/round1/RESULT.md)): more synthetic data from our engine lifted
 mostly hidden ball recall from 0.500 to about 0.58 and cut false positives from 125 to about 40,
 but **targeting added nothing measurable**: the targeted model (0.573) and an untargeted control
-(0.585) are within noise on 82 labels. So "a Data agent orders more of exactly those scenes... lifts
-recall" credits targeting with a gain the control also got. A line the file supports: "More
-synthetic footage lifts hidden-ball recall from 0.50 to 0.58; aiming it at the failures has not
-beaten random scenes yet." Round 2 is pre-registered, not run.
+(0.585) are within noise on 82 labels. The voice used to credit targeting
+with the lift ("one round on hidden balls lifts recall"), a gain the control also got; it now
+says both halves. 0.50 and 0.58 are the file's 0.500 and "about 0.58" (0.573 targeted, 0.585
+control). Round 2 is pre-registered, not run: if it beats its control, the last clause changes.
 [vision-report-v2](eval/vision-report-v2.md) is a matched-engine retrain, not a targeted round:
 never voice it as one.
 
@@ -76,9 +77,9 @@ fact-checking agent's rejection with the event it cites, the rewrite, the accept
 the same moment as the analyst sees it (number and evidence) and as the casual fan sees it (one
 line).
 
-**Voice (46 words).** "An Analyst agent drafts a claim. We plant a wrong number. The fact-checking
-agent rejects it, cites the event, and sends it back. The rewrite passes. In testing it caught all
-136 planted false claims. The analyst gets the evidence; the casual fan gets one line."
+**Voice (48 words).** "An Analyst agent drafts a claim. We plant a wrong number. The fact-checking
+agent rejects it, cites the event, and sends it back. The rewrite passes. In testing, none of 136
+planted false claims reached the screen. The analyst gets the evidence; the casual fan gets one line."
 
 **Needs.** `ninety-e2e <clip> --out <bundle> --plant` opened in the viewer, or
 `ninety-slice --replay replays/slice-minute2-plant.json` for the Foundry recording (both on `main`);
@@ -86,12 +87,11 @@ per-persona variants (#131) if more than the template
 cues' analyst and casual wording is shown. Number from [fact-checker.md](eval/fact-checker.md)
 (136 / 136; re-read it at lock in case a newer run is committed).
 
-**Check before recording:** "caught all 136" overstates the file. Of the 136 kept off air, 9 were
-held by a Judge service error, not judged (127 of 127 caught where a check decided), and the run
-used `ninety-judge:1`; the Judge is now version 4 and the report is listed as stale
-(`ninety/agents/evidence.py`). A line the file supports: "In testing, none of 136 planted false
-claims reached the screen." Re-read the file at lock in case the re-run on the current Judge is
-committed.
+**Why "none reached the screen", not "caught all 136":** of the 136 kept off air, 9 were held by a
+Judge service error, not judged (127 of 127 caught where a check decided), so "caught" overstates
+the file. The run used `ninety-judge:1`; the Judge is now version 4 and the report is listed as
+stale (`ninety/agents/evidence.py`). Re-read the file at lock in case the re-run on the current
+Judge is committed.
 
 **Status: capturable locally.** `ninety-e2e --plant` shows the rejection in the viewer's agent
 trace, and the viewer switches analyst and casual. Offline the writers are stand-ins and the Judge
@@ -157,8 +157,9 @@ player recall 0.997 on 7,500 test frames) and, if shown, the agent ablation
 
 ## Word count
 
-Narration totals 214 words (32 + 37 + 46 + 15 + 43 + 41). Trim beat 3 first if a read-through
-runs long.
+Narration totals 226 words (32 + 47 + 48 + 15 + 43 + 41), 11 over the 215 budget since beats 2
+and 3 were reworded to match their evidence. Trim beat 3 first if a read-through runs long, but
+keep both halves of beat 2's last sentence.
 
 ## What has to land before recording (Oct 25)
 
