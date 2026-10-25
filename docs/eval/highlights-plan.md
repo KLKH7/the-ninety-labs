@@ -256,6 +256,121 @@ and `z` (height). The posts and bar are fixed by Law 1 (7.32 m by 2.44 m).
   woodwork stays off and the count is reported. A set chosen for woodwork would be its own
   pre-registered window list, not an edit of that one.
 
+## Amendment 2 (2026-10-24): how the attack that led to the shot started
+
+Added after the plan was merged (#278) and before any origin was measured. The plan's "Not in this
+plan" asked for this amendment before the code; the code was drafted alongside it, in the same pull
+request, and nothing has been run on a clip. It adds one field to each moment, `origin`, and the
+words a caption may use for it; nothing above changes.
+
+*Revised 2026-10-24, before this amendment merged and before any origin was measured:* Kian's
+restart detector (#320 kick-offs, #325 corners, goal kicks, throw-ins, free kicks and penalties;
+`ninety/vision/restarts.py`) sees restarts directly, including the free kicks and penalties the
+first version could not give. The rule now takes a detected restart first and keeps the inference
+from the ball going out as the fallback. The source and the absence of a time threshold are
+unchanged. The same revision names a moment's side and player only when the side was told surely
+(below).
+
+*Revised again 2026-10-25, before merge, after a development run on seed 8080's answer key over
+the demo edit's segments (no detection, no measurement):* every origin came out null, because the
+rule stopped at event types it did not know. Main's vision now writes `possession_change` (#289),
+and the answer key also has presses, touches, tackles, interceptions, fouls and offsides, and set
+pieces with no kind. The rule now reads those (rules 1 to 5 below). The same run found a wrong
+origin: a ball seen going out before a cut was read as the restart after it, when the condensed
+match's cut had skipped minutes and a foul; nothing before a cut is read now. With those fixes the
+run gave 7 open-play origins that agree with the full answer key and 6 nulls (set pieces whose
+stoppage the edit cut away, which only the restart detector can see), and no wrong origin.
+
+### Honest status of "pre-registered" (added at merge-queue review)
+
+This amendment was not fixed before the code. It was written together with the code, revised once
+for Kian's restart detector, and revised a second time after a development run on seed 8080's
+answer key (above), which changed the rules: the possession_change, press, tackle, foul and
+kindless set piece rules (1 to 5 and 4a) and the nothing-across-a-cut rule. Seed 8080 is the demo
+match, not a sealed seed and not a validation or test clip. The rules below are the ones as of the
+pull request; they are frozen from here, and nothing has been scored on a validation or test clip,
+so "pre-registered" here means *stated in this plan before any validation or test scoring*, not
+before every look at output.
+
+### `origins`: withheld until graded (R4's review)
+
+Like `labels`, the reel carries an `origins` flag, false until origin has been graded against the answer
+key on validation clips (below). While it is false every moment's `origin` is null, so no caption
+(code or model) and no screen says how an attack began, and the fact-checker refuses every restart
+word. Origin compares the detector's sides, which are not yet reliable (Law 3 guard, #308), and has not
+been measured; the flag keeps the unmeasured claim off screen. `highlights.origin` itself is graded
+offline over the answer key's events and is unaffected.
+
+### The source, and why there is no time threshold
+
+StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,
+`doc/`) defines a possession as a period of play in which the ball is in play and one team
+controls it, and gives every event a play pattern: the event was part of the passage of play that
+followed a corner, a free kick, a throw-in, a goal kick or a kick-off, or none of those ("Regular
+Play"). A same-team restart starts a new possession (its example: a blocked pass that goes out for
+the same team's throw-in). So "this corner led to the shot" means the shot is in the possession the
+corner began. That is the source's definition, and it needs no number of seconds or passes: adding
+one would be our own threshold with nothing behind it, so there is none.
+
+### The rule (fixed now)
+
+Walking back from the shot through the confident detected events, the shooting side's possession:
+
+0. **began at the restart the detector saw**, if the side took it: a `kickoff` is `kick_off`
+   (Law 8, after a goal or at the start of a half), a `set_piece` is its `restart` (`corner`,
+   `throw_in`, `goal_kick`, `free_kick`, `penalty_kick`). A restart taken by the strike itself (a
+   direct free kick, a penalty) may be timed up to a frame after the shot (25 frames a second, the
+   broadcast's precision) and counts. A restart the other side took, or a set piece with no kind,
+   means the side's start was not seen. The rules below apply only where no restart was seen;
+1. **goes on** through its own completed passes and its own earlier shots (a rebound); a press on
+   the carrier and a touch that does not take the ball (`pressure`, `deflection`) change nobody's
+   possession and are passed over;
+2. **began in open play** (`open_play`) where the ball was won back: an opponent's failed pass,
+   the side's interception or won tackle, or a `possession_change` to the side that no stoppage
+   came just before (one that did is the restart's, and the stoppage before it decides);
+3. **began at a restart** at a detected ball out of play (`ninety/vision/events.py` names the side
+   that touched it last), if the restart is the shooting side's, by the Laws:
+   - over a touchline: a **throw-in** (`throw_in`) for the side that did not touch it last (Law 15);
+   - over the goal line the side attacks, touched last by a defender: a **corner** (`corner`, Law 17);
+   - over its own goal line, touched last by an attacker: a **goal kick** (`goal_kick`, Law 16);
+   - a ball out over a goal line straight after a detected goal is that goal (below);
+   - which line it went over is the one it is further over, as the engine judges a ball out at a
+     corner flag (`ninety/sim/decisions.py`, `restart_cost`);
+4. **began at a kick-off** (`kick_off`) after a goal the other side scored (Law 8);
+4a. a **set piece of no kind** (the answer key's) is read from what stopped play before it: a ball
+   out of play (rule 3), or the other side's foul (`penalty_kick` inside the area the side
+   attacks, Law 14, else `free_kick`, Law 13) or offside (`free_kick`, Law 11). A foul with no set
+   piece of the side after it was play on (advantage), and gives nothing;
+5. otherwise its start **was not seen**: `origin` is null. That covers an opponent's completed pass
+   or shot, the side's own failed pass, the side's own goal, a restart that was the opponent's, no
+   event before it, and any broadcast cut between an event and the shot: nothing before a cut is
+   read (a restart after it is the detector's to see, rule 0).
+
+**Free kicks, penalties and the kick-offs that start a half** come only from the restart detector
+(rule 0): nothing else in the video shows them. StatsBomb's "From Keeper" and "From Counter" are
+not tried.
+
+**Side.** A moment's `team` and `player` are null unless the shot's side was told surely
+(`factcheck.side_known`, the gate every writer uses), since a track id (`h-t12`) names a side too.
+`origin` still compares the detector's sides; how often that is wrong is part of what is graded.
+
+### What the captions may say
+
+A caption may say a moment came from a corner, a throw-in, a goal kick, a free kick, a penalty, a
+kick-off or a set piece only when its `origin` says so (`factcheck.origin_reasons`). Counter-attacks
+are never given, so their words are refused for every moment. "Top corner" and the other placement
+words stay refused as before. A caption names no player whose side was not told surely
+(`captioner.unsure_players`), and one naming a team on an unsure side is held by the confidence gate.
+
+### Graded (offline)
+
+The same rule over the answer key's events gives each true shot its true origin. The answer key's
+`set_piece` carries no kind, so for it the kind comes from #299's `restart_kind` where its event
+sets give one, else from the fallback rules. On the matched
+shots of the measurement above (validation, then the test split once): how often the detected origin
+equals the true one, per origin, with Wilson intervals, each disagreement listed, and how often the
+detected origin is null where the truth has one.
+
 ## Outcome
 
 *Not yet measured.*
