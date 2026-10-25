@@ -298,7 +298,7 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, as broadcasters count possession."""
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
         return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
 
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
