@@ -224,9 +224,9 @@ def referee(match: str, minute_from: int, minute_to: int, club: str | None = Non
 
 
 def possession(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-    """Each club's share of the passes between two match minutes, the way TV counts possession (not
-    time on the ball), with bounds: a pass whose side the video could not tell could be either's,
-    and the share is stated only when no pass is in doubt. Cite by id."""
+    """Each club's share of the passes between two match minutes, the pass ratio Opta publishes as
+    possession (not time on the ball), with bounds: a pass whose side the video could not tell could be
+    either's, and the share is stated only when no pass is in doubt. Cite by id."""
     return _insight(match, "possession", minute_from, minute_to, club)
 
 
