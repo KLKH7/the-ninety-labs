@@ -464,6 +464,9 @@ DIRECTED = (
     "final_third_share",
     *(f"{k}{a}" for k in ("progressive", "final_third_entry", "long", "intercepted") for a in ("", "_all")),
     "pair_passes",
+    "shots_all",
+    "shots",
+    "shot_distance_m",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -509,7 +512,12 @@ TEMPLATES = {
         for a in ("", "_all")
     },
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
-    "possession_share": [rf"had {_N}% of possession", r"counted by passes as TV counts it"],
+    "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
+    "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
+    "shot_distance_m": [
+        rf"(?:shot|a shot came) from {_N} m out", rf"where the posts were {_N} degrees apart",
+    ],
     "final_third_share": [
         r"the ball was in",
         rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",

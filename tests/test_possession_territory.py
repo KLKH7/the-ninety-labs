@@ -91,3 +91,13 @@ def test_possession_and_territory_questions_route_to_their_tools(q, tool):
 def test_the_headline_of_a_territory_answer_is_its_range():
     fact = {"metric": "final_third_share", "lo": 25, "hi": 31, "value": 25, "unit": "%"}
     assert cm._figure(fact) == "25 to 31%"
+
+
+@pytest.mark.parametrize("x", [-3.0, -0.5, 106.0, 108.0])
+def test_a_ball_beyond_a_goal_line_is_in_no_third(x):
+    # The merge queue's review of #314: a ball off the pitch gave a depth past the thirds, and
+    # THIRDS[-1] is "final", so both clubs got final-third seconds.
+    rows = terr.territory_rows([frame(k, xk) for k, xk in enumerate([50.0, x])])
+    got = terr.territory(rows, 1, 1)
+    assert got["home"]["seconds"] == got["away"]["seconds"] == 1
+    assert got["home"]["shares"]["final"] == got["away"]["shares"]["final"] == 0
