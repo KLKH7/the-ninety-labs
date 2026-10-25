@@ -82,6 +82,8 @@ UNIT_WORDS = {
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
     "shots": ("shots", "shot"),
+    "progressive passes": ("progressive passes", "progressive pass"),
+    "long passes": ("long passes", "long pass"),
     "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
 }
@@ -460,6 +462,8 @@ DIRECTED = (
     "regain_to_shot_s",
     "possession_share",
     "final_third_share",
+    *(f"{k}{a}" for k in ("progressive", "final_third_entry", "long", "intercepted") for a in ("", "_all")),
+    "pair_passes",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -494,6 +498,17 @@ TEMPLATES = {
     ],
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
     "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
+    **{
+        f"{k}{a}": [rf"(?:completed|played|had|there (?:was|were)) {_N} {w}"]
+        for k, w in (
+            ("progressive", r"progressive pass(?:es)?"),
+            ("final_third_entry", r"pass(?:es)? into the final third"),
+            ("long", r"long pass(?:es)?"),
+            ("intercepted", r"pass(?:es)? intercepted"),
+        )
+        for a in ("", "_all")
+    },
+    "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
     "possession_share": [rf"had {_N}% of possession", r"counted by passes as TV counts it"],
     "final_third_share": [
         r"the ball was in",
