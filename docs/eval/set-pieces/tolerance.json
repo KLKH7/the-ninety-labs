@@ -1,0 +1,52 @@
+{
+ "rule": "docs/eval/set-piece-detection-plan.md (tolerances; amendment 2): the 90th percentile of the ball's ground position error and of the players' foot-point error, rounded up to the cm, on the possession set's validation sample",
+ "clip": "possession-set validation seed920101 from frame 35250 (1410 s), render commit 65247ba, renderer 0.5.17, stadium=broadcast",
+ "detections": "the drawn labels, score 1 (ninety/eval/label_detections.py)",
+ "commands": [
+  "uv run python -m ninety.eval.label_detections <clip> --out detections.jsonl",
+  "uv run --group vision python -m ninety.vision.observe <clip> --detections detections.jsonl --out observations.jsonl",
+  "uv run python -m ninety.eval.true_camera observations.jsonl --frames <clip>/frames.jsonl --out observations-true.jsonl",
+  "uv run python -m ninety.eval.pitch_score --frames <clip>/frames.jsonl --observations <each> --report <each>.json"
+ ],
+ "live": {
+  "frames": 250,
+  "camera_ok": 0,
+  "players": {
+   "n": 0,
+   "median_m": null,
+   "p90_m": null,
+   "max_m": null
+  },
+  "ball_on_ground": {
+   "n": 0,
+   "median_m": null,
+   "p90_m": null,
+   "max_m": null
+  }
+ },
+ "true_camera": {
+  "frames": 250,
+  "camera_ok": 250,
+  "players": {
+   "n": 4487,
+   "median_m": 0.224,
+   "p90_m": 0.474,
+   "max_m": 1.385
+  },
+  "ball_on_ground": {
+   "n": 206,
+   "median_m": 0.024,
+   "p90_m": 0.052,
+   "max_m": 1.541
+  },
+  "ball_in_the_air": {
+   "n": 43,
+   "median_m": 10.775,
+   "p90_m": 15.494,
+   "max_m": 15.782
+  }
+ },
+ "BALL_TOL_M": 0.06,
+ "LINE_TOL_M": 0.48,
+ "note": "The live reading trusts no frame, so neither tolerance can be measured on it; these are the true-camera reading's, used only with it (lesson 227)."
+}

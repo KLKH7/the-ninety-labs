@@ -57,6 +57,26 @@ def test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth(tmp_path):
     assert truth_reads(run) == []
 
 
+def test_with_restarts_the_job_adds_them_and_their_kinds_and_opens_no_truth(tmp_path):
+    clip, dets = clean_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
+        found = read_detections({str(dets)!r})
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found),
+                              {{"commit": "test"}}, with_restarts=True)
+        OUT = {{"report": report, "files": sorted(p.name for p in Path({str(out)!r}).iterdir())}}
+    """)
+    assert run["out"]["files"] == sorted([*OUTPUTS, "restarts.json"])
+    assert {"set_piece", "kickoff"} <= set(run["out"]["report"]["events"])
+    side = json.loads((out / "restarts.json").read_text())
+    assert side["summary"]["cues"] >= 1  # the stage ran on the clip, which shows no restart
+    assert truth_reads(run) == []
+
+
 @pytest.mark.parametrize("name", [*TRUTH_FILES, "notes.txt"])
 def test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads(tmp_path, name):
     clip, _ = clean_clip(tmp_path)

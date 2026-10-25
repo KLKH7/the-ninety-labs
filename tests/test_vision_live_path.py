@@ -23,7 +23,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 LIVE = ["ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
         "ninety/vision/events.py", "ninety/vision/tracked_frames.py", "ninety/vision/live_job.py",
-        "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/join.py"]
+        "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/join.py",
+        "ninety/vision/restarts.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 
@@ -102,6 +103,25 @@ def test_tracks_and_events_from_the_committed_observations_open_no_truth():
     run = run_audited(EVENT_STAGE)
     assert run["out"]["events"] > 0  # it did the work, so the guard is not passing on nothing
     assert run["out"]["named"] > 0  # and named players (h-t12) from the tracks alone
+    assert any(o.endswith("observations-seed900001.jsonl") for o in run["opened"])
+    assert truth_reads(run) == []
+
+
+RESTART_STAGE = """
+    from ninety.vision import events, restarts, track
+    from tests.test_vision_restarts import open_play, set_ball
+    rows = track.read_observations("tests/fixtures/observations-seed900001.jsonl")
+    _, real = restarts.detect(rows, events.detect(rows)[0])
+    scene = open_play() + set_ball((104.5, 67.5), (104.0, 66.6))
+    found, side = restarts.detect(scene, events.detect(scene)[0])
+    OUT = {"real_cues": real["summary"]["cues"], "kinds": [r["kind"] for r in side["restarts"]]}
+"""
+
+
+def test_restarts_from_the_committed_observations_and_a_planted_corner_open_no_truth():
+    run = run_audited(RESTART_STAGE)
+    assert run["out"]["kinds"] == ["corner"]  # it did the work
+    assert run["out"]["real_cues"] >= 1
     assert any(o.endswith("observations-seed900001.jsonl") for o in run["opened"])
     assert truth_reads(run) == []
 

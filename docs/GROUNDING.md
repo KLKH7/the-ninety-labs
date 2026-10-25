@@ -242,6 +242,18 @@ reason; the value itself is ours.
 | S6 | published off-the-shelf player detection on real broadcast football: before fine-tuning on football, YOLOv8 found 46.0% of players (precision 95.2%, AP50 80.3%) and RT-DETR 50.8% (precision 92.0%, AP50 80.4%) on the SoccerNet 2023 tracking test set; fine-tuned, YOLOv8 reached 93.8%. The paper states neither the starting weights nor the score threshold, so the number gives scale, not a like-for-like comparison | [Yeung, Ide and Fujii 2024, arXiv 2405.12070](https://arxiv.org/abs/2405.12070), Table 2 | the COCO baseline in `render-checks.json` (planned) |
 | S7 | published off-the-shelf ball detection: no football figure found. The nearest: a COCO-trained YOLOv3, not retrained, found 11 of 2,189 balls (recall 0.5%) in beach volleyball video. Another sport and camera, so it shows only that an off-the-shelf detector misses small balls; a football figure is asked of the organisers | [Hiemann et al. 2021, *Sensors* 21:3214](https://doi.org/10.3390/s21093214), Table 3 | the COCO baseline in `render-checks.json` (planned) |
 
+### Vision event detection: restarts
+
+`ninety/vision/restarts.py`, from observations only ([set-piece-detection-plan.md](eval/set-piece-detection-plan.md)).
+The rules are the Laws in our own words; the tolerances are measured, never chosen.
+
+| ID | Rule | Source | Kind | Test |
+|---|---|---|---|---|
+| VR1 | **The kind from where the ball is set**: the centre spot a kick-off, a penalty mark (11 m out on the goal's centre line) a penalty kick, a corner arc (1 m about the corner) a corner, a goal area (5.5 m deep, 5.5 m either side of the 7.32 m goal) a goal kick, anywhere else on the field a free kick; nearest zone first, each within the ball's measured position error | Laws 1, 8, 13, 14, 16, 17 | rule; the tolerance is measurement precision | `tests/test_vision_restarts.py::test_each_kind_is_read_from_where_the_ball_is_set`, `::test_a_zone_holds_within_the_ball_tolerance_and_not_past_it` |
+| VR2 | **A restart is taken when the ball is kicked and clearly moves**: the detected time is the strike off a set ball, not the moment it was set | Laws 8 and 13 to 17 | rule | `::test_each_kind_is_read_from_where_the_ball_is_set` |
+| VR3 | **A throw-in is thrown from behind the touchline with both hands over the head**, from where the ball crossed: the ball held over a player's body above his hips, his feet at or beyond a touchline (within the players' measured position error), then let go | Law 15 | rule | `::test_a_throw_in_is_the_ball_held_up_by_a_player_at_a_touchline_then_let_go`, `::test_a_ball_held_up_away_from_a_touchline_is_no_throw_in` |
+| VR4 | **Held, not at the feet**: a ball drawn in a player's box above the hip (the greater trochanter, 0.530 of standing height) is in his hands or at his head, below it at his feet | Winter, *Biomechanics and Motor Control of Human Movement* (anthropometric segment proportions, after Drillis and Contini) | published proportion | `::test_a_set_ball_drawn_over_the_takers_boots_is_still_set` |
+
 ### Insights: what the phone's Companion and Insight Scout explain
 
 `ninety/intel/` (scene, line_breaks, overloads, counter_press, pass_options, roles, teamsheet), from
