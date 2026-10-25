@@ -603,3 +603,48 @@ def test_a_number_bound_to_a_player_may_be_a_fact_scoped_to_him():
     other = {**RUN, "id": "a7run", "scope": "player:a7:window:0.00-95.20", "value": 90.0}
     verdict = check(Claim("h7's 90 m so far.", [RUN["id"], "a7run"]), {**FACTS, "a7run": other})
     assert verdict.reasons == ["number 90 is not a cited distance_m of h7"]
+
+
+# Kian's blind labels (docs/eval/factcheck-human-labels.md): words about play a cited fact must show.
+def _play(eid, clock, type_, team, player, **more):
+    minute, second = 2 if clock < "02:00" else 3, int(clock[-2:])
+    return {"id": eid, "minute": minute, "second": second, "clock": clock, "type": type_, "team": team,
+            "player": player, **more}
+
+
+PLAY = {e["id"]: e for e in (
+    _play("p1", "01:33", "pass", "home", "h7", intended="h9", interceptor="a8", outcome="fail",
+          distance_m=21, ball_speed_kmh=51),
+    _play("i1", "01:35", "interception", "away", "a8"),
+    _play("p2", "01:37", "pass", "away", "a8", receiver="a10", intended="a10", outcome="success",
+          distance_m=12, ball_speed_kmh=40),
+    _play("lb", "02:05", "pass", "home", "h4", receiver="h9", intended="h9", outcome="success",
+          distance_m=32, ball_speed_kmh=80),
+    _play("pr", "02:04", "pressure", "away", "a6", receiver="h4"),
+)}
+
+
+@pytest.mark.parametrize("text, evidence, reason", [
+    # L19: the interception is that very pass being cut out, and 21 m is no long ball
+    ("The interception by a8 at 01:35 came immediately after h7's failed pass at 01:33.", ["p1", "i1"],
+     "one act, not one after the other"),
+    ("h7's pass at 01:33 came before a8's interception at 01:35.", ["p1", "i1"], "one act, not one before"),
+    ("h7's failed long pass at 01:33 is cut out by a8.", ["p1"], "a long ball is a pass of 32 m or more"),
+    # L16: pressure said with no cited pressure event
+    ("h4 plays a 32 m pass to h9 despite pressure.", ["lb"], "no cited event is a pressure event"),
+    ("h4, under heavy pressure, finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+])
+def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence, reason):
+    verdict = check(Claim(text, evidence), PLAY)
+    assert not verdict.ok and any(reason in r for r in verdict.reasons), verdict.reasons
+
+
+@pytest.mark.parametrize("text, evidence", [
+    ("h7's pass at 01:33 is cut out by a8, who then finds a10.", ["p1", "i1", "p2"]),  # "then": a new act
+    ("After the interception, a8 finds a10.", ["i1", "p2"]),  # two acts, in order
+    ("h4 plays a long ball to h9.", ["lb"]),  # 32 m is a long ball
+    ("h4 finds h9 with a 32 m pass despite pressure from a6.", ["lb", "pr"]),  # the pressure is cited
+    ("a8 finds a10 with a 12 m pass.", ["p2"]),
+])
+def test_play_words_with_their_fact_cited_still_pass(text, evidence):
+    assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons

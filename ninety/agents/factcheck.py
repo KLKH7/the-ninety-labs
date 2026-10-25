@@ -701,8 +701,61 @@ def check(
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
     reasons += shape_reasons(text, evidence)
+    reasons += play_reasons(claim.text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
+
+
+# Words about play that a cited fact must show (Kian's blind labels, docs/eval/factcheck-human-labels.md).
+# A long ball is a pass of 32 m or more: Opta's 35 yards (GROUNDING I11, *verify*).
+LONG_BALL_M = 32
+LONG_BALL = re.compile(r"\blong\s+(?:balls?|pass(?:es)?)\b", re.I)
+# Play under pressure: said only with a cited pressure event (an opponent closing the ball down).
+UNDER_PRESSURE = re.compile(
+    r"\b(?:despite|under|amid)\s+(?:the\s+|heavy\s+|intense\s+|their\s+|sustained\s+)?pressure\b"
+    r"|\bpressured\b", re.I,
+)
+# A connective that orders two moments in time. Joining an interception to the very pass it cut out
+# makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
+# the interception where the ball arrives.
+BEFORE_AFTER = re.compile(r"\b(?:after|before|following|followed\s+by|preceded\s+by)\b", re.I)
+WINS_IT = re.compile(r"intercept|\bcut\s+out\b|\bwins?\s+(?:it|the\s+ball)\b", re.I)
+A_PASS = re.compile(r"\bpass(?:es|ed)?\b", re.I)
+
+
+def _same_act(evidence: list[dict]) -> list[tuple[dict, dict]]:
+    """(pass, interception) pairs that are one act: a cited pass cut out by a player, and his cited
+    interception as the next cited event after it."""
+    order = sorted((e for e in evidence if e.get("type")),
+                   key=lambda e: (e.get("minute") or 0, e.get("clock") or ""))
+    pairs = []
+    for n, p in enumerate(order[:-1]):
+        nxt = order[n + 1]
+        if (p.get("type") == "pass" and p.get("outcome") == "fail" and p.get("interceptor")
+                and nxt.get("type") == "interception" and nxt.get("player") == p["interceptor"]):
+            pairs.append((p, nxt))
+    return pairs
+
+
+def play_reasons(text: str, evidence: list[dict]) -> list[str]:
+    """What a claim says of the play that its cited facts must show."""
+    reasons = []
+    if LONG_BALL.search(text) and not any(
+        e.get("type") == "pass" and (e.get("distance_m") or 0) >= LONG_BALL_M for e in evidence
+    ):
+        reasons.append(f"a long ball is a pass of {LONG_BALL_M} m or more: no cited pass is")
+    if UNDER_PRESSURE.search(text) and not any(e.get("type") == "pressure" for e in evidence):
+        reasons.append("play under pressure is said, but no cited event is a pressure event")
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        for m in BEFORE_AFTER.finditer(sentence):
+            left, right = sentence[: m.start()], sentence[m.end():]
+            if _same_act(evidence) and ((WINS_IT.search(left) and A_PASS.search(right))
+                                        or (A_PASS.search(left) and WINS_IT.search(right))):
+                p, i = _same_act(evidence)[0]
+                reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {m.group().lower()} "
+                               "the other")
+                break
+    return reasons
 
 
 # The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said
