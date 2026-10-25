@@ -27,7 +27,7 @@ Events, from one spell to the next:
   where the ball, struck at the speed seen, slows to TARGET_PACE (docs/eval/interception-plan.md);
 - the nearest opponent closer than PRESSURE_M to the player on the ball: pressure, at the presser,
   once in PRESSURE_REPEAT_S for each side, as the engine writes it (docs/eval/pressure-plan.md);
-- a spell that ends with the ball leaving slower than any pass and an opponent at it: a tackle,
+- a spell that ends with the ball leaving him slower than any pass and an opponent at it: a tackle,
   won or lost by the side of the next spell (docs/eval/tackle-plan.md).
 Of these three, only pressure is written by default (WRITTEN): interceptions and tackles missed
 their plans' bar on validation, and are built for measuring (`detect(..., kinds=TURNOVERS)`).
@@ -138,7 +138,8 @@ PRESSURE_M = 2.0
 PRESSURE_REPEAT_S = 8.0
 # Tackles (docs/eval/tackle-plan.md). The engine strikes every ground pass to still move at
 # ARRIVE_MPS or more where it arrives (decisions.ARRIVE_MPS, design), so a ball leaving a player
-# slower than that is no pass of his: it was knocked off him.
+# slower than that is no pass of his: it was knocked off him. Read relative to him (amendment 2): a
+# carrier running at speed carries the ball near that speed on the pitch.
 ARRIVE_MPS = 6.0
 # A score at most this is held by the fact-checker (factcheck.MIN_CONFIDENCE is 0.5): a tackle whose
 # two players the tracker did not keep through the contact is held there.
@@ -376,10 +377,29 @@ def presser_id(o: Track, holder: Track, frame: int, tracks: list[Track]) -> str 
     return player_id(o)
 
 
+def relative_speed(path: list[BallPoint], i: int, holder: Track) -> float | None:
+    """How fast the ball moves away from `holder` after path[i], m/s: its displacement less his, from
+    path[i] to the last frame within SHOT_LOOK_S where both are seen, over the time between (tackle
+    plan, amendment 2). Read over the window, not frame to frame, so position noise does not swamp it.
+    None when no such frame."""
+    p, start = path[i], holder.at(path[i].frame)
+    if start is None:
+        return None
+    later = [(q, h) for q in path[i + 1:] if q.frame - p.frame <= SHOT_LOOK_S * FPS
+             and (h := holder.at(q.frame)) is not None]
+    if not later:
+        return None
+    q, h = later[-1]
+    dx = (q.x - p.x) - (h[0] - start[0])
+    dy = (q.y - p.y) - (h[1] - start[1])
+    return math.hypot(dx, dy) / ((q.frame - p.frame) / FPS)
+
+
 def tackles(path: list[BallPoint], sp: list[Spell], tracks: list[Track], out_frames: list[int],
             cut_at: list[int]) -> list[tuple[Spell, Track, str | None, bool]]:
     """(spell, tackler, outcome, kept) for each tackle (docs/eval/tackle-plan.md): a spell with a side
-    ends with the ball leaving slower than ARRIVE_MPS (no pass) and a track of the other side within
+    ends with the ball leaving him slower than ARRIVE_MPS (no pass; `relative_speed`, amendment 2)
+    and a track of the other side within
     CONTROL_M of it. The outcome is the side of the next spell with a side, the ball in play between
     (`success` for the tackler's, `fail` for the holder's, else None); `kept` is whether the tracker
     saw both players again within SPELL_GAP_FRAMES of the contact."""
@@ -389,8 +409,8 @@ def tackles(path: list[BallPoint], sp: list[Spell], tracks: list[Track], out_fra
         if a.track.team is None:
             continue
         i = index[a.last]
-        speed = _speed_kmh(path, i)
-        if speed is None or speed / 3.6 >= ARRIVE_MPS:
+        speed = relative_speed(path, i, a.track)
+        if speed is None or speed >= ARRIVE_MPS:
             continue
         p = path[i]
         near = [(math.hypot(q[0] - p.x, q[1] - p.y), o) for o in tracks

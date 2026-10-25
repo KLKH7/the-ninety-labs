@@ -105,13 +105,14 @@ def m0(matches: list[Path]) -> dict:
 
 
 def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = NOISE_SEED,
-                 shares: tuple[float, float, float] = SHARES["m1"]) -> list[dict]:
+                 shares: tuple[float, float, float] = SHARES["m1"], ids: list | None = None) -> list[dict]:
     """Observation rows (ninety.vision.observe's shape) from answer-key frames: each player and the
     ball at its true place plus Gaussian noise, a kit colour per side, the camera ok. With
     `broadcast`, only what the picture shows (visibility above 0), with the drawn boxes. The noise's
     per-axis variance sigma² is split by `shares` into one offset for the clip, one shift per frame
     shared by every object, and each object's own (amendment 1). The shared parts come from their
-    own generator, so the objects' draws, and M1's rows, are the same whatever the shares."""
+    own generator, so the objects' draws, and M1's rows, are the same whatever the shares. `ids`, if
+    given, gets each row's player ids in order: for grading only, never in the rows the detector reads."""
     rng = fmath.Random(seed)  # portable draws: the report is the same on every machine (lesson 46)
     shared = fmath.Random(f"{seed}-shared")
     clip_sd, frame_sd, own_sd = (sigma * math.sqrt(s) for s in shares)
@@ -119,13 +120,16 @@ def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = 
     rows = []
     for f in frames:
         fx, fy = bx + shared.gauss(0, frame_sd), by + shared.gauss(0, frame_sd)
-        players = []
+        players, who = [], []
         for k, p in enumerate(f["players"]):
             if broadcast and not (p.get("bbox") and p.get("visibility", 0) > 0):
                 continue
             box = p["bbox"] if broadcast else [20 * k, 0, 20 * k + 10, 30]
             players.append({"bbox": box, "score": SCORE, "x": p["x"] + fx + rng.gauss(0, own_sd),
                             "y": p["y"] + fy + rng.gauss(0, own_sd), "rgb": KIT[p["team"]]})
+            who.append(p["id"])
+        if ids is not None:
+            ids.append(who)
         b, ball = f["ball"], []
         if not broadcast or (b.get("bbox") and b.get("visibility", 0) > 0):
             box = b["bbox"] if broadcast else [0, 500, 8, 508]
@@ -202,25 +206,33 @@ def diagnostics(truth: list[dict], detected: list[dict], report: dict, frames: l
             "false_pressures_from_unseen_memory": memory, "false_pressures": len(false_pr)}
 
 
-def fast_at_feet(rows: list[dict], frames: list[dict]) -> dict:
-    """Of the frames where a player truly has the ball at his feet and the ball is seen, how many read
-    it leaving at ARRIVE_MPS or faster, the speed the tackle rule takes for a strike (amendment 1)."""
+def fast_at_feet(rows: list[dict], frames: list[dict], ids: list[list[str]]) -> dict:
+    """Of the frames where a player truly has the ball at his feet and the ball is seen, how many the
+    tackle rule reads as a strike: its speed relative to him (`events.relative_speed`, tackle plan
+    amendment 2) at ARRIVE_MPS or faster. He is a track of his own stand-in places, by his true id."""
     path = tr.ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
-    held = [index[f["frame"]] for f in frames if f.get("possessor") and f["frame"] in index]
-    speeds = [ev._speed_kmh(path, i) for i in held]
-    return {"fast": sum(1 for v in speeds if v is not None and v / 3.6 >= ev.ARRIVE_MPS),
+    tracks: dict[str, tr.Track] = {}
+    for r, who in zip(rows, ids, strict=True):
+        for d, pid in zip(r["players"], who, strict=True):
+            t = tracks.setdefault(pid, tr.Track(0))
+            t.frames.append(r["frame"])
+            t.xy.append((d["x"], d["y"]))
+    speeds = [ev.relative_speed(path, index[f["frame"]], tracks[f["possessor"]]) for f in frames
+              if f.get("possessor") in tracks and f["frame"] in index]
+    return {"fast": sum(1 for v in speeds if v is not None and v >= ev.ARRIVE_MPS),
             "of": sum(1 for v in speeds if v is not None)}
 
 
 def score_clip(name: str, frames: list[dict], truth: list[dict], sigma: float, broadcast: bool,
                history: list[dict] | None = None, shares: tuple[float, float, float] = SHARES["m1"]) -> dict:
-    rows = observations(frames, sigma, broadcast, shares=shares)
+    ids: list[list[str]] = []
+    rows = observations(frames, sigma, broadcast, shares=shares, ids=ids)
     detected, _ = ev.detect(rows, kinds=ev.TURNOVERS)
     report = event_score.score(truth, detected, frames)
     clip = {"clip": name, "events": {}}
     if shares != SHARES["m1"]:
-        clip["fast_at_feet"] = fast_at_feet(rows, frames)
+        clip["fast_at_feet"] = fast_at_feet(rows, frames, ids)
     clip["diagnostics"] = diagnostics(truth, detected, report, frames, history or [])
     for rule in ("strict", "lenient", "time_only"):
         clip["events"][rule] = {k: {m: v[m] for m in ("true", "detected", "tp", "fp", "fn")}

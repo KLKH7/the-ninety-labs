@@ -129,3 +129,23 @@ def test_the_shared_parts_take_no_draw_from_the_objects_so_m1s_rows_never_move()
     m1 = errors(ts.observations(frames, ts.NOISE_M, False), frames)
     assert all(close(a, b) for ra, rb in zip(m1, want, strict=True) for a, b in zip(ra, rb, strict=True))
     assert not all(close(a, b) for ra, rb in zip(got, want, strict=True) for a, b in zip(ra, rb, strict=True))
+
+
+def test_a_ball_carried_at_a_sprinters_feet_is_not_read_as_struck_but_one_leaving_him_fast_is():
+    # h7 runs at 8 m/s with the ball 0.3 m ahead: 8 m/s on the pitch, 0 away from him. a5 then runs
+    # with it while it leaves h7 at 9 m/s: the frames he truly holds it are the ones judged.
+    def scene(leaves):
+        out = []
+        for f in range(20):
+            x = 20.0 + 8.0 * f / tr.FPS
+            ball_x = x + 0.3 + (9.0 * (f - 5) / tr.FPS if leaves and f > 5 else 0.0)
+            fr = frame(f, [("h7", "home", x, 30.0)], (ball_x, 30.0))
+            fr["possessor"] = "h7"
+            out.append(fr)
+        return out
+    for leaves, fast in ((False, 0), (True, 6)):
+        frames = scene(leaves)
+        ids: list = []
+        rows = ts.observations(frames, 0.0, False, ids=ids)
+        got = ts.fast_at_feet(rows, frames, ids)
+        assert got["fast"] >= fast and (got["fast"] == 0) == (not leaves), got

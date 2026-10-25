@@ -758,3 +758,68 @@ def test_a_tackle_whose_tackler_the_tracker_loses_in_the_contact_is_held_under_t
     (contact,) = kinds_of(tackle_scene(), "tackle")
     (t,) = kinds_of(tackle_scene(tackler_gone_after=contact["frame"]), "tackle")
     assert t["frame"] == contact["frame"] and t["confidence"] == ev.HELD
+
+
+# Amendment 2: the strike test reads the ball's speed relative to the holder, over the window.
+
+
+def running_scene(ball_mps=(7.0, 5.0), carrier_mps=7.0, frames=60, holder_gone=False):
+    """A blue player runs along +x at `carrier_mps` with the ball 0.3 m ahead; from frame 30 he runs
+    on and the ball moves at `ball_mps` on the pitch: by default 8.6 m/s, faster than ARRIVE_MPS, but
+    5 m/s away from him (sideways), between CARRY_MPS and ARRIVE_MPS: knocked off him. A red player
+    stands 1 m ahead of the ball and 1 m to its side at frame 30. With `holder_gone`, the tracker
+    loses the blue player after frame 30."""
+    rows, b30 = [], 50.0 + carrier_mps * 30 / FPS + 0.3
+    for f in range(frames):
+        cx = 50.0 + carrier_mps * f / FPS
+        if f <= 30:
+            ball = (cx + 0.3, 34.0)
+        else:
+            ball = (b30 + ball_mps[0] * (f - 30) / FPS, 34.0 + ball_mps[1] * (f - 30) / FPS)
+        line = [(50.0 + carrier_mps * 30 / FPS + 1.3, 35.0, RED)]
+        if not holder_gone or f <= 30:
+            line.append((cx, 34.0, BLUE))
+        rows.append(row(f, crowd(f) + line, ball))
+    return rows
+
+
+def test_a_ball_faster_than_any_pass_on_the_pitch_but_slow_away_from_its_runner_is_knocked_not_struck():
+    rows = running_scene()
+    path, tracks = tr.ball_path(rows), tr.track_players(rows)
+    tr.assign_teams(tracks)
+    (a,) = [s for s in ev.spells(path, tracks) if s.track.team == "home"]
+    i = next(k for k, p in enumerate(path) if p.frame == a.last)
+    assert ev._speed_kmh(path, i) / 3.6 >= ev.ARRIVE_MPS  # the premise: on the pitch it reads as a strike
+    assert ev.relative_speed(path, i, a.track) < ev.ARRIVE_MPS
+    assert [t["team"] for t in kinds_of(rows, "tackle")] == ["away"]
+
+
+def test_the_same_ball_leaving_its_runner_faster_than_any_pass_is_no_tackle():
+    # 8 m/s away from him across his run: struck, whatever the opponent beside it.
+    assert ev.CARRY_MPS < 5.0 < ev.ARRIVE_MPS < 8.0  # the premise: one each side of the line
+    assert kinds_of(running_scene(ball_mps=(7.0, 8.0)), "tackle") == []
+
+
+def test_the_relative_speed_is_read_over_the_window_not_frame_to_frame():
+    rows = running_scene()
+    path, tracks = tr.ball_path(rows), tr.track_players(rows)
+    holder = next(t for t in tracks if t.at(30) == (50.0 + 7.0 * 30 / FPS, 34.0))
+    i = next(k for k, p in enumerate(path) if p.frame == 31)
+    # From frame 31 the ball moves 5 m/s across his run and keeps pace along it: 5 m/s, exactly.
+    assert abs(ev.relative_speed(path, i, holder) - 5.0) < 1e-9
+
+
+def test_with_the_holder_lost_just_after_the_contact_no_tackle_is_told():
+    assert len(kinds_of(running_scene(), "tackle")) == 1
+    assert kinds_of(running_scene(holder_gone=True), "tackle") == []
+
+
+def test_one_frames_jitter_barely_moves_the_relative_speed():
+    # The ball seen 0.2 m off on frame 32 (a position error): over the window it moves the speed by
+    # 0.2 m / 0.28 s at most; a frame-to-frame step would read it as 5 m/s more.
+    rows = running_scene()
+    next(r for r in rows if r["frame"] == 32)["ball"][0]["y"] += 0.2
+    path, tracks = tr.ball_path(rows), tr.track_players(rows)
+    holder = next(t for t in tracks if t.at(30) == (50.0 + 7.0 * 30 / FPS, 34.0))
+    i = next(k for k, p in enumerate(path) if p.frame == 31)
+    assert abs(ev.relative_speed(path, i, holder) - 5.0) < 0.2 / 0.24 + 1e-9
