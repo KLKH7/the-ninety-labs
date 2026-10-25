@@ -63,6 +63,10 @@ def _also(get, metric: str, unit: str, context: str | None = None) -> Callable[[
     return at
 
 
+def _territory(mi) -> Callable[[int], dict]:
+    return _summary(mi.territory, "final_third_share", "lo")
+
+
 def _count(mi, kind: str) -> Callable[[int], dict]:
     def at(m: int) -> dict:
         rows = [f for f in mi.facts.get(kind, ()) if f["minute"] <= m]
@@ -115,6 +119,15 @@ def _distance(mi) -> Callable[[int], dict]:
 def stats_table(mi) -> dict:
     """The Stats tab's rows, each with a series of "so far" values per BIN_MIN minutes."""
     rows = [
+        (
+            "Attack",
+            "possession",
+            "Possession (share of passes)",
+            "%",
+            _summary(mi.possession, "possession_share"),
+        ),
+        # The lower bound: the seconds with the ball near a third's line may add to it (GROUNDING I18).
+        ("Attack", "territory", "Ball in the attacking third, at least", "%", _territory(mi)),
         ("Attack", "counters", "Regains that led to a shot", "regains", _count(mi, "counter")),
         ("Attack", "one_twos", "One-twos", "one-twos", _count(mi, "one_two")),
         ("Attack", "crosses", "Crosses", "crosses", _summary(mi.style, "crosses")),

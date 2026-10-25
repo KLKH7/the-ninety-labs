@@ -456,6 +456,8 @@ DIRECTED = (
     "extra_players",
     "overload_moments",
     "regain_to_shot_s",
+    "possession_share",
+    "final_third_share",
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -490,6 +492,11 @@ TEMPLATES = {
     ],
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
     "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
+    "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "final_third_share": [
+        r"the ball was in",
+        rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",
+    ],
 }
 
 
