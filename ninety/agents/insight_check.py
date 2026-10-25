@@ -377,6 +377,13 @@ def check(
         a, b = f.get("passer_is"), f.get("receiver_is")
         if a and b and not re.search(rf"\b{re.escape(a)} passed to {re.escape(b)}\b", claim.text):
             reasons.append(f"the pair is {a} to {b}, said in that order")
+        # The reverse is another pair: said beside the right one, it needs its own cited fact.
+        reverse = any(
+            g.get("metric") == "pair_passes" and g.get("passer_is") == b and g.get("receiver_is") == a
+            for g in cited
+        )
+        if a and b and not reverse and re.search(rf"\b{re.escape(b)} passed to {re.escape(a)}\b", claim.text):
+            reasons.append(f"{b} to {a} is not a cited pair")
         if "of the passes the video could name both players of" not in claim.text:
             reasons.append("a pass pair says it counts only the passes the video could name both players of")
 
