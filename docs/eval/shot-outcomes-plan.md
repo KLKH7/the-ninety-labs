@@ -108,3 +108,43 @@ too) decides:
 A restart seen overrides the line evidence (the Laws say what happened; the net is a pixel judgement).
 Thresholds are Law 1's geometry and the errors already measured on validation (`E_X`, `E_Y`, `E_C`,
 `docs/eval/shot-outcomes.json`); nothing is fitted.
+
+## Amendment 3 (Oct 25, after the validation score at 523f0074 and before any re-score; validation only)
+
+Validation at 523f0074 (`runs/onepod-1025/out/score-val/report.json`, the pod's): goals found 12 of
+16 ungated, 6 false, **0 above the 0.5 gate**; saves **0 of 50**. Diagnosed from the validation clips'
+truth and the detected events only (the test split not opened):
+
+- **Goal confidence:** all 18 detected goals score 0.153 to 0.434. Rule 6 halves the line evidence
+  where no height is known (on the broadcast that is nearly every frame) and again near a post, and
+  the kick-off is almost never inside a 10 s clip, so a goal's confidence cannot reach the gate the
+  other events are judged by. Reliability (detected goals, share true): 0.15 to 0.2, 5 of 9; 0.2 to
+  0.3, 2 of 2; 0.3 to 0.4, 4 of 5; 0.4 to 0.5, 1 of 2.
+- **False goals:** 4 of 6 are saves: a ball in the keeper's hands, placed on the ground, lands
+  behind the line by its height times the camera's slope. `events.out_of_play` already passes over a
+  ball drawn over a player for this reason; the net rule did not. The other 2 are true goals timed
+  1.2 and 2.6 s late (not changed here: the observations needed to see why are not on hand).
+- **Saves:** of the 50, 39 are read as passes and 5 as nothing. About half carry the wrong side:
+  a shot is tested only toward the goal the striker's side attacks, so a side read wrong (the
+  broadcast's side accuracy on validation is about 0.58) makes a shot a pass. Most of the rest are
+  lofted: the first 0.3 s of ground track meets the goal line 4 to 24 m wide of the centre while the
+  keeper takes the ball by it (measured speeds 120 to 230 km/h against 65 to 120 true).
+
+Four changes, none a fitted threshold:
+
+1. **The net ignores a ball drawn over a player** (`on_player`), as `out_of_play` does.
+2. **A shot's side is the side attacking the goal it heads for** (the engine's convention, the one
+   `assign_teams` names sides by: home attacks x = 105), and a strike is tested toward both goals.
+   Its `team_confidence` is the striker's track's when the two agree, else none (the kit says the
+   other side).
+3. **A strike is also a shot when its move ends at that goal**: the line from the strike to where the
+   move ends crosses the goal line between the widened posts (`SHOT_MARGIN_M`) from within
+   `SHOT_MAX_M`, and the move ends with a keeper's spell (`Track.keeper`) inside that goal's penalty
+   area (16.5 m, Law 1), or with the ball over that goal line. The end of a move is on the ground or
+   in the keeper's hands, so a lofted ball's height bends it far less than the strike's first 0.3 s.
+4. **A goal's line evidence is the mean ball score over the in-net frames**, without the two halvings
+   (they were design weights, and the reliability above shows they put every goal under the gate);
+   a goal's confidence stays `1 - (1 - line)(1 - kickoff)`, the gate stays 0.5.
+
+The validation clips are re-scored with this, the reliability table reported again, and then the
+commit is frozen and the test split scored once.
