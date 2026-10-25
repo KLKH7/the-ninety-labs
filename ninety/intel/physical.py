@@ -21,8 +21,9 @@ from collections.abc import Mapping, Sequence
 
 from ninety.intel import overloads
 from ninety.intel.scene import FPS, minute_of
+from ninety.intel.stats import SPRINT_THRESHOLD_KMH
 
-SPRINT_KMH = 25.2
+SPRINT_KMH = SPRINT_THRESHOLD_KMH  # one source, one constant (stats.py, GROUNDING I22)
 MIN_SPRINT_S = 1.0
 STEP_S = 1.0  # a step a second: the tracked frames' smoothing, team distance's step (team_stats.STEP_S)
 MAX_STEP_KMH = 12.0 * 3.6  # a step past this is a track jumping, not a player (team_stats.MAX_STEP_MPS)

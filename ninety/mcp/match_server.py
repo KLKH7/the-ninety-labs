@@ -260,7 +260,7 @@ def physical(match: str, minute_from: int, minute_to: int, club: str | None = No
 
 
 def passing(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-    """What the passes did between two match minutes: progressive passes (Wyscout's definition),
+    """What the passes did between two match minutes: progressive passes (a published definition),
     passes into the final third, long passes (32 m or more) and passes intercepted, each club's count
     with bounds while the video could not tell whose some were, and the totals; and the pairs of
     named players who passed to each other most (only passes the video could name both players of).

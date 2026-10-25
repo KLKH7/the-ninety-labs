@@ -2,11 +2,11 @@
 long balls and interceptions, per club and in all; and the pass network, who passed to whom.
 
 Each is arithmetic on a detected pass's start and end (ninety/vision/events.py):
-- **progressive** (Wyscout's definition): a completed pass that ends at least 30 m closer to the
-  opponents' goal when it starts and ends in the team's own half, 15 m when it crosses halfway, and
-  10 m when it starts and ends in the opponents' half;
+- **progressive** (a published definition, I20, in our own words): a completed pass that ends at
+  least 30 m closer to the opponents' goal when it starts and ends in the team's own half, 15 m when
+  it crosses halfway, and 10 m when it starts and ends in the opponents' half;
 - **into the final third**: a completed pass that starts outside the third of the pitch nearest the
-  opponents' goal and ends inside it (Wyscout's "pass to final third");
+  opponents' goal and ends inside it (a published definition too, I20);
 - **long**: a pass of 32 m or more, the 35 yards of Opta's long ball (I11), for every passer;
 - **intercepted**: a pass the other side's player took (the detector names him when unambiguous).
 
@@ -36,7 +36,8 @@ UNIT = {
     "long": "long passes",
     "intercepted": "passes",
 }
-# Wyscout's progressive pass: metres closer to the opponents' goal, by where it starts and ends.
+# The published progressive pass (GROUNDING I20): metres closer to the opponents' goal, by where it
+# starts and ends.
 PROGRESSIVE_M = {"own": 30.0, "across": 15.0, "theirs": 10.0}
 
 
