@@ -2181,7 +2181,7 @@ for (const p of LIVE_PANES) {
 interface PlayerStats { id: string; distance_km?: number | null; top_speed_kmh?: number | null; involvements?: number | null }
 /** match.json's pass network (Insight Scout): per club, each player's average position and passes
  * made, and completed passes between pairs. */
-interface PassNetwork { nodes: { id: string; x: number; y: number; passes: number }[]; links: { a: string; b: string; n: number }[] }
+interface PassNetwork { named_passes_only?: boolean; nodes: { id: string; x: number; y: number; passes: number }[]; links: { a: string; b: string; n: number }[] }
 type Squads = { player_stats?: PlayerStats[]; pass_network?: Record<"home" | "away", PassNetwork> };
 
 let squadKey = "";
@@ -2301,6 +2301,7 @@ function renderSquad() {
     li.querySelector(".v")!.textContent = value;
     return li;
   };
+  $("network-named").hidden = !net.named_passes_only;
   $("network-rows").replaceChildren(
     ...(pair ? [line(`${who(pair.a)} and ${who(pair.b)}`, `${pair.n} passes`)] : []),
     ...(busiest ? [line(`Most passes: ${who(busiest.id)}`, String(busiest.passes))] : []),

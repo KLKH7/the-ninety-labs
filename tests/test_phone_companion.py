@@ -940,7 +940,7 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
                                 {"id": "a-t3", "distance_km": 7.4, "top_speed_kmh": None, "involvements": 20}]
         # The Scout's block (#338): the network's nodes are the players' names, as the video named them.
         body["insight_stats"] = {"bin_min": 5, "rows": [], "pass_network": {
-            side: {"nodes": [{"id": f"{p} Keeper", "x": 30, "y": 30, "passes": 10},
+            side: {"named_passes_only": True, "nodes": [{"id": f"{p} Keeper", "x": 30, "y": 30, "passes": 10},
                              {"id": f"{p} Nine", "x": 50, "y": 40, "passes": 8}],
                    "links": [{"a": f"{p} Keeper", "b": f"{p} Nine", "n": 6}]}
             for side, p in (("home", "Abel"), ("away", "Bruno"))}}
@@ -963,6 +963,7 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     assert page.locator("#network .node").count() == 2 and page.locator("#network .link").count() == 1
     assert page.inner_text("#network-rows .who-name >> nth=0") == "Abel Keeper and Abel Nine"
     assert "6 passes" in page.inner_text("#network-rows")
+    assert page.is_visible("#network-named")  # said so, as the Scout's named_passes_only asks
     assert not errors
     ctx.close()
 
