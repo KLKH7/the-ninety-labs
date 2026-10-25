@@ -721,7 +721,9 @@ UNDER_PRESSURE = re.compile(
 # makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
 # the interception where the ball arrives.
 BEFORE_AFTER = re.compile(r"\b(?:after|before|following|followed\s+by|preceded\s+by)\b", re.I)
-WINS_IT = re.compile(r"intercept|\bcut\s+out\b|\bwins?\s+(?:it|the\s+ball)\b", re.I)
+WINS_IT = re.compile(
+    r"intercept|\bcut(?:s|ting)?\s+(?:it\s+)?out\b|\b(?:wins?|won|winning)\s+(?:it|the\s+ball)\b", re.I
+)
 A_PASS = re.compile(r"\bpass(?:es|ed)?\b", re.I)
 
 
@@ -748,16 +750,37 @@ def play_reasons(text: str, evidence: list[dict]) -> list[str]:
         reasons.append(f"a long ball is a pass of {LONG_BALL_M} m or more: no cited pass is")
     if UNDER_PRESSURE.search(text) and not any(e.get("type") == "pressure" for e in evidence):
         reasons.append("play under pressure is said, but no cited event is a pressure event")
-    for sentence in re.split(r"(?<=[.!?])\s+", text):
-        for m in BEFORE_AFTER.finditer(sentence):
-            left, right = sentence[: m.start()], sentence[m.end():]
-            if _same_act(evidence) and ((WINS_IT.search(left) and A_PASS.search(right))
-                                        or (A_PASS.search(left) and WINS_IT.search(right))):
-                p, i = _same_act(evidence)[0]
-                reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {m.group().lower()} "
-                               "the other")
-                break
+    for p, i in _same_act(evidence):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            for m in BEFORE_AFTER.finditer(sentence):
+                one, other = _ordered(sentence, m)
+                if ((_names_cut(one, p) and _names_pass(other, p))
+                        or (_names_pass(one, p) and _names_cut(other, p))):
+                    word = m.group().lower()
+                    reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {word} the other")
+                    return reasons
     return reasons
+
+
+def _ordered(sentence: str, m: re.Match) -> tuple[str, str]:
+    """The two things a connective orders: either side of it, or, when it opens the sentence ("After
+    h7's pass, a8 intercepts"), its own clause and the rest."""
+    left, right = sentence[: m.start()], sentence[m.end():]
+    if left.strip():
+        return left, right
+    head, _, rest = right.partition(",")
+    return head, rest
+
+
+def _names_pass(part: str, p: dict) -> bool:
+    """This part speaks of the cut-out pass: a pass, by its passer."""
+    passer = re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part)
+    return bool(A_PASS.search(part)) and passer is not None
+
+
+def _names_cut(part: str, p: dict) -> bool:
+    """This part is the interception alone: a word for it, and not the pass it cut out by its passer."""
+    return bool(WINS_IT.search(part)) and re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part) is None
 
 
 # The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said

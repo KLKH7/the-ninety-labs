@@ -623,6 +623,9 @@ PLAY = {e["id"]: e for e in (
     _play("pr", "02:04", "pressure", "away", "a6", receiver="h4"),
     # another player's interception after a pass cut out by a8: a second act
     _play("i2", "01:36", "interception", "home", "h3"),
+    # h7's earlier pass, completed: a different act from the one a8 cut out
+    _play("p0", "01:20", "pass", "home", "h7", receiver="h9", intended="h9", outcome="success",
+          distance_m=10, ball_speed_kmh=35),
 )}
 
 
@@ -631,10 +634,18 @@ PLAY = {e["id"]: e for e in (
     ("The interception by a8 at 01:35 came immediately after h7's failed pass at 01:33.", ["p1", "i1"],
      "one act, not one after the other"),
     ("h7's pass at 01:33 came before a8's interception at 01:35.", ["p1", "i1"], "one act, not one before"),
+    # the connective opening the sentence, and every form of it (review of #353)
+    ("After h7's failed pass, a8 intercepts the ball.", ["p1", "i1"], "one act, not one after"),
+    ("Following h7's pass, a8 cuts it out.", ["p1", "i1"], "one act, not one following"),
+    ("h7's pass was followed by a8's interception.", ["p1", "i1"], "one act, not one followed by"),
+    ("a8's interception was preceded by h7's pass.", ["p1", "i1"], "one act, not one preceded by"),
+    ("The interception came after a8 cut out h7's pass.", ["p1", "i1"], "one act, not one after"),
     ("h7's failed long pass at 01:33 is cut out by a8.", ["p1"], "a long ball is a pass of 32 m or more"),
     # L16: pressure said with no cited pressure event
     ("h4 plays a 32 m pass to h9 despite pressure.", ["lb"], "no cited event is a pressure event"),
     ("h4, under heavy pressure, finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+    ("h4 is pressured but finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+    ("Amid pressure, h4 finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
 ])
 def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence, reason):
     verdict = check(Claim(text, evidence), PLAY)
@@ -649,6 +660,11 @@ def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence,
     ("a8 finds a10 with a 12 m pass.", ["p2"]),
     ("h7's pass is cut out by a8, then a8 passes to a10.", ["p1", "i1", "p2"]),  # "then" orders two acts
     ("h3's interception came after h7's failed pass.", ["p1", "i2"]),  # another player's: a second act
+    # the interceptor's own next pass is a second act, whatever comes first in the sentence
+    ("a8 passes to a10 after intercepting h7's pass.", ["p1", "i1", "p2"]),
+    ("After winning the ball, a8 passes to a10.", ["i1", "p2"]),
+    ("After h7's pass to h9, a8 intercepts h7's next pass.", ["p0", "p1", "i1"]),  # two passes by h7
+    ("After the interception, a8 passes to a10.", ["p1", "i1", "p2"]),  # the pass after is a8's own
 ])
 def test_play_words_with_their_fact_cited_still_pass(text, evidence):
     assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons

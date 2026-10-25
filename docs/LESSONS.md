@@ -3070,7 +3070,9 @@ short and actionable. This file is public: no research sources, product names or
   (how often it airs). A claim's words about the play need a cited fact that shows them, checked in
   code: "long ball" needs a pass of 32 m or more (GROUNDING I11), "under pressure" a pressure event, and
   "after"/"before" never joins an interception to the pass it cut out. Have a person label a blind,
-  pre-registered sample of an evaluation's decisions before its numbers are trusted.
+  pre-registered sample of an evaluation's decisions before its numbers are trusted. A rule made from
+  that sample's misses is checked on it in-sample only; a fresh sample measures it. Reclassifying a
+  kind as neither true nor false is not a fix of the checker, and is reported as such.
 - **Check:** `tests/test_factcheck_eval_labels.py::test_tone_claims_are_neither_true_nor_false_and_nothing_says_forward`,
   `tests/test_factcheck.py::test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it` (and its
   true twins), `docs/eval/factcheck-human-labels.md`.
