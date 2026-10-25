@@ -7,7 +7,7 @@ import { clock } from "./types";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const code = params.get("code") ?? newCode();
-const relay = new MockLaptop(code);
+const relay = new MockLaptop(code, () => ({ type: "clock", t: Math.round(now() * 100) / 100, playing }));
 (window as unknown as { ninetyLaptop: object }).ninetyLaptop = { relay, time: () => now() }; // read by tests/test_phone.py
 
 let playing = false;

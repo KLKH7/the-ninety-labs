@@ -1,0 +1,42 @@
+{
+ "runs": [
+  "runs/f7-65247ba3",
+  "runs/f11-65247ba3"
+ ],
+ "rule": "smallest step with noise share <= 0.05",
+ "shares": [
+  {
+   "step_s": 1.0,
+   "share": 0.2366
+  },
+  {
+   "step_s": 2.0,
+   "share": 0.1746
+  },
+  {
+   "step_s": 3.0,
+   "share": 0.1497
+  },
+  {
+   "step_s": 4.0,
+   "share": 0.1329
+  },
+  {
+   "step_s": 5.0,
+   "share": 0.1241
+  },
+  {
+   "step_s": 6.0,
+   "share": 0.1179
+  },
+  {
+   "step_s": 8.0,
+   "share": 0.1077
+  },
+  {
+   "step_s": 10.0,
+   "share": 0.1031
+  }
+ ],
+ "chosen_s": null
+}
