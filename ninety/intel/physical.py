@@ -23,8 +23,9 @@ from pathlib import Path
 
 from ninety.intel import overloads
 from ninety.intel.scene import FPS, minute_of
+from ninety.intel.stats import SPRINT_THRESHOLD_KMH
 
-SPRINT_KMH = 25.2
+SPRINT_KMH = SPRINT_THRESHOLD_KMH  # one source, one constant (stats.py, GROUNDING I22)
 # The labels the phone says with each figure, measured on held-out simulated matches against the
 # truth (ninety/eval/physical_eval.py --calibrate, docs/eval/physical.md).
 CALIBRATION = Path(__file__).with_name("physical_calibration.json")

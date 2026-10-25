@@ -24,7 +24,7 @@ def p(i, team, x, y, ex, ey, outcome="success", side=0.99, player="h-t1", receiv
         (95, 64, "away", True),  # away attacks toward x = 0: 31 m closer within its own half
     ],
 )
-def test_progressive_is_wyscouts_three_distances(x, ex, team, want):
+def test_progressive_is_the_published_three_distances(x, ex, team, want):
     assert passing.progressive(x, 34, ex, 34, team) is want
 
 
