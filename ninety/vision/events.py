@@ -417,11 +417,23 @@ def detect(rows: list[dict], join_breaks: bool = True,
             nxt = [c + 1 for c in cut_at if c >= f] + [k for k in strikes if k > f]
             end = outcomes._index(path, min(nxt, default=None))
             line = outcomes.line_evidence(path[i:end], heights, scorer)
-            if line is not None:
-                score, k, y = line
-                g = path[i + k]
-                kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks)
-                conf = round(1 - (1 - score) * (1 - kick), 3)
+            restart = None
+            if line is None:
+                # Amendment 4: unseen in the net (a high ball lands beyond it), a kick-off first after it
+                # is a goal (Law 8), as amendment 2 has it after a detected shot.
+                restart = outcomes.first_restart(path, i, min((k for k in strikes if k > f), default=None),
+                                                 scorer, others if others is not None else tracks)
+                if restart is not None and restart[0] != "kickoff":
+                    restart = None
+            if line is not None or restart is not None:
+                if line is not None:
+                    score, k, y = line
+                    g = path[i + k]
+                    kick = outcomes.kickoff_evidence(path, i + k, others if others is not None else tracks)
+                    conf = round(1 - (1 - score) * (1 - kick), 3)
+                else:
+                    g, y = path[i], _clip(path[i].y, PITCH_Y)
+                    conf = round(restart[2], 3)
                 last = [s for s in sp if s.last < f and s.track.team == scorer]
                 who = attribute(last[-1].track, path[index[last[-1].last]], tracks) if last else None
                 if last:

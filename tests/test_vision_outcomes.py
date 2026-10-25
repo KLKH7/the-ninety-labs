@@ -373,3 +373,25 @@ def test_a_shot_the_kit_reads_for_the_other_side_is_still_a_shot_for_the_side_at
     shots, _, _, _ = run(shot_scene(keeper_catch((97.0, 34.0)), keeper=(103.0, 34.0), others=[(97.0, 34.0)],
                                     shooter=RED))
     assert [(s["team"], s["outcome"], s["team_confidence"]) for s in shots] == [("home", "blocked", None)]
+
+
+# Amendment 4: a ball over a goal line, unseen in the net, then a kick-off.
+
+
+def roof_of_net(k):
+    """A lofted strike whose ground track bends wide (no shot is read at it) and, placed on the
+    ground, lands beyond the net's depth (rules 1 to 3 cannot see it), where it stays."""
+    return lofted((111.0, 45.0))(k)
+
+
+def test_a_ball_over_the_goal_line_then_a_kick_off_is_a_goal():
+    shots, goals, types, _ = run(shot_scene(roof_of_net, kickoff_after=True))
+    assert [(g["team"], g["x"], g["confidence"]) for g in goals] == [("home", 105.0, 0.8)]  # the kick-off's
+    assert [s["outcome"] for s in shots] == ["goal"]  # his strike becomes the shot
+    assert "out_of_play" not in types
+
+
+def test_the_same_ball_with_no_kick_off_or_a_wrong_one_is_out_of_play():
+    for after in (None, False):  # no restart seen; players in the wrong halves (no kick-off by Law 8)
+        shots, goals, types, _ = run(shot_scene(roof_of_net, kickoff_after=after))
+        assert goals == [] and shots == [] and "out_of_play" in types
