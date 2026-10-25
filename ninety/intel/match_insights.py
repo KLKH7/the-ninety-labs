@@ -28,6 +28,7 @@ from ninety.intel import (
     overloads,
     pass_options,
     passing,
+    physical,
     roles,
     shape,
     shot_map,
@@ -111,6 +112,7 @@ class MatchInsights:
         facts["territory"] = ball_share.territory_rows(f.frames)
         facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
         facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
+        facts["running"] = physical.rows(f.frames)  # each track's running, per minute (I22)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = [
             {
@@ -338,6 +340,29 @@ class MatchInsights:
             if team in (None, r["team"])
         ]
         return {"facts": pairs, "summary": summary}
+
+    def physical(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each named player's distance (km, from the footage shown, with its measured label), top
+        speed, sprints above 25.2 km/h and the zone he was in most, over the minutes."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        lb, bar = physical.labels(), team_stats_mod.within_pct()
+        # Each figure is said only when the grading of named players (docs/eval/physical.md) is no
+        # worse than the bar the phone already accepts for it: team distance's label for distance and
+        # sprint counts, the phone card's worst measured top-speed error for top speed (GROUNDING I22).
+        held = physical.held(lb, bar)
+        facts = []
+        for r in physical.players(self.facts.get("running", ()), self.people, minute_from, minute_to):
+            if team not in (None, r["team"]):
+                continue
+            r = {**r, "club": clubs[r["team"]]}
+            why = held.get(r["metric"])
+            if why:
+                r["confident"], r["why_held"] = False, why
+            elif r["metric"] == "player_km":
+                r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
+            facts.append(r)
+        return {"facts": facts, "summary": []}
 
     def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
         team = self.team(club)

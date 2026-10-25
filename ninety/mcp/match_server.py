@@ -47,7 +47,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
-    "referee", "lineup", "possession", "territory", "shots", "passing",
+    "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -237,6 +237,13 @@ def territory(match: str, minute_from: int, minute_to: int, club: str | None = N
     return _insight(match, "territory", minute_from, minute_to, club)
 
 
+def physical(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """The zone each named player was in most between two match minutes, of the footage the video
+    named him in. A player's distance, top speed and sprints are computed but held (confident false,
+    why_held) until named players are measured well enough; do not state them. Cite by id."""
+    return _insight(match, "physical", minute_from, minute_to, club)
+
+
 def passing(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
     """What the passes did between two match minutes: progressive passes (Wyscout's definition),
     passes into the final third, long passes (32 m or more) and passes intercepted, each club's count
@@ -339,7 +346,7 @@ def make_server() -> FastMCP:
     )
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
-        possession, territory, shots, passing,
+        possession, territory, shots, passing, physical,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

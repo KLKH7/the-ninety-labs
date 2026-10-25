@@ -82,6 +82,8 @@ UNIT_WORDS = {
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
     "shots": ("shots", "shot"),
+    "km": ("km", "kilometres", "kilometers"),
+    "km/h": ("km/h", "kilometres an hour", "kph"),
     "progressive passes": ("progressive passes", "progressive pass"),
     "long passes": ("long passes", "long pass"),
     "degrees": ("degrees", "degree"),
@@ -370,6 +372,17 @@ def check(
     if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
         reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
 
+    # Words of a zero say a zero: "did not sprint" only of a count of none (merge-queue review of #323).
+    for f in cited:
+        zero_said = re.search(r"\bdid not sprint\b", claim.text)
+        if f.get("metric") == "player_sprints" and f.get("value") and zero_said:
+            reasons.append(f"it says he did not sprint; the cited fact counts {f['value']}")
+        # A zone is the fact's own third and channel, not any third (merge-queue review of #323).
+        if f.get("metric") == "player_zone":
+            where = "in the centre" if f.get("channel") == "centre" else f"on the {f.get('channel')}"
+            if not re.search(rf"\b{re.escape(str(f.get('third')))} third {re.escape(where)}\b", claim.text):
+                reasons.append(f"the zone is their {f.get('third')} third {where}")
+
     # A pass pair says who passed to whom, in that order, and that it counts only named passes.
     for f in cited:
         if f.get("metric") != "pair_passes":
@@ -497,6 +510,10 @@ DIRECTED = (
     "final_third_share",
     *(f"{k}{a}" for k in ("progressive", "final_third_entry", "long", "intercepted") for a in ("", "_all")),
     "pair_passes",
+    "player_km",
+    "player_top_kmh",
+    "player_sprints",
+    "player_zone",
     "shots_all",
     "shots",
     "shot_distance_m",
@@ -544,6 +561,10 @@ TEMPLATES = {
         )
         for a in ("", "_all")
     },
+    "player_km": [rf"has covered {_N} km", r"from the footage shown", rf"give or take {_N}%"],
+    "player_top_kmh": [rf"reached a top speed of {_N} km/h"],
+    "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
+    "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
     "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
     "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
