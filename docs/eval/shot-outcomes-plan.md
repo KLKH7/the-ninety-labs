@@ -169,3 +169,19 @@ at confidence `kickoff` (the line evidence 0, as amendment 2 has it when the net
 last spell of that side before it becomes the shot, outcome goal. A goal kick or a corner first
 leaves it out of play, as now. Known risk, reported not tuned: on a condensed match a cut can skip
 the goal kick and land on the next half's kick-off.
+
+## Amendment 5 (Oct 25, before any re-score of validation and before the test split is rendered): who kicks off
+
+Amendment 4's known risk, raised by the Coordinator: a ball that went over the goal line without a
+goal, then a cut to the next half's kick-off (Law 8 starts each half with one), would read as a goal.
+The Laws tell the two apart by who kicks off: after a goal, the side that conceded it (Law 8); at the
+start of the second half, the side that did not kick off the first. So a kick-off counts as evidence
+of a goal for a side only when that side is not the one kicking off.
+
+The side kicking off is the side of the nearest outfield player with a side inside the centre circle
+(9.15 m, Law 1, less `events.RIVAL_M`) on the kick-off's last still frame: the same reading as
+`ninety/vision/restarts.py`'s kick-off taker. When no such player is seen, the kick-off stands as
+before (the Laws are not contradicted). This applies everywhere a kick-off is evidence: rule 4's
+kick-off evidence, amendment 2's restart rule and amendment 4. Known cost, reported not tuned: a
+taker whose kit side is read wrong turns a true goal's kick-off away (the broadcast's side accuracy is
+about 0.58 on validation; the tactical views' players are used when given, rule 4).
