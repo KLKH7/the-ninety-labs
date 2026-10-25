@@ -424,7 +424,7 @@ Measured with the camera fit, the height band (0.901 to 1.002) and the trust gat
 
 | Measure | Result |
 |---|---|
-| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67. **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
+| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67 (old band; on today's main it is 0.25, see the Camera trusted row). **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Possession changes | 1 of 5 found, none false (recall 0.20, 95% 0.04 to 0.62; strict, lenient and time-only the same), scored once with a rule that adds no constant ([eval/possession-change.md](eval/possession-change.md)). By phase: open play 1 of 4, at a restart 0 of 1 (not claimed: after an out of play or a cut no change is told). Three of the five are on 900003, whose camera is trusted on 4 frames. The open-play miss on 900001 is the keeper's save: the shot before it is read as a pass whose ball goes over the goal line (the false out of play below), so no change is told after it. **Without seed 900001:** 0 of 3. Not set or checked on validation clips: their observations were not on the machine that scored it |
@@ -441,8 +441,9 @@ Measured with the camera fit, the height band (0.901 to 1.002) and the trust gat
 - teams can be told apart by brightness as well as by colour;
 - the side vote uses each side's mean position, not its deepest player.
 The event and tracker thresholds were tried on a grid and none changed. On seed 900001 the pass F1
-is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure (F1 0.67
-on 13 passes) replaces it as the headline.
+is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure on the old band (F1 0.67
+on 13 passes) replaced it on 21 Oct; on today's main it is 0.25 (2 of 13, 1 false;
+[camera-cuts-plan.md](eval/camera-cuts-plan.md)).
 
 **Read with care.** Five ten-second clips hold 13 passes and one shot, and two of the clips give no
 events at all. A single pass moves the recall by 8 points. This shows the pipeline works end to end
@@ -658,7 +659,7 @@ fact); the injection count checks that the text agrees with it.
 `uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance
 from tracked positions against the ground truth, offline, with and without the shipped smoothing
 ([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
-for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
+for speed now and 1.5 km/h for top speed (measured 21 Oct, before #250 and #270; not re-measured), against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
 
 ### Possession now (the wind map's layer)
