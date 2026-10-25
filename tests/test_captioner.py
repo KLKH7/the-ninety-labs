@@ -62,7 +62,7 @@ def test_a_caption_the_fact_checker_passes_airs():
 def test_the_model_is_given_the_label_the_shot_its_build_up_and_the_distance():
     run("h9 scores.")
     body = says.prompt
-    assert body["moment"] == {"kind": "goal", "label": "THUNDERBOLT", "team": "home"}
+    assert body["moment"] == {"kind": "goal", "label": "THUNDERBOLT", "team": "home", "origin": None}
     assert body["shot"]["id"] == "s1" and [e["id"] for e in body["around"]] == ["p1"]
     assert (body["distance"]["value"], body["distance"]["unit"]) == (26, "m")
 
@@ -208,3 +208,57 @@ def test_an_unpublished_captioner_refuses_to_run(monkeypatch):
     events, r = scene()
     with pytest.raises(RegistryDrift):
         asyncio.run(e2e.caption_reel(r, events, "foundry"))
+
+
+# How the attack started, in the captions
+
+
+def corner_scene():
+    """The scene, with a corner before it: the ball out over home's attacking line off away."""
+    events, _ = scene()
+    events = [ev("o1", 59.0, "out_of_play", team="away", player=None, x=105.3, y=60.0), *events]
+    return events, reel(events, MEASURED)
+
+
+def test_a_caption_may_name_the_restart_the_attack_came_from():
+    events, r = corner_scene()
+    assert r["moments"][0]["origin"] == "corner"
+    assert run("From the corner, h9 smashes a thunderbolt in!", events_reel=(events, r))["source"] == "model"
+
+
+def test_a_restart_the_code_did_not_find_keeps_the_code_caption():
+    out = run("From the corner, h9 smashes a thunderbolt in!")  # this attack's start was not seen
+    assert out["source"] == "code" and "corner" in out["call"]["problem"]
+    events, r = corner_scene()
+    out = run("A free kick, and h9 smashes a thunderbolt in!", events_reel=(events, r))
+    assert out["source"] == "code" and "free kick" in out["call"]["problem"]
+
+
+def test_the_code_caption_says_where_the_attack_started():
+    events, r = corner_scene()
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"] == "h9 scores from 26 m at 112 km/h, from a corner."
+
+
+@pytest.mark.parametrize("text,origin,ok", [
+    ("from a corner", "corner", True),
+    ("from a corner", "open_play", False),
+    ("a corner kick", None, False),
+    ("into the top corner", "open_play", True),  # a part of the goal, not the restart
+    ("the far corner of the net", "open_play", True),
+    ("tucked into the corner of the net", "open_play", True),
+    ("a penalty", None, False),
+    ("from the spot kick", "corner", False),
+    ("a long throw-in", "throw_in", True),
+    ("a long throw-in", "corner", False),
+    ("from the goal kick", "goal_kick", True),
+    ("straight from the kick-off", "kick_off", True),
+    ("a set piece", "throw_in", True),
+    ("a set piece", "open_play", False),
+    ("a free kick", "corner", False),
+    ("on the counter", "open_play", False),
+    ("won back and finished", "open_play", True),
+])
+def test_a_restart_is_named_only_as_the_code_found_it(text, origin, ok):
+    from ninety.agents.factcheck import origin_reasons
+    assert (origin_reasons(text, origin) == []) is ok

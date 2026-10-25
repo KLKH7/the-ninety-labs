@@ -40,7 +40,7 @@
     "moment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "t", "team", "player", "kind", "why", "label", "label_detail", "d_m", "v_kmh", "T_s", "clip"],
+      "required": ["event", "t", "team", "player", "kind", "why", "origin", "label", "label_detail", "d_m", "v_kmh", "T_s", "clip"],
       "properties": {
         "event": { "type": "string", "description": "The detected shot's id." },
         "t": { "type": "number", "minimum": 0, "description": "When the shot was struck." },
@@ -48,6 +48,7 @@
         "player": { "type": ["string", "null"] },
         "kind": { "enum": ["goal", "save"] },
         "why": { "enum": ["goal", "beat_the_dive", "filter_off"] },
+        "origin": { "enum": ["corner", "throw_in", "goal_kick", "kick_off", "open_play", null], "description": "How the shooting side's possession began (docs/eval/highlights-plan.md, Amendment 2): the restart, or open_play when the ball was won back. Null when its start was not seen, a free kick included (vision detects no fouls)." },
         "label": { "enum": ["THUNDERBOLT", "SCREAMER", "LONG-RANGE", "ROCKET", "REFLEX SAVE", "TAP-IN", "GOAL", "SAVE"] },
         "label_detail": { "type": ["string", "null"], "description": "The number that earned the label, as shown (\"112 km/h\"); null for GOAL and SAVE." },
         "d_m": { "type": "number", "minimum": 0, "description": "From the strike to the centre of the goal attacked." },

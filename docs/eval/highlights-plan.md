@@ -256,6 +256,63 @@ and `z` (height). The posts and bar are fixed by Law 1 (7.32 m by 2.44 m).
   woodwork stays off and the count is reported. A set chosen for woodwork would be its own
   pre-registered window list, not an edit of that one.
 
+## Amendment 2 (2026-10-24): how the attack that led to the shot started
+
+Added after the plan was merged (#278) and before any origin was measured. The plan's "Not in this
+plan" asked for this amendment before the code; the code was drafted alongside it, in the same pull
+request, and nothing has been run on a clip. It adds one field to each moment, `origin`, and the
+words a caption may use for it; nothing above changes.
+
+### The source, and why there is no time threshold
+
+StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,
+`doc/`) defines a possession as a period of play in which the ball is in play and one team
+controls it, and gives every event a play pattern: the event was part of the passage of play that
+followed a corner, a free kick, a throw-in, a goal kick or a kick-off, or none of those ("Regular
+Play"). A same-team restart starts a new possession (its example: a blocked pass that goes out for
+the same team's throw-in). So "this corner led to the shot" means the shot is in the possession the
+corner began. That is the source's definition, and it needs no number of seconds or passes: adding
+one would be our own threshold with nothing behind it, so there is none.
+
+### The rule (fixed now)
+
+Walking back from the shot through the confident detected events, the shooting side's possession:
+
+1. **goes on** through its own completed passes and its own earlier shots (a rebound);
+2. **began in open play** (`open_play`) at an opponent's failed pass: the ball won back;
+3. **began at a restart** at a detected ball out of play (`ninety/vision/events.py` names the side
+   that touched it last), if the restart is the shooting side's, by the Laws:
+   - over a touchline: a **throw-in** (`throw_in`) for the side that did not touch it last (Law 15);
+   - over the goal line the side attacks, touched last by a defender: a **corner** (`corner`, Law 17);
+   - over its own goal line, touched last by an attacker: a **goal kick** (`goal_kick`, Law 16);
+   - a ball out over a goal line straight after a detected goal is that goal (below);
+   - which line it went over is the one it is further over, as the engine judges a ball out at a
+     corner flag (`ninety/sim/decisions.py`, `restart_cost`);
+4. **began at a kick-off** (`kick_off`) after a goal the other side scored (Law 8);
+5. otherwise its start **was not seen**: `origin` is null. That covers an opponent's completed pass
+   or shot, the side's own failed pass, the side's own goal, a restart that was the opponent's, no
+   event before it, and a broadcast cut between two live-ball events (nothing seen before a cut is
+   linked to anything after it, as the event detector itself rules; a ball seen going out before a
+   cut still gives its restart after it).
+
+**Free kicks are never given.** A free kick follows a foul, and vision detects no fouls; a shot from
+one has a null origin. The same holds for kick-offs that start a half, which follow no goal, and for
+StatsBomb's "From Keeper" and "From Counter", which this rule does not try.
+
+### What the captions may say
+
+A caption may say a moment came from a corner, a throw-in, a goal kick, a kick-off or
+a set piece only when its `origin` says so (`factcheck.origin_reasons`). Free kicks, penalties
+(spot kicks) and counter-attacks are never given, so their words are refused for every moment.
+"Top corner" and the other placement words stay refused as before.
+
+### Graded (offline)
+
+The same rule over the answer key's events gives each true shot its true origin. On the matched
+shots of the measurement above (validation, then the test split once): how often the detected origin
+equals the true one, per origin, with Wilson intervals, each disagreement listed, and how often the
+detected origin is null where the truth has one.
+
 ## Outcome
 
 *Not yet measured.*

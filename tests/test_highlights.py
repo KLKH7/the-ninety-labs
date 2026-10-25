@@ -10,7 +10,7 @@ import json
 import pytest
 
 from ninety import condensed, highlights
-from ninety.highlights import Verdict, distance_m, label, record, reel, verdict_from_report
+from ninety.highlights import Verdict, distance_m, label, origin, record, reel, verdict_from_report
 from ninety.match.timeline import Timeline
 
 # A measured verdict: the filter live, small errors (1 km/h, 0.5 m, 0.2 m along and across, 0.02 s).
@@ -276,3 +276,96 @@ def test_the_video_times_are_the_whole_images_recorded(tmp_path):
     record(reel, CUT, images, tmp_path / "out", encode=False)
     rec = reel["moments"][0]["recording"]
     assert rec["images"] == [10, 36] and rec["video_t"] == [0.4, 1.44]
+
+
+# How the attack started (highlights.origin, the plan's Amendment 2)
+
+
+def ev(eid, t, kind, team="home", x=80.0, y=34.0, outcome=None):
+    return {"id": eid, "t": t, "type": kind, "team": team, "x": x, "y": y, "outcome": outcome,
+            "source": "vision", "confidence": 0.9}
+
+
+SHOT = ev("s", 20.0, "shot", x=94.0, outcome="goal")  # home attacks the goal line at x = 105
+
+
+def started(*before, shot=SHOT, cut=None):
+    return origin(shot, [*before, shot], cut or (lambda t0, t1: False))
+
+
+def test_the_ball_won_back_from_an_opponents_failed_pass_is_open_play():
+    assert started(ev("p", 10.0, "pass", "away", outcome="fail"),
+                   ev("q", 15.0, "pass", outcome="success")) == "open_play"
+
+
+def test_a_ball_out_over_a_touchline_is_a_throw_in_for_the_side_that_did_not_touch_it_last():
+    assert started(ev("o", 10.0, "out_of_play", "away", x=60.0, y=-0.3)) == "throw_in"
+    assert started(ev("o", 10.0, "out_of_play", "away", x=60.0, y=68.3)) == "throw_in"
+    assert started(ev("o", 10.0, "out_of_play", "home", x=60.0, y=-0.3)) is None  # away's throw
+
+
+def test_over_the_line_attacked_off_a_defender_is_a_corner_and_off_an_attacker_a_goal_kick():
+    assert started(ev("o", 10.0, "out_of_play", "away", x=105.3, y=20.0)) == "corner"
+    assert started(ev("o", 10.0, "out_of_play", "home", x=105.3, y=20.0)) is None  # away's goal kick
+    assert started(ev("o", 10.0, "out_of_play", "away", x=-0.3, y=20.0)) == "goal_kick"  # home's own line
+    assert started(ev("o", 10.0, "out_of_play", "home", x=-0.3, y=20.0)) is None  # away's corner
+
+
+def test_at_a_corner_flag_the_line_it_is_further_over_decides():
+    assert started(ev("o", 10.0, "out_of_play", "away", x=105.2, y=-0.5)) == "throw_in"
+    assert started(ev("o", 10.0, "out_of_play", "away", x=105.5, y=-0.2)) == "corner"
+    assert started(ev("o", 10.0, "out_of_play", "away", x=105.25, y=-0.25)) == "throw_in"  # level: touchline
+
+
+def test_a_side_attacking_the_other_way_takes_its_corner_at_the_other_end():
+    shot = ev("s", 20.0, "shot", x=11.0, outcome="on_target")  # attacks x = 0
+    assert started(ev("o", 10.0, "out_of_play", "away", x=-0.3, y=20.0), shot=shot) == "corner"
+    assert started(ev("o", 10.0, "out_of_play", "away", x=105.3, y=20.0), shot=shot) == "goal_kick"
+
+
+def test_a_goal_by_the_other_side_gives_the_kick_off():
+    assert started(ev("g", 5.0, "shot", "away", x=10.0, outcome="goal"),
+                   ev("p", 15.0, "pass", outcome="success")) == "kick_off"
+    assert started(ev("g", 5.0, "goal", "away", x=10.0)) == "kick_off"
+    assert started(ev("g", 5.0, "shot", "home", x=94.0, outcome="goal")) is None  # its own: away kicks off
+
+
+def test_a_ball_out_straight_after_a_goal_is_that_goal():
+    assert started(ev("g", 5.0, "shot", "away", x=10.0, outcome="goal"),
+                   ev("o", 5.5, "out_of_play", "away", x=-0.3, y=34.0)) == "kick_off"
+
+
+def test_a_start_not_seen_gives_no_origin():
+    assert started() is None  # nothing before it
+    assert started(ev("p", 10.0, "pass", "away", outcome="success")) is None  # theirs, then ours unseen
+    assert started(ev("p", 10.0, "pass", outcome="fail")) is None  # we lost it: how we won it is unseen
+    assert started(ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0),
+                   ev("p", 10.0, "pass", outcome="fail")) is None  # the corner's possession ended there
+    assert started(ev("x", 10.0, "shot", "away", x=10.0, outcome="on_target")) is None
+
+
+def test_the_possession_runs_on_through_passes_and_a_rebound():
+    assert started(ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0),
+                   ev("p", 8.0, "pass", outcome="success"),
+                   ev("r", 12.0, "shot", x=96.0, outcome="on_target")) == "corner"
+
+
+def test_a_cut_between_live_balls_hides_the_start_but_not_a_restart():
+    cut_at_9 = lambda t0, t1: t0 < 9.0 <= t1  # noqa: E731
+    assert started(ev("p", 5.0, "pass", "away", outcome="fail"), ev("q", 12.0, "pass", outcome="success"),
+                   cut=cut_at_9) is None
+    out = ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0)
+    assert started(out, ev("q", 12.0, "pass", outcome="success"),
+                   cut=cut_at_9) == "corner"  # a dead ball before the cut, its corner after it
+
+
+def test_the_reel_gives_each_moment_its_origin_and_match_json_knows_the_cuts():
+    meta = {"fps": 25, "t_start": 0.0, "frames": 750,
+            "segments": [{"index": 0, "frame": 0, "frames": 250},
+                         {"index": 250, "frame": 500, "frames": 500}]}
+    events = [ev("p", 5.0, "pass", "away", outcome="fail"), ev("s", 21.0, "shot", x=94.0, outcome="goal")]
+    body = condensed.build(meta, events)  # a cut from 10 s to 20 s, between the pass and the shot
+    assert body["highlights"]["moments"][0]["origin"] is None
+    assert reel(events)["moments"][0]["origin"] == "open_play"  # the same with no cut
+    cut = condensed.cut_between(Timeline.of_clip(meta))
+    assert cut(5.0, 21.0) and not cut(1.0, 9.0) and not cut(20.0, 29.0)

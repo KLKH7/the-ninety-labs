@@ -126,14 +126,71 @@ def label(kind: str, x: float, y: float, d: float, v: float | None, T: float | N
     return None
 
 
+# How the attack that led to the shot started (the plan's Amendment 2): the restart, or the ball won
+# in open play, that began the shooting side's possession. None when its start was not seen.
+ORIGINS = ("corner", "throw_in", "goal_kick", "kick_off", "open_play")
+PITCH_Y = 68.0
+
+
+def _is_goal(e: dict) -> bool:
+    return e["type"] == "goal" or (e["type"] == "shot" and e.get("outcome") == "goal")
+
+
+def restart(out: dict, team: str, attacks: float, before: dict | None) -> str | None:
+    """The restart after a detected ball out of play, if it is `team`'s (Laws 15 to 17), seen from a
+    side attacking the goal line at x = `attacks`. `out` names the side that touched it last. A ball
+    over a line by more along y than along x went over a touchline (at a corner flag, the line it is
+    further over, as the engine judges it: ninety/sim/decisions.py, restart_cost). A ball out over a
+    goal line straight after a goal is that goal: the kick-off is the side's that conceded (Law 8)."""
+    x, y = out["x"], out["y"]
+    over_x, over_y = max(-x, x - PITCH_X, 0.0), max(-y, y - PITCH_Y, 0.0)
+    if over_y >= over_x:  # Law 15: a throw-in to the side that did not touch it last
+        return "throw_in" if out["team"] != team else None
+    if before is not None and _is_goal(before):
+        return "kick_off" if before["team"] != team else None
+    crossed = PITCH_X if x > PITCH_X / 2 else 0.0
+    if crossed == attacks:  # Law 17: a corner when a defender touched it last
+        return "corner" if out["team"] != team else None
+    return "goal_kick" if out["team"] != team else None  # Law 16: over its own line by an attacker
+
+
+def origin(shot: dict, events: list[dict], cut=lambda t0, t1: False) -> str | None:
+    """How the shooting side's possession began, walking back from the shot through the confident
+    detected events: its own completed passes and earlier shots keep it going; an opponent's failed
+    pass is the ball won in open play; a ball out of play is the restart it gives (`restart`); an
+    opponent's goal is the kick-off. Anything else, or a broadcast cut (`cut(t0, t1)`: one lies
+    between match times t0 and t1) before a live ball, means the start was not seen: None. A ball
+    seen going out before a cut still gives its restart after it, as the event detector links them
+    (ninety/vision/events.py). A free kick is never given: no foul is detected."""
+    team, attacks = shot["team"], goal_line(shot["x"])
+    before = sorted((e for e in events if (e["t"], e["id"]) < (shot["t"], shot["id"])),
+                    key=lambda e: (e["t"], e["id"]))
+    for i in range(len(before) - 1, -1, -1):
+        e = before[i]
+        if e["type"] == "out_of_play":
+            return restart(e, team, attacks, before[i - 1] if i else None)
+        if _is_goal(e):
+            return "kick_off" if e["team"] != team else None
+        if cut(e["t"], shot["t"]):  # a cut nearer the shot was met first, at a later event
+            return None
+        kept = e["type"] == "shot" or (e["type"] == "pass" and e.get("outcome") == "success")
+        if e["team"] == team and kept:
+            continue
+        if e["team"] != team and e["type"] == "pass" and e.get("outcome") == "fail":
+            return "open_play"
+        return None
+    return None
+
+
 def kind_of(e: dict) -> str | None:
     if e["type"] != "shot":
         return None
     return {"goal": "goal", "on_target": "save"}.get(e.get("outcome"))
 
 
-def reel(events: list[dict], verdict: Verdict | None = None) -> dict:
-    """The reel from confident detected events (the caller applies the fact-checker's gate)."""
+def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: False) -> dict:
+    """The reel from confident detected events (the caller applies the fact-checker's gate). `cut`
+    says whether the broadcast cut between two match times (condensed.py passes the clip's)."""
     verdict = verdict or Verdict()
     moments, left_out = [], 0
     for e in sorted(events, key=lambda e: (e["t"], e["id"])):
@@ -155,7 +212,7 @@ def reel(events: list[dict], verdict: Verdict | None = None) -> dict:
         tag = label(kind, e["x"], e["y"], d, v, T, verdict)
         moments.append({
             "event": e["id"], "t": e["t"], "team": e.get("team"), "player": e.get("player"),
-            "kind": kind, "why": why,
+            "kind": kind, "why": why, "origin": origin(e, events, cut),
             "label": tag[0] if tag else kind.upper(), "label_detail": tag[1] if tag else None,
             "d_m": round(d, 1), "v_kmh": v, "T_s": None if T is None else round(T, 2),
             "clip": [round(max(0.0, e["t"] - BEFORE_S), 2), round(e["t"] + AFTER_S, 2)],
