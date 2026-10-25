@@ -69,22 +69,22 @@ said so here. Development numbers on stand-in observations only; no test number.
 
 To be written after the runs, below this line, without changing anything above.
 
-### Outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `0326b9b`)
+### Outcome (2026-10-25, [turnovers-dev.json](turnovers-dev.json), from commit `f996285`)
 
 Development numbers on **stand-in observations** built from the answer key, validation only; not a
 vision result. Strict matching (lenient gives the same here).
 
 | Run | True | Detected | Found (recall, 95%) | Right (precision, 95%) |
 |---|---:|---:|---|---|
-| M1, 30 windows, noise 0.188 m | 55 | 53 | 32 (0.58, 0.45 to 0.70) | 32 (0.60, 0.47 to 0.72) |
+| M1, 30 windows, noise 0.188 m | 55 | 45 | 28 (0.51, 0.38 to 0.64) | 28 (0.62, 0.48 to 0.75) |
 | M1, no noise | 55 | 55 | 40 (0.73, 0.60 to 0.83) | 40 (0.73, 0.60 to 0.83) |
-| M2, 4 rendered clips, noise | 6 | 4 | 2 (0.33, 0.10 to 0.70) | 2 (0.50, 0.15 to 0.85) |
+| M2, 4 rendered clips, noise | 6 | 7 | 4 (0.67, 0.30 to 0.90) | 4 (0.57, 0.25 to 0.84) |
 | M2, no noise | 6 | 7 | 4 (0.67, 0.30 to 0.90) | 4 (0.57, 0.25 to 0.84) |
 
-**Bar met** on M1 with noise (0.58 and 0.60, both at least 0.5): `pressure` is in `events.WRITTEN`.
-Of M1's 21 false pressures with noise, 7 fall in a window's first 8 s for a side the engine had
+**Bar met**, narrowly, on M1 with noise (0.51 and 0.62, both at least 0.5): `pressure` is in `events.WRITTEN`.
+Of M1's 17 false pressures with noise, 6 fall in a window's first 8 s for a side the engine had
 written one for in the 8 s before it (the memory a clip cannot see). Names on matched events of
-all three kinds (M1, noise): 48 right, 1 wrong, 30 left null.
+all three kinds (M1, noise): 46 right, 2 wrong, 26 left null. The first run drew its noise from the platform's generator, which is not the same on every machine (lesson 46), and gave 32 of 55 found and 32 of 53 right; the committed report is the rerun with portable draws, from the same commit's code. Two draws of the same noise moving a rate this much is the measure's own spread. Recall at 0.51 against a bar of 0.5 is inside that spread: the bar is met as written, and it is not a margin.
 
 **For review (Kian):** pressure now reaches the agents and the stats (PPDA counts `pressure`
 events) from the broadcast, which shows 5 to 8 players: a detected pressure is one the picture

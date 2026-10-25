@@ -144,8 +144,8 @@ ARRIVE_MPS = 6.0
 # two players the tracker did not keep through the contact is held there.
 HELD = 0.49
 # The new kinds `detect` writes by default; each plan's bar decides whether its kind is in. On the
-# validation stand-in (docs/eval/turnovers-dev.json, M1 with noise) pressure met it; interceptions
-# (precision 13 of 99) and tackles (recall 1 of 44) did not, so they are built but not written.
+# validation stand-in (docs/eval/turnovers-dev.json, M1 with noise) pressure met it, narrowly;
+# interceptions (precision 12 of 86) and tackles (recall 3 of 44) did not: built, not written.
 TURNOVERS = ("interception", "pressure", "tackle")
 WRITTEN = ("pressure",)
 
