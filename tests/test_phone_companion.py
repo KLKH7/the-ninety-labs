@@ -105,6 +105,8 @@ def test_the_phone_draws_the_bundles_tracked_radar_named_by_the_clips_codes(brow
     assert page.get_attribute("#map", "data-from") == "bundle"
     assert page.get_attribute("#map", "data-source") == "tracked"
     assert page.inner_text(".band .home-name") == "Crowmere"  # the clubs on the clip's scorebug
+    assert page.get_attribute("#goals-home", "aria-label") == "Crowmere goals"
+    assert page.get_attribute("#goals-away", "aria-label") == "Dunhollow goals"
     assert page.inner_text(".band .away-name") == "Dunhollow"
     state = page.evaluate(f"window.ninetyPhone.radarAt({1505 / FPS})")
     assert {p["id"] for p in state["players"]} == {"h-t1", "h-t2", "h-t4", "a-t3"}
@@ -558,7 +560,7 @@ def test_live_shows_just_now_and_match_stats_from_the_bundle_only(browser, cards
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert "Crowmere had three players" in page.inner_text("#just-now")  # the newest card up to the clock
     # No match.json in this bundle: no stats are shown rather than any invented.
-    assert page.locator("#live-stats").is_hidden() and page.locator("#scorers").is_hidden()
+    assert page.locator("#live-stats").is_hidden() and page.locator(".side-goal").count() == 0
     assert not errors
 
 
@@ -831,6 +833,7 @@ def test_a_bundle_that_names_no_clubs_shows_neutral_sides_and_says_teams_are_not
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("#teams-note:not([hidden])")
     assert page.inner_text(".band .home-name") == "Home" and page.inner_text(".band .away-name") == "Away"
+    assert page.get_attribute("#goals-home", "aria-label") == "Home goals"  # the clubs on screen
     assert "London" not in page.inner_text(".band") and "Lisbon" not in page.inner_text(".band")
     assert not errors
 

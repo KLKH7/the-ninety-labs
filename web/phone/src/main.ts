@@ -476,6 +476,7 @@ function showTeams() {
     for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
     for (const el of document.querySelectorAll(`.crest.${side}`)) el.innerHTML = crestSvg(teams[side], side);
     for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
+    $(`goals-${side}`).setAttribute("aria-label", `${teams[side]} goals`);
   }
   $("legend-home").textContent = `${teams.home} →`;
   $("legend-away").textContent = `← ${teams.away}`;
@@ -1939,7 +1940,9 @@ $("story-mode").addEventListener("ionChange", (e) => {
 let spottedKey = "";
 function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
-  const key = `${goals.map((g) => g.event).join()}|${teams.home}`;
+  // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
+  const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}`;
   if (key === spottedKey) return;
   spottedKey = key;
   const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
