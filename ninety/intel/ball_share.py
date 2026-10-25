@@ -1,7 +1,7 @@
 """Possession share and territory by third, from the video alone (GROUNDING I17, I18). (The phone's
 momentum strip, by half and per five minutes, is ninety/match/territory.py.)
 
-Possession share is the pass ratio broadcasters publish: a team's passes over both teams' passes, as
+Possession share is the pass ratio Opta publishes as possession: a team's passes over both teams' passes, as
 Opta counts possession (I17), not time on the ball. A detected pass counts for its team only when
 its side was told past the fact-checker's side gate (factcheck.side_known); a pass whose side is not
 known could be either team's, so the share is given as bounds, and stated only when they agree (no
