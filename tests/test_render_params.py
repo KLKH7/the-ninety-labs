@@ -256,3 +256,54 @@ def test_only_footage_asks_for_a_broadcast_stadium():
     assert sample_params(8001, stadium="broadcast").to_dict()["stadium"] == "broadcast"
     with pytest.raises(ValueError):
         sample_params(8001, stadium="packed")
+
+
+def test_the_shirt_as_seen_mixes_its_pattern_in_by_area():
+    """A solid shirt is seen as its colour; hoops in white over a dark shirt lighten it by the shader's
+    0.46 share, mixed in linear light; a shirt whose shorts match it is trimmed in the page's neutral."""
+    from ninety.render.params import NEUTRAL_TRIM, Kit, visible_shirt
+
+    navy = Kit("#1f2a5a", "#ffffff", "#1f2a5a")
+    assert visible_shirt(navy, "solid") == "#1f2a5a"
+    seen = visible_shirt(navy, "hoops")
+    assert seen != "#1f2a5a" and int(seen[1:3], 16) > 0x1f  # lighter, towards white
+    own = Kit("#1f2a5a", "#1f2a5a", "#1f2a5a")
+    assert visible_shirt(own, "halves") == visible_shirt(Kit("#1f2a5a", NEUTRAL_TRIM, "#000000"), "halves")
+
+
+def test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on():
+    """The demo match's kits on main before this rule: purple hoops in white over white shorts
+    against a near-white shirt, which passed on shirt colour alone (14:1) and looked alike as seen
+    (1.9:1). Now the shirts as seen meet the same 3:1."""
+    from ninety.render.params import Kit, kits_seen_apart, visible_shirt, wcag_contrast
+
+    before = (Kit("#40083f", "#ffffff", "#ffffff"), "hoops", Kit("#f2f2f2", "#ffffff", "#f2f2f2"), "hoops")
+    assert wcag_contrast(before[0].shirt, before[2].shirt) > 3 and not kits_seen_apart(*before)
+    p = sample_params(8080, kit_contrast="broadcast")
+    a, b = visible_shirt(p.home_kit, p.home_pattern), visible_shirt(p.away_kit, p.away_pattern)
+    assert wcag_contrast(a, b) >= 3.0, (a, b)
+
+
+def test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws(monkeypatch):
+    """Seeds 1-300 in broadcast: the shirts differ as colours and as seen, and each keeper is far
+    from both shirts as seen. A seed whose kits already looked apart is drawn exactly as before."""
+    from ninety.render import params as P
+
+    plain = {}
+    with monkeypatch.context() as m:
+        m.setattr(P, "_kits_seen_apart", lambda p, seed: p)
+        for seed in range(1, 301):
+            plain[seed] = P.sample_params(seed, kit_contrast="broadcast")
+    changed = 0
+    for seed in range(1, 301):
+        p = P.sample_params(seed, kit_contrast="broadcast")
+        assert P.kits_differ(p.home_kit.shirt, p.away_kit.shirt, "broadcast"), seed
+        assert P.kits_seen_apart(p.home_kit, p.home_pattern, p.away_kit, p.away_pattern), seed
+        seen = (P.visible_shirt(p.home_kit, p.home_pattern), P.visible_shirt(p.away_kit, p.away_pattern))
+        q = plain[seed]
+        if P.kits_seen_apart(q.home_kit, q.home_pattern, q.away_kit, q.away_pattern):
+            assert p == q, seed
+        else:
+            changed += 1
+            assert all(P.color_distance(k.shirt, o) >= 0.5 for k in (p.home_gk, p.away_gk) for o in seen)
+    assert 0 < changed < 300  # the rule bites on some seeds and leaves the rest alone

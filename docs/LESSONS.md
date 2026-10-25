@@ -2853,3 +2853,16 @@ short and actionable. This file is public: no research sources, product names or
   output folder). Before any `pkill -f`, run `pgrep -fl` with the same pattern and read every line.
 - **Check:** `pgrep -fl '<pattern>'` lists only processes whose command lines name your own seeds or
   folders; if it lists anything else, narrow the pattern or use the ids.
+
+### 243. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
