@@ -9,14 +9,16 @@ export interface CommentaryLine {
   t: number; // match seconds
   t_end: number;
   text: string;
-  audio: string; // relative to the bundle
+  audio: string | null; // relative to the bundle; null when the line was not voiced: caption only
 }
 export interface Commentary {
   format: 1;
   lines: CommentaryLine[];
 }
 
-export type Track = "stadium" | "commentary";
+/** Stadium alone; commentary over it; or the audio description persona (src/narrator.ts), which
+ * the main page runs. */
+export type Track = "stadium" | "commentary" | "described";
 const DUCK = 0.3; // design: the crowd under a line, as a broadcast mix sits it
 const DRIFT_S = 0.3; // re-align an audio element further than this from the picture
 
@@ -32,7 +34,7 @@ export function readCommentary(body: unknown): Commentary | null {
   const lines = c.lines.filter(
     (l): l is CommentaryLine =>
       !!l && typeof l.id === "string" && typeof l.t === "number" && typeof l.t_end === "number" && l.t_end > l.t &&
-      typeof l.text === "string" && typeof l.audio === "string" && !/^[a-z]+:|^\/|\.\./i.test(l.audio),
+      typeof l.text === "string" && (l.audio === null || (typeof l.audio === "string" && !/^[a-z]+:|^\/|\.\./i.test(l.audio))),
   );
   return { format: 1, lines: lines.sort((a, b) => a.t - b.t) };
 }
@@ -59,6 +61,8 @@ export class AudioTracks {
   get hasCommentary(): boolean {
     return !!this.commentary?.lines.length;
   }
+  /** Whether this bundle offers anything to choose: commentary, or an audio description. */
+  described = false;
   get hasSound(): boolean {
     return !!this.bed || this.hasCommentary;
   }
@@ -69,13 +73,13 @@ export class AudioTracks {
     if (on?.id !== this.line?.id) {
       this.line = on;
       this.voice.pause();
-      if (on) this.voice.src = new URL(on.audio, new URL(this.base, location.href)).href;
+      if (on?.audio) this.voice.src = new URL(on.audio, new URL(this.base, location.href)).href;
     }
     const shown = this.captions && on ? on.text : "";
     if (this.captionEl.textContent !== shown) this.captionEl.textContent = shown;
     this.captionEl.hidden = !shown;
     document.body.dataset.commentary = on ? on.id : "";
-    for (const [el, at] of [[this.bed, v], [on ? this.voice : null, on ? t - on.t : 0]] as const) {
+    for (const [el, at] of [[this.bed, v], [on?.audio ? this.voice : null, on ? t - on.t : 0]] as const) {
       if (!el) continue;
       el.muted = this.muted;
       if (!playing) {

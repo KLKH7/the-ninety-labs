@@ -290,7 +290,7 @@ async function start() {
   const personaButtons = [...document.querySelectorAll<HTMLButtonElement>("#persona [role=radio]")];
   const setPersona = (p: Persona, focus = false, picked = true) => {
     if (picked && p === "audio") voiceBox.checked = store.get("voice") !== "0";
-    if (big) p = "casual";
+    if (big && p !== "audio") p = "casual"; // only the audio menu changes it here
     persona = p;
     if (!big) store.set("persona", p);
     document.body.dataset.persona = p;
@@ -342,12 +342,14 @@ async function start() {
   );
   // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
   // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
+  // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
   let tracks: AudioTracks | null = null;
-  if (big && (m.commentary?.count || m.stadium)) {
+  if (big) {
     const body = m.commentary?.count
       ? await fetch(new URL("commentary.json", new URL(b.base, location.href))).then((r) => (r.ok ? r.json() : null)).catch(() => null)
       : null;
     tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
+    tracks.described = !!b.audio;
   }
   const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
   const hud = big
@@ -363,6 +365,7 @@ async function start() {
           if (!open) qrState.closed = true;
         },
         audio: tracks,
+        onTrack: (track) => setPersona(track === "described" ? "audio" : "casual"),
       })
     : null;
 
@@ -375,6 +378,8 @@ async function start() {
       case " ":
       case "k":
         if (target.tagName === "BUTTON" && e.key === " ") return; // the button's own click
+        // A radio or checkbox's own Space (the audio menu): it chooses, it does not play.
+        if (e.key === " " && target instanceof HTMLInputElement && ["radio", "checkbox"].includes(target.type)) return;
         e.preventDefault();
         togglePlay();
         break;
@@ -401,12 +406,15 @@ async function start() {
         qrState.closed = true;
         break;
       case "1":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("casual");
         break;
       case "2":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("analyst");
         break;
       case "3":
+        if (big) return; // personas are the phone's; audio description is in the audio menu
         setPersona("audio");
         break;
       case "d":

@@ -32,6 +32,7 @@ export function setupHud(opts: {
   clock: HTMLOutputElement;
   qrOpen: (open: boolean) => void;
   audio: AudioTracks | null;
+  onTrack?: (track: "stadium" | "commentary" | "described") => void;
 }) {
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
   const hud = $("hud");
@@ -88,7 +89,11 @@ export function setupHud(opts: {
   const audioBtn = $("hud-audio") as HTMLButtonElement;
   const menu = $("audio-menu");
   audioBtn.innerHTML = ICONS.audio;
-  audioBtn.hidden = !tracks?.hasCommentary;
+  audioBtn.hidden = !tracks?.hasCommentary && !tracks?.described;
+  $("track-commentary").hidden = !tracks?.hasCommentary;
+  $("track-described").hidden = !tracks?.described;
+  // Subtitles are the commentary's: offered with it only.
+  (menu.querySelectorAll("fieldset")[1] as HTMLElement).hidden = !tracks?.hasCommentary;
   const setMenu = (open: boolean) => {
     menu.hidden = !open;
     audioBtn.setAttribute("aria-expanded", String(open));
@@ -97,7 +102,10 @@ export function setupHud(opts: {
   menu.addEventListener("change", (e) => {
     const input = e.target as HTMLInputElement;
     if (!tracks) return;
-    if (input.name === "track") tracks.track = input.value as "stadium" | "commentary";
+    if (input.name === "track") {
+      tracks.track = input.value as "stadium" | "commentary" | "described";
+      opts.onTrack?.(tracks.track);
+    }
     if (input.name === "subs") tracks.captions = input.value === "on";
   });
 

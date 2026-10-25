@@ -164,7 +164,7 @@ FPS = 25
 # The clip: 40 images of match frames 1500-1539, then a cut to frames 1550-1584 (35 images).
 SEGMENTS = [{"index": 0, "frame": 1500, "frames": 40}, {"index": 40, "frame": 1550, "frames": 35}]
 SHOWN = list(range(1500, 1540)) + list(range(1550, 1585))
-HOME_RGB = (0x4E, 0xA1, 0xFF)
+HOME_RGB = (0x3A, 0x68, 0xC0)  # London navy (src/radar.ts COLORS.home), the club's colour
 
 
 def tracked_clip() -> dict:
@@ -337,7 +337,10 @@ def test_seen_is_drawn_filled_and_estimated_hollow(browser, site):
         return [window.ninetyRadar.pixel(p, 30), window.ninetyRadar.pixel(p, 30, 4.5)];
     }})()""")
     assert not rgb_near(hollow[0], HOME_RGB, tol=80), hollow  # grass shows through its centre
-    assert hollow[1][2] > hollow[0][2] + 60, hollow  # its ring is drawn in the team's blue
+    # Its ring is drawn in the club's colour: nearer it than the grass at the centre is (a test of
+    # which colour, not of how bright one channel is, so it holds for any club colour).
+    dist = lambda px: sum((a - b) ** 2 for a, b in zip(px[:3], HOME_RGB, strict=True))  # noqa: E731
+    assert dist(hollow[1]) < dist(hollow[0]) / 2, hollow
 
 
 def test_the_radar_toggles_from_the_keyboard_and_says_what_it_shows(browser, site):

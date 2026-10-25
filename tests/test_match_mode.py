@@ -145,7 +145,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     (www / "commentary" / "commentary.json").write_text(json.dumps({"format": 1, "voice": "test", "lines": [
         {"id": "c1", "t": 60.3, "t_end": 61.3, "text": "Crowmere break at pace",
          "audio": "c1.wav", "event": None},
-        {"id": "c2", "t": 61.8, "t_end": 62.4, "text": "Saved", "audio": "c2.wav", "event": None}]}))
+        {"id": "c2", "t": 61.8, "t_end": 62.4, "text": "Saved", "audio": None, "event": None}]}))
     manifest = json.loads((www / "commentary" / "manifest.json").read_text())
     (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
                                                                   "stadium": "stadium.wav"}))
@@ -422,6 +422,9 @@ def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optiona
     page.check("input[name=subs][value=on]")
     page.wait_for_selector("#captions:not([hidden])")
     assert page.inner_text("#captions") == "Crowmere break at pace"
+    # 62.28 s (match frame 1557, past the cut): a line not voiced (audio null) is captioned all the same
+    seek(page, 47)
+    page.wait_for_function("document.querySelector('#captions').textContent === 'Saved'")
     seek(page, 37)  # 61.5 s: between the lines, no subtitle left on screen
     page.wait_for_selector("#captions[hidden]", state="attached")
     assert page.get_attribute("body", "data-commentary") == ""
@@ -432,8 +435,21 @@ def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optiona
     page.context.close()
 
 
-def test_a_bundle_without_commentary_offers_no_audio_menu(browser, site):  # noqa: F811
+def test_audio_description_stays_reachable_from_the_big_screen_through_the_audio_menu(browser, site):  # noqa: F811
+    """No commentary in this bundle: the menu offers Stadium and the audio description persona, by
+    keyboard as by pointer, and no subtitles (they are the commentary's)."""
     page, errors = open_viewer(browser, site + "?bundle=match/")
-    assert page.is_hidden("#hud-audio") and page.is_hidden("#hud-volume")
+    assert page.is_visible("#hud-audio") and page.is_hidden("#hud-volume")
+    page.focus("#hud-audio")
+    page.keyboard.press("Enter")
+    assert page.is_visible("#audio-menu")
+    assert page.is_hidden("#track-commentary") and page.is_visible("#track-described")
+    assert page.is_hidden("input[name=subs][value=on]")
+    page.focus("input[name=track][value=described]")
+    page.keyboard.press("Space")
+    page.wait_for_function("document.body.dataset.persona === 'audio'")
+    page.keyboard.press("3")  # the persona keys stay the phone's
+    page.check("input[name=track][value=stadium]")
+    page.wait_for_function("document.body.dataset.persona === 'casual'")
     assert not errors
     page.context.close()
