@@ -2,6 +2,8 @@
 (docs/eval/highlights-plan.md, fixed before any of it was measured).
 
     reel(events, verdict)    the reel's moments in match time, and how many saves were left out
+    record(reel, ...)        each moment recorded from the footage: a still at the strike and a
+                             clip of its window, for the phone and the viewer to play
 
 - Every goal is in. A save is in when the ball beat a keeper's dive: its flight time
   T = d / v at most T_DIVE_S, d the distance from the strike to the centre of the goal it attacks
@@ -20,7 +22,11 @@ answer key. The errors in `verdict` are a summary of how wrong vision was on val
 from __future__ import annotations
 
 import math
+import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 
 PITCH_X, CENTRE_Y = 105.0, 34.0
 # Law 1: the penalty area is 16.5 m deep and reaches 16.5 m beyond each post (3.66 + 16.5 across
@@ -159,3 +165,46 @@ def reel(events: list[dict], verdict: Verdict | None = None) -> dict:
     return {"save_filter": verdict.save_filter,
             "labels": any(m is not None for m in verdict.margins.values()),
             "moments": moments, "saves_by_pace": [m["event"] for m in saves], "saves_left_out": left_out}
+
+
+# The recording's VP9 settings: the bundle's own video.webm's (ninety/e2e.py, write_footage), so a
+# clip plays wherever the footage does. Never H.264: its usual encoder, x264, is GPL (AGENTS.md).
+VP9 = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-deadline", "realtime", "-cpu-used", "8",
+       "-row-mt", "1", "-pix_fmt", "yuv420p"]
+DIR = "highlights"
+
+
+def _name(event_id: str) -> str:
+    """A file name from an event id: letters, digits, - and _ only."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", event_id)
+
+
+def record(reel: dict, timeline, images: list[Path], out: Path, encode: bool) -> dict:
+    """Records each moment from the clip's own images into out/highlights/: a still of the image at
+    the strike (`<event>.jpg`) and, with `encode` and ffmpeg there, its window as `<event>.webm`.
+    Each moment gets `recording`: the images it covers [first, end), their video times, the strike's
+    image and the files, relative to the bundle; a moment wholly outside the footage gets none.
+    `timeline` maps match time to the footage (ninety/match/timeline.py), across its cuts."""
+    fps, n = timeline.fps, len(images)
+    folder = out / DIR
+    can_encode = encode and shutil.which("ffmpeg") is not None
+    for m in reel["moments"]:
+        v0, v1 = timeline.to_video(m["clip"][0]), timeline.to_video(m["clip"][1])
+        first, end = max(0, math.floor(v0 * fps)), min(n, math.ceil(v1 * fps))
+        if end <= first:
+            m["recording"] = None
+            continue
+        shot = min(end - 1, max(first, math.floor(timeline.to_video(m["t"]) * fps)))
+        folder.mkdir(parents=True, exist_ok=True)
+        name = _name(m["event"])
+        shutil.copyfile(images[shot], folder / f"{name}.jpg")
+        clip = None
+        if can_encode:
+            clip = f"{DIR}/{name}.webm"
+            pattern = str(images[0].parent / "%05d.jpg")  # the clip's images, numbered from 0
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps),
+                            "-start_number", str(first), "-i", pattern, "-frames:v", str(end - first),
+                            *VP9, str(out / clip)], check=True)
+        m["recording"] = {"images": [first, end], "video_t": [round(first / fps, 2), round(end / fps, 2)],
+                          "shot_image": shot, "poster": f"{DIR}/{name}.jpg", "clip": clip}
+    return reel
