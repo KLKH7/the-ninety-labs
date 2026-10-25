@@ -2975,3 +2975,25 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
   and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
   phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 252. A test waits on the state it checks; one read of a screen is a race
+- **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
+  `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
+  top-level `await import('./mock')`. The other read each screen's clock once, from a DOM attribute
+  written each time a frame is drawn: on a loaded runner the phone read 0.5 s behind the big
+  screen (61.77 / 61.27 / 61.93). The clock check also had a gap: it passed a phone whose clock
+  did not advance between the big screen's once-a-second messages, so it read right once a
+  second.
+- **Rule:**
+  - A browser test waits for the state it checks (an element visible, a ready flag, a status's
+    state), never a single read after an action, and never a longer timeout in its place.
+  - A value a screen writes per frame is read after a fresh frame.
+  - A sync check settles for at most one sync period (the sender's own interval, cited), keeps the
+    product's bar, then requires the next samples to stay in step. A phone constantly off, or one
+    whose clock stops between messages, still fails.
+- **Check:** `tests/test_phone.py::test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap`
+  waits for `#mockbar`. `assert_in_step` (fresh frames, `SETTLE_S`, then `STEPS` more samples)
+  fails `test_the_phone_clock_stays_within_tolerance_of_the_laptop` and
+  `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
+  shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
+  messages (mutant runs, #341 and its follow-up).
