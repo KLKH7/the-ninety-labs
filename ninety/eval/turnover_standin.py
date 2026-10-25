@@ -31,6 +31,8 @@ from ninety.vision import track as tr
 from ninety.vision.track import BallPoint
 from ninety.vision.tracked_frames import player_id
 
+FPS = tr.FPS
+
 ROOT = Path(__file__).resolve().parents[2]
 SET = ROOT / "docs" / "eval" / "possession-set.json"  # written by #299 (ninety/eval/possession_set.py)
 # The players' measured median position error on ours-v2's validation clips (0.221 m,
@@ -123,9 +125,18 @@ def observations(frames: list[dict], sigma: float, broadcast: bool, seed: int = 
 
 
 def window(match: Path, start: float, seconds: float) -> tuple[list[dict], list[dict]]:
-    """The window's frames and events from a simulated match, as a clip cut from it holds them."""
-    frames = [f for f in read_jsonl(match / "frames.jsonl") if start <= f["t"] < start + seconds - 1e-9]
-    lo, hi = frames[0]["frame"], frames[-1]["frame"]
+    """The window's frames and events from a simulated match, as a clip cut from it holds them
+    (whole frames from the start, as the possession set's windows). Only the window's lines of the
+    match's frames.jsonl are parsed: each starts with its frame number, written in order."""
+    lo, hi = round(start * FPS), round((start + seconds) * FPS) - 1
+    frames = []
+    with open(match / "frames.jsonl") as fh:
+        for line in fh:
+            k = int(line[len('{"frame": '):line.index(",")])
+            if k > hi:
+                break
+            if k >= lo:
+                frames.append(json.loads(line))
     events = [e for e in read_jsonl(match / "events.jsonl") if lo <= e["frame"] <= hi]
     return frames, events
 
@@ -154,7 +165,8 @@ def diagnostics(truth: list[dict], detected: list[dict], report: dict, frames: l
                            if any(p["type"] == "pass" and p["frame"] == d["frame"] for p in detected))
     true_tk = [e for e in truth if e["type"] == "tackle"]
     found_tk = {matched[d["id"]] for d in tk if d["id"] in matched}
-    poke = {(e["frame"], e["receiver"]) for e in truth if e["type"] == "deflection"}
+    # poke() knocks the ball off the holder: the engine writes his deflection at the tackle's frame.
+    poke = {(e["frame"], e["player"]) for e in truth if e["type"] == "deflection"}
     missed_kind = {"knocked_loose": 0, "taken_off_a_dribble": 0}
     for e in true_tk:
         if e["id"] not in found_tk:

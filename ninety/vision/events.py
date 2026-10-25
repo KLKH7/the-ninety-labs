@@ -29,6 +29,8 @@ Events, from one spell to the next:
   once in PRESSURE_REPEAT_S for each side, as the engine writes it (docs/eval/pressure-plan.md);
 - a spell that ends with the ball leaving slower than any pass and an opponent at it: a tackle,
   won or lost by the side of the next spell (docs/eval/tackle-plan.md).
+Of these three, only pressure is written by default (WRITTEN): interceptions and tackles missed
+their plans' bar on validation, and are built for measuring (`detect(..., kinds=TURNOVERS)`).
 
 A broadcast cuts away from a long dead ball to its restart (ninety/render/edit.py): the frame
 numbers jump there. Nothing seen before a cut is linked to anything after it: a spell before it and
@@ -141,9 +143,11 @@ ARRIVE_MPS = 6.0
 # A score at most this is held by the fact-checker (factcheck.MIN_CONFIDENCE is 0.5): a tackle whose
 # two players the tracker did not keep through the contact is held there.
 HELD = 0.49
-# The new kinds `detect` writes by default; each plan's bar decides whether its kind is in.
+# The new kinds `detect` writes by default; each plan's bar decides whether its kind is in. On the
+# validation stand-in (docs/eval/turnovers-dev.json, M1 with noise) pressure met it; interceptions
+# (precision 13 of 99) and tackles (recall 1 of 44) did not, so they are built but not written.
 TURNOVERS = ("interception", "pressure", "tackle")
-WRITTEN = TURNOVERS
+WRITTEN = ("pressure",)
 
 
 @dataclass(frozen=True)
