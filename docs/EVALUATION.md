@@ -536,8 +536,16 @@ Describer model's line goes through the same gate; the Personalizer asks for no 
 and holds one written anyway. A shape fact carries the side confidence of the least sure player it
 was computed from (1.0 from ground truth), and the same rule gates it: a team claim on an unsure one
 is held, and the Describer's shape line says "one side". Tracked frames carry no side confidence
-yet, so on the live path every shape line says "one side" until they do. **Known residual:** a track id (`a-t9`) encodes the side by its
-letter, from the same decision; it is not held, as naming the track is how the agents say who.
+yet, so on the live path every shape line says "one side" until they do. A track id (`a-t9`)
+encodes the side by its letter, from the tracker's vote. The agents keep it, as naming the track is
+how they say who, but no screen reads a club from it unless the bundle vouches for that track
+(`sides_known`, lesson 245): otherwise the viewer and the phone say "a player". An event's own side
+is named on the phone only above the same threshold, which the bundle carries
+(`min_team_confidence`), and a goal counts for a club's score only on a side told surely
+(`condensed.build`). **Known residual:** the radar still colours each dot by the tracker's vote, and
+its screen-reader summary names a dot's club from it; the phone's answer pictures name clubs from
+the insight facts' own team, gated by those tools' confidence, not by this threshold; and the team
+stats count each detected event for the side the tracker voted.
 
 **Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
 is looked at again: the fact-checker re-runs R3's event detection (`ninety.vision.events.detect`,
