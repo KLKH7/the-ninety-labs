@@ -20,7 +20,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, offside, overloads, pass_options, roles, shape, style
+from ninety.intel import (
+    ball_share,
+    counter_press,
+    line_breaks,
+    offside,
+    overloads,
+    pass_options,
+    roles,
+    shape,
+    style,
+)
 from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
@@ -94,6 +104,9 @@ class MatchInsights:
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
         facts["one_two"] = style.one_twos(facts["pass"])
+        # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
+        facts["possession"] = ball_share.possession_rows(events)
+        facts["territory"] = ball_share.territory_rows(f.frames)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = [
             {
@@ -281,6 +294,21 @@ class MatchInsights:
         if team is not None:
             out = [r for r in out if r["team"] == team]
         return {"facts": out, "summary": []}
+
+    def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each club's share of the passes over the minutes, as broadcasters count possession."""
+        return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+
+    def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Where the ball was over the minutes: each club's share with it in its attacking third."""
+        return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
+
+    def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
+        team = self.team(club)
+        got = fn(self.facts.get(kind, ()), minute_from, minute_to)
+        clubs = self.fixture.clubs
+        summary = [{**r, "club": clubs[t], "clubs": clubs} for t, r in got.items() if team in (None, t)]
+        return {"facts": [], "summary": summary}
 
     def style(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """How each club played over the minutes: its passing channels, its width beside the other
