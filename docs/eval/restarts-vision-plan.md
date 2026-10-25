@@ -64,3 +64,14 @@ branch) where this uses the players' 1.26 m; its "still" is 3 frames under `even
 where this asks 1.0 s; it requires a dead ball first (the ball over the goal line, or a cut of 4 s
 or more) and allows the ball fetched from the net to read as a spell; it does not check which side
 kicks off. Neither is changed here to match the other before both are measured.
+
+## Known limits (independent audit, before any validation score)
+
+- An opponent inside the circle nearer the ball than the taker (a Law 8 offence, or a misread kit)
+  names the wrong side; the side is still checked by the grader's sided score.
+- A kick is seen only if the ball is sighted again within `SPELL_GAP_FRAMES` (0.24 s) of the still
+  spell: a kicked ball lost to blur or a bad camera fit for longer drops the kick-off.
+- A ball creeping under 1.26 m in a second reads as still; the spot and Law 8 checks carry it.
+- Home defends x = 0 in both halves, as the engine plays it today (GROUNDING L3, partial); when
+  the teams change ends, the halves here change with them.
+These are recorded, not tuned: the validation score says how often each happens.

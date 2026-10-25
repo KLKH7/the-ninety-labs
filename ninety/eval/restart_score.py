@@ -68,7 +68,7 @@ def truth_kickoffs(clip: Path) -> list[dict]:
 
 def match(truth: list[dict], detected: list[dict], sided: bool) -> list[tuple[dict, dict]]:
     cands = sorted((abs(d["t"] - t["t"]), i, j) for i, t in enumerate(truth) for j, d in enumerate(detected)
-                   if d["type"] == "kickoff" and abs(d["t"] - t["t"]) <= WINDOW_S + EPS
+                   if abs(d["t"] - t["t"]) <= WINDOW_S + EPS
                    and (not sided or d["team"] == t["team"]))
     used_t, used_d, pairs = set(), set(), []
     for _, i, j in cands:
