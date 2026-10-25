@@ -124,3 +124,14 @@ def test_voicing_the_bundle_points_each_call_at_its_audio(tmp_path):
     assert shot["audio"].startswith("speech/") and (tmp_path / shot["audio"]).is_file()
     assert lines["Goal! Lisbon score!"]["audio"] is None
     assert [k for k in ("t", "t_end", "text", "audio", "event") if k not in shot] == []
+
+
+@pytest.mark.parametrize(("restart", "sure", "unsure"), [
+    ("corner", "Corner to London.", "A corner."), ("goal_kick", "Goal kick to London.", "A goal kick."),
+    ("throw_in", "London throw.", "A throw-in."), ("free_kick", "Free kick to London.", "A free kick."),
+    ("penalty_kick", "Penalty to London!", "A penalty!"), (None, "A set piece.", "A set piece."),
+])
+def test_a_restart_names_the_side_taking_it_only_when_sure(restart, sure, unsure):
+    # vision's set piece (#325): `team` is the side taking it; a null side confidence is unsure.
+    assert texts([ev("v1", 10.0, "set_piece", side=0.99, restart=restart)]) == [sure]
+    assert texts([ev("v1", 10.0, "set_piece", side=None, restart=restart)]) == [unsure]

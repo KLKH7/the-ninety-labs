@@ -44,6 +44,15 @@ GAP_S = 1.0  # design: the silence a commentator leaves between calls, so the cr
 # it went over the touchline, where Law 15 restarts play with a throw-in.
 TOUCHLINE_M = 1.0
 SHOT_SAID = {"on_target": "on target", "off_target": "wide", "blocked": "blocked"}
+# A detected set piece's restart (schemas/match_event.schema.json `restart`), with its taker's side
+# and without it.
+RESTART_SAID = {
+    "corner": ("Corner to {side}.", "A corner."),
+    "goal_kick": ("Goal kick to {side}.", "A goal kick."),
+    "throw_in": ("{side} throw.", "A throw-in."),
+    "free_kick": ("Free kick to {side}.", "A free kick."),
+    "penalty_kick": ("Penalty to {side}!", "A penalty!"),
+}
 
 
 @dataclass(frozen=True)
@@ -98,7 +107,12 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
         over_touchline = event["y"] <= TOUCHLINE_M or event["y"] >= describe.PITCH_WIDTH_M - TOUCHLINE_M
         return "restart", ["It's gone out for a throw." if over_touchline else "It's gone out of play."]
     if kind == "set_piece":
-        return "restart", ["A set piece."]
+        # Which restart (vision's `restart`, #325): `team` is the side taking it, named only when sure.
+        said = RESTART_SAID.get(event.get("restart") or "")
+        if said is None:
+            return "restart", ["A set piece."]
+        sure, unsure = said
+        return "restart", [sure.format(side=side)] if side else [unsure]
     return None
 
 
