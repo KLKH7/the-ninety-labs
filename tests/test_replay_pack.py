@@ -74,3 +74,17 @@ def test_a_bundle_made_with_the_radar_match_mode_and_live_agents_packs(tmp_path)
         (b / name).write_text("{}\n")
     names = [p.relative_to(b).as_posix() for p in replay.members(b)]
     assert {"radar.json", "match.json", "agents.json"} <= set(names)
+
+
+def test_every_file_ninety_e2e_writes_is_one_the_pack_publishes(tmp_path):
+    # #328: the bundle gained commentary.json and the image build refused it. A real bundle, as
+    # ninety-e2e writes it, must pack, so the next file it adds is caught here, not in the image job.
+    from ninety import e2e
+    from tests.e2e_clip import write_clip
+
+    clip, detections, events = write_clip(tmp_path)
+    out = tmp_path / "bundle"
+    e2e.main([str(clip), "--out", str(out), "--detections", str(detections), "--frames",
+              "--events-file", str(events)])
+    files = set(json.loads((out / "manifest.json").read_text())["files"])
+    assert "commentary.json" in files and files <= {p.name for p in replay.members(out)}

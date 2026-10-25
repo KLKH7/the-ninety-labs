@@ -29,6 +29,7 @@ from pathlib import Path
 # Everything a format-1 bundle may hold (ninety/e2e.py): the viewer reads these and nothing else.
 FILES = {"manifest.json", "cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json",
          "video.webm", "audio.json", "description.vtt", "speech.json",
+         "commentary.json",  # the commentary toggle's calls (ninety/speech/commentary.py)
          "radar.json", "match.json",  # --tracked and --match (ninety/radar.py, ninety/condensed.py)
          "agents.json"}  # --agents live: every model answer, for audit
 # Folders of footage and speech: JPEG frames (--frames), the audio description's spoken lines
