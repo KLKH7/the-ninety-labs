@@ -1,6 +1,12 @@
 # /work on the shared render pod
 
-This is a CPU pod (32 vCPU, 64 GB), rented by Kian and deleted when the work is done. **No secrets
+> **Reusing this tooling on a rented machine:** it predates lesson 247 and has no host-side cap and
+> no continuous copy-off. Before any reuse, start a detached timer on the host that deletes it at the
+> cap as the very first command (before `setup.sh`'s apt), and copy each finished clip off every
+> couple of minutes from the start; state both in the plan (lesson 247, docs/PLAN.md risks).
+
+This was a CPU pod (32 vCPU, 64 GB) for the dry run; the dataset itself was rendered on a GPU pod
+(see docs/eval/dataset-v2-freeze.json). It is rented by Kian and deleted when the work is done. **No secrets
 here:** no keys, SAS links, `.env` files or tokens. Clone the public repo over https, and copy results
 back over SSH to your own machine.
 

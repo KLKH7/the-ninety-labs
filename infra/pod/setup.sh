@@ -10,6 +10,8 @@
 # (infra/pod/render.py and the plan) comes from [driver ref], default main, into /work/render/driver.
 # It also lays out /work for the other sessions that share the pod (/work/README, /work/bin/reserve).
 # No secret is needed here: the repository is public. Upload links are given only to `upload`.
+# NOT HERE: a host-side cap (the host deleting itself at a deadline) and continuous copy-off. This script
+# predates lesson 247; start both before running it on a paid machine (infra/pod/README-work.md).
 set -euo pipefail
 SHA=${1:?usage: setup.sh <render commit sha> [driver ref]}
 DRIVER_REF=${2:-main}
