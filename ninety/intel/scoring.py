@@ -6,8 +6,9 @@ shot outcomes (ninety/vision/events.py, ninety/vision/outcomes.py; #271): nothin
   attacks one end all match (home toward x = PITCH_X, the engine's convention; it does not change
   ends). A goal whose detected side disagrees with its end, or whose detection confidence is under
   the fact-checker's event gate (factcheck.MIN_CONFIDENCE), is in doubt (an own goal, or a misread),
-  so the score has bounds and is said only when no goal is in doubt: a wrong score on screen is the
-  one mistake a fan never forgives.
+  so the score has bounds. It is never said (Kian, Oct 26, option B): vision finds some goals and
+  misses others, so a count of them would contradict the broadcast's scorebug; a score question
+  names each goal it spotted instead.
 - The **scorer** is the goal's shooter (`player`), named as the role gate allows (I6), else by his
   position or club.
 - An **assist** is the final pass to the scorer before he scored (Opta's assist, I24): the detected
@@ -98,8 +99,8 @@ def saves(events: Iterable[Mapping]) -> list[dict]:
 
 
 def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]) -> dict:
-    """The score after `minute_to`: each club's goals, with bounds from goals of unknown side; said
-    only when no goal is in doubt."""
+    """The score after `minute_to`: each club's goals, with bounds from goals of unknown side, for
+    code's bookkeeping only: never said, never confident (option B)."""
     window = [g for g in goal_rows if g["minute"] <= minute_to]
     unknown = sum(not g["side_known"] for g in window)
     n = {t: sum(g["side_known"] and g["team"] == t for g in window) for t in TEAMS}

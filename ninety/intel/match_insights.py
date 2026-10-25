@@ -371,8 +371,8 @@ class MatchInsights:
         return {"facts": [], "summary": summary}
 
     def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """The score after minute_to (said only when no goal's side is in doubt), each goal up to then
-        with its scorer and assist, oldest first, and each club's saves over the minutes."""
+        """Each goal up to minute_to with its scorer and assist, oldest first, and each club's saves
+        over the minutes; the score's own counts are bookkeeping, never said (option B)."""
         team = self.team(club)
         clubs = self.fixture.clubs
         goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]

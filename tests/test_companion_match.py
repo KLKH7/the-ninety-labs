@@ -936,13 +936,34 @@ def test_the_aired_text_is_the_checked_sentence_exactly():
     assert r.source == "model" and r.answer.text == r.answer.text.strip()
 
 
-def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline():
-    # Kian, Oct 26 (option B): the scorebug shows the score; the answer lists the goals vision spotted.
+def _goal(gid, minute, side_known=True, confidence=0.9):
+    return {"id": f"goal:{gid}", "kind": "goal", "team": "home", "club": "London Athletic", "minute": minute,
+            "t": 60.0 * minute - 30.0, "event": gid, "event_confidence": confidence,
+            "side_known": side_known, "confident": side_known and confidence >= 0.5}
+
+
+def _score_answer(goals, question="What's the score?"):
     mi = insights()
-    mi.facts["goal"] = [{"id": "goal:v90", "kind": "goal", "team": "home", "club": "London Athletic",
-                         "minute": 23, "t": 1350.0, "event": "v90", "event_confidence": 0.9,
-                         "side_known": True, "confident": True}]
-    r = asyncio.run(companion.answer_match(Question("s1", None, "What's the score?", 30 * 60.0), mi))
-    assert "London Athletic scored in minute 23." in r.answer.text
-    assert "scorebug" in r.answer.text and not re.search(r"\b\d+\s*[-–]\s*\d+\b|had scored \d", r.answer.text)
-    assert r.answer.headline in ("Goals spotted by vision", "See the scorebug")
+    mi.facts["goal"] = goals
+    return asyncio.run(companion.answer_match(Question("s1", None, question, 80 * 60.0), mi)).answer
+
+
+@pytest.mark.parametrize("goals, said, minutes", [
+    ([_goal("v90", 23)], "London Athletic scored in minute 23.", {"23"}),  # spotted and placed
+    ([_goal("v91", 43, side_known=False)], "a goal in minute 43 too, without telling whose", {"43"}),
+    ([_goal("v92", 43, confidence=0.3)], "no goal it can vouch for", set()),  # under the detection gate
+    ([], "no goal it can vouch for", set()),
+    ([_goal("v90", 23), _goal("v91", 61, side_known=False)], "scored in minute 23.", {"23", "61"}),
+])
+def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, said, minutes):
+    # Kian, Oct 26 (option B): the scorebug shows the score; the answer names the goals vision spotted.
+    a = _score_answer(goals)
+    assert a.text.startswith(companion.SCORE_POINTER) and said in a.text, a.text
+    assert set(re.findall(r"\d+", a.text)) == minutes  # the only numbers are the goals' minutes
+    assert a.metric is None and a.value is None  # never the score's counts as the answer's number
+    assert a.headline in ("Goals spotted by vision", "See the scorebug")
+
+
+def test_who_is_winning_is_headed_by_the_scorebug_not_a_scorer():
+    a = _score_answer([_goal("v90", 23)], "Who's winning?")
+    assert a.headline in ("Goals spotted by vision", "See the scorebug") and a.metric is None
