@@ -166,7 +166,7 @@ def fake_fits(monkeypatch, unsure: bool):
 
     def fit_match_shots(points, w, h, starts, gantry):
         ok = not unsure
-        return ([pitch.ShotCheck(GANTRY, 0.0, len(points), len(points) if ok else 0, unsure)],
+        return ([pitch.ShotCheck(OWN, 3.0, len(points), len(points) if ok else 0, unsure)],
                 [pitch.FrameFit(fit.view, 0.5, 100, ok)] * len(points))
 
     monkeypatch.setattr(pitch, "fit_shots", fit_shots)
@@ -181,12 +181,14 @@ def run(gantry):
 
 
 HEADER = ("gantry", "match_gantry", "shots")
+OWN = (GANTRY[0] + 3.0, GANTRY[1], GANTRY[2])  # the shot's own gantry, not the match's
 
 
 def test_observe_through_a_one_clip_match_gantry_writes_the_same_frames(monkeypatch):
     fake_fits(monkeypatch, unsure=False)
     before, after = run(None), run(GANTRY)
     assert after[0]["match_gantry"] is True and after[0]["shots"][0]["unsure"] is False
+    assert after[0]["gantry"] == list(GANTRY) and after[0]["shots"][0]["gantry"] == list(OWN)
     strip = [{k: v for k, v in r.items() if k not in HEADER} for r in after]
     assert strip == [{k: v for k, v in r.items() if k not in HEADER} for r in before]
 
@@ -201,7 +203,7 @@ def test_observe_holds_every_frame_of_an_unsure_shot(monkeypatch):
 
 @pytest.mark.parametrize("over, ok_match, unsure", [
     (0.0, 0, False),  # at the tolerance is within it
-    (0.01, 0, True),  # beyond it, and the match gantry explains fewer frames
+    (0.01, 1, True),  # beyond it, and the match gantry explains fewer frames
     (0.01, 2, False),  # beyond it, but a tie goes to the match gantry
 ])
 def test_unsure_is_beyond_the_tolerance_and_explained_worse_by_the_match_gantry(monkeypatch, over,
@@ -231,3 +233,23 @@ def test_the_finalist_gantries_are_scored_on_the_given_frames(monkeypatch):
     given = [np.zeros((n, 2)) for n in (90, 80)]
     assert pitch.find_gantry(top + given, W, H)[0] == 37.5
     assert pitch.find_gantry(top + given, W, H, score=given)[0] == 67.5
+
+
+def test_a_given_gantry_is_used_and_none_is_searched_for(monkeypatch):
+    def find_gantry(*a, **k):
+        raise AssertionError("searched for a gantry it was given")
+
+    monkeypatch.setattr(pitch, "find_gantry", find_gantry)
+    g, fits = pitch.fit_clip([np.zeros((5, 2))] * 2, W, H, gantry=GANTRY)
+    assert g == GANTRY and not any(f.ok for f in fits)
+
+
+def test_a_shot_too_bare_for_its_own_gantry_is_not_marked(monkeypatch):
+    def fit_clip(points, w, h, anchor_every=25, gantry=None):
+        if gantry is None:
+            raise ValueError("no frame shows enough pitch markings to place the camera")
+        return gantry, [pitch.FrameFit(None, None, 5, False) for _ in points]
+
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    checks, fits = pitch.fit_match_shots([np.zeros((5, 2))] * 2, W, H, [0], GANTRY)
+    assert checks == [pitch.ShotCheck(None, None, 0, 0, False)] and not any(f.ok for f in fits)
