@@ -150,3 +150,22 @@ Four changes, none a fitted threshold:
 
 The validation clips are re-scored with this, the reliability table reported again, and then the
 commit is frozen and the test split scored once.
+
+## Amendment 4 (Oct 25, before any re-score of validation and before the test split is rendered): the kick-off after a ball over a goal line
+
+Found on the demo match (seed 8080, development only, never a measurement): a penalty into the roof
+of the net. Placed on the ground, the high ball lands 6 to 9 m behind the line, past the net's depth,
+so rules 1 to 3 cannot see it; its strike's ground track met the goal line 0.3 m outside the shot
+rule's margin, so no shot was read, and amendment 2's restart rule, which runs only after a detected
+shot, never looked. The kick-off that followed (Law 8: after a goal the side that conceded kicks off)
+was in the clip, after a cut. On validation this cannot be seen: each of the 16 goal clips ends 5 to
+7 s after its goal, before any kick-off.
+
+The change, none of it a threshold: amendment 2's rule is also applied to every run of the ball over
+a goal line (`events.out_of_play`) that rules 1 to 3 do not make a goal. When the first restart seen
+after it, before the next strike, is a kick-off (amendment 2's test), it is a goal for the side
+attacking that goal (an own goal counts for it too, Law 10), timed at the first frame over the line,
+at confidence `kickoff` (the line evidence 0, as amendment 2 has it when the net is not seen); the
+last spell of that side before it becomes the shot, outcome goal. A goal kick or a corner first
+leaves it out of play, as now. Known risk, reported not tuned: on a condensed match a cut can skip
+the goal kick and land on the next half's kick-off.
