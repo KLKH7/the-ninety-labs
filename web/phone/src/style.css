@@ -307,6 +307,8 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .scoreline { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .scorers { margin: 14px 0 0; font-size: 15px; color: var(--text); }
 .scorers::before { content: "⚽︎"; margin-right: 8px; }
+.scorers.none, #teams-note { color: var(--text-2); }
+.scorers.none::before, #teams-note::before { content: none; }
 
 .live-tabs { display: flex; justify-content: space-around; padding: 18px 8px 10px; position: sticky; top: 0; z-index: 2; background: #000; }
 .live-tabs button { min-height: 44px; padding: 0 12px; border: 0; background: none; font-size: 20px; font-weight: 600; color: var(--text-2); }
@@ -759,3 +761,67 @@ ion-modal { --backdrop-opacity: 0.45; }
 .technical summary::after { content: " ›"; }
 .technical[open] summary::after { content: " ⌄"; }
 .stat-row .within { color: var(--text-3); font-size: 13px; }
+.chip[aria-disabled="true"] { opacity: 0.35; }
+.stat-row.empty .bar { background: rgba(118, 118, 128, 0.24); }
+
+/* ---- Density (Kian, Oct 24: "all pages look very blank"): one scroll packed with cards, as Apple
+   Sports and FotMob lay a match out. Each Live card is a glance with "See all" to its section. */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.see-all { border: 0; background: none; padding: 0; min-height: 44px; font: inherit; font-size: 15px; color: var(--text-2); cursor: pointer; }
+.see-all::after { content: " ›"; }
+.moment-rows { list-style: none; margin: 0; padding: 0; }
+.moment-row { display: grid; grid-template-columns: 40px 8px 1fr; align-items: baseline; gap: 8px; padding: 10px 0; border-bottom: 0.5px solid var(--hairline); font-size: 16px; }
+.moment-row:last-child { border-bottom: 0; }
+.moment-row .min { color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 15px; }
+.moment-row::before { content: ""; grid-column: 2; grid-row: 1; width: 8px; height: 8px; border-radius: 4px; background: var(--home); align-self: center; }
+.moment-row.away::before { background: var(--away); }
+.moment-row.neutral::before { background: var(--text-3); }
+.moment-row .min { grid-column: 1; grid-row: 1; }
+.moment-row .text { grid-column: 3; grid-row: 1; }
+.moment-row.goal .text { font-weight: 600; }
+.teaser-rows { display: grid; gap: 4px; }
+.teaser { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 8px 0; }
+.teaser .crest { grid-row: 1 / span 2; width: 28px; height: 28px; display: inline-flex; }
+.teaser .crest svg { width: 100%; height: 100%; }
+.teaser-name { font-size: 17px; font-weight: 600; }
+.teaser-shirts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.teaser-shirts b { min-width: 24px; height: 24px; padding: 0 4px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--home); color: #fff; font-variant-numeric: tabular-nums; }
+.teaser.away .teaser-shirts b { background: var(--away); }
+#live-shots .half-pitch { display: block; width: 100%; height: auto; max-height: 200px; }
+#stats-territory .strip { display: block; width: 100%; height: 72px; }
+.full-pitch { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 12px; background: var(--pitch); }
+.full-pitch .pitch-lines { fill: none; stroke: rgba(255, 255, 255, 0.5); stroke-width: 0.3; }
+.full-pitch .link { stroke: rgba(255, 255, 255, 0.7); stroke-linecap: round; }
+.full-pitch .node { stroke: #fff; stroke-width: 0.5; }
+.full-pitch .node.home { fill: var(--home); }
+.full-pitch .node.away { fill: var(--away); }
+.full-pitch .node-n { fill: #fff; font-size: 2.6px; font-weight: 700; text-anchor: middle; }
+.stat-list { list-style: none; margin: 0; padding: 0; }
+.stat-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; min-height: 44px; border-bottom: 0.5px solid var(--hairline); font-size: 16px; }
+.stat-list li:last-child { border-bottom: 0; }
+.stat-list .dot { width: 8px; height: 8px; border-radius: 4px; background: var(--home); }
+.stat-list li.away .dot { background: var(--away); }
+.stat-list li:not(.home):not(.away) { grid-template-columns: 1fr auto; }
+.stat-list .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.top-list + .top-list { margin-top: 14px; }
+.top-list .caps { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; }
+/* Ask: the starter grid on an empty conversation; then "Recent" above the answers. */
+.ask-start { padding: 16px 16px 8px; }
+.ask-start[hidden], .recent-title[hidden] { display: none; }
+.chip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.chip-grid .chip { white-space: normal; text-align: left; min-height: 64px; padding: 12px 14px; border-radius: 16px; line-height: 1.25; }
+.recent-title { padding: 12px 16px 0; margin: 0; }
+/* Story: a play is one dense row (time, then the line), as Apple Sports' play-by-play; Scout
+   moments keep their cards. */
+.insights { gap: 6px; }
+.insight.play { padding: 10px 16px 10px 22px; border-radius: 16px; }
+.insight.play.away { padding: 10px 22px 10px 16px; }
+.insight.play::before { top: 10px; bottom: 10px; }
+.insight.play .story-body { display: grid; grid-template-columns: 52px 1fr; align-items: baseline; column-gap: 8px; }
+.insight.play .story-body > p:first-of-type { grid-column: 2; grid-row: 1; font-size: 16px; }
+.insight.play .when-line { grid-column: 1; grid-row: 1; margin: 0; font-size: 15px; display: block; }
+.insight.play .tally { display: block; font-weight: 600; color: var(--text); }
+.ask-start #ask-players-title { margin-top: 22px; }
+.fine-note { margin: 8px 0 0; font-size: 13px; color: var(--text-2); }
+#stats-period[hidden] { display: none; }
+.fine-note[hidden] { display: none; }

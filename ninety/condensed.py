@@ -103,6 +103,20 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
     return out
 
 
+def cut_between(timeline: Timeline):
+    """Whether the broadcast cut between match times t0 and t1: they are in different segments."""
+    fps = timeline.fps
+
+    def seg(t: float) -> int:
+        i = 0
+        for n, s in enumerate(timeline.segs):
+            if s.frame <= t * fps + 1e-6:
+                i = n
+        return i
+
+    return lambda t0, t1: seg(t0) != seg(t1)
+
+
 def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None) -> dict:
     """match.json for a clip (its clip.json) and its detected events; `verdict` is what the
     highlights measurement decided (ninety/highlights.py), none until it has run."""
@@ -123,5 +137,5 @@ def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | Non
         "chapters": chapters(timeline, sure),
         "goals": goals,
         "stats": stats,
-        "highlights": highlights.reel(sure, verdict),
+        "highlights": highlights.reel(sure, verdict, cut_between(timeline)),
     }

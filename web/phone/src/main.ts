@@ -12,12 +12,11 @@ import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as descri
 import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
-import londonCrest from "./crests/london-athletic.svg?raw";
-import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
+import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -392,7 +391,12 @@ async function loadBundle() {
     const m = (await get("manifest.json")) as BundleManifest;
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
-    Object.assign(teams, teamNames(m.teams));
+    // A bundle that does not name both clubs is not given the demo's: neutral sides, said so.
+    // (teamNames hands back DEFAULT_TEAMS itself only when it falls back.)
+    const named = teamNames(m.teams);
+    const confirmed = named !== DEFAULT_TEAMS;
+    Object.assign(teams, confirmed ? named : { home: "Home", away: "Away" });
+    $("teams-note").hidden = confirmed;
     setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
     minTeamConfidence = typeof m.min_team_confidence === "number" ? m.min_team_confidence : null;
     showTeams();
@@ -425,6 +429,7 @@ async function loadBundle() {
       if (e.confident !== false) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
     }
     $("match-card").hidden = !state.match;
+    renderChips(); // the Ask grid's player questions come from the match's numbers
   } catch {
     // The minimap feed still draws the radar; only the cuts and the match are missing.
   }
@@ -566,8 +571,8 @@ function averagePositions(): Map<string, [number, number]> {
 /** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
  * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  if (club === "London") return londonCrest;
-  if (club === "Lisbon") return lisbonCrest;
+  const own = crestOf(club);
+  if (own) return own;
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
@@ -584,6 +589,12 @@ function spot(side: "home" | "away", x: number, y: number): string {
   const flank = z.includes("on the left") ? "Left" : z.includes("on the right") ? "Right" : "Centre";
   return `${flank} · ${depth}`;
 }
+
+const POSITION_WORDS: Record<string, string> = {
+  GK: "Goalkeeper", RB: "Right back", CB: "Centre back", LB: "Left back", RWB: "Right wing-back", LWB: "Left wing-back",
+  DM: "Defensive midfielder", CM: "Centre midfielder", AM: "Attacking midfielder", RM: "Right midfielder", LM: "Left midfielder",
+  RW: "Right winger", LW: "Left winger", ST: "Striker", CF: "Centre forward",
+};
 
 function renderRoster(roster: string[]) {
   const avg = averagePositions();
@@ -602,11 +613,14 @@ function renderRoster(roster: string[]) {
     num.textContent = sheet?.number !== undefined ? String(sheet.number) : unnamed ? "" : shirt(id);
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
+    // A sheet player with a shirt but no name is his position in words ("Goalkeeper"), never
+    // "London 1" beside a "1" already in the number column.
+    const roleOnly = !!sheet && !sheet.name && !!sheet.position;
+    name.textContent = roleOnly ? POSITION_WORDS[sheet!.position!] ?? sheet!.position! : unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
     // Apple Sports' line-up: the position after the name, quiet ("GK"); from the team sheet only.
     const where = document.createElement("span");
     where.className = sheet?.position ? "where pos" : "where";
-    where.textContent = sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
+    where.textContent = roleOnly ? "" : sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
     b.append(num, name, where);
     b.setAttribute("aria-label", playerName(id));
     if (at) {
@@ -957,6 +971,9 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
+    $("so-far-box").hidden = true;
+    $("heat-box").hidden = true;
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
@@ -1005,6 +1022,8 @@ async function refreshCard(force = false) {
 }
 
 function showCard(c: PlayerCard) {
+  $("so-far-box").hidden = false;
+  $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
@@ -1075,13 +1094,21 @@ function showInvolved(id: string, t: number) {
 
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  const others = rosterIds().filter((o) => o !== id);
+  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
+  const side = { home: 0, away: 0 };
+  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
+  const others = rosterIds()
+    .filter((o) => o !== id)
+    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    .filter((o) => ++side[team(o)] <= 11);
+  $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
     ...others.map((o) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
+      b.dataset.player = o;
       b.textContent = playerName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
@@ -1095,9 +1122,12 @@ async function compare(a: string, b: string) {
   let cb: PlayerCard;
   try {
     [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
-  } catch (e) {
-    $("compare-rows").hidden = false;
-    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+  } catch {
+    // No numbers for one of them yet: nothing is drawn, and that player's chip says so quietly.
+    $("compare-rows").hidden = true;
+    const chip = $("compare-chips").querySelector<HTMLButtonElement>(`[data-player="${b}"]`);
+    chip?.setAttribute("aria-disabled", "true");
+    chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
   const rows: [string, number, number, number][] = [
@@ -1166,11 +1196,35 @@ function chip(q: string, onTab: Tab | null) {
 /** Questions this fan has already asked: never suggested back to them. */
 const asked = new Set<string>();
 
+/** An empty conversation shows the starter grid instead of the composer's chips; after the first
+ * answer, the answers under "Recent" and the chips (or an answer's follow-ups) above the composer. */
+function syncAsk() {
+  const any = $("answers").children.length > 0;
+  $("ask-start").hidden = any;
+  $("recent-title").hidden = !any;
+  if (!any) $("ask-chips").hidden = true;
+  else if ($("ask-chips").dataset.started !== "1") {
+    $("ask-chips").dataset.started = "1";
+    $("ask-chips").hidden = false;
+  }
+}
+new MutationObserver(syncAsk).observe($("answers"), { childList: true });
+syncAsk();
+
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
+  // An empty conversation opens on a grid of questions (never a blank page), then the answers.
+  $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
+  // And about the players most in the game (the Scout's per-player numbers), when there are any.
+  const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
+  const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
+  const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
+  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
@@ -1780,6 +1834,32 @@ function storyItem(team: "home" | "away" | null, text: string, t: number): { li:
   return { li, body };
 }
 
+/** Live's Key moments: the newest goals and Scout moments, a minute and a line each (Apple Sports'
+ * key plays); "See all" opens Story. Hidden until there is one. */
+function renderKeyMoments(plays: DetectedEvent[]) {
+  type Moment = { t: number; team: "home" | "away" | null; text: string; goal: boolean };
+  const goals: Moment[] = plays
+    .filter((e) => e.type === "shot" && e.outcome === "goal")
+    .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })); // a club's colour only on a side told surely
+  const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
+  const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
+  $("key-moments").hidden = moments.length === 0;
+  $("key-rows").replaceChildren(
+    ...moments.map((m) => {
+      const li = document.createElement("li");
+      li.className = `moment-row ${m.team ?? "neutral"}${m.goal ? " goal" : ""}`;
+      const min = document.createElement("span");
+      min.className = "min";
+      min.textContent = `${momentum.minuteOf(m.t)}′`;
+      const text = document.createElement("span");
+      text.className = "text";
+      text.textContent = m.text;
+      li.append(min, text);
+      return li;
+    }),
+  );
+}
+
 function renderInsights() {
   renderJustNow();
   // Apple Sports' play-by-play: one card per play, newest first, the time under the sentence, the
@@ -1789,6 +1869,7 @@ function renderInsights() {
   const now = viewTime();
   const plays = playsUpTo(now);
   playsShown = plays.length;
+  renderKeyMoments(plays);
   const key = list.dataset.mode === "key";
   const score = (t: number) => (state.match ? scoreAt(state.match, t) : null);
   type Row = { t: number; el: HTMLLIElement };
@@ -1880,15 +1961,18 @@ function showMatch(t: number) {
   // when the detection names no player, or "Goal 43′" when its side was not told surely).
   const scored = m.goals.filter((g) => g.t <= t);
   const scorers = $("scorers");
-  scorers.hidden = scored.length === 0;
-  const said = scored
+  // Always one line, so the band never grows when the first goal goes in.
+  scorers.hidden = false;
+  scorers.classList.toggle("none", scored.length === 0);
+  const said = scored.length === 0 ? "No goals yet" : scored
     .map((g) => {
       const who = bundleEvents.get(g.event)?.player;
       return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
     })
-    .join(", ");
+        .join(", ");
   if (scorers.textContent !== said) scorers.textContent = said;
   renderShots(t);
+  renderSquad();
   if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
   const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
@@ -1901,7 +1985,13 @@ function showMatch(t: number) {
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
 interface StatsBlock {
   rows: { group: string; key: string; label: string; unit: string | null; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }[];
+  /** Each half on its own (#338): the same rows with one value per team; `second` from minute 46. */
+  halves?: Partial<Record<"first" | "second", { minute_from: number; minute_to: number; rows: HalfRow[] }>>;
+  player_stats?: PlayerStats[];
+  pass_network?: Record<"home" | "away", PassNetwork>;
 }
+type HalfRow = { group: string; key: string; label: string; unit: string | null; home: number | null; away: number | null; confident: boolean };
+let statsPeriod: "match" | "first" | "second" = "match";
 const round1 = (n: number) => Math.round(n * 10) / 10;
 interface TeamStatsFacts {
   from_footage: boolean;
@@ -1968,13 +2058,16 @@ function renderStats(st: MatchData["stats"][number]) {
       li.querySelector(".label")!.append(pm);
       li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
     }
-    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly, in grey (nothing to
+    // share yet, so no club's colour); 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
+    li.classList.toggle("empty", h + a === 0);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
     (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
     return li;
   };
+  const listOf = (groups: [string, Row[]][]) => {
   const items: HTMLLIElement[] = [];
   for (const [name, rows] of groups) {
     const shown = rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a));
@@ -1987,7 +2080,24 @@ function renderStats(st: MatchData["stats"][number]) {
     head.append(h3);
     items.push(head, ...shown.map(row));
   }
-  $("stat-rows").replaceChildren(...items);
+  return items;
+  };
+  const items = listOf(groups);
+  // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
+  const halves = block?.insight_stats?.halves;
+  $("stats-period").hidden = !halves?.first;
+  for (const btn of $("stats-period").querySelectorAll<HTMLElement>("ion-segment-button[value=second]")) btn.hidden = !halves?.second;
+  const half = statsPeriod === "match" ? null : halves?.[statsPeriod];
+  if (half) {
+    const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
+    for (const r of half.rows) {
+      if (r.home === null || r.away === null) continue;
+      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      if (!r.confident) unsure.add(label);
+      byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
+    }
+    $("stat-rows").replaceChildren(...listOf(byGroup));
+  } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
   const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
@@ -1999,6 +2109,7 @@ function renderStats(st: MatchData["stats"][number]) {
 
 let shotFilter: "all" | "home" | "away" = "all";
 let shotsKey = "";
+let liveShotsKey = "";
 $("shot-filter").addEventListener("ionChange", (e) => {
   shotFilter = (e as CustomEvent<{ value: typeof shotFilter }>).detail.value;
   shotsKey = "";
@@ -2013,6 +2124,17 @@ function renderShots(t: number) {
   $("shot-map").hidden = all.length === 0;
   // A shot on an unsure side is in "All" only: no club's filter claims it.
   const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
+  // Live's card draws what the Stats map draws: a shot only on a sure side (its place on the half
+  // pitch is read from that side's direction of attack); no sure shot, no card.
+  const drawn = all.filter((s) => s.sure);
+  $("live-shots").hidden = drawn.length === 0;
+  const allKey = drawn.map((s) => s.id).join();
+  if (allKey !== liveShotsKey) {
+    liveShotsKey = allKey;
+    shotMap.draw($("live-shots-svg") as unknown as SVGSVGElement, drawn);
+    const goals = all.filter((s) => s.outcome === "goal").length;
+    $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}.`;
+  }
   const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
   if (key === shotsKey) return;
   shotsKey = key;
@@ -2059,6 +2181,167 @@ for (const p of LIVE_PANES) {
     if (to === null) return;
     e.preventDefault();
     showPane(LIVE_PANES[(to + LIVE_PANES.length) % LIVE_PANES.length], true);
+  });
+}
+
+// --- the squads: Live's line-ups teaser, the pass network, the top performers ------------------
+
+/** match.json's per-player numbers (Insight Scout): computed by code from tracking, each with the
+ * player's id; a missing number is not measured and its list is not drawn. */
+interface PlayerStats { id: string; distance_km?: number | null; top_speed_kmh?: number | null; involvements?: number | null }
+/** match.json's pass network (Insight Scout): per club, each player's average position and passes
+ * made, and completed passes between pairs. */
+interface PassNetwork { named_passes_only?: boolean; nodes: { id: string; x: number; y: number; passes: number }[]; links: { a: string; b: string; n: number }[] }
+type Squads = { player_stats?: PlayerStats[]; pass_network?: Record<"home" | "away", PassNetwork> };
+
+let squadKey = "";
+let networkSide: "home" | "away" = "home";
+function renderSquad() {
+  const m0 = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  // The Scout's numbers ride in insight_stats (#338); top-level kept for a bundle that has them there.
+  const m = m0 ? { ...m0, player_stats: m0.insight_stats?.player_stats ?? m0.player_stats, pass_network: m0.insight_stats?.pass_network ?? m0.pass_network } : null;
+  const sheet = Object.entries(teamSheet);
+  const net0 = m?.pass_network?.[networkSide];
+  const key = `${sheet.length}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  if (key === squadKey) return;
+  squadKey = key;
+  // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
+  const rows = (["home", "away"] as const).map((side) => {
+    const shirts = sheet.filter(([id, e]) => team(id) === side && e.number !== undefined).map(([, e]) => e.number!).sort((a, b) => a - b);
+    const row = document.createElement("div");
+    row.className = `teaser ${side}`;
+    row.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
+    const name = document.createElement("span");
+    name.className = "teaser-name";
+    name.textContent = fullName(teams[side]);
+    const nums = document.createElement("span");
+    nums.className = "teaser-shirts";
+    if (shirts.length) {
+      nums.setAttribute("role", "list");
+      nums.setAttribute("aria-label", `Shirts ${shirts.join(", ")}`);
+    }
+    for (const n of shirts.slice(0, 11)) {
+      const b = document.createElement("b");
+      b.setAttribute("role", "listitem");
+      b.textContent = String(n);
+      nums.append(b);
+    }
+    row.append(name, nums);
+    return { row, n: shirts.length };
+  });
+  $("lineups-teaser").hidden = rows.every((r) => r.n === 0);
+  $("teaser-rows").replaceChildren(...rows.map((r) => r.row));
+
+  // Top performers: the three highest of each measured number, as FotMob lists them.
+  const ps = m?.player_stats ?? [];
+  const lists: [string, keyof PlayerStats, (v: number) => string][] = [
+    ["Distance", "distance_km", (v) => `${v.toFixed(1)} km`],
+    ["Top speed", "top_speed_kmh", (v) => `${v.toFixed(1)} km/h`],
+    ["Most involved", "involvements", (v) => String(Math.round(v))],
+  ];
+  const blocks = lists.flatMap(([title, k, fmt]) => {
+    const top = ps.filter((p) => typeof p[k] === "number").sort((a, b) => (b[k] as number) - (a[k] as number)).slice(0, 3);
+    if (!top.length) return [];
+    const box = document.createElement("div");
+    box.className = "top-list";
+    const h = document.createElement("h3");
+    h.className = "caps";
+    h.textContent = title;
+    const ul = document.createElement("ul");
+    ul.className = "stat-list";
+    for (const p of top) {
+      const li = document.createElement("li");
+      li.className = sideUnsure(p.id) ? "" : team(p.id); // a club's dot only on a side told surely
+      li.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="who-name"></span><span class="v"></span>';
+      li.querySelector(".who-name")!.textContent = playerName(p.id);
+      li.querySelector(".v")!.textContent = fmt(p[k] as number);
+      ul.append(li);
+    }
+    box.append(h, ul);
+    return [box];
+  });
+  $("top-players").hidden = blocks.length === 0;
+  $("top-lists").replaceChildren(...blocks);
+
+  // Pass network: each player at his average position, a line per pair as thick as their passes.
+  const net = m?.pass_network?.[networkSide];
+  // The card shows while either club has a network; a club without one shows an empty pitch never.
+  $("pass-network").hidden = !(m?.pass_network?.home?.nodes.length || m?.pass_network?.away?.nodes.length);
+  $("network").toggleAttribute("hidden", !net?.nodes.length);
+  $("network-rows").hidden = !net?.nodes.length;
+  if (!net?.nodes.length) return;
+  const svg = $("network") as unknown as SVGSVGElement;
+  const NS = "http://www.w3.org/2000/svg";
+  svg.setAttribute("viewBox", "-3 -3 111 74");
+  const el = (tag: string, attrs: Record<string, string | number>) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  };
+  const at = new Map(net.nodes.map((n) => [n.id, n]));
+  // The pitch drawn so the club attacks to the right, as its line-up does; y = 0 at the bottom.
+  const px = (n: { x: number; y: number }) => (networkSide === "home" ? [n.x, 68 - n.y] : [105 - n.x, n.y]);
+  const most = Math.max(1, ...net.links.map((l) => l.n));
+  const kids: SVGElement[] = [
+    el("rect", { x: 0, y: 0, width: 105, height: 68, class: "pitch-lines" }),
+    el("path", { d: "M52.5 0v68", class: "pitch-lines" }),
+    el("circle", { cx: 52.5, cy: 34, r: 9.15, class: "pitch-lines" }),
+    el("rect", { x: 0, y: 13.85, width: 16.5, height: 40.3, class: "pitch-lines" }),
+    el("rect", { x: 88.5, y: 13.85, width: 16.5, height: 40.3, class: "pitch-lines" }),
+  ];
+  for (const l of net.links.filter((l) => l.n >= 3)) {
+    const a = at.get(l.a);
+    const b = at.get(l.b);
+    if (!a || !b) continue;
+    const [x1, y1] = px(a);
+    const [x2, y2] = px(b);
+    kids.push(el("line", { x1, y1, x2, y2, class: "link", "stroke-width": (0.4 + (2.4 * l.n) / most).toFixed(2) }));
+  }
+  for (const n of net.nodes) {
+    const [x, y] = px(n);
+    kids.push(el("circle", { cx: x, cy: y, r: 2.6 + Math.min(1.6, n.passes / 25), class: `node ${networkSide}` }));
+    const shirt = (teamSheet[n.id] ?? Object.values(teamSheet).find((e) => e.name === n.id))?.number;
+    if (shirt !== undefined) {
+      const t = el("text", { x, y: y + 1.1, class: "node-n" });
+      t.textContent = String(shirt);
+      kids.push(t);
+    }
+  }
+  svg.replaceChildren(...kids);
+  const pair = [...net.links].sort((a, b) => b.n - a.n)[0];
+  const busiest = [...net.nodes].sort((a, b) => b.passes - a.passes)[0];
+  svg.setAttribute("aria-label", `${teams[networkSide]} pass network: ${net.nodes.length} players.`);
+  const who = (id: string) => (teamSheet[id] || isTrack(id) || /^[ha]\d+$/.test(id) ? playerName(id) : id); // a name is itself
+  const line = (label: string, value: string) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="who-name"></span><span class="v"></span>';
+    li.querySelector(".who-name")!.textContent = label;
+    li.querySelector(".v")!.textContent = value;
+    return li;
+  };
+  $("network-named").hidden = !net.named_passes_only;
+  $("network-rows").replaceChildren(
+    ...(pair ? [line(`${who(pair.a)} and ${who(pair.b)}`, `${pair.n} passes`)] : []),
+    ...(busiest ? [line(`Most passes: ${who(busiest.id)}`, String(busiest.passes))] : []),
+  );
+}
+$("stats-period").addEventListener("ionChange", (e) => {
+  statsPeriod = (e as CustomEvent<{ value: typeof statsPeriod }>).detail.value;
+  statsKey = ""; // redraw the rows now
+  if (state.match) showMatch(viewTime());
+});
+$("network-side").addEventListener("ionChange", (e) => {
+  networkSide = (e as CustomEvent<{ value: "home" | "away" }>).detail.value;
+  renderSquad();
+});
+
+// "See all" on a Live card: its full section (a Live pane, or a tab).
+for (const b of document.querySelectorAll<HTMLButtonElement>(".see-all")) {
+  b.addEventListener("click", () => {
+    if (b.dataset.pane) {
+      showPane(b.dataset.pane as LivePane, true);
+      void ($("live-content") as unknown as { scrollToTop?: (ms: number) => Promise<void> }).scrollToTop?.(0);
+    } else if (b.dataset.tab) showTab(b.dataset.tab as Tab, true);
   });
 }
 
@@ -2133,11 +2416,14 @@ function renderMomentum(live: number, t: number) {
   // card is hidden until there is something to show (design: MIN_TERRITORY_S).
   const seenS = tr ? tr.bins.filter((b) => b.t <= live && b.home !== null).reduce((sum, b) => sum + b.seen_s, 0) : 0;
   $("momentum").hidden = !tr || seenS < MIN_TERRITORY_S;
+  $("stats-territory").hidden = $("momentum").hidden;
   if (!tr || seenS < MIN_TERRITORY_S) return;
   const key = `${Math.floor(live)}|${scrubT === null ? "" : t.toFixed(1)}`;
   if (key === stripKey) return;
   stripKey = key;
   momentum.draw(strip, tr, live, scrubT === null ? null : t, state.match?.goals ?? []);
+  momentum.draw($("stats-territory-svg") as unknown as SVGSVGElement, tr, live, null, state.match?.goals ?? []);
+  $("stats-territory-said").textContent = momentum.sayAt(tr, live, teams);
   strip.setAttribute("aria-valuemax", String(Math.floor(live)));
   strip.setAttribute("aria-valuenow", String(Math.floor(t)));
   strip.setAttribute("aria-valuetext", (scrubT === null ? "Live. " : "") + momentum.sayAt(tr, t, teams));
