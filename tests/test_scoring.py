@@ -106,3 +106,18 @@ def test_losing_the_ball_is_not_the_score():
 
 def test_why_did_they_score_is_still_the_goals_story():
     assert cm.route("Why did London Athletic score?")[0] == "goal_build_up"
+
+
+def test_a_goal_with_no_shot_before_it_names_no_scorer():
+    # C (#271): a goal's `player` is the scoring side's last holder; with no shot, he may not have scored.
+    rows = [e(4, "goal", "home", 103.0, player="h-t9", x=105.0, y=34.0)]
+    [g] = scoring.goals(rows)
+    assert g["player"] is None and g["confident"]
+
+
+def test_a_goal_under_the_event_gate_holds_the_score():
+    rows = goal_events()
+    rows[-1] = {**rows[-1], "confidence": 0.4}
+    [g] = scoring.goals(rows)
+    assert not g["confident"]
+    assert not scoring.score(scoring.goals(rows), 90, CLUBS)["confident"]
