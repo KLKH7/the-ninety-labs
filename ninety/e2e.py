@@ -696,6 +696,12 @@ async def run(args: argparse.Namespace) -> dict:
                                        clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
+    # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
+    # output, for the phone's commentary toggle.
+    from ninety.speech import commentary
+
+    commentary_info = commentary.write(
+        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta)), out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)
@@ -776,8 +782,9 @@ async def run(args: argparse.Namespace) -> dict:
         "radar": radar_info,
         "match": match_info,
         "cards": cards_info,
+        "commentary": commentary_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
-                  "description.vtt"] + (["radar.json"] if radar_info else [])
+                  "description.vtt", "commentary.json"] + (["radar.json"] if radar_info else [])
                  + (["agents.json"] if agents_mode == "graph live" else [])
                  + (["match.json"] if match_info else [])
                  + (["cards.json"] if cards_info else []),
