@@ -89,3 +89,58 @@ kicks off. Neither is changed here to match the other before both are measured.
 - Home defends x = 0 in both halves, as the engine plays it today (GROUNDING L3, partial); when
   the teams change ends, the halves here change with them.
 These are recorded, not tuned: the validation score says how often each happens.
+
+## Set pieces, and an amendment (2026-10-24, before any validation score)
+
+Added to the same module, by the Laws (GROUNDING L1, L7 to L9, S14):
+
+- **Where the still ball lies** (`place_kind`, the position error allowed): the centre mark, a
+  kick-off; within the corner arc (1 m), a corner; in the goal area, a goal kick; on a penalty
+  mark, a penalty; on a touchline (held or placed), a throw-in; elsewhere on the field, a free kick.
+- **The arrangement at the kick** (`set_piece_arrangement`), which also names the side: a corner
+  for the side attacking that goal, no opponent within 9.15 m (Law 17); a goal kick for the side
+  defending it, no opponent in the penalty area (Law 16); a penalty for the side attacking it,
+  nobody else in the area but its keeper (Law 14); a free kick or throw-in for the side of the
+  player at the ball (within reach, P6), no opponent within 9.15 m (Law 13) or 2 m (Law 15). The
+  nearest a keeper in his own area is his hold (Law 12), not a free kick.
+- **A stoppage first:** the still opens the picture after a cut, or lasts `MIN_STOPPAGE_S` (4 s,
+  the edit's `MIN_CUT_S`: the broadcast leaves out every longer wait). Written `type: "set_piece"`
+  with a new optional `restart` field (schema).
+
+**Amended after the development check on the demo (seed 8080), not after any validation or test
+score.** As first written, the set-piece rules gave 13 false free kicks on the demo's finished
+segments: balls held still 1.0 to 1.6 s in open play with nobody near. That led to the stoppage
+rule. The demo's throw-in was read as a free kick; that led to the touchline class. Its free kick
+was lost because the taker hid the kick for 9 frames; that led to `KICK_GAP_FRAMES`, the tracker's
+1 s wait, now the gap allowed in a still spell and before the kick, for kick-offs too (it was
+`SPELL_GAP_FRAMES`, 6). A still the clip happens to start on no longer counts as a stoppage, since
+the demo's segments start anywhere in a wait. No tolerance changed. On the demo with these rules:
+the kick-off found (side right), none of its 4 set pieces found, no false restart. (An earlier
+version of this note and of PR #325 said 5; the finished segments hold 4.) Why each was missed:
+
+| Set piece (truth frame) | Cause | General or specific |
+|---|---|---|
+| throw-in, near touchline (1376) | still 1.2 s from the segment's first frame: the window opens mid-wait and the demo renders no cut, so no stoppage is seen | specific to windows that open on a set ball (validation windows open 2 s before the stoppage) |
+| free kick (17307) | still 3.2 s from the segment's first frame (as above), and at the kick no player of the side detected within reach of the ball | windowing: specific; the taker unseen at the ball: general (detection and tracking of a player over the ball) |
+| throw-in, far touchline (19006) | the ball lies on the grass 0.27 m beyond the line, fully visible (about 30 px), but detected in 9 of 91 frames: no still spell | general: ball-detector recall on a dead ball at or beyond the far line |
+| corner (20395) | the ball set in the arc, fully visible (about 47 px), scored 0.2 to 0.4 by the detector for the whole wait, under the 0.5 threshold: no sighting | general: ball-detector recall on a ball set at the corner |
+
+None of the 4 is lost to the still rule itself once the ball is sighted. These are causes on the
+demo, a development check: fixes are chosen from the validation split's misses, never from these.
+
+**Grading set pieces** waits for #299's `restart_kind`, which reads each true set piece's kind from
+the stoppage before it: same kind and side, within 1.0 s of the true kick, by the same rule as
+kick-offs.
+
+**Second audit (independent, on the set pieces), what changed and what is recorded.** Fixed: the
+taker is named only within reach of the ball (the corner, goal-kick or penalty taker had no
+distance limit); a keeper at the ball with it drawn over him for most of the still is his hold,
+not a set ball, for every kind (it had covered free kicks and throw-ins only); tests now catch all
+12 of its mutants. Recorded, not changed:
+- The rule that the clip's start is no stoppage was chosen from the demo's segments. Validation
+  windows open 2 s before the stoppage, so it does not touch them.
+- A free kick within 1.26 m of a touchline reads as a throw-in.
+- A kick hidden by the taker is timed at the last still sighting, up to 1 s before the strike.
+- A wait shown uncut but shorter than 4 s is not found.
+- A set piece's confidence is the ball detection's score alone; its arrangement is a gate, not a
+  share.
