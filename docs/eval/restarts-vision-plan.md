@@ -101,10 +101,18 @@ was lost because the taker hid the kick for 9 frames; that led to `KICK_GAP_FRAM
 1 s wait, now the gap allowed in a still spell and before the kick, for kick-offs too (it was
 `SPELL_GAP_FRAMES`, 6). A still the clip happens to start on no longer counts as a stoppage, since
 the demo's segments start anywhere in a wait. No tolerance changed. On the demo with these rules:
-the kick-off found (side right), none of its 5 set pieces found, no false restart. Of the 5 set
-pieces: 2 sit at a segment's start, so no stoppage is seen; in 1 the taker is not detected at the
-ball; 1 corner's ball is not seen; 1 is a throw-in on the far touchline, where a held ball projects
-off the field. Throw-ins on the far side need the ball's height (planned).
+the kick-off found (side right), none of its 4 set pieces found, no false restart. (An earlier
+version of this note and of PR #325 said 5; the finished segments hold 4.) Why each was missed:
+
+| Set piece (truth frame) | Cause | General or specific |
+|---|---|---|
+| throw-in, near touchline (1376) | still 1.2 s from the segment's first frame: the window opens mid-wait and the demo renders no cut, so no stoppage is seen | specific to windows that open on a set ball (validation windows open 2 s before the stoppage) |
+| free kick (17307) | still 3.2 s from the segment's first frame (as above), and at the kick no player of the side detected within reach of the ball | windowing: specific; the taker unseen at the ball: general (detection and tracking of a player over the ball) |
+| throw-in, far touchline (19006) | the ball lies on the grass 0.27 m beyond the line, fully visible (about 30 px), but detected in 9 of 91 frames: no still spell | general: ball-detector recall on a dead ball at or beyond the far line |
+| corner (20395) | the ball set in the arc, fully visible (about 47 px), scored 0.2 to 0.4 by the detector for the whole wait, under the 0.5 threshold: no sighting | general: ball-detector recall on a ball set at the corner |
+
+None of the 4 is lost to the still rule itself once the ball is sighted. These are causes on the
+demo, a development check: fixes are chosen from the validation split's misses, never from these.
 
 **Grading set pieces** waits for #299's `restart_kind`, which reads each true set piece's kind from
 the stoppage before it: same kind and side, within 1.0 s of the true kick, by the same rule as
