@@ -327,6 +327,9 @@ class Run:
     # Recordings made before the fact-checker stopped checking a Challenger's reading once the
     # Tactician's claim was verified replay under the rule they were recorded with.
     check_alternative_after_verified: bool = False
+    # The code checks on words about play (factcheck.play_reasons); off only to replay a recording
+    # made before them, under the rule it was recorded with.
+    play_words: bool = True
     perceiver: object | None = None  # ninety/agents/perceive.Perceiver: the clip's other cameras
 
     def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
@@ -552,7 +555,8 @@ class FactChecker(Executor):
                 continue
             started = time.perf_counter()
             with telemetry.stage_span("fact_check", attempt=draft.attempt):
-                checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate)
+                checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate,
+                                         run.play_words)
             self.judged(case, checked)
             if checked.verdict.category == "low_confidence" and run.perceiver is not None:
                 looked = await self.look_again(case, draft, scope, checked)
@@ -610,7 +614,8 @@ class FactChecker(Executor):
         if confirmed is None:
             return checked
         with telemetry.stage_span("fact_check", attempt=draft.attempt, re_perceived=True):
-            return await fact_check(draft.claim, confirmed, guarded(run.models.judge), run.gate)
+            return await fact_check(draft.claim, confirmed, guarded(run.models.judge), run.gate,
+                                    run.play_words)
 
 
 class Producer(Executor):
@@ -759,6 +764,7 @@ async def run_workflow(
     shape: list[dict] | None = None,
     check_alternative_after_verified: bool = False,
     perceiver=None,
+    play_words: bool = True,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those. `shape` is the match's
@@ -779,7 +785,8 @@ async def run_workflow(
             by_minute[r["minute"]] = (*by_minute.get(r["minute"], ()), r["id"])
     run = Run(counted, ledger, known, match, inline_events, plant, live, gate,
               personalize, events, t=times, shape=by_minute,
-              check_alternative_after_verified=check_alternative_after_verified, perceiver=perceiver)
+              check_alternative_after_verified=check_alternative_after_verified, perceiver=perceiver,
+              play_words=play_words)
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
     personalizer = Personalizer(run)
@@ -947,6 +954,7 @@ async def replay_workflow(recording: WorkflowRecording) -> Result:
         replay_models(replayer), inputs["events"], inputs["minute"], inputs["match"], inputs["plant"],
         False, inputs["inline_events"],
         check_alternative_after_verified=inputs.get("alternative_checked_after_verified", True),
+        play_words=inputs.get("play_words_checked", False),
     )
     if replayer.remaining:
         raise ReplayMismatch(f"the run ended with {replayer.remaining} recorded answer(s) never asked for")
@@ -1046,7 +1054,7 @@ def main() -> None:
             inputs = {"match": match, "seed": seed, "minutes": args.minutes, "minute": args.minute,
                       "plant": args.plant, "inline_events": inline, "events": events,
                       "moments": [m.id for m in result.moments],
-                      "alternative_checked_after_verified": False}
+                      "alternative_checked_after_verified": False, "play_words_checked": True}
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
             # The definitions the run's foundry.pinned accepted, from this same code (evidence.py).
             defs = evidence.of_code(lambda client: list(foundry.workflow_agents(client).values()))

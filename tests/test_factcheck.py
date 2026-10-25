@@ -621,6 +621,8 @@ PLAY = {e["id"]: e for e in (
     _play("lb", "02:05", "pass", "home", "h4", receiver="h9", intended="h9", outcome="success",
           distance_m=32, ball_speed_kmh=80),
     _play("pr", "02:04", "pressure", "away", "a6", receiver="h4"),
+    # another player's interception after a pass cut out by a8: a second act
+    _play("i2", "01:36", "interception", "home", "h3"),
 )}
 
 
@@ -645,6 +647,8 @@ def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence,
     ("h4 plays a long ball to h9.", ["lb"]),  # 32 m is a long ball
     ("h4 finds h9 with a 32 m pass despite pressure from a6.", ["lb", "pr"]),  # the pressure is cited
     ("a8 finds a10 with a 12 m pass.", ["p2"]),
+    ("h7's pass is cut out by a8, then a8 passes to a10.", ["p1", "i1", "p2"]),  # "then" orders two acts
+    ("h3's interception came after h7's failed pass.", ["p1", "i2"]),  # another player's: a second act
 ])
 def test_play_words_with_their_fact_cited_still_pass(text, evidence):
     assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons

@@ -610,6 +610,7 @@ def check(
     claim: Claim,
     known: dict[str, dict],
     roster: Iterable[Mapping | str] | None = None,
+    play: bool = True,
 ) -> Verdict:
     reasons = []
     if not claim.evidence:
@@ -701,7 +702,8 @@ def check(
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
     reasons += shape_reasons(text, evidence)
-    reasons += play_reasons(claim.text, evidence)
+    if play:  # off only to replay a recording made before these checks (ninety/agents/workflow.py)
+        reasons += play_reasons(claim.text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
 
