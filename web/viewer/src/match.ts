@@ -4,6 +4,7 @@
 // it is match.json (ninety/condensed.py); this only shows it at the right moment.
 
 import { type Bundle, type Manifest, clock } from "./bundle";
+import type { Reel } from "./highlights";
 import type { TeamNames } from "./teams";
 
 export type Kind = "goal" | "save" | "shot" | "set_piece" | "build_up";
@@ -28,6 +29,8 @@ export interface MatchData {
   chapters: Chapter[];
   goals: { t: number; team: "home" | "away" | null; event: string }[];
   stats: ({ t: number; event: string | null } & Record<"home" | "away", TeamStats>)[];
+  /** The highlights reel (ninety/highlights.py); bundles made before it have none. */
+  highlights?: Reel;
 }
 
 /** How long the "time skip" label stays up after a cut (design: long enough to read, gone before

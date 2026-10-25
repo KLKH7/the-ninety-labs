@@ -1,6 +1,7 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
+import { setupHighlights } from "./highlights";
 import { pairCardUp, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
@@ -321,7 +322,10 @@ async function start() {
   };
   const togglePlay = () => (footage.paused() ? footage.play() : footage.pause());
   playButton.addEventListener("click", togglePlay);
-  scrub.addEventListener("input", () => footage.seek(Number(scrub.value)));
+  scrub.addEventListener("input", () => {
+    highlights?.stopReel(); // a manual seek leaves the reel
+    footage.seek(Number(scrub.value));
+  });
   renderPipeline(b);
   renderTrace(b, seekMatch);
   const radar = setupRadar(b, segmentOf, matchTime, teams, big);
@@ -334,6 +338,7 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
+  const highlights = setupHighlights(b, videoTime, footage);
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -352,6 +357,7 @@ async function start() {
         if (target === scrub) return; // the slider moves itself
         if (inControl && target.getAttribute("role") === "radio") return;
         e.preventDefault();
+        highlights?.stopReel();
         footage.seek(footage.time() + (e.key === "ArrowRight" ? 1 : -1));
         break;
       case ",":
@@ -377,6 +383,11 @@ async function start() {
         if (!match) return;
         e.preventDefault();
         match.step(footage.time(), e.key === "]" ? 1 : -1);
+        break;
+      case "h":
+        if (!highlights) return;
+        e.preventDefault();
+        highlights.toggleReel();
         break;
       case "m":
         if (!b.radar || big) return;
@@ -406,6 +417,7 @@ async function start() {
     phone.tick();
     radar.tick(v);
     match?.tick(v, t, reduceMotionBox.checked);
+    highlights?.tick(v, t, reduceMotionBox.checked);
     if (big) {
       const up = phone.paired && pairCardUp(b.match?.chapters ?? [], m.fps, v);
       const card = $("pair-card");

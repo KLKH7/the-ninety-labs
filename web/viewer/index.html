@@ -31,6 +31,13 @@
         </div>
         <div class="stage" id="stage">
           <div class="time-skip" id="time-skip" hidden></div>
+          <div class="hl-progress" id="hl-progress" hidden></div>
+          <div class="hl-card" id="hl-card" hidden aria-hidden="true">
+            <div class="hl-head"><span class="hl-label" id="hl-label"></span><span class="hl-detail" id="hl-detail"></span></div>
+            <div class="hl-meta" id="hl-meta"></div>
+            <p class="hl-caption" id="hl-caption"></p>
+            <span class="hl-source" id="hl-source"></span>
+          </div>
           <video id="video" muted playsinline preload="auto" aria-hidden="true"></video>
           <canvas id="frames" aria-hidden="true" hidden></canvas>
           <canvas id="overlay" tabindex="0" role="img" aria-label="On-screen graphics"></canvas>
@@ -54,11 +61,23 @@
           <ol id="chapters"></ol>
           <div class="playhead" id="playhead" aria-hidden="true"></div>
         </nav>
+        <section class="highlights" id="highlights" aria-labelledby="hl-title" hidden>
+          <div class="hl-bar">
+            <h2 id="hl-title">Highlights</h2>
+            <span class="hl-count" id="hl-count"></span>
+            <button type="button" id="hl-play" aria-pressed="false">Play the reel</button>
+            <span class="hl-keys"><kbd>H</kbd></span>
+          </div>
+          <ol class="hl-list" id="hl-list"></ol>
+          <div class="hl-notes" id="hl-notes"></div>
+          <p class="sr-only" id="hl-live" aria-live="polite"></p>
+        </section>
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
           <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona<span class="dev-only"> · <kbd>D</kbd> detections · <kbd>M</kbd> radar</span>
           <span class="match-keys">· <kbd>[</kbd> <kbd>]</kbd> chapter</span>
+          <span class="hl-keys-line">· <kbd>H</kbd> play the highlights</span>
           <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
         <p class="audio-note" id="audio-note" hidden></p>

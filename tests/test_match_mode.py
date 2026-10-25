@@ -13,6 +13,7 @@ import re
 import shutil
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,7 @@ from tests.e2e_clip import H, W, write_clip
 from tests.test_radar import browser  # noqa: F401  (the shared Chromium fixture)
 
 FPS = 25
+HIGHLIGHTS = Path(__file__).parent / "fixtures" / "highlights-reel.json"
 # 40 images of match frames 1500-1539 (60.0-61.56 s), a cut, then 35 of 1550-1584 (62.0-63.36 s).
 # tests/e2e_clip.py's clip.json says it ends at 62.96 s, so ninety-e2e keeps events up to there.
 SEGMENTS = [{"index": 0, "frame": 1500, "frames": 40}, {"index": 40, "frame": 1550, "frames": 35}]
@@ -128,6 +130,12 @@ def site(browser, tmp_path_factory):  # noqa: F811
         worker.start()
         worker.join()
         assert (www / out / "match.json").exists() == match
+    # The same match with the reel a measured run would give: labels and a fact-checked caption
+    # (tests/fixtures/highlights-reel.json), so the viewer is pinned before the measurement exists.
+    shutil.copytree(www / "match", www / "highlights")
+    body = json.loads((www / "highlights" / "match.json").read_text())
+    body["highlights"] = json.loads(HIGHLIGHTS.read_text())
+    (www / "highlights" / "match.json").write_text(json.dumps(body))
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -312,3 +320,103 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     last = [m for m in sent if m["type"] == "clock"][-1]
     assert last["t"] == pytest.approx((1550 + 0.5) / FPS, abs=0.03)  # mutation: t_start + video time -> 61.62
     ctx.close()
+
+# ---------------------------------------------------------------- highlights (src/highlights.ts)
+
+
+def card(page) -> str:
+    return page.get_attribute("#highlights", "data-card") or ""
+
+
+def test_the_fixture_has_the_shape_the_finder_writes():
+    # The reel ninety/highlights.py writes, captioned (ninety/agents/captioner.py): the same keys.
+    made = condensed.build(META, EVENTS)["highlights"]
+    fixture = json.loads(HIGHLIGHTS.read_text())
+    assert set(fixture) == set(made)
+    assert set(fixture["moments"][0]) == set(made["moments"][0]) | {"caption", "caption_source"}
+
+
+def test_a_highlight_card_shows_the_label_the_number_and_the_caption(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=highlights/")
+    assert page.get_attribute("body", "data-highlights") == "on"
+    seek(page, 5)  # 60.2 s: before the goal's card
+    assert card(page) == "" and not page.is_visible("#hl-card")
+    seek(page, 26)  # 61.06 s: the goal at 61.0 s
+    assert card(page) == "v2"
+    assert page.inner_text("#hl-label") == "THUNDERBOLT"
+    assert page.inner_text("#hl-detail") == "112 km/h · 26 m"
+    assert page.inner_text("#hl-meta") == "GOAL · HOME · h9 · 01:01"
+    assert page.inner_text("#hl-caption") == "A thunderbolt from h9, 26 m out at 112 km/h!"
+    assert page.inner_text("#hl-source").lower() == "fact-checked commentary"
+    assert page.inner_text("#hl-live") == ("Thunderbolt, 112 km/h · 26 m. Goal, home, 01:01. "
+                                           "A thunderbolt from h9, 26 m out at 112 km/h!")
+    seek(page, 57)  # 62.7 s: the save at 62.8 s comes up 0.2 s early
+    assert card(page) == "v5"
+    assert page.inner_text("#hl-label") == "REFLEX SAVE"
+    assert page.inner_text("#hl-source").lower() == "computed"  # the code caption
+    items = page.locator("#hl-list .hl-item")
+    assert items.count() == 2
+    assert items.nth(1).get_attribute("aria-current") == "true"
+    assert "1 slower save left out" in page.inner_text("#hl-notes")
+    assert not errors
+
+
+def test_the_reel_plays_each_moment_and_stops(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=highlights/")
+    page.locator("body").focus()
+    page.keyboard.press("h")
+    page.wait_for_function("document.querySelector('#highlights').dataset.reel === '1'")
+    assert page.inner_text("#hl-progress") == "HIGHLIGHTS · 1 / 2"
+    assert page.get_attribute("#hl-play", "aria-pressed") == "true"
+    # Each clip runs past this 3 s footage, so each plays to its end, then the next starts.
+    page.wait_for_function("document.querySelector('#highlights').dataset.reel === '2'", timeout=10000)
+    page.wait_for_function("document.querySelector('#highlights').dataset.reel === ''", timeout=10000)
+    assert page.inner_text("#play") == "Play"  # paused at the end
+    assert not page.is_visible("#hl-progress")
+    assert not errors
+
+
+def test_a_manual_seek_leaves_the_reel(browser, site):  # noqa: F811
+    page, _ = open_viewer(browser, site + "?bundle=highlights/")
+    page.click("#hl-play")
+    page.wait_for_function("document.querySelector('#highlights').dataset.reel === '1'")
+    seek(page, 10)
+    # At once: left alone, the reel would only end after both clips, about 6 s later.
+    page.wait_for_function("document.querySelector('#highlights').dataset.reel === ''", timeout=1000)
+
+
+def test_a_highlight_in_the_list_plays_from_its_build_up(browser, site):  # noqa: F811
+    page, _ = open_viewer(browser, site + "?bundle=highlights/")
+    seek(page, 70)
+    page.locator("#hl-list .hl-item").nth(0).click()  # its clip starts at 53 s, before the footage
+    page.wait_for_function("document.querySelector('#scrub').value < 0.5")  # back to the start, playing
+    assert page.get_attribute("#highlights", "data-reel") == ""  # one moment, not the reel
+
+
+def test_before_the_measurement_the_reel_is_unlabelled_and_says_why(browser, site):  # noqa: F811
+    page, _ = open_viewer(browser, site + "?bundle=match/")  # the code reel ninety-e2e wrote
+    seek(page, 26)
+    assert page.inner_text("#hl-label") == "GOAL"
+    assert not page.is_visible("#hl-detail")
+    assert page.inner_text("#hl-caption") == "home scores from 45 m at 60 km/h."
+    notes = page.inner_text("#hl-notes")
+    assert "Every detected save is shown" in notes and "once vision's speed and distance errors" in notes
+
+
+def test_reduced_motion_keeps_the_card_still(browser, site):  # noqa: F811
+    # The browser asks for reduced motion, which the viewer reads at load (its own box follows it).
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, reduced_motion="reduce")
+    page = ctx.new_page()
+    page.goto(site + "?bundle=highlights/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    seek(page, 26)
+    assert "still" in page.get_attribute("#hl-card", "class").split()
+
+
+def test_a_bundle_without_match_json_has_no_highlights(browser, site):  # noqa: F811
+    page, _ = open_viewer(browser, site + "?bundle=plain/")
+    assert not page.is_visible("#highlights")
+    assert page.get_attribute("body", "data-highlights") is None
+    page.locator("body").focus()
+    page.keyboard.press("h")  # does nothing
+    assert not page.is_visible("#hl-progress")
