@@ -263,6 +263,14 @@ plan" asked for this amendment before the code; the code was drafted alongside i
 request, and nothing has been run on a clip. It adds one field to each moment, `origin`, and the
 words a caption may use for it; nothing above changes.
 
+*Revised 2026-10-24, before this amendment merged and before any origin was measured:* Kian's
+restart detector (#320 kick-offs, #325 corners, goal kicks, throw-ins, free kicks and penalties;
+`ninety/vision/restarts.py`) sees restarts directly, including the free kicks and penalties the
+first version could not give. The rule now takes a detected restart first and keeps the inference
+from the ball going out as the fallback. The source and the absence of a time threshold are
+unchanged. The same revision names a moment's side and player only when the side was told surely
+(below).
+
 ### The source, and why there is no time threshold
 
 StatsBomb's open data specification (*Open Data Events v4.0.0*, statsbomb/open-data on GitHub,
@@ -278,6 +286,12 @@ one would be our own threshold with nothing behind it, so there is none.
 
 Walking back from the shot through the confident detected events, the shooting side's possession:
 
+0. **began at the restart the detector saw**, if the side took it: a `kickoff` is `kick_off`
+   (Law 8, after a goal or at the start of a half), a `set_piece` is its `restart` (`corner`,
+   `throw_in`, `goal_kick`, `free_kick`, `penalty_kick`). A restart taken by the strike itself (a
+   direct free kick, a penalty) may be timed up to a frame after the shot (25 frames a second, the
+   broadcast's precision) and counts. A restart the other side took, or a set piece with no kind,
+   means the side's start was not seen. The rules below apply only where no restart was seen;
 1. **goes on** through its own completed passes and its own earlier shots (a rebound);
 2. **began in open play** (`open_play`) at an opponent's failed pass: the ball won back;
 3. **began at a restart** at a detected ball out of play (`ninety/vision/events.py` names the side
@@ -295,20 +309,27 @@ Walking back from the shot through the confident detected events, the shooting s
    linked to anything after it, as the event detector itself rules; a ball seen going out before a
    cut still gives its restart after it).
 
-**Free kicks are never given.** A free kick follows a foul, and vision detects no fouls; a shot from
-one has a null origin. The same holds for kick-offs that start a half, which follow no goal, and for
-StatsBomb's "From Keeper" and "From Counter", which this rule does not try.
+**Free kicks, penalties and the kick-offs that start a half** come only from the restart detector
+(rule 0): nothing else in the video shows them. StatsBomb's "From Keeper" and "From Counter" are
+not tried.
+
+**Side.** A moment's `team` and `player` are null unless the shot's side was told surely
+(`factcheck.side_known`, the gate every writer uses), since a track id (`h-t12`) names a side too.
+`origin` still compares the detector's sides; how often that is wrong is part of what is graded.
 
 ### What the captions may say
 
-A caption may say a moment came from a corner, a throw-in, a goal kick, a kick-off or
-a set piece only when its `origin` says so (`factcheck.origin_reasons`). Free kicks, penalties
-(spot kicks) and counter-attacks are never given, so their words are refused for every moment.
-"Top corner" and the other placement words stay refused as before.
+A caption may say a moment came from a corner, a throw-in, a goal kick, a free kick, a penalty, a
+kick-off or a set piece only when its `origin` says so (`factcheck.origin_reasons`). Counter-attacks
+are never given, so their words are refused for every moment. "Top corner" and the other placement
+words stay refused as before. A caption names no player whose side was not told surely
+(`captioner.unsure_players`), and one naming a team on an unsure side is held by the confidence gate.
 
 ### Graded (offline)
 
-The same rule over the answer key's events gives each true shot its true origin. On the matched
+The same rule over the answer key's events gives each true shot its true origin. The answer key's
+`set_piece` carries no kind, so for it the kind comes from #299's `restart_kind` where its event
+sets give one, else from the fallback rules. On the matched
 shots of the measurement above (validation, then the test split once): how often the detected origin
 equals the true one, per origin, with Wilson intervals, each disagreement listed, and how often the
 detected origin is null where the truth has one.

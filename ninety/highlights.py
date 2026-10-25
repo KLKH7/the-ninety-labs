@@ -28,6 +28,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ninety.agents.factcheck import side_known
+
 PITCH_X, CENTRE_Y = 105.0, 34.0
 # Law 1: the penalty area is 16.5 m deep and reaches 16.5 m beyond each post (3.66 + 16.5 across
 # from the goal's centre line); the goal area 5.5 m, so 3.66 + 5.5.
@@ -127,9 +129,14 @@ def label(kind: str, x: float, y: float, d: float, v: float | None, T: float | N
 
 
 # How the attack that led to the shot started (the plan's Amendment 2): the restart, or the ball won
-# in open play, that began the shooting side's possession. None when its start was not seen.
-ORIGINS = ("corner", "throw_in", "goal_kick", "kick_off", "open_play")
+# in open play, that began the shooting side's possession. None when its start was not seen. The
+# restart kinds are the detector's own (ninety/vision/restarts.py, `restart` on a set_piece).
+ORIGINS = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play")
+RESTART_KINDS = frozenset({"corner", "throw_in", "goal_kick", "free_kick", "penalty_kick"})
 PITCH_Y = 68.0
+# A restart taken by the strike itself (a direct free kick, a penalty) can be timed a frame after
+# the shot: the broadcast's 25 frames a second (docs/DATA_CONTRACT.md) are its precision.
+FRAME_S = 1 / 25
 
 
 def _is_goal(e: dict) -> bool:
@@ -154,19 +161,31 @@ def restart(out: dict, team: str, attacks: float, before: dict | None) -> str | 
     return "goal_kick" if out["team"] != team else None  # Law 16: over its own line by an attacker
 
 
+def _restart_detected(e: dict) -> bool:
+    return e["type"] == "kickoff" or e["type"] == "set_piece"
+
+
 def origin(shot: dict, events: list[dict], cut=lambda t0, t1: False) -> str | None:
     """How the shooting side's possession began, walking back from the shot through the confident
-    detected events: its own completed passes and earlier shots keep it going; an opponent's failed
-    pass is the ball won in open play; a ball out of play is the restart it gives (`restart`); an
-    opponent's goal is the kick-off. Anything else, or a broadcast cut (`cut(t0, t1)`: one lies
-    between match times t0 and t1) before a live ball, means the start was not seen: None. A ball
-    seen going out before a cut still gives its restart after it, as the event detector links them
-    (ninety/vision/events.py). A free kick is never given: no foul is detected."""
+    detected events. A restart the detector saw (ninety/vision/restarts.py: a `kickoff`, or a
+    `set_piece` naming its `restart`) is that restart when the shooting side took it. Without one, a
+    ball out of play is the restart it gives (`restart`), and an opponent's goal is the kick-off.
+    The side's own completed passes and earlier shots keep the possession going; an opponent's
+    failed pass is the ball won in open play. Anything else, or a broadcast cut (`cut(t0, t1)`: one
+    lies between match times t0 and t1) before a live ball, means the start was not seen: None. A
+    ball seen going out before a cut still gives its restart after it, as the event detector links
+    them (ninety/vision/events.py)."""
     team, attacks = shot["team"], goal_line(shot["x"])
-    before = sorted((e for e in events if (e["t"], e["id"]) < (shot["t"], shot["id"])),
-                    key=lambda e: (e["t"], e["id"]))
+    before = sorted((e for e in events if e["id"] != shot["id"] and (
+        (e["t"], e["id"]) < (shot["t"], shot["id"])
+        or (_restart_detected(e) and e["t"] <= shot["t"] + FRAME_S))), key=lambda e: (e["t"], e["id"]))
     for i in range(len(before) - 1, -1, -1):
         e = before[i]
+        if e["type"] == "kickoff":
+            return "kick_off" if e["team"] == team else None
+        if e["type"] == "set_piece":
+            kind = e.get("restart")
+            return kind if kind in RESTART_KINDS and e["team"] == team else None
         if e["type"] == "out_of_play":
             return restart(e, team, attacks, before[i - 1] if i else None)
         if _is_goal(e):
@@ -210,8 +229,12 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
             left_out += 1
             continue
         tag = label(kind, e["x"], e["y"], d, v, T, verdict)
+        sure = side_known(e)
         moments.append({
-            "event": e["id"], "t": e["t"], "team": e.get("team"), "player": e.get("player"),
+            # A side, and so a player's track (`h-t12`), is named only when it was told surely
+            # (factcheck.side_known); origin still compares the detector's sides.
+            "event": e["id"], "t": e["t"], "team": e.get("team") if sure else None,
+            "player": e.get("player") if sure else None,
             "kind": kind, "why": why, "origin": origin(e, events, cut),
             "label": tag[0] if tag else kind.upper(), "label_detail": tag[1] if tag else None,
             "d_m": round(d, 1), "v_kmh": v, "T_s": None if T is None else round(T, 2),

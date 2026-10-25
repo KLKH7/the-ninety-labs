@@ -731,10 +731,9 @@ def label_reasons(text: str, label: str) -> list[str]:
 
 
 # How the attack started (ninety/highlights.py, `origin`; the plan's Amendment 2). A caption may name
-# a restart only of a moment whose origin is that restart. Free kicks and counter-attacks are never
-# given, nor penalties (vision detects no fouls; the rule does not try counters), so their words are
-# always refused.
-SET_PIECES = ("corner", "throw_in", "goal_kick", "kick_off")
+# a restart only of a moment whose origin is that restart. Counter-attacks are never given (the rule
+# does not try them), so their words are always refused.
+SET_PIECES = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off")
 ORIGIN_WORDS = tuple((re.compile(p, re.I), frozenset(origins)) for p, origins in (
     # "corner" the restart, not a part of the goal ("top corner", "far corner of the net")
     (r"(?<!top )(?<!far )(?<!near )(?<!upper )(?<!lower )(?<!bottom )\bcorners?(?:[\s-]kicks?)?\b"
@@ -743,8 +742,9 @@ ORIGIN_WORDS = tuple((re.compile(p, re.I), frozenset(origins)) for p, origins in
     (r"\bgoal[\s-]?kicks?\b", ("goal_kick",)),
     (r"\bkick[\s-]?offs?\b", ("kick_off",)),
     (r"\bset[\s-]?pieces?\b|\bdead[\s-]ball\b|\brestarts?\b", SET_PIECES),
-    (r"\bfree[\s-]?kicks?\b|\bpenalt(?:y|ies)\b|\bspot[\s-]kicks?\b"
-     r"|\bcounter(?:[\s-]?attack(?:s|ing)?)?\b|\bon\s+the\s+break\b", ()),
+    (r"\bfree[\s-]?kicks?\b", ("free_kick",)),
+    (r"\bpenalt(?:y|ies)\b|\bspot[\s-]kicks?\b|\bfrom\s+the\s+spot\b", ("penalty_kick",)),
+    (r"\bcounter(?:[\s-]?attack(?:s|ing)?)?\b|\bon\s+the\s+break\b", ()),
 ))
 
 

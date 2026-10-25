@@ -392,3 +392,46 @@ def test_the_reel_gives_each_moment_its_origin_and_match_json_knows_the_cuts():
     assert reel(events)["moments"][0]["origin"] == "open_play"  # the same with no cut
     cut = condensed.cut_between(Timeline.of_clip(meta))
     assert cut(5.0, 21.0) and not cut(1.0, 9.0) and not cut(20.0, 29.0)
+
+
+# Restarts the detector saw (ninety/vision/restarts.py: kickoff, and set_piece with its `restart`)
+
+
+def restart_ev(eid, t, kind, team="home"):
+    if kind == "kick_off":
+        return ev(eid, t, "kickoff", team, x=52.5, y=34.0)
+    return {**ev(eid, t, "set_piece", team), "restart": kind}
+
+
+@pytest.mark.parametrize("kind", ["corner", "throw_in", "goal_kick", "free_kick", "penalty_kick"])
+def test_a_detected_restart_the_side_took_is_the_origin(kind):
+    assert started(restart_ev("r", 10.0, kind), ev("p", 12.0, "pass", outcome="success")) == kind
+    assert started(restart_ev("r", 10.0, kind, team="away")) is None  # theirs: our start unseen
+
+
+def test_a_detected_kick_off_starts_a_half_or_follows_a_goal():
+    assert started(restart_ev("k", 0.0, "kick_off"), ev("p", 4.0, "pass", outcome="success")) == "kick_off"
+    assert started(restart_ev("k", 0.0, "kick_off", team="away")) is None
+
+
+def test_a_restart_struck_as_the_shot_is_found_within_a_frame():
+    # A direct free kick or a penalty: the restart and the shot are one strike, timed a frame apart.
+    assert started(restart_ev("r", 20.04, "penalty_kick")) == "penalty_kick"
+    assert started(restart_ev("r", 20.0, "free_kick")) == "free_kick"
+    assert started(restart_ev("r", 20.08, "free_kick")) is None  # two frames later: after the shot
+
+
+def test_the_detected_restart_wins_over_the_inference_from_the_ball_out():
+    out = ev("o", 5.0, "out_of_play", "away", x=105.3, y=20.0)  # inferred: a corner
+    assert started(out, restart_ev("r", 9.0, "goal_kick")) == "goal_kick"  # but the video saw a goal kick
+    assert started(out) == "corner"  # no restart seen: the inference
+
+
+def test_a_set_piece_with_no_kind_gives_no_origin():
+    assert started({**ev("r", 10.0, "set_piece"), "restart": None}) is None
+    assert started(ev("r", 10.0, "set_piece")) is None  # the answer key's set_piece carries no kind
+    assert started({**ev("r", 10.0, "set_piece"), "restart": "drop_ball"}) is None  # not a kind we know
+
+
+def test_a_shot_straight_from_the_kick_off_is_found_at_the_same_instant():
+    assert started(restart_ev("z", 20.0, "kick_off")) == "kick_off"  # timed with the strike itself

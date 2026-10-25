@@ -16,16 +16,17 @@ from ninety.highlights import reel
 MEASURED = Measured(save_filter=True, margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
 
 
-def ev(eid, t, kind="pass", team="home", player="h4", x=60.0, y=34.0, confidence=0.9, **more):
+def ev(eid, t, kind="pass", team="home", player="h4", x=60.0, y=34.0, confidence=0.9, side=0.99, **more):
+    """A detected event; `side` is how surely its side was told (0.99: past factcheck's 0.96 gate)."""
     return {"id": eid, "t": t, "frame": round(t * 25), "type": kind, "team": team, "player": player,
-            "x": x, "y": y, "source": "vision", "confidence": confidence, **more}
+            "x": x, "y": y, "source": "vision", "confidence": confidence, "team_confidence": side, **more}
 
 
-def scene(x=105 - 26.0, kmh=112.4, outcome="goal", around_confidence=0.9):
+def scene(x=105 - 26.0, kmh=112.4, outcome="goal", around_confidence=0.9, side=0.99):
     """A pass from h4 to h9, then h9's shot 26 m out at 112.4 km/h: a THUNDERBOLT when it scores."""
     events = [ev("p1", 60.0, receiver="h9", outcome="success", end_x=x, end_y=34.0, ball_speed_kmh=50.0,
-                 confidence=around_confidence),
-              ev("s1", 61.0, "shot", player="h9", x=x, outcome=outcome, ball_speed_kmh=kmh)]
+                 confidence=around_confidence, side=side),
+              ev("s1", 61.0, "shot", player="h9", x=x, outcome=outcome, ball_speed_kmh=kmh, side=side)]
     return events, reel(events, MEASURED)
 
 
@@ -249,6 +250,11 @@ def test_the_code_caption_says_where_the_attack_started():
     ("the far corner of the net", "open_play", True),
     ("tucked into the corner of the net", "open_play", True),
     ("a penalty", None, False),
+    ("a penalty", "penalty_kick", True),
+    ("from the spot", "penalty_kick", True),
+    ("from the spot", "corner", False),
+    ("a free kick", "free_kick", True),
+    ("a set piece", "free_kick", True),
     ("from the spot kick", "corner", False),
     ("a long throw-in", "throw_in", True),
     ("a long throw-in", "corner", False),
@@ -312,3 +318,40 @@ def test_a_save_captioned_as_a_goal_keeps_the_code_caption_even_when_the_judge_p
 def test_a_goal_captioned_as_a_save_keeps_the_code_caption():
     out = run("A thunderbolt from h9 and the keeper makes the save!")
     assert out["source"] == "code" and "save" in out["call"]["problem"]
+
+
+# A side told unsurely (factcheck.side_known): no team, no player
+
+
+def test_an_unsure_side_names_no_team_and_no_player():
+    events, r = scene(side=0.5)
+    m = r["moments"][0]
+    assert (m["team"], m["player"]) == (None, None)
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"] == "A player scores from 26 m at 112 km/h."
+
+
+def test_a_caption_naming_a_player_on_an_unsure_side_keeps_the_code_caption():
+    out = run("A thunderbolt from h9!", events_reel=scene(side=0.5))
+    assert out["source"] == "code" and "h9" in out["call"]["problem"]
+    out = run("A thunderbolt, 26 m out!", events_reel=scene(side=0.5))  # no one named: it airs
+    assert out["source"] == "model"
+
+
+def test_a_caption_naming_a_team_on_an_unsure_side_is_held():
+    out = run("A thunderbolt for home!", events_reel=scene(side=0.5))
+    assert out["source"] == "code" and out["call"]["problem"].startswith("held")
+
+
+def test_a_sure_side_is_named():
+    events, r = scene(side=0.97)  # past the 0.96 gate
+    assert (r["moments"][0]["team"], r["moments"][0]["player"]) == ("home", "h9")
+
+
+def test_the_code_caption_names_a_penalty():
+    events, _ = scene()
+    events = [{**ev("r1", 61.0, "set_piece", player=None), "restart": "penalty_kick"}, *events[1:]]
+    r = reel(events, MEASURED)
+    assert r["moments"][0]["origin"] == "penalty_kick"
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"].endswith(", from the penalty spot.")
