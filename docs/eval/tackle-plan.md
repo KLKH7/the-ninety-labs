@@ -109,3 +109,39 @@ The cause is now measured: a ball truly at a player's feet reads at 6 m/s or fas
 M4 (10% on M3), because the strike test reads the ball's speed on the pitch, not relative to the
 holder. A test relative to the holder is the proposed change; it needs its own amendment and run.
 Details in [interception-plan.md](interception-plan.md), "Amendment 1, outcome".
+
+## Amendment 2, 2026-10-25: the strike test reads the ball's speed relative to the holder (before any run of it)
+
+**Why.** Amendment 1's outcome measured the tackle rule's failure. Of the frames where a player truly
+has the ball at his feet, 10% read at 6 m/s or faster even with only a clip offset (M3): a carrier
+running at speed carries the ball that fast. On M4 it is 70%. The engine's tackle is the ball
+knocked off the holder, so what tells a knock from a carry is how the ball moves **away from him**.
+`CARRY_MPS` already judges possession on speed relative to the player.
+
+**How the speed is read.** The rule's speed was the median of the ball's frame-to-frame steps (0.04 s
+each). Taking that relative to the holder would not help: on M4 each step carries about 4 m/s of
+noise per axis from the ball's and the holder's own errors, and those do not cancel. So the relative
+speed is read over the whole window, as the pass rule's direction already is (`heads_for_goal`,
+`_direction`): from the spell's last frame f to the last frame within `SHOT_LOOK_S` (0.3 s) where both
+the ball and the holder's track are seen,
+
+  relative speed = |(ball there − ball at f) − (holder there − holder at f)| / time between them.
+
+With no such frame (fewer than two ball points in the window, or the holder not seen in it), no
+tackle is told, as before when the speed was unknown.
+
+**What changes.** Only rule step 1 of this plan, "no strike". It now reads this relative speed under
+`ARRIVE_MPS` (6.0 m/s, unchanged) in place of the ball's speed on the pitch. Steps 2 to 5 (the
+opponent within `CONTROL_M`, the outcome, the confidence and `HELD`), the pass rule, the other
+kinds, the bar and where it is read (M4, amendment 1) are unchanged. Interceptions and pressure do
+not use this speed, so their numbers cannot move.
+
+**A risk, stated now.** The engine strikes a pass at its speed on the pitch, not relative to the
+passer. A pass played forward by a passer running the same way can read under 6 m/s relative to him
+and, with an opponent within 1.5 m, would now be told as a tackle. It is counted: detected tackles
+matched to no true tackle but within 1.0 s of a true pass of the holder's side.
+
+**Measured,** as amendment 1: M1, M3 and M4 on the 30 windows, M2 on the 4 rendered clips, decided on
+M4. The tackle rows of amendment 1's outcome stay above as they were measured. Also reported: the
+same share as before, frames with the ball truly at a player's feet that read at 6 m/s or faster,
+now on the relative speed.
