@@ -255,8 +255,8 @@ async function start() {
     // Open on a clean picture (demo audit 2, row 5): the match's first frames carry the stinger that
     // joins the broadcast's segments, mid-wipe. It clears within half of the renderer's STINGER_S
     // (ninety/render/edit.py, edge_stingers), so the first frame shown is the one just after it.
-    if (m.footage.kind === "video")
-      video.addEventListener("loadedmetadata", () => { if (video.currentTime === 0) footage.seek(POSTER_S); }, { once: true });
+    // A media fragment, not a seek on load: a seek made before the metadata arrives then still wins.
+    if (m.footage.kind === "video") video.src = `${b.base}${m.footage.src}#t=${POSTER_S}`;
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);

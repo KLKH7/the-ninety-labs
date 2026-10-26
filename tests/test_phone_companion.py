@@ -928,7 +928,9 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
 
 def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_section(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
+    # Without a persona (#362's choices) the focus strips are no cards; the feed is Apple Sports' order.
+    sections = "#pane-pitch > section:not(.focus-strip)"
+    js = f"[...document.querySelectorAll('{sections}')].map(s => s.id || s.className)"
     order = page.evaluate(js)
     assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
                      "lineups-teaser"]
@@ -974,8 +976,9 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
-    page.wait_for_selector("#lineups-teaser:not([hidden])")  # Live's teaser: the shirts the sheet is sure of
-    assert page.inner_text("#teaser-rows .teaser.home .teaser-shirts") == "4"
+    page.wait_for_selector("#teaser-rows .teaser", state="attached")
+    # Line-ups are the Players tab's alone (Kian, Oct 26): Live draws no teaser of the shirts.
+    assert page.is_hidden("#lineups-teaser")
     page.click("#lt-players")
     page.wait_for_selector("#top-players:not([hidden])")
     lists = page.locator("#top-lists .top-list")
@@ -1200,7 +1203,7 @@ def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(b
     assert not errors
 
 
-def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # noqa: F811
+def scorebug_phone(browser, site, readings, goals, measured=True, at="61", more=None):  # noqa: F811
     """The cut clip's bundle with the scorebug's readings (#356's scorebug.jsonl, behind the
     manifest's gate, as ninety-e2e --scorebug writes it) and these detected goals."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
@@ -1213,6 +1216,7 @@ def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # n
     def match(route):
         body = route.fetch().json()
         body["goals"] = goals
+        body.update(more or {})
         route.fulfill(json=body)
 
     ctx.route("**/bundle/manifest.json", manifest)
@@ -1264,13 +1268,30 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 0, 1, team="away")]
     sideless = [{"t": 61.2, "team": None, "event": "e6"}]
     ctx, laptop, page, errors = scorebug_phone(browser, site, readings, sideless, at="61.6")
-    page.wait_for_selector("#goals-away .side-goal")
-    assert page.inner_text("#goals-away .side-goal") == "Dunhollow goal 2′"
-    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
-    assert page.text_content("#score-home") == "0" and page.text_content("#score-away") == "0"  # 0-0 read
+    page.wait_for_function("document.querySelector('#score-away').textContent === '0'")
+    # With readings, the lines are the scorebug's goals (they agree with the numerals): none at 0-0.
+    assert page.locator(".side-goal").count() == 0
     laptop.fill("#seek", "63")
     page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
     assert page.text_content("#score-home") == "0"
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"  # the club, the minute it rose
+    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
+    assert not errors
+    ctx.close()
+
+
+def test_the_band_lists_every_goal_the_scorebug_counted_so_the_lines_agree_with_the_score(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: the band read 3-1 over one line each. Every rise in a side's count is a goal
+    under its crest, in minutes ("2′ 2′"), whether or not vision spotted it; a jump of two is two."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 3, 0, team="home"),
+                reading(62.8, "score_change", 3, 1, team="away")]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="63")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '3'")
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-home .side-goal") == "Crowmere 2′ 2′ 2′"  # 61.9 s, and two at 62.5 s
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"
     assert not errors
     ctx.close()
 
@@ -1591,5 +1612,169 @@ def test_the_shot_map_is_no_card_while_it_draws_no_shot(browser, site):  # noqa:
     page.click("#lt-stats")
     page.wait_for_selector("#live-stats:not([hidden])")
     assert page.is_hidden("#shot-map") and page.is_hidden("#live-shots")
+    assert not errors
+    ctx.close()
+
+
+def persona_phone(browser, site, fan, goals=None, more=None):  # noqa: F811
+    """The cut clip's phone as London v Lisbon, with #362's stored choices (`fan`) set before it loads."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    ctx.add_init_script(f"localStorage.setItem('ninety.fan', {json.dumps(json.dumps(fan))})")
+
+    def manifest(route):
+        body = route.fetch().json()
+        body["teams"] = {"home": "LON", "away": "LIS"}
+        route.fulfill(json=body)
+
+    def match(route):
+        body = route.fetch().json()
+        if goals is not None:
+            body["goals"] = goals
+        body.update(more or {})
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", manifest)
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_selector("#summary-rows .stat-row", state="attached")
+    return ctx, page, errors
+
+
+def top(page, sel):
+    return page.locator(sel).bounding_box()["y"]
+
+
+def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_every_number(browser, site):  # noqa: F811
+    """Kian, Oct 26 ("make personalisation more visible"): the same moment, two layouts at a glance;
+    the pitch leads Live for every persona."""
+    goals = [{"t": 61.3, "team": "away", "event": "e2"}]
+    fan = {"club": "LIS", "mode": "casual", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#key-moments:not([hidden])")
+    assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
+    assert top(page, ".pitch-card") < top(page, "#key-moments")  # the pitch leads, then the moments
+    assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
+    assert "Lisbon goal" in page.inner_text("#key-rows")  # the club, in the third person (Kian, Oct 26)
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(1).bounding_box()["x"] < sides.nth(0).bounding_box()["x"]  # your club on the left
+    assert not errors
+    ctx.close()
+    fan = {"club": "LON", "mode": "analyst", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#live-summary:not([hidden])")
+    assert top(page, ".pitch-card") < min(top(page, "#live-summary"), top(page, "#key-moments"))
+    assert page.locator("#summary-rows .stat-row").count() == page.locator("#stat-rows .stat-row").count() > 4
+    assert "Lisbon goal" in page.inner_text("#key-rows") and "You" not in page.inner_text("#key-rows")
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(0).bounding_box()["x"] < sides.nth(1).bounding_box()["x"]
+    assert not errors
+    ctx.close()
+
+
+def test_the_persona_switches_in_one_tap_from_the_more_sheet(browser, site):  # noqa: F811
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "casual", "focus": "tactics"})
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#persona-mode")
+    page.click("#persona-mode ion-segment-button[value=analyst]")
+    page.wait_for_function("document.body.dataset.mode === 'analyst'")
+    page.click("#persona-club ion-segment-button[value=LIS]")
+    page.wait_for_function("document.body.dataset.us === 'away'")
+    saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))
+    assert saved == {"club": "LIS", "mode": "analyst", "focus": "tactics"}  # #362's choices, kept
+    assert not errors
+    ctx.close()
+
+
+def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_cards(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: two analysts must not look alike. Tactics: the latest overload, line break
+    and shape as large cards above the pitch. Players: the players most in the game, named by the ID
+    feed, above the pitch; a tap opens his card."""
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "tactics"})
+    page.wait_for_selector("#tactics-strip .focus-row")
+    assert page.is_hidden("#players-strip")
+    assert top(page, ".pitch-card") < top(page, "#tactics-strip") < top(page, "#live-summary")
+    kinds = page.locator("#tactics-strip .focus-label").all_inner_texts()
+    assert len({k.split(" · ")[0] for k in kinds}) == len(kinds) <= 3, kinds  # one card a kind
+    assert not errors
+    ctx.close()
+    more = {"lineup_tactical": [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "Striker",
+                                 "confident": True, "source": "id_feed"}],
+            "player_stats": [{"id": "a-t3", "involvements": 12}, {"id": "h-t4", "involvements": 7}]}
+    fan = {"club": "LON", "mode": "analyst", "focus": "players"}
+    ctx, page, errors = persona_phone(browser, site, fan, more=more)
+    page.wait_for_selector("#players-strip .player-row")
+    assert page.is_hidden("#tactics-strip")
+    assert top(page, ".pitch-card") < top(page, "#players-strip")
+    first = page.locator("#players-strip .player-row").first
+    assert first.locator(".focus-text").inner_text() == "Tac Named"
+    assert first.locator(".shirt-dot").inner_text() == "9"
+    assert first.locator(".focus-label").inner_text() == "Striker · 12 involvements"
+    # Apple Sports' restraint (Kian, Oct 26): 17 pt regular rows, 13 pt labels, no coloured borders.
+    style = first.evaluate("""(b) => { const t = getComputedStyle(b.querySelector('.focus-text'));
+      const l = getComputedStyle(b.querySelector('.focus-label'));
+      return [t.fontSize, t.fontWeight, l.fontSize]; }""")
+    assert style == ["17px", "400", "13px"], style
+    first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    assert page.inner_text("#player-title").startswith("Tac Named, #9 · Striker")
+    assert not errors
+    ctx.close()
+
+
+def test_a_team_stats_row_on_fewer_than_ten_events_is_not_drawn(browser, site):  # noqa: F811
+    """Coordinator, Oct 26 (inventory #7): counted only on sides told surely, a row of 0 and 1 says
+    nothing; under MIN_ROW_EVENTS (10) events a row of counts is not drawn. The clip has a few."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.add_init_script("delete window.__ninetyMinRowEvents")  # the phone's own threshold
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_timeout(500)
+    rows = "[...document.querySelectorAll('#stat-rows .stat-row')]"
+    labels = page.evaluate(f"{rows}.map((l) => l.getAttribute('aria-label'))")
+    assert not [x for x in labels if x.startswith(("Shots", "Passes", "Pass accuracy"))], labels
+    assert not errors
+    ctx.close()
+
+
+def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser, site):  # noqa: F811
+    """Kian, Oct 26: "Rondell 38′" where the player-ID feed names the scorer (#389's line-up of
+    broadcast tracks), the club otherwise; never a label made from the tracker's id."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 2, 0, team="home")]
+    goals = [{"t": 61.2, "team": "home", "event": "e2"}]
+    more = {"lineup": [{"id": "h8", "name": "Zane Rondell", "number": 2, "position": "Right-back",
+                        "confident": True, "source": "id_feed"}]}
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, goals, at="63", more=more)
+    page.wait_for_function("document.querySelector('#score-home').textContent === '2'")
+    lines = page.locator("#goals-home .side-goal").all_inner_texts()
+    assert lines == ["Rondell 2′", "Crowmere 2′"], lines  # e2's scorer h8 by name; the other by club
+    assert not errors
+    ctx.close()
+
+
+def test_live_never_lists_the_team_sheet_whatever_the_focus(browser, site):  # noqa: F811
+    """Kian, Oct 26: line-ups and team sheets only in the Players tab. A players focus with no
+    per-player numbers adds nothing under the pitch, never the sheet."""
+    lines = ["goalkeeper"] + ["defender"] * 4 + ["midfielder"] * 3 + ["forward"] * 3
+    row = lambda side, n, line: {"number": n + 1, "name": f"{side.title()} Player{n + 1}", "position": line,  # noqa: E731
+                                 "line": line}
+    sheets = {side: [row(side, n, line) for n, line in enumerate(lines)] for side in ("home", "away")}
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "players"},
+                                      more={"sheets": sheets, "player_stats": []})
+    page.wait_for_timeout(500)
+    assert page.is_hidden("#players-strip") and page.is_hidden("#lineups-teaser")
+    assert "Home Player1" not in page.inner_text("#pane-pitch")
     assert not errors
     ctx.close()
