@@ -196,14 +196,18 @@ def test_a_fan_word_is_said_only_of_the_label_that_earns_it(text, label, ok):
 # In the bundle
 
 
-def test_the_code_caption_says_a_detected_speed_only_once_vision_s_speed_is_measured(monkeypatch):
+def test_the_code_caption_says_no_speed_for_a_shot_even_when_ground_pass_speeds_are_measured(monkeypatch):
+    # Only a pass vision marks along the ground has a measured error (#381: LOFTED_FLAG_MEASURED, the
+    # band 8 km/h); a shot's speed is not measured at all (2 true shots in the 30 test clips), so its
+    # caption never states one, whatever the flags say.
     from ninety.agents import factcheck
 
     events, r = scene()
     held = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
     monkeypatch.setattr(factcheck, "SPEED_MEASURED", True)
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
     said = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
-    assert (held, said) == ("h9 scores from 26 m.", "h9 scores from 26 m at 112 km/h.")
+    assert (held, said) == ("h9 scores from 26 m.", "h9 scores from 26 m.")
 
 
 CLUBS = {"home": "London", "away": "Lisbon"}
