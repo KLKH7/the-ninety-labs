@@ -185,10 +185,23 @@ NINETY_LIVE_URL="$(azd env get-value API_URL)" uv run pytest -q tests/test_live_
 Tasks), and [preprovision.sh](preprovision.sh) stops it early if a Key Vault secret or the budget
 address is missing. Set `RENDER_COMMIT` too if the render queue job should keep its commit.
 
-The pinned bundle (`replay-seed900001-0f101db`): the frozen test clip seed900001, R3's detected
-events, the offline Analyst with one false number planted on purpose, so the trace shows the
-fact-checking agent rejecting it and the verified rewrite (the viewer says so); made with
-`uv run ninety-e2e runs/test-frozen-cca498c/test/seed900001 --out runs/replay --demo --plant` at 0f101db.
+The pinned bundle (`replay-seed8080-match-3531970`, Oct 26): the demo match, seed 8080 re-cut for
+watchability (footage hunt, #404: 51 segments, 16.2 min, LON 4-1 LIS), from main's live path:
+vision's detected events sided by the player-ID feed (lesson 269), the offline agents, H.264/AAC
+footage with an HLS ladder (ninety/footage.py, #397, lesson 272). The full sequence (identity feed,
+sided events, match insights, Scout cards, ninety-e2e and the bundle checks) is the producer's
+`final-rebuild.sh`; its e2e step, at 3531970:
+
+```bash
+uv run ninety-e2e runs/demo-8080-hunt --out runs/demo-8080-bundle-final --demo --match --agents offline \
+  --describer code --detections runs/demo-8080-hunt/detections.jsonl --events-file <detected.sided.jsonl> \
+  --tracked runs/demo-8080-hunt/tracked.json --observations runs/demo-8080-hunt/observations.jsonl \
+  --views runs/demo-8080-hunt/views --cards <cards.json> --scorebug runs/demo-8080-hunt/scorebug.jsonl \
+  --team-stats <insights.json> --footage-audio runs/demo-8080-hunt/condensed.mp4
+```
+
+The bundle before it (`replay-seed900001-0f101db`) was the frozen test clip seed900001 with one false
+number planted on purpose, so the trace showed the fact-checking agent rejecting it.
 
 A new Replay bundle (a better clip, the detector's events, a Foundry recording):
 
@@ -236,9 +249,14 @@ The served clips are config, not code. Besides the M1 clip (`tests/fixtures`), e
 (tracked positions), `detected.jsonl` (detected events) and `clip.json` (seed and club codes), plus
 `scorebug.jsonl` when the scorebug was read. These are the files an e2e run leaves in `runs/<match>/`.
 The wind map, the player card and Ask then work for that clip (`ninety/match/tracking.py`,
-`served_clips`). The demo match's package is about 30 MB (its `tracked.json`), so the image is meant to
-take it as a pinned release asset, unpacked to `NINETY_SERVED_DIR`, the way it takes the replay. That
-change to the image is a deploy, and waits for its approval.
+`served_clips`). The image takes the demo match's package as a pinned release asset (`served.tar.gz`
+in the same release as the bundle, 3 MB compressed), packed by [served.py](served.py), which refuses
+simulator positions, ground-truth events and clip.json keys beyond the ones read, and unpacks it to
+`NINETY_SERVED_DIR=/app/served` (`seed8080-match`):
+
+```bash
+python3 infra/served.py pack runs/demo-8080-hunt seed8080-match runs/served.tar.gz <detected.sided.jsonl>
+```
 
 ## The MCP key
 
