@@ -29,7 +29,16 @@ def test_a_commentator_calls_goals_shots_and_restarts_in_the_present_tense():
               ev("v3", 40.0, "out_of_play", y=68.0), ev("v4", 60.0, "out_of_play", x=105.0, y=40.0),
               ev("v5", 80.0, "kickoff")]
     assert texts(events) == ["London shoot, on target.", "Goal! Lisbon score!", "It's gone out of play.",
-                             "It's gone out of play.", "London kick off."]
+                             "London kick off."]  # v4 is 20 s after v3: within REPEAT_S, not called again
+
+
+def test_the_ball_going_out_is_said_in_turn_in_plain_words_and_not_twice_in_half_a_minute():
+    outs = [ev(f"v{i}", 40.0 * i, "out_of_play", y=0.0) for i in range(1, 6)]
+    assert texts(outs) == [*commentary.OUT_SAID, commentary.OUT_SAID[0]]
+    close = [ev("v1", 40.0, "out_of_play", y=0.0),
+             ev("v2", 40.0 + commentary.REPEAT_S - 1, "out_of_play", y=0.0),
+             ev("v3", 40.0 + commentary.REPEAT_S + 1, "out_of_play", y=0.0)]
+    assert texts(close) == [commentary.OUT_SAID[0], commentary.OUT_SAID[1]]
 
 
 @pytest.mark.parametrize("side", [None, 0.3, 0.96])  # unknown, unsure, at the threshold (not above it)
@@ -61,10 +70,10 @@ def test_an_insight_is_said_only_when_verified_and_never_names_an_unsure_side():
     events = [ev("v3", 10.0, "pass", side=0.3, player="h-t4", receiver="h-t8", outcome="success",
                  end_x=78.0, end_y=34.0, ball_speed_kmh=40.0)]
     cue = {"id": "insight-m-v3", "kind": "insight", "persona": "analyst", "t_in": 10.0,
-           "text": "h-t4 plays it 12 m to h-t8, at 40 km/h.", "evidence": ["v3"]}
+           "text": "h-t4 plays it 12 m to h-t8.", "evidence": ["v3"]}
     assert texts(events, [{**cue, "verified": False}]) == []
     (said,) = texts(events, [{**cue, "verified": True}])
-    assert said == "A player plays it 12 metres to another player, at 40 kilometres an hour."
+    assert said == "A player plays it 12 metres to another player."
     assert "London" not in said and "h-t" not in said
 
 

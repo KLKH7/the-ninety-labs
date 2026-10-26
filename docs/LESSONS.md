@@ -3176,6 +3176,35 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
   `docs/eval/ablation-third-arm-plan.md`.
 
+### 261. A goal is said by its own line, and a shot is skipped only for its own goal
+- **What happened:** the Describer says a verified claim in the place of the event it is about, but at
+  a claim's priority. On the demo, the claims about two goals ("a player scores.") were at a lower
+  priority than the shot line just before each, so the shot's line pushed them out and a blind fan
+  heard "A player shoots from the right." and never that it went in (67:08, 70:36). The commentary
+  called the goal first by priority, then the shot two seconds later ("Goal!", then "A shot.").
+- **Rule:** a goal is said by its own line ("Goal! ..."), never replaced by a claim about it. A shot
+  that went in is not said as well only when its own goal event follows (the next goal, with no play
+  between) and is confident enough to be said; otherwise the shot is said as the goal. An
+  independent review found the first version of this rule could leave a goal unsaid (a goal event
+  under the gate) or say it twice (a goal more than 2 s after its shot): both are tested now.
+- **Check:** `tests/test_spoken_variety.py::test_a_goal_with_a_verified_claim_is_said_as_a_goal_and_not_crowded_out_by_its_shot`,
+  `::test_a_shot_its_goal_follows_is_not_said_before_the_goal`.
+
+### 262. A bound from a study is the population's limit, not its sample's maximum
+- **What happened:** the fact-checker's pass-speed bound was derived twice, wrongly both times.
+  First it was 85% of the fastest kick in a seven-player laboratory study (34.48 m/s, so 105.5 km/h): a
+  sample's maximum, not the fastest a ball is kicked. That bound rejected a true 112 km/h pass in our
+  own engine's seed 7. It was set again at 85% of GROUNDING P3 (122.4 km/h), just above the demo's
+  fastest claimed pass, but P3 is a design bound for our engine (real kicks reach about 58 m/s), so 85%
+  of it bounds no population either. An independent review found both.
+- **Rule:** a bound taken from a study states which population it bounds; a sample's largest value
+  is not that population's limit, and a fraction of a design bound is a design bound. With no sourced
+  pass bound for our world, the gate keeps one bound, P3's, the same constant the live path drops a
+  detection's speed at (`detected.MAX_BALL_KMH`). A bound changed after a test result is disclosed
+  with its reason, and the change must be to the derivation, never to fit the result.
+- **Check:** `ninety/agents/factcheck.py` `MAX_BALL_KMH is detected.MAX_BALL_KMH`;
+  `tests/test_factcheck.py::test_a_stated_ball_speed_the_ball_cannot_reach_is_rejected`.
+
 ### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
 - **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
   a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
@@ -3201,3 +3230,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_phone_companion.py::test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track`
   and `::test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s_numbers` drop the
   bundle's `sheets` first and still assert the no-sheet results (0 rows; the line-up's 4 shirts).
+
+### 269. When vision cannot do a job the product needs, take a disclosed input; never a hidden one
+- **What happened:** the demo had to name players, and vision cannot: shirt numbers are a few
+  pixels tall on our renders, and naming by role missed its 0.95 gate (held-out 0.884, #374).
+  The tempting shortcut was to read the simulator's ids where vision's tracks are, quietly, and
+  call the names vision's. Kian decided (Oct 26) to name players openly the way broadcasts do,
+  from a licensed tracking provider's player-ID feed.
+- **Rule:** an input the live path takes from the engine is a separate, named artifact
+  (`identity_feed.jsonl`) carrying only what that job needs (here identity: who, and where to
+  match him), read by one module, for one purpose (identity, and the side it implies), allowed by name in AGENTS.md's hard rules, and
+  disclosed wherever its output is shown ("Player ID feed"; README, EVALUATION, CHALLENGE_MAP).
+  Everything else the pipeline computes must be the same with it and without it, and its matching
+  is graded like any vision result, without claiming it as vision's.
+- **Check:** `uv run pytest tests/test_identity_feed.py`:
+  `::test_only_the_identity_path_touches_the_feed` fails if any other module imports the feed's
+  reader (any import form) or reads a field made from it;
+  `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
+  fact, event or match.json field other than the line-up changes;
+  `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.

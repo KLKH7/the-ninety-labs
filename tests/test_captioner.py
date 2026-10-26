@@ -59,9 +59,11 @@ def run(text_or_model, judge=PASSES, events_reel=None, **kw):
 
 
 def test_a_caption_the_fact_checker_passes_airs():
-    out = run("A thunderbolt from h9, 26 m out at 112 km/h!")
+    # No speed in the words: vision's stated speeds are held until measured (#375), so a caption that
+    # states one is sent back (tested in tests/test_factcheck.py); this one states what is checked.
+    out = run("A thunderbolt from h9, 26 m out!")
     assert (out["source"], out["text"], out["call"]["problem"]) == (
-        "model", "A thunderbolt from h9, 26 m out at 112 km/h!", None)
+        "model", "A thunderbolt from h9, 26 m out!", None)
 
 
 def test_the_model_is_given_the_label_the_shot_its_build_up_and_the_distance():
