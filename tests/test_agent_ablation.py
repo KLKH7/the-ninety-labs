@@ -17,7 +17,7 @@ FIRST = EVENTS[0]["id"]  # minute 1's pass
 SEED = 21
 
 
-def scripted_run(grader=None):
+def scripted_run(grader=None, **kw):
     # The single agent writes a true claim in minute 1 and a false number in minute 2, in both its
     # arms (each minute runs the arms in order: one agent, one agent + fact-checker, graph); checked,
     # it keeps writing the false number when sent back. The graph's Tactician does the same.
@@ -32,7 +32,7 @@ def scripted_run(grader=None):
          "challenger": ['{"agree": true}'] * 2},
         judge=Judge(),
     )
-    return asyncio.run(ab.run(graph, one_agent, grader or Judge(), {SEED: EVENTS}, minutes=2))
+    return asyncio.run(ab.run(graph, one_agent, grader or Judge(), {SEED: EVENTS}, minutes=2, **kw))
 
 
 BODY = scripted_run()
@@ -153,7 +153,7 @@ def test_the_report_is_strict_json_and_names_the_false_claims():
     assert "| one agent + fact-checker | 1 | 1 | 0/1 (0%)" in md
     assert "199 km/h" in md
     # The plan's reading rule: the same true and false counts, so arm 2 matches the graph.
-    assert "matches the graph" in md
+    assert "Outcome 1" in md
 
 
 def reading(graph: tuple[int, int], checked: tuple[int, int]) -> str:
@@ -164,13 +164,33 @@ def reading(graph: tuple[int, int], checked: tuple[int, int]) -> str:
 
 
 def test_the_pre_registered_reading_rule():
-    # (true, false) on air for the graph, then for arm 2.
-    assert "graph wins" in reading((6, 0), (6, 1))  # as many true, fewer false
-    assert "graph wins" in reading((9, 1), (6, 1))  # more true, at a lower false rate
-    assert "graph wins" in reading((6, 1), (5, 1))  # the graph's rule is read first: more true, lower rate
-    assert "matches" in reading((5, 1), (6, 1))  # within one of each
-    assert "Neither" in reading((3, 0), (9, 0))  # far fewer true, no fewer false
-    assert "Neither" in reading((9, 4), (3, 1))  # more true but a higher false rate, and not within one
+    # (true, false) on air for the graph, then for arm 2; exactly one outcome, checked in order.
+    assert "Outcome 1" in reading((6, 0), (6, 1))  # within one of each: never a win
+    assert "Outcome 1" in reading((5, 1), (6, 2))
+    assert "Outcome 2" in reading((6, 0), (6, 2))  # as many true, fewer false
+    assert "Outcome 2" in reading((9, 1), (6, 1))  # more true, at a lower false rate
+    assert "Outcome 3" in reading((6, 2), (6, 0))  # the same, swapped
+    assert "Outcome 3" in reading((6, 1), (9, 1))
+    assert "Outcome 4" in reading((9, 4), (3, 1))  # more true but a higher false rate
+    assert "Outcome 4" in reading((3, 1), (9, 4))
+
+
+def test_no_two_outcomes_hold_at_once():
+    import itertools
+
+    for counts in itertools.product(range(6), repeat=4):
+        text = reading(counts[:2], counts[2:])
+        assert sum(f"Outcome {n}" in text for n in range(1, 5)) == 1, counts
+
+
+def test_the_cost_stop_starts_no_further_minute():
+    body = scripted_run(budget_usd=0.000001)  # spent after minute 1, so minute 2 never starts
+    assert {len(minutes) for minutes in body["minutes_by_arm"].values()} == {1}
+    assert body["stopped"].startswith("cost stop") and "minute 2" in body["stopped"]
+    assert body["estimated_usd"] > 0 and body["grader_calls"] >= 1
+    md = ab.report({**body, "agent_definitions": {}}, "scripted models")
+    assert "cost stop" in md
+    assert BODY["stopped"] == ""  # the default budget is not reached on two scripted minutes
 
 
 def test_the_live_command_refuses_to_run_offline(monkeypatch):

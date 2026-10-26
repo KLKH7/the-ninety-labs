@@ -56,6 +56,11 @@ COMMAND = "uv run python -m ninety.eval.agent_ablation --live"
 SEEDS = (21, 33)  # the held-out seeds (docs/EVALUATION.md)
 MINUTES = match_server.MINUTES  # every served match is this long
 
+# docs/eval/latency-cost.md's prices for gpt-4.1-mini, at the plan's ~3,000 tokens in and 150 out a call
+# (docs/eval/ablation-third-arm-plan.md): tokens were not metered, so cost is estimated from calls.
+USD_PER_CALL = 3000 * 0.0004 / 1000 + 150 * 0.0016 / 1000
+BUDGET_USD = 0.50  # the plan's cost stop, approved by Kian
+
 Ask = Callable[[str], Awaitable[str]]
 Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
 
@@ -158,15 +163,31 @@ async def graph_minute(
 
 async def run(
     graph_models: Models, one_agent: Ask, grader: Judge, events_by_seed: dict[int, list[dict]],
-    minutes: int = MINUTES,
+    minutes: int = MINUTES, budget_usd: float = BUDGET_USD,
 ) -> dict:
-    """Every arm over every minute of every seed, each aired claim graded."""
+    """Every arm over every minute of every seed, each aired claim graded. Starts no further minute
+    once the estimated spend (every model call, the grader's too) reaches `budget_usd`."""
     arms: dict[str, list[dict]] = {"one agent": [], "one agent + fact-checker": [], "graph": []}
+    graded_calls = 0
+
+    async def counted_grader(claim: Claim, evidence: list[dict]) -> Verdict:
+        nonlocal graded_calls
+        graded_calls += 1
+        return await grader(claim, evidence)
+
+    def spent() -> float:
+        return (graded_calls + sum(m["model_calls"] for ms in arms.values() for m in ms)) * USD_PER_CALL
+
+    stopped = ""
     for seed, events in events_by_seed.items():
         # The inline events under a match id no server serves (lesson 90): a tool call errors.
         match = match_server.unserved(match_server.match_id(seed))
         known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
         for minute in range(1, minutes + 1):
+            if not stopped and spent() >= budget_usd:
+                stopped = f"cost stop: ${spent():.2f} estimated before seed {seed} minute {minute}"
+            if stopped:
+                break
             for arm in arms:
                 started = time.perf_counter()
                 checker: dict = {}
@@ -179,11 +200,12 @@ async def run(
                 else:
                     aired, calls, why = await graph_minute(graph_models, events, match, minute, checker)
                 seconds = time.perf_counter() - started
-                graded = [await grade(c, known, grader) for c in aired]
+                graded = [await grade(c, known, counted_grader) for c in aired]
                 arms[arm].append({"seed": seed, "minute": minute, "aired": graded, "model_calls": calls,
                                   "seconds": round(seconds, 2), "why_none": why, "checker": checker})
     return {"seeds": list(events_by_seed), "minutes": minutes,
-            "arms": {a: summary(m) for a, m in arms.items()}, "minutes_by_arm": arms}
+            "arms": {a: summary(m) for a, m in arms.items()}, "minutes_by_arm": arms,
+            "grader_calls": graded_calls, "estimated_usd": round(spent(), 4), "stopped": stopped}
 
 
 def summary(minutes: list[dict]) -> dict:
@@ -225,29 +247,33 @@ ARM_WORDS = {
     "graph": "the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the confidence "
     "gate and the Judge, Producer); only verified claims air.",
 }
-# docs/latency-cost.md's prices for gpt-4.1-mini, at the plan's ~3,000 tokens in and 150 out a call
-# (docs/eval/ablation-third-arm-plan.md): tokens were not metered, so cost is estimated from calls.
-USD_PER_CALL = 3000 * 0.0004 / 1000 + 150 * 0.0016 / 1000
 
 
 def reading(arms: dict) -> str:
-    """The plan's reading rule, fixed before the run (docs/eval/ablation-third-arm-plan.md)."""
+    """The plan's reading rule, fixed before any run was scored (docs/eval/ablation-third-arm-plan.md):
+    exactly one of four outcomes, checked in order."""
     g, c = arms["graph"], arms["one agent + fact-checker"]
 
     def rate(arm: dict) -> float:
         return arm["false_aired"] / arm["aired"] if arm["aired"] else 0.0
 
-    # "More true claims at the same false rate" is read as: at a false rate no higher than arm 2's.
-    if (g["true_aired"] >= c["true_aired"] and g["false_aired"] < c["false_aired"]) or (
-        g["true_aired"] > c["true_aired"] and rate(g) <= rate(c)
-    ):
-        return ("**The graph wins** by the plan's rule: at least as many true claims with fewer false ones "
-                "on air, or more true claims at a false rate no higher.")
-    if abs(g["false_aired"] - c["false_aired"]) <= 1 and abs(g["true_aired"] - c["true_aired"]) <= 1:
-        return ("**The single agent with the fact-checker matches the graph** by the plan's rule (within one "
-                "false and one true claim): the fact-checker does the work, and the graph's extra agents buy "
-                "only coverage, at their cost.")
-    return "**Neither the plan's 'graph wins' nor its 'matches'**: reported as it fell, in the table above."
+    def beats(a: dict, b: dict) -> bool:
+        return (a["true_aired"] >= b["true_aired"] and a["false_aired"] < b["false_aired"]) or (
+            a["true_aired"] > b["true_aired"] and rate(a) <= rate(b)
+        )
+
+    if abs(g["true_aired"] - c["true_aired"]) <= 1 and abs(g["false_aired"] - c["false_aired"]) <= 1:
+        return ("**Outcome 1, the single agent with the fact-checker matches the graph** by the plan's rule "
+                "(within one true and one false claim): the fact-checker does the work, and the graph's "
+                "extra agents buy only coverage, at their cost.")
+    if beats(g, c):
+        return ("**Outcome 2, the graph wins** by the plan's rule: at least as many true claims with fewer "
+                "false ones on air, or more true claims at a false rate no higher.")
+    if beats(c, g):
+        return ("**Outcome 3, the single agent with the fact-checker wins** by the plan's rule: at least as "
+                "many true claims with fewer false ones on air, or more true claims at a false rate no "
+                "higher.")
+    return "**Outcome 4, mixed** by the plan's rule: neither arm beats the other; no winner is drawn."
 
 
 def checked(name: str, arm: dict) -> str:
@@ -262,10 +288,10 @@ def report(body: dict, ran: str) -> str:
     lines = [
         "# Ablation: one agent with every tool, against the multi-agent graph",
         "",
-        f"Generated by `{COMMAND}`, on held-out seeds {seeds}, every minute of",
+        f"Generated by `{COMMAND}`, on seeds {seeds}, every minute of",
         f"the served match ({body['minutes']} each), with {ran}, at commit `{body.get('commit', 'unknown')}`",
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
-        "to run. Data: `docs/eval/ablation-agents.json`.",
+        f"to run. Data: `docs/eval/{body.get('name', 'ablation-agents')}.json`.",
         "",
         evidence.md_line(body[evidence.KEY]),
         "",
@@ -291,6 +317,12 @@ def report(body: dict, ran: str) -> str:
             f"| {checked(name, arm)} | {arm['model_calls']} "
             f"| ${arm['model_calls'] * USD_PER_CALL:.2f} | {arm['seconds'] / max(arm['minutes'], 1):.1f} |"
         )
+    if "estimated_usd" in body:
+        lines += ["", f"Estimated cost of the run: ${body['estimated_usd']:.2f}, from {body['grader_calls']} "
+                  "grader calls and every arm's model calls (tokens not metered)."]
+    if body.get("stopped"):
+        lines += ["", f"**The run stopped early ({body['stopped']}).** The rule below is read on the "
+                  "minutes run."]
     if "one agent + fact-checker" in arms:
         lines += ["", reading(arms)]
     lines += ["", "## False claims on air", ""]
@@ -382,6 +414,8 @@ def main() -> None:
     ap.add_argument("--live", action="store_true", help="the published agents (Azure): the committed run")
     ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
     ap.add_argument("--out", type=Path, default=ROOT / "runs" / "eval")
+    ap.add_argument("--name", default="ablation-agents",
+                    help="the output files' name: ablation-third-arm for the plan's run (its own files)")
     args = ap.parse_args()
     if not args.live:
         ap.error("the ablation is measured live (--live); tests/test_agent_ablation.py runs it on scripts")
@@ -390,9 +424,10 @@ def main() -> None:
     body["ran"] = ran
     body[evidence.KEY] = defs  # each agent's version and definition fingerprint (ninety/agents/evidence.py)
     body["commit"] = workflow._commit()  # the engine the seeds were simulated with, and everything else
+    body["name"] = args.name
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "ablation-agents.json").write_text(results(body))
-    (args.out / "ablation-agents.md").write_text(report(body, ran))
+    (args.out / f"{args.name}.json").write_text(results(body))
+    (args.out / f"{args.name}.md").write_text(report(body, ran))
     for name, arm in body["arms"].items():
         print(f"{name}: {arm['aired']} aired, {arm['false_aired']} false, {arm['model_calls']} model calls")
 
