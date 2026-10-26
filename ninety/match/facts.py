@@ -49,6 +49,10 @@ def compact(event: dict) -> dict:
         out["outcome"] = event["outcome"]
     if event.get("ball_speed_kmh") is not None:
         out["ball_speed_kmh"] = round(event["ball_speed_kmh"])
+    if event.get("lofted") is not None:
+        # Whether vision saw the ball in the air over the pass: its speed is measured only on the
+        # ground (factcheck.measured_speed).
+        out["lofted"] = bool(event["lofted"])
     if event.get("end_x") is not None and event.get("end_y") is not None:
         out["distance_m"] = round(math.hypot(event["end_x"] - event["x"], event["end_y"] - event["y"]))
     if event.get("confidence") is not None:

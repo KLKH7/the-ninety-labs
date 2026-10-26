@@ -3249,3 +3249,36 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 270. A goal is the goal event, not the shot that went in
+- **What happened:** match mode (`ninety/condensed.py`), the highlight reel and the team goal
+  count (`ninety/intel/stats.py`) counted a goal only as a shot whose outcome was a goal. GROUNDING
+  I24 already said a goal is a detected `goal` event (Law 10). On the demo match (seed 8080) vision
+  logged 5 goal events. Two had no shot before them, so match.json, its chapters (the scrubber's
+  ticks) and the reel showed 3 goals. Those 3 took their side from the shot, whose side confidence
+  (0.16 to 0.65) is under the fact-checker's gate, so all 3 showed no club. The goal events' own
+  side confidence was 0.94 to 1.0. The demo audit found it, not a test: every test built goals as
+  shots.
+- **Rule:** one function says what a goal is (`stats.goal_moments`), and every screen and fact
+  reads it. A `goal` event is the goal. The shot just before it, if that shot went in, is the same
+  goal (the pairing `scoring.goals` already uses, so no new time window). The goal event's side and
+  confidence decide the goal's club and whether it counts; the shot gives where it was struck and
+  how fast. A shot that went in with no goal event after it still counts. A goal with no shot has no
+  distance, so no distance is said.
+- **Check:** `uv run pytest tests/test_match_mode.py -k goal tests/test_captioner.py -k strike`.
+  `test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts`
+  fails if a goal event without a shot is dropped, if a pair counts twice, or if the club comes from
+  the shot. On a bundle, match.json's `goals` and its goal chapters each match the goal events.
+
+### 271. A name that reaches events through one bridge is capped by that bridge
+- **What happened:** #389 named the broadcast's tracks, which events name, only through the camera
+  join to the tactical tracks. Its precision was high, but 232 of 345 events stayed unnamed and
+  side-unsure, because most broadcast tracks have no join pairing at the gate. The broadcast
+  camera is calibrated and its tracks are already in pitch metres, so they could be matched to the
+  feed directly, as real broadcasts do. Doing that named 224 events (106 of 106 held-out right).
+- **Rule:** before shipping a coverage number, count what stops the rest and check that the limit
+  is the data, not the route: every unnamed event gets one reason, and a fix is pre-registered with
+  its precision gate before it runs.
+- **Check:** `docs/eval/identity.json` `direct.reasons` covers all 345 events;
+  `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
+  fails if the direct path is on without its gate met.

@@ -39,7 +39,7 @@ from ninety.intel import (
 )
 from ninety.intel import identity as identity_mod
 from ninety.intel import team_stats as team_stats_mod
-from ninety.intel.scene import TEAMS, Frames, xy
+from ninety.intel.scene import TEAMS, Frames, minute_of, xy
 from ninety.intel.teamsheet import Fixture
 
 BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
@@ -81,11 +81,13 @@ class MatchInsights:
         association: Mapping[str, Mapping] | None = None,
         score_reads: Sequence[Mapping] = (),
         feed: identity_mod.Feed | None = None,
+        broadcast_frames: Sequence[Mapping] | None = None,
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
             raise ValueError(f"{clip}: frames must be source 'tracked', got {bad}")
         f = Frames(frames)
+        detected_events = list(events)  # as vision detected them, before any person is moved
         broadcast: dict[str, dict] = {}
         if association is not None:
             # A joined match: the players are the tactical camera's tracks and the events name the
@@ -150,6 +152,7 @@ class MatchInsights:
         # readings (`score_reads`), whose first holds the score before any change.
         facts["scorebug"] = scoring.scorebug([*events, *score_reads])
         facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
+        facts["spell"] = spell_rows(events)  # runs of passes, receiver to passer (ninety/speech/spells.py)
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
@@ -172,7 +175,8 @@ class MatchInsights:
                                  f"{feed.meta.get('seed')}, {feed.meta['teams']})")
             mi.identity = identity_mod.tactical(f.frames, feed)
             if association is not None:
-                mi.identity_broadcast = identity_mod.broadcast(association, mi.identity, identity_mod.gate())
+                mi.identity_broadcast = identity_mod.named_broadcast(
+                    association, mi.identity, feed, detected_events, broadcast_frames)
             mi.identity_source = identity_mod.disclosure(feed)
         return mi
 
@@ -335,8 +339,13 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
-        return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession;
+        and the longest spells of passes in a row (a run vision followed receiver to passer, which
+        needs no side told), longest first."""
+        out = self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+        spells = [r for r in self.facts.get("spell", ()) if minute_from <= r["minute"] <= minute_to]
+        spells.sort(key=lambda r: (-r["value"], r["t"]))
+        return {**out, "facts": [*out.get("facts", []), *spells[:1]]}
 
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Where the ball was over the minutes: each club's share with it in its attacking third."""
@@ -621,6 +630,23 @@ def load_fixture(path: Path) -> Fixture:
     return Fixture(int(body["seed"]), params["home_code"], params["away_code"])
 
 
+def spell_rows(events: Sequence[Mapping]) -> list[dict]:
+    """Each spell of possession (ninety/speech/spells.py) as an insight fact: its passes, when it ended,
+    and its side only when every pass's was told surely."""
+    from ninety.agents import factcheck
+    from ninety.speech import spells
+
+    rows = []
+    for run in spells.spells(list(events)):
+        last, team = run[-1], run[-1].get("team")
+        sure = team in TEAMS and all(e.get("team") == team and factcheck.side_known(e) for e in run)
+        rows.append({"id": f"spell:{last['id']}", "kind": "spell", "metric": "spell_passes",
+                     "team": team if sure else None, "minute": minute_of(float(last["t"])),
+                     "t": round(float(last["t"]), 2), "value": len(run), "unit": "passes", "confident": True,
+                     "events": [e["id"] for e in run]})
+    return rows
+
+
 def score_reads(path: Path) -> list[dict]:
     """A clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score, the vision ones."""
     rows = (json.loads(line) for line in path.read_text().splitlines() if line.strip())
@@ -643,6 +669,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--identity-feed", type=Path, default=None,
                     help="the simulated tracking provider's player-ID feed (ninety/sim/identity_feed.py): "
                          "names for the line-up only, never a fact or a stat")
+    ap.add_argument("--broadcast-vision", type=Path, default=None,
+                    help="with --identity-feed: the segments' vision runs, to name the broadcast's tracks "
+                         "directly from the feed too (ninety/intel/identity.py, step 6)")
     ap.add_argument("--scorebug", type=Path, default=None,
                     help="the clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score")
     args = ap.parse_args(argv)
@@ -652,12 +681,14 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
     association = json.loads(args.association.read_text())["tracks"] if args.association else None
     reads = score_reads(args.scorebug) if args.scorebug is not None else []
-    feed = None
+    feed, b_frames = None, None
     if args.identity_feed:  # the player-ID feed: names (and nothing else) for the line-up
-        feed = identity_mod.load_for(args.identity_feed, frames, load_fixture(args.fixture))
+        b_frames = (identity_mod.broadcast_frames(args.broadcast_vision, args.fixture.parent)
+                    if args.broadcast_vision else [])
+        feed = identity_mod.load_for(args.identity_feed, [*frames, *b_frames], load_fixture(args.fixture))
     mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
                              association=association, score_reads=reads,
-                             feed=feed)
+                             feed=feed, broadcast_frames=b_frames)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 
