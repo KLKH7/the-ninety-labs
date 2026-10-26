@@ -90,9 +90,17 @@ def site(browser, tmp_path_factory):  # noqa: F811
     server.shutdown()
 
 
-def phone(browser, site, bundle=True, laptop_t: float | None = None):  # noqa: F811
-    """A mock laptop and the phone in one context; with `bundle`, the phone reads the cut clip's."""
+def phone(browser, site, bundle=True, laptop_t: float | None = None, match=None):  # noqa: F811
+    """A mock laptop and the phone in one context; with `bundle`, the phone reads the cut clip's.
+    `match` edits the bundle's match.json before the phone reads it (e.g. drop its team sheets)."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    if match is not None:
+        def edited(route):
+            body = route.fetch().json()
+            match(body)
+            route.fulfill(json=body)
+
+        ctx.route("**/bundle/match.json", edited)
     laptop = ctx.new_page()
     laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
     laptop.wait_for_function("window.ninetyLaptop")
@@ -946,6 +954,7 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
 
     def squads(route):
         body = route.fetch().json()
+        body.pop("sheets", None)  # the bundle's own fictional sheets would list eleven shirts
         body["lineup"] = [{"id": "h-t1", "number": 4, "confident": True},
                           {"id": "a-t3", "number": 9, "confident": True}]
         body["player_stats"] = [{"id": "h-t1", "distance_km": 6.2, "top_speed_kmh": 30.1, "involvements": 12},
@@ -1346,7 +1355,8 @@ def test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track(browser
     """Demo audit: Players listed track fragments (12 London, 6 centre forwards, Lisbon with no keeper).
     With the team sheet (match.json `sheets`, names-by-role), it lists each club's eleven: shirt, name,
     position. Without one, a tracked player is never listed as a player."""
-    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    # The bundle now carries team sheets (ninety-e2e writes fictional ones, #374): drop them here.
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS, match=lambda b: b.pop("sheets", None))
     page.click("#lt-players")
     assert page.locator("#roster .who").count() == 0  # the cut clip has tracks only and no sheet
     page.context.close()
