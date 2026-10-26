@@ -1212,3 +1212,32 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     assert page.text_content("#score-home") == "0"
     assert not errors
     ctx.close()
+
+
+def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browser, site):  # noqa: F811
+    """#368: a detected save is written as a shot with outcome null (saves are not read from video).
+    The phone says only that it was taken, and marks it apart on the shot map, never as wide."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def unread(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": None} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", unread)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#lt-stats")
+    page.wait_for_selector("#shots circle.shot.open", state="attached")  # a small mark
+    assert page.locator("#shots circle.shot.off").count() == 0  # e2 is the clip's one sure shot
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play[data-event=e2]")
+    said = page.inner_text("#insights .play[data-event=e2]")
+    assert "takes a shot." in said and "wide" not in said
+    assert not errors
+    ctx.close()

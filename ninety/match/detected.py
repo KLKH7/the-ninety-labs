@@ -29,6 +29,11 @@ FIXTURES = ROOT / "tests" / "fixtures"
 M1_CLIP = "seed900001"
 # The answer key's file names (docs/DATA_CONTRACT.md): never a detected-events file.
 TRUTH_NAMES = frozenset({"events.jsonl", "frames.jsonl"})
+# The engine never moves a ball faster than 40 m/s (GROUNDING P3, a design bound: real recorded kicks go
+# faster, about 58 m/s, but not in this engine's matches, which is all the live path sees). A detected
+# speed above it is a misread, not a measurement: the live path keeps the event and drops the speed,
+# so no graphic, line or claim says it (vision's speed estimate is its own to fix).
+MAX_BALL_KMH = 40.0 * 3.6
 
 
 def m1_path(clip: str = M1_CLIP) -> Path:
@@ -66,7 +71,15 @@ def load(path: str | Path) -> list[dict]:
     if path.name in TRUTH_NAMES:
         raise ValueError(f"{path}: that is the answer key's name; the live path reads detected events")
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    return check(rows, str(path))
+    return [credible(e) for e in check(rows, str(path))]
+
+
+def credible(event: dict) -> dict:
+    """The event with a ball speed no ball can reach dropped to unknown (MAX_BALL_KMH, GROUNDING P3)."""
+    speed = event.get("ball_speed_kmh")
+    if speed is not None and speed > MAX_BALL_KMH:
+        return {**event, "ball_speed_kmh": None}
+    return event
 
 
 @lru_cache(maxsize=4)

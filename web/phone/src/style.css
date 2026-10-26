@@ -283,6 +283,7 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .half-pitch .shot.off { fill: none; stroke-width: 0.45; }
 .half-pitch .shot.off.home { stroke: color-mix(in srgb, var(--home) 40%, #fff); }
 .half-pitch .shot.off.away { stroke: color-mix(in srgb, var(--away) 40%, #fff); }
+.half-pitch .shot.open { fill: rgba(235, 235, 245, 0.45); stroke-width: 0.35; } /* outcome not read */
 
 /* ===== Apple Sports, matched (Coordinator, Oct 24: exact match of mobbin/live-applesports-1..3,
    mobbin2/live-applesports-teamstats-1 and mobbin/story-applesports-1). Measured off the 1179 px
