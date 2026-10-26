@@ -69,6 +69,8 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     page.click("#tab-button-ask")
     page.wait_for_selector("#onboard:visible")
     assert page.is_hidden("#ask-start") and page.is_hidden("#ask-form")  # no composer while choosing
+    assert page.is_hidden("#panel-ask ion-header")  # full-screen: the tiles carry the crests
+    assert page.is_visible("#tabs")  # Live and Story stay a tap away
     assert page.inner_text("#onboard-title") == "Your club"
     assert page.locator(".onboard-option .onboard-crest svg").count() == 2
     tap(page, "London Athletic")
@@ -81,6 +83,7 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     page.wait_for_selector("#ask-start:visible")
     assert page.is_hidden("#onboard")
     page.wait_for_selector("#ask-form:visible")  # the composer rises in once the choices are made
+    assert page.is_visible("#panel-ask ion-header")  # and the match header is back
     qs = grid(page)
     assert qs[0] == "Where are London overloading?" and "Which pass broke Lisbon's lines?" in qs
     saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))

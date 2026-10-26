@@ -935,3 +935,17 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 #panel-ask.composer-in ion-footer.composer { animation: composer-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes composer-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #panel-ask.composer-in ion-footer.composer { animation-duration: 0.01s; } }
+
+/* Onboarding is full-screen (Kian, Oct 25): no match header (the tiles carry the crests) and no
+   composer; the tab bar stays, so Live and Story are a tap away. iOS 17/18 controls: Back a round
+   grey glass button with a white chevron, Skip a grey capsule, the page dots centred between. */
+#panel-ask.onboarding ion-header { display: none; }
+#panel-ask.onboarding #ask-content { --offset-top: 0px !important; }
+#ask-content .onboard:not([hidden]) { padding-top: calc(env(safe-area-inset-top) + 10px); }
+.onboard-nav { padding: 0 16px; min-height: 44px; }
+.onboard .nav-link { min-height: 0; padding: 0; gap: 0; color: #fff; font-size: 15px; font-weight: 600;
+  background: rgba(118, 118, 128, 0.24); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
+.onboard-back { width: 36px; height: 36px; border-radius: 50%; justify-content: center; }
+.onboard-back svg { width: 20px; height: 20px; stroke-width: 2.6; margin-left: -1px; }
+.onboard-skip { height: 32px; padding: 0 14px !important; border-radius: 16px; }
+.onboard .nav-link:active { background: rgba(118, 118, 128, 0.36); }
