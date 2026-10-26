@@ -304,3 +304,37 @@ def test_onair_keeps_only_the_speeds_a_cited_event_may_state_and_leaves_tidy_tex
     rows, traced = onair.gate_speeds(cue_rows, claims, [shot])
     assert rows[0]["text"] == "h1 shoots." and traced[0]["text"] == "h1 shoots."
     assert "101" not in traced[0]["steps"][0]["detail"]
+
+
+# ---------------------------------------------------------------- radio-style: names, the score, chances
+
+
+NAMES = {"h-t9": "Rondell", "h-t1": "Carrick"}
+SCORES = [{"t": 100.4, "home": 2, "away": 1, "confident": True}]
+
+
+def test_the_voices_name_a_player_by_the_feed_and_say_the_score_after_a_goal():
+    goal = [ev("g1", 100.4, "goal", "h-t9", x=95.0)]
+    track, _ = describe.describe(goal, [], clubs=CLUBS, names=NAMES, scores=SCORES)
+    assert [s.spoken for s in track.said] == ["Goal! Rondell scores, on the right. London lead 2–1."]
+    calls = [li["text"] for li in commentary.commentary(goal, [], CLUBS, names=NAMES, scores=SCORES)["lines"]]
+    assert calls == ["Goal! Rondell scores! London lead 2–1."]
+    # Without the feed, his club; without a reading, no score: never counted from goals.
+    track, _ = describe.describe(goal, [], clubs=CLUBS)
+    assert [s.spoken for s in track.said] == ["Goal! A London player scores, on the right."]
+    assert called(goal) == ["Goal! London score!"]
+
+
+def test_a_pass_is_said_with_the_feeds_names_and_a_level_score_as_level():
+    passes = [ev("p1", 10.0, "pass", "h-t1", "h-t9", "success", side=0.5)]
+    track, _ = describe.describe(passes, [], clubs=CLUBS, names=NAMES)
+    assert track.said[0].spoken.startswith("Carrick finds Rondell")
+    assert describe.score_said((1, 1), CLUBS) == "It's 1–1."
+    assert describe.score_said((0, 2), CLUBS) == "Lisbon lead 2–0."
+
+
+def test_a_shot_on_target_is_a_big_chance():
+    shot = [ev("s1", 100.0, "shot", "h-t9", outcome="on_target", x=95.0)]
+    assert said(shot)[0][1].startswith("Big chance! ")
+    calls = [li["text"] for li in commentary.commentary(shot, [], CLUBS, names=NAMES)["lines"]]
+    assert calls == ["Big chance! Rondell shoots, on target!"]

@@ -748,26 +748,30 @@ async def run(args: argparse.Namespace) -> dict:
         cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant,
                                                                         perceiver=perceiver)
         agents_mode = "graph offline"
-    # What the screens show: a tracked player as "a London player", never his raw track id
-    # (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
-    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta))
-    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
-    # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
-    cues, claims = onair.gate_speeds(cues, claims, events)
-    # The INSIGHT bar shows only what the broadcast can't (ninety/agents/insight_bar.py): the agents'
-    # single-event claims stay in the trace and the audio description, never on the bar.
-    # The audio description still says them in their event's place (`spoken_cues`); the bar, the
-    # bundle's cues and the commentary do not.
-    kinds = {e["id"]: e["type"] for e in events}
-    spoken_cues = cues
-    cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
+    # The match's insights, when the bundle has them: the INSIGHT bar's facts, the feed's names by track
+    # (#389: only this path reads them, and hands the screens and the voices names alone) and the
+    # scorebug's measured readings (#356).
     insights_file = args.insights or args.team_stats
+    mi, names, scores = None, {}, []
     if insights_file is not None:
         from ninety.intel.match_insights import MatchInsights
 
         mi = MatchInsights.from_dict(json.loads(insights_file.read_text()))
-        # The feed's names by track (#389): only this path reads them, and hands the bar names alone.
         names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
+        scores = [r for r in mi.facts.get("scorebug", ()) if r.get("confident")]
+    # What the screens show: a tracked player by the feed's name or as "a London player", never his raw
+    # track id (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
+    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta), names)
+    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta), names)
+    # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
+    cues, claims = onair.gate_speeds(cues, claims, events)
+    # The INSIGHT bar shows only what the broadcast can't (ninety/agents/insight_bar.py): the agents'
+    # single-event claims stay in the trace and the audio description (`spoken_cues`), never on the
+    # bar, in the bundle's cues or in the commentary.
+    kinds = {e["id"]: e["type"] for e in events}
+    spoken_cues = cues
+    cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
+    if mi is not None:
         bar, bar_claims = insight_bar.build(mi, Timeline.of_clip(clip.meta).to_video, sides_known(events),
                                             clubs_of(clip.meta), names)
         cues, claims, spoken_cues = cues + bar, claims + bar_claims, spoken_cues + bar
@@ -785,22 +789,24 @@ async def run(args: argparse.Namespace) -> dict:
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
     track, refused = describe.describe(events, spoken_cues, voice or describe.estimate, upgrades,
-                                       clubs=clubs_of(clip.meta))
+                                       clubs=clubs_of(clip.meta), names=names, scores=scores)
     if voice is not None:
         voice.save(track, out)
     # Every text the track writes, as a screen may show it: the checked form names track ids, which never
     # air (ninety/agents/onair.py); what is said (`spoken`) never named them.
     sure, clubs = sides_known(events), clubs_of(clip.meta)
     for line in track.said:
-        line.text = onair.render(line.text, sure, clubs)
-    refused = [{**r, "text": onair.render(r["text"], sure, clubs)} if isinstance(r.get("text"), str) else r
+        line.text = onair.render(line.text, sure, clubs, names)
+    refused = [{**r, "text": onair.render(r["text"], sure, clubs, names)}
+               if isinstance(r.get("text"), str) else r
                for r in refused]
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
 
     commentary_info = commentary.write(
-        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta)), out)
+        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta), names, scores),
+        out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)

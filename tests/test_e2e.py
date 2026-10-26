@@ -432,9 +432,9 @@ def test_the_commentary_hears_the_clips_clubs_and_timeline_and_never_the_audio_c
     seen = []
     real = commentary.commentary
 
-    def spy(events, cues, clubs=None, timeline=None):
+    def spy(events, cues, clubs=None, timeline=None, names=None, scores=None):
         seen.append((cues, clubs, timeline))
-        return real(events, cues, clubs, timeline)
+        return real(events, cues, clubs, timeline, names, scores)
 
     monkeypatch.setattr(commentary, "commentary", spy)
     monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
