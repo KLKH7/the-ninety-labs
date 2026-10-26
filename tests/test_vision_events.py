@@ -233,7 +233,7 @@ def test_a_ball_rolling_past_a_player_is_not_his():
     assert ev.CARRY_MPS < 12.0
 
 
-def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_away_is_not():
+def test_a_strike_toward_the_goal_home_attacks_is_a_shot_for_home_whichever_kit_depth_named_home():
     def scene(colour):
         rows, bx = [], 90.3
         for f in range(40):
@@ -241,10 +241,11 @@ def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_
                 bx += 25.0 / FPS
             rows.append(row(f, crowd(f) + [(90.0, 34.0, colour)], (bx, 34.0)))
         return rows
-    home = [e["type"] for e in ev.detect(scene(BLUE))[0]]
-    away = [e["type"] for e in ev.detect(scene(RED))[0]]
-    assert home == ["shot", "out_of_play"]  # it goes on over the goal line
-    assert "shot" not in away and away[0] == "pass"
+    home = [(e["type"], e["team"]) for e in ev.detect(scene(BLUE))[0]]
+    away = [(e["type"], e["team"]) for e in ev.detect(scene(RED))[0]]
+    assert home[0] == ("shot", "home") and home[1][0] == "out_of_play"  # it goes on over the goal line
+    # By depth red is away; its strike at the goal home attacks names its kit home (amendment B1).
+    assert away == home
 
 
 def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not():
@@ -823,3 +824,51 @@ def test_one_frames_jitter_barely_moves_the_relative_speed():
     holder = next(t for t in tracks if t.at(30) == (50.0 + 7.0 * 30 / FPS, 34.0))
     i = next(k for k, p in enumerate(path) if p.frame == 31)
     assert abs(ev.relative_speed(path, i, holder) - 5.0) < 0.2 / 0.24 + 1e-9
+
+
+# Amendment B1 (docs/eval/turnovers-vision-plan.md): the kits named by the goal their strikes head for.
+
+
+def strike_scene(shooter_x, deep_colour, frames=40, kick=10):
+    """Four players of each kit; `deep_colour`'s stand deeper toward x = 0 (so `assign_teams` names
+    it home). A blue player at (shooter_x, 34) strikes at 25 m/s toward x = 105, between the posts."""
+    shallow = RED if deep_colour == BLUE else BLUE
+    rows = []
+    for f in range(frames):
+        people = ([(60 + 3 * k, 60.0, deep_colour) for k in range(4)] + [(75 + 3 * k, 62.0, shallow) for k in range(4)]
+                  + [(shooter_x, 34.0, BLUE)])
+        bx = shooter_x + 0.3 if f <= kick else min(shooter_x + 0.3 + 25.0 * (f - kick) / FPS, 104.0)
+        rows.append(row(f, people, (bx, 34.0)))
+    return rows
+
+
+def test_a_strike_at_the_goal_x_105_names_its_kit_home_against_a_naming_by_depth():
+    rows = strike_scene(85.0, deep_colour=RED)
+    tracks = tr.track_players(rows)
+    assert tr.assign_teams(tracks) is not None
+    shooter = next(t for t in tracks if t.xy[0] == (85.0, 34.0))
+    assert shooter.team == "away"  # the premise: by depth, blue is away
+    sp = ev.spells(tr.ball_path(rows), tracks)
+    assert ev.name_by_strikes(tr.ball_path(rows), sp, tracks, rows) == -1
+    assert shooter.team == "home" and all(t.team == "away" for t in tracks if t.rgb[0] == RED)
+
+
+def test_a_naming_the_strikes_agree_with_or_no_strike_leaves_the_sides():
+    for rows, margin in ((strike_scene(85.0, deep_colour=BLUE), 1), (strike_scene(40.0, deep_colour=RED), 0)):
+        tracks = tr.track_players(rows)
+        tr.assign_teams(tracks)
+        before = [t.team for t in tracks]
+        path = tr.ball_path(rows)
+        assert ev.name_by_strikes(path, ev.spells(path, tracks), tracks, rows) == margin
+        assert [t.team for t in tracks] == before
+
+
+def test_the_tactical_views_sides_are_not_renamed():
+    rows = strike_scene(85.0, deep_colour=RED)
+    for r in rows:
+        for d in r["players"]:
+            d["view"] = "left"
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    path = tr.ball_path(rows)
+    assert ev.name_by_strikes(path, ev.spells(path, tracks), tracks, rows) == 0

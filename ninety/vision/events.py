@@ -452,6 +452,30 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
+def name_by_strikes(path: list[BallPoint], sp: list[Spell], tracks: list[Track], rows: list[dict]) -> int:
+    """Amendment B1 (docs/eval/turnovers-vision-plan.md): on the broadcast, the kits named by the goal
+    their strikes head for. Each spell end of an outfield track with a side whose ball heads for a goal
+    (`heads_for_goal`, toward either) votes that its kit attacks that goal (home attacks x = 105). When
+    the votes against `assign_teams`' naming outnumber those for it, every outfield track's side is
+    swapped; keepers keep the half they stand in. Returns the votes for less the votes against. The
+    tactical views' sides are not touched (their observations name each box's view)."""
+    if any("views" in d or "view" in d for r in rows for d in r["players"]):
+        return 0
+    index = {p.frame: i for i, p in enumerate(path)}
+    margin = 0
+    for s in sp:
+        if s.track.team is None or s.track.keeper:
+            continue
+        for side in ("home", "away"):
+            if heads_for_goal(path, index[s.last], side):
+                margin += 1 if side == s.track.team else -1
+    if margin < 0:
+        for t in tracks:
+            if t.team is not None and not t.keeper:
+                t.team = "away" if t.team == "home" else "home"
+    return margin
+
+
 def detect(rows: list[dict], join_breaks: bool = True, kinds: tuple[str, ...] = WRITTEN,
            pace: float | None = None) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
@@ -466,6 +490,7 @@ def detect(rows: list[dict], join_breaks: bool = True, kinds: tuple[str, ...] = 
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     sp = spells(path, tracks)
+    teams["named_by_strikes"] = name_by_strikes(path, sp, tracks, rows)
     outs = out_of_play(path)
     events: list[dict] = []
 
