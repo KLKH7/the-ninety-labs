@@ -1602,10 +1602,10 @@ def _carry(n=60, v=3.5, ahead=0.21, jump_at=None, jump_m=0.0):
     return frames
 
 
-def test_a_ball_in_close_control_is_played_by_a_foot_once_a_stride():
+def test_a_ball_in_close_control_is_played_by_a_foot_every_step():
     """Old: the engine carries a ball 0.21 m in front of him with no touch of its own, and the drawn
-    stride ran through it with neither foot playing it (seed 8080, h11 at 74.6 s). Now the foot on
-    its side meets it once a stride, the sole at the back of the ball at the touch's height."""
+    stride ran through it with neither foot playing it (seed 8080, h11 at 74.6 s). Now the swinging
+    foot meets it every step, left and right in turn, the sole at the back of the ball."""
     frames = _carry()
     drawn = _draw(frames)["h1"]
     w = [p["touch"]["w"] if p["touch"] else 0.0 for p, *_ in drawn]
@@ -1614,7 +1614,9 @@ def test_a_ball_in_close_control_is_played_by_a_foot_once_a_stride():
     assert peaks, "no foot met the carried ball"
     episodes = len(peaks)
     run = 3.5 * len(frames) / FPS
-    assert abs(episodes - run / (2 * _step_m(3.5))) <= 1.5, (episodes, run)
+    assert abs(episodes - run / _step_m(3.5)) <= 1.5, (episodes, run)
+    sides = [drawn[i][0]["touch"]["side"] for i in peaks]
+    assert all(a != b for a, b in zip(sides, sides[1:], strict=False)), sides  # left and right in turn
     for i in peaks:
         pose, m, _, _ = drawn[i]
         side = pose["touch"]["side"]
@@ -1668,22 +1670,22 @@ def test_a_soft_touch_below_stride_speed_keeps_its_support_foot():
     assert not g.supporting
 
 
-@pytest.mark.parametrize("lateral, side", [(0.12, "l"), (-0.12, "r")])
-def test_a_carried_ball_is_played_by_the_foot_on_its_side_late_in_its_swing(lateral, side):
-    """The foot on the ball's side plays it, and only late in that foot's swing (TAP_AT)."""
-    frames = _carry(ahead=0.18)
-    for fr in frames:
-        fr["ball"]["y"] += lateral
-    drawn = _draw(frames)["h1"]
-    touched = [p for p, *_ in drawn if p["touch"]]
-    assert touched and all(p["touch"]["side"] == side for p in touched)
-    for p in touched:
-        if p["touch"]["w"] > 0.5:
-            # its stance is centred on STANCE_CENTRE: a foot about to land is a quarter of the swing
-            # short of it, so late in the swing is just before the stance, never in it
-            from ninety.render.scene import STANCE_CENTRE, _duty
-            half = _duty(3.5) * math.pi
-            assert abs(_wrap(p["phase"] - STANCE_CENTRE[side])) > half * 0.5, p["phase"]
+def test_a_tapping_foot_meets_the_ball_late_in_its_swing_on_its_own_side():
+    """Each tap comes late in the tapping foot's swing (TAP_AT), never in its stance, and on that
+    foot's side of the ball's back (TAP_ACROSS)."""
+    from ninety.render.scene import STANCE_CENTRE, _duty
+
+    frames = _carry()
+    half = _duty(3.5) * math.pi
+    for p, *_ in _draw(frames)["h1"]:
+        t = p["touch"]
+        if not t or t["w"] <= 0.5:
+            continue
+        air = 2 * math.pi - 2 * half
+        into = ((p["phase"] - (STANCE_CENTRE[t["side"]] + half)) % (2 * math.pi)) / air
+        assert 0.5 < into < 1.0, (p["phase"], into)  # in the swing's second half: late, not in stance
+        lateral = t["at"][1] - 30.0  # he runs along y = 30 facing +x: left is +y
+        assert (lateral > 0) == (t["side"] == "l"), (t, lateral)
 
 
 def test_a_carried_ball_that_jumps_round_him_is_rolled_by_a_foot():
@@ -1716,3 +1718,53 @@ def test_a_catch_above_his_reach_is_made_in_a_jump():
             assert g.lift == pytest.approx(min(z + BALL_RADIUS - HAND_REACH_Z * k, HEADER_LIFT_MAX))
         else:
             assert g.lift <= 0.0
+
+
+@pytest.mark.parametrize("turn", [1.0, -1.0])
+def test_a_runner_leans_into_a_turn(turn):
+    """Old: a runner on a curve was drawn upright. The body leans the way it is accelerated, across
+    as along (pace), so on a left-hand curve his head is left of his hips, and the label with it."""
+    v, r, frames = 6.0, 12.0, []
+    for i in range(40):
+        a = turn * v / r * i / FPS
+        frames.append({"ball": {"x": 0.0, "y": 0.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": 50 + r * math.sin(a),
+                                    "y": 30 + turn * r * (1 - math.cos(a)),
+                                    "vx": v * math.cos(a), "vy": v * math.sin(a), "heading": a,
+                                    "action": "run", "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    pose, m, rel, _ = drawn[30]
+    h = frames[30]["players"][0]["heading"]
+    left = (-math.sin(h), math.cos(h))
+    head_side = rel["head"][0] * left[0] + rel["head"][1] * left[1]
+    assert turn * pose["roll"] > math.radians(5), pose["roll"]
+    assert turn * head_side > 0.05, head_side
+    g = Gait(action="run", speed=v, heading=h, roll=pose["roll"])  # the label tips with the mesh
+    parts = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, g)}
+    flat = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action="run", speed=v, heading=h))}
+    moved = [parts["head"]["a"][i] - flat["head"]["a"][i] for i in range(2)]
+    assert turn * (moved[0] * left[0] + moved[1] * left[1]) > 0.05, moved
+    for still in ("dive", "hands"):  # poses the mesh draws whole are not tipped, nor their labels
+        a = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action=still, heading=h, roll=0.2))}
+        b = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action=still, heading=h))}
+        assert a["head"]["a"] == b["head"]["a"], still
+
+
+def test_the_head_turns_to_the_ball_no_faster_than_a_body_turns():
+    """A player watches the ball: the head turns toward it, at most LOOK_MAX on the neck and no
+    faster than P16's 350 degrees a second."""
+    from ninety.render.fouls import LOOK_MAX
+    from ninety.render.scene import LOOK_RATE, watch_ball
+
+    g = Gait(action="stand", heading=0.0)
+    yaws = []
+    for _ in range(20):
+        g.look = None
+        watch_ball(g, 50.0, 30.0, (50.0, 40.0, 0.0))  # the ball straight to his left
+        yaws.append(g.look["yaw"])
+    steps = [b - a for a, b in zip([0.0, *yaws], yaws, strict=False)]
+    assert max(steps) <= LOOK_RATE / FPS + 1e-4  # the pose rounds to 4 places
+    assert yaws[-1] == pytest.approx(LOOK_MAX, abs=1e-3)
+    g.look = {"yaw": -0.3, "w": 1.0}  # a foul's look is drawn instead
+    watch_ball(g, 50.0, 30.0, (50.0, 40.0, 0.0))
+    assert g.look["yaw"] == -0.3
