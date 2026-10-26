@@ -24,7 +24,7 @@ from pathlib import Path
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, foundry_evals
+from ninety.agents import credentials, evidence, factcheck, foundry, foundry_evals
 from ninety.agents.factcheck import Claim, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
@@ -40,7 +40,7 @@ HELD_OUT_TONE_WORDS = ("patient", "bold", "speculative", "long ball", "gentle", 
 # When a tone word fits an event, from the event's own fields. Set before reading any Judge
 # output; a "true" label must be true (LESSONS: an evaluation's true labels must fit the facts).
 SHORT_SLOW = (15, 60)  # a cautious or patient pass: at most 15 m and 60 km/h
-LONG_PASS_M = 30  # a long ball: at least 30 m
+LONG_PASS_M = factcheck.LONG_BALL_M  # a long ball: 32 m or more (GROUNDING I11), as the code check reads it
 LONG_RANGE_M = 20  # a hopeful or speculative shot: from at least 20 m
 FAST_PASS_KMH = 80  # not a gentle, slow pass: at least 80 km/h
 FAST_SHOT_KMH = 100  # not a tame shot: at least 100 km/h
@@ -58,20 +58,28 @@ def cases(seed: int, minutes: float) -> list[dict]:
     meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
                     and "distance_m" in e and "intended" in e]
     meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
+    # A pass said to go "to" or to "pick out" its receiver states that he was the one meant: true only
+    # when nobody else was (audit 4a, the review of #251: "a7 plays a long ball to a1", meant for a3,
+    # was labelled true and its rejection counted as the Judge's error).
+    as_meant = [e for e in done if e.get("intended") in (None, e.get("receiver"))]
     tackles = [e for e in events if e["type"] == "tackle"]
+    # "Wins the ball" is true only of a tackle that won it (audit 4a: four failed tackles were labelled
+    # true under these words, and the Judge rejecting them was counted as its error).
+    tackles_won = [e for e in tackles if e.get("outcome") == "success"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
     # as goals do.
     all_shots = [e for e in extended if e["type"] == "shot" and e.get("outcome") != "goal"]
-    short_slow = [e for e in done if e["distance_m"] <= SHORT_SLOW[0]
+    short_slow = [e for e in as_meant if e["distance_m"] <= SHORT_SLOW[0]
                   and (e.get("ball_speed_kmh") or 0) <= SHORT_SLOW[1]]
-    long_balls = [e for e in done if e["distance_m"] >= LONG_PASS_M]
+    long_balls = [e for e in as_meant if e["distance_m"] >= LONG_PASS_M]
     fast_passes = [e for e in done if (e.get("ball_speed_kmh") or 0) >= FAST_PASS_KMH]
     long_range = [e for e in all_shots if e.get("distance_m", 0) >= LONG_RANGE_M]
     fast_shots = [e for e in all_shots if (e.get("ball_speed_kmh") or 0) >= FAST_SHOT_KMH]
     interceptions = [e for e in events if e["type"] == "interception"]
     pressure = [e for e in events if e["type"] == "pressure"]
-    goals = [e for e in extended if e["type"] == "goal"]
+    # A goal names its scorer; one that names nobody gave the claim "None scores." (audit 4a).
+    goals = [e for e in extended if e["type"] == "goal" and e.get("player")]
     other = {"home": "away", "away": "home"}
 
     def teammate(e):
@@ -83,49 +91,55 @@ def cases(seed: int, minutes: float) -> list[dict]:
     # not in the event) and {rival} (the other team).
     kinds = {
         "true: completed pass": (
-            True, done, "{player} plays a {distance_m} m pass to {receiver}."
+            True, as_meant, "{player} plays a {distance_m} m pass to {receiver}."
         ),
         "true: cited clock": (
             True, done, "{player} plays a pass at {clock}."
         ),
         "true: tackle": (
-            True, tackles, "{player} wins the ball from {receiver} with a tackle."
+            True, tackles_won, "{player} wins the ball from {receiver} with a tackle."
         ),
         "true: shot": (
             True, shots, "{player} shoots at {ball_speed_kmh} km/h."
         ),
-        # true claims with interpretation: a commentator's reading of supported facts
-        "true: interpreted tackle": (
-            True, tackles, "{player} wins the ball back from {receiver}, a crucial defensive intervention."
+        # Tone: a commentator's word for how a supported fact looked ("cautious", "risky", "a confident
+        # ball"). Neither true nor false: no cited fact states it, the Judge's rule holds what the facts
+        # do not state, and a human labeller doubted them too (docs/eval/factcheck-human-labels.md).
+        # Counted apart, as how often the Judge lets such a word air. "Forward" is gone from the
+        # confident pass: no cited fact gives a direction.
+        "tone: crucial tackle": (
+            None, tackles_won,
+            "{player} wins the ball back from {receiver}, a crucial defensive intervention."
         ),
-        "true: interpreted pass": (
-            True, done, "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
+        "tone: confident pass": (
+            None, as_meant,
+            "{player} picks out {receiver} with a {distance_m} m pass, a confident ball."
         ),
-        "true: interpreted shot": (
-            True, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
+        "tone: ambitious shot": (
+            None, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
         ),
         # The three tone kinds below keep their text; since the tone fix they only use events the
         # word fits (before, "cautious" was put on every completed pass, including 42 m at 96 km/h).
-        "true: neutral interpretation": (
-            True, short_slow, "{player} plays a cautious pass to {receiver}."
+        "tone: cautious pass": (
+            None, short_slow, "{player} plays a cautious pass to {receiver}."
         ),
-        "true: negative interpretation": (
-            True, tackles, "{player} makes a risky tackle on {receiver}."
+        "tone: risky tackle": (
+            None, tackles, "{player} makes a risky tackle on {receiver}."
         ),
-        "true: distant interpretation": (
-            True, long_range, "{player} makes a hopeful effort from {distance_m} metres."
+        "tone: hopeful effort": (
+            None, long_range, "{player} makes a hopeful effort from {distance_m} metres."
         ),
         # held-out tone: words that never appear in the Judge's instructions
-        "true: held-out tone, patient pass": (
-            True, short_slow, "{player} plays a patient pass to {receiver}."
+        "tone: held-out, patient pass": (
+            None, short_slow, "{player} plays a patient pass to {receiver}."
         ),
-        "true: held-out tone, bold challenge": (
-            True, tackles, "{player} puts in a bold challenge on {receiver}."
+        "tone: held-out, bold challenge": (
+            None, tackles, "{player} puts in a bold challenge on {receiver}."
         ),
-        "true: held-out tone, speculative shot": (
-            True, long_range, "{player} tries a speculative shot from {distance_m} metres."
+        "tone: held-out, speculative shot": (
+            None, long_range, "{player} tries a speculative shot from {distance_m} metres."
         ),
-        "true: held-out tone, long ball": (
+        "true: long ball": (
             True, long_balls, "{player} plays a long ball to {receiver}."
         ),
         "true: interception": (
@@ -266,26 +280,29 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
 @contextlib.asynccontextmanager
 async def judge_under_test(local: bool):
-    """The Judge to measure, and its label for the report: the published version by default. Signs
-    in first: the cases are simulated after this, and can outlast agents-live's sign-in."""
+    """The Judge to measure, its label for the report and its definition (name, version,
+    fingerprint; ninety/agents/evidence.py): the published version by default. Signs in first: the
+    cases are simulated after this, and can outlast agents-live's sign-in."""
     async with credentials.new_credential() as credential:
         await credentials.sign_in(credential)
         local_judge = judge_agent(foundry.chat_client(credential))
         if local:
-            yield local_judge, f"local definition on `{config.MODEL}`"
+            yield local_judge, f"local definition on `{config.MODEL}`", evidence.local([local_judge])
             return
         name, version = foundry.pinned(local_judge)
+        defs = evidence.record([local_judge])
         async with FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
             credential=credential,
         ) as published:
-            yield published, f"`{name}:{version}` on `{config.MODEL}`"
+            yield published, f"`{name}:{version}` on `{config.MODEL}`", defs
 
 
 async def run(seeds: list[int], minutes: float, concurrency: int = 3, local: bool = False):
-    """Every claim with both layers' verdicts, and the label of the Judge that gave them."""
-    async with judge_under_test(local) as (agent, label):
-        return await _run(agent, seeds, minutes, concurrency), label
+    """Every claim with both layers' verdicts, the label of the Judge that gave them, and its
+    definition."""
+    async with judge_under_test(local) as (agent, label, defs):
+        return await _run(agent, seeds, minutes, concurrency), label, defs
 
 
 async def _run(agent, seeds: list[int], minutes: float, concurrency: int) -> list[dict]:
@@ -317,7 +334,8 @@ def passed(row: dict) -> bool:
 
 
 def report(
-    rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None
+    rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None,
+    *, defs: dict,
 ) -> str:
     git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     sha = git.stdout.strip()
@@ -327,7 +345,11 @@ def report(
         f"Generated by `uv run python -m ninety.eval.factcheck_eval` on {datetime.date.today()} "
         f"at commit `{sha}`, simulator seeds {seed}, judge {judge_label}. Each claim cites "
         "the one event it describes, so its truth is known. A layer *catches* a false claim by "
-        "rejecting it, and *wrongly rejects* a true one.",
+        "rejecting it, and *wrongly rejects* a true one. A claim the Judge never answered (a "
+        "service error or timeout) is held back: it counts as caught or wrongly rejected, and is "
+        "also counted apart.",
+        "",
+        evidence.md_line(defs),
         "",
         "| Kind | Claims | Code alone | Code + judge |",
         "|---|---|---|---|",
@@ -336,13 +358,15 @@ def report(
     for kind in kinds:
         group = [r for r in rows if r["kind"] == kind]
         truth = group[0]["true"]
-        code = sum(r["code_ok"] == truth for r in group)
-        both = sum(passed(r) == truth for r in group)
-        word = "accepted" if truth else "caught"
+        aired = truth is None  # tone: how often it airs, neither right nor wrong
+        code = sum(r["code_ok"] == (truth or aired) for r in group)
+        both = sum(passed(r) == (truth or aired) for r in group)
+        word = "aired" if aired else "accepted" if truth else "caught"
         lines.append(f"| {kind} | {len(group)} | {code}/{len(group)} {word} | {both}/{len(group)} {word} |")
 
-    false = [r for r in rows if not r["true"]]
-    true = [r for r in rows if r["true"]]
+    false = [r for r in rows if r["true"] is False]
+    true = [r for r in rows if r["true"] is True]
+    tone = [r for r in rows if r["true"] is None]
     code_catch = sum(not r["code_ok"] for r in false)
     both_catch = sum(not passed(r) for r in false)
     both_wrong = sum(not passed(r) for r in true)
@@ -355,13 +379,20 @@ def report(
         if r.get("category") not in {"service", "timeout"}
     )
     true_service_errors = sum(r in true for r in service_errors)
+    false_service_errors = len(service_errors) - true_service_errors
     semantic_denominator = len(true) - true_service_errors
     lines += [
         "",
         f"**False claims caught:** code alone {code_catch}/{len(false)}, "
-        f"code + judge {both_catch}/{len(false)}.  ",
+        f"code + judge {both_catch}/{len(false)} "
+        f"(of which held by a service/timeout error, not judged: {false_service_errors}; "
+        f"caught by a decision of the code checks or the Judge: "
+        f"{both_catch - false_service_errors}/{len(false) - false_service_errors}).  ",
         f"**True claims wrongly rejected:** code + judge {both_wrong}/{len(true)} "
         f"(excluding service/timeout holds: {semantic_true_wrong}/{semantic_denominator}).",
+        f"**Tone words, neither true nor false** (a commentator's word no cited fact states; the Judge "
+        f"holds what the facts do not state): code + judge aired "
+        f"{sum(passed(r) for r in tone)}/{len(tone)}.  ",
         f"**Judge service/timeout errors:** {len(service_errors)} total, "
         f"{true_service_errors} on true claims.",
         "",
@@ -378,13 +409,21 @@ def report(
             + ".",
             "",
         ]
-    misses = [r for r in rows if passed(r) != r["true"]]
+    misses = [r for r in rows if r["true"] is not None and passed(r) != r["true"]]
     for r in misses:
         why = "; ".join(r["reasons"]) or "accepted"
         lines.append(f"- *{r['kind']}* (seed {r['seed']}): \"{r['claim'].text}\" {why}")
     if not misses:
         lines.append("None.")
     return "\n".join(lines) + "\n"
+
+
+def refuse_outage(rows: list[dict]) -> None:
+    """NothingMeasured when the Judge left too many of the claims it was sent unanswered (a service
+    error or timeout): that run measured an outage, and writes no report (lesson 131)."""
+    asked = [r for r in rows if r["code_ok"]]
+    unanswered = sum(r.get("category") in {"service", "timeout"} for r in asked)
+    evidence.refuse_outage(unanswered, len(asked), "claims sent to the Judge")
 
 
 FOUNDRY_EVAL = "ninety-fact-checker"
@@ -423,15 +462,17 @@ def main() -> None:
     ap.add_argument("--foundry", action="store_true", help="record the run in Foundry's Evaluations")
     args = ap.parse_args()
     seeds = [int(seed) for seed in args.seeds.split(",")]
-    rows, label = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    rows, label, defs = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    refuse_outage(rows)  # before anything is recorded in Foundry or written
     foundry_run = None
     if args.foundry:
         foundry_run = foundry_evals.record(
             FOUNDRY_EVAL, f"seeds {args.seeds}, judge {label.replace('`', '')}",
-            [foundry_item(r) for r in rows], FOUNDRY_CRITERIA,
+            # a tone claim has no right answer to grade
+            [foundry_item(r) for r in rows if r["true"] is not None], FOUNDRY_CRITERIA,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, label, foundry_run))
+    args.out.write_text(report(rows, args.seeds, label, foundry_run, defs=defs))
     print(args.out.read_text())
     (args.out.with_suffix(".json")).write_text(
         json.dumps([{**r, "claim": r["claim"].text, "evidence": r["evidence"]} for r in rows], indent=1)

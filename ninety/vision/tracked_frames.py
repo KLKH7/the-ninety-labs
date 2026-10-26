@@ -35,6 +35,7 @@ import json
 import math
 from pathlib import Path
 
+from ninety.vision import sides
 from ninety.vision import track as tr
 
 SOURCE = "tracked"
@@ -100,7 +101,7 @@ def build(rows: list[dict], clip: str, smooth_frames: int = SMOOTH_FRAMES) -> di
     """The tracked frames (each meets schemas/frame.schema.json), their kickoff resets, and how they
     were made."""
     tracks = tr.track_players(rows)
-    teams = tr.assign_teams(tracks)
+    teams = sides.assign(tracks, rows)  # the same sides events.detect gives (sides.py)
     kept = [t for t in tracks if t.team is not None and len(t.frames) >= MIN_TRACK_FRAMES]
     at: dict[int, list[dict]] = {}
     for t in kept:

@@ -1,0 +1,4357 @@
+{
+  "command": "uv run python -m ninety.eval.speed_score --set docs/eval/finetune-v2freeze/test-set.json --clips <clips> --observations <ours-freeze observations> --detector ours-freeze --out docs/eval/speed-report-freeze",
+  "commit": "10c57138d9f5f25ab95f7fec2002b663512ba3c3",
+  "date": "2026-10-24",
+  "detector": "ours-freeze",
+  "clip_set": "v2freeze-test",
+  "seeds": [
+    900001,
+    900002,
+    900003,
+    900004,
+    900005,
+    900006,
+    900007,
+    900008,
+    900009,
+    900010,
+    900011,
+    900012,
+    900013,
+    900014,
+    900015,
+    900016,
+    900017,
+    900018,
+    900019,
+    900020,
+    900021,
+    900022,
+    900023,
+    900024,
+    900025,
+    900026,
+    900027,
+    900028,
+    900029,
+    900030
+  ],
+  "not_scored": [],
+  "rules": {
+    "match": "event_score strict",
+    "relative_min_kmh": 18.0,
+    "in_the_air_above_m": 0.5,
+    "lofted_window_frames": 8,
+    "min_pairs": 10
+  },
+  "pooled": {
+    "true": {
+      "pass": 82,
+      "shot": 2
+    },
+    "detected": {
+      "pass": 66,
+      "shot": 0
+    },
+    "matched": {
+      "pass": 41,
+      "shot": 0
+    },
+    "event_speed": {
+      "pass": {
+        "n": 36,
+        "enough": true,
+        "median_abs_kmh": 3.5,
+        "p90_abs_kmh": 8.2,
+        "mean_signed_kmh": -0.24,
+        "n_relative": 36,
+        "median_abs_relative": 0.074
+      },
+      "shot": {
+        "n": 0,
+        "enough": false,
+        "median_abs_kmh": null,
+        "p90_abs_kmh": null,
+        "mean_signed_kmh": null,
+        "n_relative": 0,
+        "median_abs_relative": null
+      },
+      "pass, along the ground": {
+        "n": 35,
+        "enough": true,
+        "median_abs_kmh": 3.5,
+        "p90_abs_kmh": 7.7,
+        "mean_signed_kmh": -4.14,
+        "n_relative": 35,
+        "median_abs_relative": 0.074
+      },
+      "pass, lofted": {
+        "n": 1,
+        "enough": false,
+        "median_abs_kmh": 136.2,
+        "p90_abs_kmh": 136.2,
+        "mean_signed_kmh": 136.2,
+        "n_relative": 1,
+        "median_abs_relative": 1.457
+      },
+      "shot, along the ground": {
+        "n": 0,
+        "enough": false,
+        "median_abs_kmh": null,
+        "p90_abs_kmh": null,
+        "mean_signed_kmh": null,
+        "n_relative": 0,
+        "median_abs_relative": null
+      },
+      "shot, lofted": {
+        "n": 0,
+        "enough": false,
+        "median_abs_kmh": null,
+        "p90_abs_kmh": null,
+        "mean_signed_kmh": null,
+        "n_relative": 0,
+        "median_abs_relative": null
+      }
+    },
+    "frame_speed": {
+      "all": {
+        "vs_3d": {
+          "n": 5094,
+          "enough": true,
+          "median_abs_kmh": 1.15,
+          "p90_abs_kmh": 7.75,
+          "mean_signed_kmh": 5.38,
+          "n_relative": 1954,
+          "median_abs_relative": 0.055
+        },
+        "vs_flat": {
+          "n": 5094,
+          "enough": true,
+          "median_abs_kmh": 1.15,
+          "p90_abs_kmh": 7.78,
+          "mean_signed_kmh": 5.53,
+          "n_relative": 1954,
+          "median_abs_relative": 0.055
+        }
+      },
+      "on the ground": {
+        "vs_3d": {
+          "n": 4906,
+          "enough": true,
+          "median_abs_kmh": 1.09,
+          "p90_abs_kmh": 5.83,
+          "mean_signed_kmh": 0.63,
+          "n_relative": 1766,
+          "median_abs_relative": 0.045
+        },
+        "vs_flat": {
+          "n": 4906,
+          "enough": true,
+          "median_abs_kmh": 1.09,
+          "p90_abs_kmh": 5.83,
+          "mean_signed_kmh": 0.64,
+          "n_relative": 1766,
+          "median_abs_relative": 0.045
+        }
+      },
+      "in the air": {
+        "vs_3d": {
+          "n": 188,
+          "enough": true,
+          "median_abs_kmh": 109.08,
+          "p90_abs_kmh": 238.54,
+          "mean_signed_kmh": 129.42,
+          "n_relative": 188,
+          "median_abs_relative": 1.98
+        },
+        "vs_flat": {
+          "n": 188,
+          "enough": true,
+          "median_abs_kmh": 115.11,
+          "p90_abs_kmh": 242.75,
+          "mean_signed_kmh": 133.27,
+          "n_relative": 188,
+          "median_abs_relative": 2.262
+        }
+      },
+      "drawn over a player": {
+        "vs_3d": {
+          "n": 2172,
+          "enough": true,
+          "median_abs_kmh": 1.36,
+          "p90_abs_kmh": 7.51,
+          "mean_signed_kmh": 0.99,
+          "n_relative": 289,
+          "median_abs_relative": 0.136
+        },
+        "vs_flat": {
+          "n": 2172,
+          "enough": true,
+          "median_abs_kmh": 1.36,
+          "p90_abs_kmh": 7.51,
+          "mean_signed_kmh": 1.0,
+          "n_relative": 289,
+          "median_abs_relative": 0.136
+        }
+      },
+      "not over a player": {
+        "vs_3d": {
+          "n": 2922,
+          "enough": true,
+          "median_abs_kmh": 1.01,
+          "p90_abs_kmh": 8.26,
+          "mean_signed_kmh": 8.64,
+          "n_relative": 1665,
+          "median_abs_relative": 0.048
+        },
+        "vs_flat": {
+          "n": 2922,
+          "enough": true,
+          "median_abs_kmh": 1.01,
+          "p90_abs_kmh": 8.26,
+          "mean_signed_kmh": 8.9,
+          "n_relative": 1665,
+          "median_abs_relative": 0.049
+        }
+      }
+    }
+  },
+  "clips": [
+    {
+      "seed": 900001,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00010",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 29.3,
+          "vision_kmh": 28.3,
+          "lofted": false,
+          "error_kmh": -1.0,
+          "relative": -0.034
+        },
+        {
+          "truth_id": "e00011",
+          "detected_id": "v00004",
+          "type": "pass",
+          "true_kmh": 27.4,
+          "vision_kmh": 26.3,
+          "lofted": false,
+          "error_kmh": -1.1,
+          "relative": -0.04
+        },
+        {
+          "truth_id": "e00009",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 44.3,
+          "vision_kmh": 42.3,
+          "lofted": false,
+          "error_kmh": -2.0,
+          "relative": -0.045
+        },
+        {
+          "truth_id": "e00008",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 34.3,
+          "vision_kmh": 32.7,
+          "lofted": false,
+          "error_kmh": -1.6,
+          "relative": -0.047
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 241,
+          "median_m": 0.049,
+          "p90_m": 0.092,
+          "max_m": 0.391
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 0.8,
+            "p90_abs_kmh": 4.52,
+            "mean_signed_kmh": 0.02,
+            "n_relative": 81,
+            "median_abs_relative": 0.025
+          },
+          "vs_flat": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 0.8,
+            "p90_abs_kmh": 4.52,
+            "mean_signed_kmh": 0.02,
+            "n_relative": 81,
+            "median_abs_relative": 0.025
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 0.8,
+            "p90_abs_kmh": 4.52,
+            "mean_signed_kmh": 0.02,
+            "n_relative": 81,
+            "median_abs_relative": 0.025
+          },
+          "vs_flat": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 0.8,
+            "p90_abs_kmh": 4.52,
+            "mean_signed_kmh": 0.02,
+            "n_relative": 81,
+            "median_abs_relative": 0.025
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 174,
+            "enough": true,
+            "median_abs_kmh": 0.99,
+            "p90_abs_kmh": 5.45,
+            "mean_signed_kmh": -0.02,
+            "n_relative": 23,
+            "median_abs_relative": 0.2
+          },
+          "vs_flat": {
+            "n": 174,
+            "enough": true,
+            "median_abs_kmh": 0.99,
+            "p90_abs_kmh": 5.45,
+            "mean_signed_kmh": -0.02,
+            "n_relative": 23,
+            "median_abs_relative": 0.2
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 70,
+            "enough": true,
+            "median_abs_kmh": 0.51,
+            "p90_abs_kmh": 2.84,
+            "mean_signed_kmh": 0.1,
+            "n_relative": 58,
+            "median_abs_relative": 0.017
+          },
+          "vs_flat": {
+            "n": 70,
+            "enough": true,
+            "median_abs_kmh": 0.51,
+            "p90_abs_kmh": 2.84,
+            "mean_signed_kmh": 0.1,
+            "n_relative": 58,
+            "median_abs_relative": 0.017
+          }
+        }
+      }
+    },
+    {
+      "seed": 900002,
+      "true": {
+        "pass": 5,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00035",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 47.4,
+          "vision_kmh": 45.1,
+          "lofted": false,
+          "error_kmh": -2.3,
+          "relative": -0.049
+        },
+        {
+          "truth_id": "e00037",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 64.9,
+          "vision_kmh": null,
+          "lofted": false
+        },
+        {
+          "truth_id": "e00038",
+          "detected_id": "v00004",
+          "type": "pass",
+          "true_kmh": 49.8,
+          "vision_kmh": 45.2,
+          "lofted": false,
+          "error_kmh": -4.6,
+          "relative": -0.092
+        },
+        {
+          "truth_id": "e00036",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 37.8,
+          "vision_kmh": 37.1,
+          "lofted": false,
+          "error_kmh": -0.7,
+          "relative": -0.019
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 202,
+          "median_m": 0.11,
+          "p90_m": 0.26,
+          "max_m": 0.456
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 191,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.7,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 124,
+            "median_abs_relative": 0.021
+          },
+          "vs_flat": {
+            "n": 191,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.7,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 124,
+            "median_abs_relative": 0.021
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 191,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.7,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 124,
+            "median_abs_relative": 0.021
+          },
+          "vs_flat": {
+            "n": 191,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.7,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 124,
+            "median_abs_relative": 0.021
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 78,
+            "enough": true,
+            "median_abs_kmh": 2.07,
+            "p90_abs_kmh": 8.5,
+            "mean_signed_kmh": 0.36,
+            "n_relative": 13,
+            "median_abs_relative": 0.203
+          },
+          "vs_flat": {
+            "n": 78,
+            "enough": true,
+            "median_abs_kmh": 2.07,
+            "p90_abs_kmh": 8.5,
+            "mean_signed_kmh": 0.36,
+            "n_relative": 13,
+            "median_abs_relative": 0.203
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 113,
+            "enough": true,
+            "median_abs_kmh": 0.7,
+            "p90_abs_kmh": 3.69,
+            "mean_signed_kmh": -0.04,
+            "n_relative": 111,
+            "median_abs_relative": 0.019
+          },
+          "vs_flat": {
+            "n": 113,
+            "enough": true,
+            "median_abs_kmh": 0.7,
+            "p90_abs_kmh": 3.69,
+            "mean_signed_kmh": -0.04,
+            "n_relative": 111,
+            "median_abs_relative": 0.019
+          }
+        }
+      }
+    },
+    {
+      "seed": 900003,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 1,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 247,
+          "median_m": 0.032,
+          "p90_m": 0.16,
+          "max_m": 0.359
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 247,
+            "enough": true,
+            "median_abs_kmh": 0.81,
+            "p90_abs_kmh": 3.07,
+            "mean_signed_kmh": 0.34,
+            "n_relative": 79,
+            "median_abs_relative": 0.039
+          },
+          "vs_flat": {
+            "n": 247,
+            "enough": true,
+            "median_abs_kmh": 0.81,
+            "p90_abs_kmh": 3.07,
+            "mean_signed_kmh": 0.34,
+            "n_relative": 79,
+            "median_abs_relative": 0.039
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 247,
+            "enough": true,
+            "median_abs_kmh": 0.81,
+            "p90_abs_kmh": 3.07,
+            "mean_signed_kmh": 0.34,
+            "n_relative": 79,
+            "median_abs_relative": 0.039
+          },
+          "vs_flat": {
+            "n": 247,
+            "enough": true,
+            "median_abs_kmh": 0.81,
+            "p90_abs_kmh": 3.07,
+            "mean_signed_kmh": 0.34,
+            "n_relative": 79,
+            "median_abs_relative": 0.039
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 28,
+            "enough": true,
+            "median_abs_kmh": 1.67,
+            "p90_abs_kmh": 5.97,
+            "mean_signed_kmh": 0.74,
+            "n_relative": 4,
+            "median_abs_relative": 0.016
+          },
+          "vs_flat": {
+            "n": 28,
+            "enough": true,
+            "median_abs_kmh": 1.67,
+            "p90_abs_kmh": 5.97,
+            "mean_signed_kmh": 0.74,
+            "n_relative": 4,
+            "median_abs_relative": 0.016
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 219,
+            "enough": true,
+            "median_abs_kmh": 0.71,
+            "p90_abs_kmh": 2.36,
+            "mean_signed_kmh": 0.29,
+            "n_relative": 75,
+            "median_abs_relative": 0.039
+          },
+          "vs_flat": {
+            "n": 219,
+            "enough": true,
+            "median_abs_kmh": 0.71,
+            "p90_abs_kmh": 2.36,
+            "mean_signed_kmh": 0.29,
+            "n_relative": 75,
+            "median_abs_relative": 0.039
+          }
+        }
+      }
+    },
+    {
+      "seed": 900004,
+      "true": {
+        "pass": 1,
+        "shot": 1
+      },
+      "detected": {
+        "pass": 3,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 205,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 163,
+          "median_m": 0.153,
+          "p90_m": 1.011,
+          "max_m": 2.398
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 170,
+            "enough": true,
+            "median_abs_kmh": 1.08,
+            "p90_abs_kmh": 16.17,
+            "mean_signed_kmh": 5.68,
+            "n_relative": 40,
+            "median_abs_relative": 0.192
+          },
+          "vs_flat": {
+            "n": 170,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 16.36,
+            "mean_signed_kmh": 5.81,
+            "n_relative": 40,
+            "median_abs_relative": 0.186
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 149,
+            "enough": true,
+            "median_abs_kmh": 0.77,
+            "p90_abs_kmh": 9.57,
+            "mean_signed_kmh": 4.62,
+            "n_relative": 19,
+            "median_abs_relative": 0.217
+          },
+          "vs_flat": {
+            "n": 149,
+            "enough": true,
+            "median_abs_kmh": 0.78,
+            "p90_abs_kmh": 9.57,
+            "mean_signed_kmh": 4.68,
+            "n_relative": 19,
+            "median_abs_relative": 0.215
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 21,
+            "enough": true,
+            "median_abs_kmh": 11.63,
+            "p90_abs_kmh": 48.86,
+            "mean_signed_kmh": 13.24,
+            "n_relative": 21,
+            "median_abs_relative": 0.185
+          },
+          "vs_flat": {
+            "n": 21,
+            "enough": true,
+            "median_abs_kmh": 11.09,
+            "p90_abs_kmh": 49.68,
+            "mean_signed_kmh": 13.83,
+            "n_relative": 21,
+            "median_abs_relative": 0.185
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 79,
+            "enough": true,
+            "median_abs_kmh": 1.51,
+            "p90_abs_kmh": 6.69,
+            "mean_signed_kmh": 5.01,
+            "n_relative": 5,
+            "median_abs_relative": 0.419
+          },
+          "vs_flat": {
+            "n": 79,
+            "enough": true,
+            "median_abs_kmh": 1.53,
+            "p90_abs_kmh": 6.69,
+            "mean_signed_kmh": 5.04,
+            "n_relative": 5,
+            "median_abs_relative": 0.458
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 91,
+            "enough": true,
+            "median_abs_kmh": 0.63,
+            "p90_abs_kmh": 18.01,
+            "mean_signed_kmh": 6.27,
+            "n_relative": 35,
+            "median_abs_relative": 0.192
+          },
+          "vs_flat": {
+            "n": 91,
+            "enough": true,
+            "median_abs_kmh": 0.65,
+            "p90_abs_kmh": 18.53,
+            "mean_signed_kmh": 6.48,
+            "n_relative": 35,
+            "median_abs_relative": 0.186
+          }
+        }
+      }
+    },
+    {
+      "seed": 900005,
+      "true": {
+        "pass": 5,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 11,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 10,
+          "median_m": 0.755,
+          "p90_m": 1.013,
+          "max_m": 1.025
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 5,
+            "enough": false,
+            "median_abs_kmh": 5.93,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 1.64,
+            "n_relative": 4,
+            "median_abs_relative": 0.146
+          },
+          "vs_flat": {
+            "n": 5,
+            "enough": false,
+            "median_abs_kmh": 5.93,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 1.64,
+            "n_relative": 4,
+            "median_abs_relative": 0.146
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 5,
+            "enough": false,
+            "median_abs_kmh": 5.93,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 1.64,
+            "n_relative": 4,
+            "median_abs_relative": 0.146
+          },
+          "vs_flat": {
+            "n": 5,
+            "enough": false,
+            "median_abs_kmh": 5.93,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 1.64,
+            "n_relative": 4,
+            "median_abs_relative": 0.146
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 2,
+            "enough": false,
+            "median_abs_kmh": 20.65,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 3.08,
+            "n_relative": 1,
+            "median_abs_relative": 0.478
+          },
+          "vs_flat": {
+            "n": 2,
+            "enough": false,
+            "median_abs_kmh": 20.65,
+            "p90_abs_kmh": 20.65,
+            "mean_signed_kmh": 3.08,
+            "n_relative": 1,
+            "median_abs_relative": 0.478
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 3,
+            "enough": false,
+            "median_abs_kmh": 4.46,
+            "p90_abs_kmh": 4.46,
+            "mean_signed_kmh": 0.68,
+            "n_relative": 3,
+            "median_abs_relative": 0.146
+          },
+          "vs_flat": {
+            "n": 3,
+            "enough": false,
+            "median_abs_kmh": 4.46,
+            "p90_abs_kmh": 4.46,
+            "mean_signed_kmh": 0.68,
+            "n_relative": 3,
+            "median_abs_relative": 0.146
+          }
+        }
+      }
+    },
+    {
+      "seed": 900006,
+      "true": {
+        "pass": 0,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 250,
+          "median_m": 0.021,
+          "p90_m": 0.03,
+          "max_m": 0.042
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.23,
+            "p90_abs_kmh": 0.51,
+            "mean_signed_kmh": 0.28,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        }
+      }
+    },
+    {
+      "seed": 900007,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 1,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 104,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 65,
+          "median_m": 1.613,
+          "p90_m": 2.606,
+          "max_m": 2.655
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 42,
+            "enough": true,
+            "median_abs_kmh": 0.68,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 5.86,
+            "n_relative": 13,
+            "median_abs_relative": 0.023
+          },
+          "vs_flat": {
+            "n": 42,
+            "enough": true,
+            "median_abs_kmh": 0.68,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 5.86,
+            "n_relative": 13,
+            "median_abs_relative": 0.023
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 42,
+            "enough": true,
+            "median_abs_kmh": 0.68,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 5.86,
+            "n_relative": 13,
+            "median_abs_relative": 0.023
+          },
+          "vs_flat": {
+            "n": 42,
+            "enough": true,
+            "median_abs_kmh": 0.68,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 5.86,
+            "n_relative": 13,
+            "median_abs_relative": 0.023
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 30,
+            "enough": true,
+            "median_abs_kmh": 0.54,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 9.61,
+            "n_relative": 1,
+            "median_abs_relative": 0.02
+          },
+          "vs_flat": {
+            "n": 30,
+            "enough": true,
+            "median_abs_kmh": 0.54,
+            "p90_abs_kmh": 4.27,
+            "mean_signed_kmh": 9.61,
+            "n_relative": 1,
+            "median_abs_relative": 0.02
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 12,
+            "enough": true,
+            "median_abs_kmh": 1.32,
+            "p90_abs_kmh": 2.67,
+            "mean_signed_kmh": -3.53,
+            "n_relative": 12,
+            "median_abs_relative": 0.023
+          },
+          "vs_flat": {
+            "n": 12,
+            "enough": true,
+            "median_abs_kmh": 1.32,
+            "p90_abs_kmh": 2.67,
+            "mean_signed_kmh": -3.53,
+            "n_relative": 12,
+            "median_abs_relative": 0.023
+          }
+        }
+      }
+    },
+    {
+      "seed": 900008,
+      "true": {
+        "pass": 0,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 0,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 0,
+          "median_m": null,
+          "p90_m": null,
+          "max_m": null
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        }
+      }
+    },
+    {
+      "seed": 900009,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 1,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 56,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 42,
+          "median_m": 4.24,
+          "p90_m": 7.943,
+          "max_m": 9.53
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 24,
+            "enough": true,
+            "median_abs_kmh": 0.97,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 7.62,
+            "n_relative": 16,
+            "median_abs_relative": 0.018
+          },
+          "vs_flat": {
+            "n": 24,
+            "enough": true,
+            "median_abs_kmh": 0.97,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 7.62,
+            "n_relative": 16,
+            "median_abs_relative": 0.018
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 24,
+            "enough": true,
+            "median_abs_kmh": 0.97,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 7.62,
+            "n_relative": 16,
+            "median_abs_relative": 0.018
+          },
+          "vs_flat": {
+            "n": 24,
+            "enough": true,
+            "median_abs_kmh": 0.97,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 7.62,
+            "n_relative": 16,
+            "median_abs_relative": 0.018
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 6,
+            "enough": false,
+            "median_abs_kmh": 0.54,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 2.75,
+            "n_relative": 3,
+            "median_abs_relative": 0.017
+          },
+          "vs_flat": {
+            "n": 6,
+            "enough": false,
+            "median_abs_kmh": 0.54,
+            "p90_abs_kmh": 8.62,
+            "mean_signed_kmh": 2.75,
+            "n_relative": 3,
+            "median_abs_relative": 0.017
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 18,
+            "enough": true,
+            "median_abs_kmh": 0.98,
+            "p90_abs_kmh": 5.38,
+            "mean_signed_kmh": 9.24,
+            "n_relative": 13,
+            "median_abs_relative": 0.025
+          },
+          "vs_flat": {
+            "n": 18,
+            "enough": true,
+            "median_abs_kmh": 0.98,
+            "p90_abs_kmh": 5.38,
+            "mean_signed_kmh": 9.24,
+            "n_relative": 13,
+            "median_abs_relative": 0.025
+          }
+        }
+      }
+    },
+    {
+      "seed": 900010,
+      "true": {
+        "pass": 1,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 217,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 198,
+          "median_m": 4.217,
+          "p90_m": 4.498,
+          "max_m": 4.684
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 193,
+            "enough": true,
+            "median_abs_kmh": 1.04,
+            "p90_abs_kmh": 2.42,
+            "mean_signed_kmh": 0.39,
+            "n_relative": 20,
+            "median_abs_relative": 0.038
+          },
+          "vs_flat": {
+            "n": 193,
+            "enough": true,
+            "median_abs_kmh": 1.04,
+            "p90_abs_kmh": 2.42,
+            "mean_signed_kmh": 0.39,
+            "n_relative": 20,
+            "median_abs_relative": 0.038
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 193,
+            "enough": true,
+            "median_abs_kmh": 1.04,
+            "p90_abs_kmh": 2.42,
+            "mean_signed_kmh": 0.39,
+            "n_relative": 20,
+            "median_abs_relative": 0.038
+          },
+          "vs_flat": {
+            "n": 193,
+            "enough": true,
+            "median_abs_kmh": 1.04,
+            "p90_abs_kmh": 2.42,
+            "mean_signed_kmh": 0.39,
+            "n_relative": 20,
+            "median_abs_relative": 0.038
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 40,
+            "enough": true,
+            "median_abs_kmh": 1.16,
+            "p90_abs_kmh": 4.58,
+            "mean_signed_kmh": -1.29,
+            "n_relative": 4,
+            "median_abs_relative": 0.111
+          },
+          "vs_flat": {
+            "n": 40,
+            "enough": true,
+            "median_abs_kmh": 1.16,
+            "p90_abs_kmh": 4.58,
+            "mean_signed_kmh": -1.29,
+            "n_relative": 4,
+            "median_abs_relative": 0.111
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 153,
+            "enough": true,
+            "median_abs_kmh": 1.03,
+            "p90_abs_kmh": 2.14,
+            "mean_signed_kmh": 0.83,
+            "n_relative": 16,
+            "median_abs_relative": 0.032
+          },
+          "vs_flat": {
+            "n": 153,
+            "enough": true,
+            "median_abs_kmh": 1.03,
+            "p90_abs_kmh": 2.14,
+            "mean_signed_kmh": 0.83,
+            "n_relative": 16,
+            "median_abs_relative": 0.032
+          }
+        }
+      }
+    },
+    {
+      "seed": 900011,
+      "true": {
+        "pass": 0,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 168,
+          "median_m": 0.144,
+          "p90_m": 0.28,
+          "max_m": 0.423
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 150,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 4.36,
+            "mean_signed_kmh": 0.2,
+            "n_relative": 51,
+            "median_abs_relative": 0.111
+          },
+          "vs_flat": {
+            "n": 150,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 4.36,
+            "mean_signed_kmh": 0.2,
+            "n_relative": 51,
+            "median_abs_relative": 0.111
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 150,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 4.36,
+            "mean_signed_kmh": 0.2,
+            "n_relative": 51,
+            "median_abs_relative": 0.111
+          },
+          "vs_flat": {
+            "n": 150,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 4.36,
+            "mean_signed_kmh": 0.2,
+            "n_relative": 51,
+            "median_abs_relative": 0.111
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 2.87,
+            "mean_signed_kmh": 0.06,
+            "n_relative": 1,
+            "median_abs_relative": 0.539
+          },
+          "vs_flat": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 2.87,
+            "mean_signed_kmh": 0.06,
+            "n_relative": 1,
+            "median_abs_relative": 0.539
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 68,
+            "enough": true,
+            "median_abs_kmh": 2.41,
+            "p90_abs_kmh": 4.94,
+            "mean_signed_kmh": 0.38,
+            "n_relative": 50,
+            "median_abs_relative": 0.104
+          },
+          "vs_flat": {
+            "n": 68,
+            "enough": true,
+            "median_abs_kmh": 2.41,
+            "p90_abs_kmh": 4.94,
+            "mean_signed_kmh": 0.38,
+            "n_relative": 50,
+            "median_abs_relative": 0.104
+          }
+        }
+      }
+    },
+    {
+      "seed": 900012,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 1,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00010",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 62.7,
+          "vision_kmh": 60.8,
+          "lofted": false,
+          "error_kmh": -1.9,
+          "relative": -0.03
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 235,
+          "median_m": 0.224,
+          "p90_m": 0.433,
+          "max_m": 0.655
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.91,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 0.95,
+            "n_relative": 113,
+            "median_abs_relative": 0.046
+          },
+          "vs_flat": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.91,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 0.95,
+            "n_relative": 113,
+            "median_abs_relative": 0.046
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.91,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 0.95,
+            "n_relative": 113,
+            "median_abs_relative": 0.046
+          },
+          "vs_flat": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.91,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 0.95,
+            "n_relative": 113,
+            "median_abs_relative": 0.046
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 97,
+            "enough": true,
+            "median_abs_kmh": 2.2,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 2.06,
+            "n_relative": 4,
+            "median_abs_relative": 0.207
+          },
+          "vs_flat": {
+            "n": 97,
+            "enough": true,
+            "median_abs_kmh": 2.2,
+            "p90_abs_kmh": 6.04,
+            "mean_signed_kmh": 2.06,
+            "n_relative": 4,
+            "median_abs_relative": 0.207
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 133,
+            "enough": true,
+            "median_abs_kmh": 1.66,
+            "p90_abs_kmh": 5.22,
+            "mean_signed_kmh": 0.13,
+            "n_relative": 109,
+            "median_abs_relative": 0.046
+          },
+          "vs_flat": {
+            "n": 133,
+            "enough": true,
+            "median_abs_kmh": 1.66,
+            "p90_abs_kmh": 5.22,
+            "mean_signed_kmh": 0.13,
+            "n_relative": 109,
+            "median_abs_relative": 0.046
+          }
+        }
+      }
+    },
+    {
+      "seed": 900013,
+      "true": {
+        "pass": 3,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 3,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 249,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 208,
+          "median_m": 0.051,
+          "p90_m": 0.103,
+          "max_m": 0.256
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 220,
+            "enough": true,
+            "median_abs_kmh": 0.82,
+            "p90_abs_kmh": 9.64,
+            "mean_signed_kmh": 16.88,
+            "n_relative": 72,
+            "median_abs_relative": 0.029
+          },
+          "vs_flat": {
+            "n": 220,
+            "enough": true,
+            "median_abs_kmh": 0.82,
+            "p90_abs_kmh": 9.64,
+            "mean_signed_kmh": 17.75,
+            "n_relative": 72,
+            "median_abs_relative": 0.029
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 209,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 5.79,
+            "mean_signed_kmh": 2.31,
+            "n_relative": 61,
+            "median_abs_relative": 0.025
+          },
+          "vs_flat": {
+            "n": 209,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 5.79,
+            "mean_signed_kmh": 2.36,
+            "n_relative": 61,
+            "median_abs_relative": 0.025
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 11,
+            "enough": true,
+            "median_abs_kmh": 295.29,
+            "p90_abs_kmh": 397.4,
+            "mean_signed_kmh": 293.64,
+            "n_relative": 11,
+            "median_abs_relative": 3.359
+          },
+          "vs_flat": {
+            "n": 11,
+            "enough": true,
+            "median_abs_kmh": 311.62,
+            "p90_abs_kmh": 409.86,
+            "mean_signed_kmh": 310.08,
+            "n_relative": 11,
+            "median_abs_relative": 4.352
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 152,
+            "enough": true,
+            "median_abs_kmh": 0.92,
+            "p90_abs_kmh": 7.69,
+            "mean_signed_kmh": 3.23,
+            "n_relative": 18,
+            "median_abs_relative": 0.16
+          },
+          "vs_flat": {
+            "n": 152,
+            "enough": true,
+            "median_abs_kmh": 0.92,
+            "p90_abs_kmh": 7.69,
+            "mean_signed_kmh": 3.3,
+            "n_relative": 18,
+            "median_abs_relative": 0.16
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 68,
+            "enough": true,
+            "median_abs_kmh": 0.67,
+            "p90_abs_kmh": 257.89,
+            "mean_signed_kmh": 47.38,
+            "n_relative": 54,
+            "median_abs_relative": 0.024
+          },
+          "vs_flat": {
+            "n": 68,
+            "enough": true,
+            "median_abs_kmh": 0.67,
+            "p90_abs_kmh": 276.39,
+            "mean_signed_kmh": 50.04,
+            "n_relative": 54,
+            "median_abs_relative": 0.024
+          }
+        }
+      }
+    },
+    {
+      "seed": 900014,
+      "true": {
+        "pass": 1,
+        "shot": 1
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 190,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 86,
+          "median_m": 0.089,
+          "p90_m": 0.21,
+          "max_m": 3.108
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 165,
+            "enough": true,
+            "median_abs_kmh": 18.56,
+            "p90_abs_kmh": 190.64,
+            "mean_signed_kmh": 54.82,
+            "n_relative": 114,
+            "median_abs_relative": 0.999
+          },
+          "vs_flat": {
+            "n": 165,
+            "enough": true,
+            "median_abs_kmh": 18.61,
+            "p90_abs_kmh": 193.84,
+            "mean_signed_kmh": 56.23,
+            "n_relative": 114,
+            "median_abs_relative": 1.031
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 83,
+            "enough": true,
+            "median_abs_kmh": 1.97,
+            "p90_abs_kmh": 12.42,
+            "mean_signed_kmh": 5.92,
+            "n_relative": 32,
+            "median_abs_relative": 0.115
+          },
+          "vs_flat": {
+            "n": 83,
+            "enough": true,
+            "median_abs_kmh": 2.38,
+            "p90_abs_kmh": 12.42,
+            "mean_signed_kmh": 6.39,
+            "n_relative": 32,
+            "median_abs_relative": 0.138
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 73.44,
+            "p90_abs_kmh": 205.3,
+            "mean_signed_kmh": 104.31,
+            "n_relative": 82,
+            "median_abs_relative": 1.585
+          },
+          "vs_flat": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 74.72,
+            "p90_abs_kmh": 209.02,
+            "mean_signed_kmh": 106.67,
+            "n_relative": 82,
+            "median_abs_relative": 1.827
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 67,
+            "enough": true,
+            "median_abs_kmh": 1.95,
+            "p90_abs_kmh": 6.74,
+            "mean_signed_kmh": 1.34,
+            "n_relative": 20,
+            "median_abs_relative": 0.091
+          },
+          "vs_flat": {
+            "n": 67,
+            "enough": true,
+            "median_abs_kmh": 1.95,
+            "p90_abs_kmh": 6.74,
+            "mean_signed_kmh": 1.34,
+            "n_relative": 20,
+            "median_abs_relative": 0.091
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 98,
+            "enough": true,
+            "median_abs_kmh": 64.0,
+            "p90_abs_kmh": 204.03,
+            "mean_signed_kmh": 91.38,
+            "n_relative": 94,
+            "median_abs_relative": 1.451
+          },
+          "vs_flat": {
+            "n": 98,
+            "enough": true,
+            "median_abs_kmh": 67.77,
+            "p90_abs_kmh": 208.76,
+            "mean_signed_kmh": 93.75,
+            "n_relative": 94,
+            "median_abs_relative": 1.629
+          }
+        }
+      }
+    },
+    {
+      "seed": 900015,
+      "true": {
+        "pass": 5,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 2,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00037",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 56.3,
+          "vision_kmh": null,
+          "lofted": false
+        },
+        {
+          "truth_id": "e00033",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 68.5,
+          "vision_kmh": null,
+          "lofted": false
+        }
+      ],
+      "positions": {
+        "camera_ok": 72,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 48,
+          "median_m": 0.641,
+          "p90_m": 0.904,
+          "max_m": 1.036
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 32,
+            "enough": true,
+            "median_abs_kmh": 1.53,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -2.21,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          },
+          "vs_flat": {
+            "n": 32,
+            "enough": true,
+            "median_abs_kmh": 1.53,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -2.21,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 32,
+            "enough": true,
+            "median_abs_kmh": 1.53,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -2.21,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          },
+          "vs_flat": {
+            "n": 32,
+            "enough": true,
+            "median_abs_kmh": 1.53,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -2.21,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 16,
+            "enough": true,
+            "median_abs_kmh": 1.08,
+            "p90_abs_kmh": 3.3,
+            "mean_signed_kmh": -1.13,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 16,
+            "enough": true,
+            "median_abs_kmh": 1.08,
+            "p90_abs_kmh": 3.3,
+            "mean_signed_kmh": -1.13,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 16,
+            "enough": true,
+            "median_abs_kmh": 2.04,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -3.28,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          },
+          "vs_flat": {
+            "n": 16,
+            "enough": true,
+            "median_abs_kmh": 2.04,
+            "p90_abs_kmh": 6.79,
+            "mean_signed_kmh": -3.28,
+            "n_relative": 5,
+            "median_abs_relative": 0.09
+          }
+        }
+      }
+    },
+    {
+      "seed": 900016,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00101",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 47.9,
+          "vision_kmh": 39.7,
+          "lofted": false,
+          "error_kmh": -8.2,
+          "relative": -0.171
+        },
+        {
+          "truth_id": "e00103",
+          "detected_id": "v00004",
+          "type": "pass",
+          "true_kmh": 30.1,
+          "vision_kmh": 24.7,
+          "lofted": false,
+          "error_kmh": -5.4,
+          "relative": -0.179
+        },
+        {
+          "truth_id": "e00102",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 28.2,
+          "vision_kmh": 27.9,
+          "lofted": false,
+          "error_kmh": -0.3,
+          "relative": -0.011
+        },
+        {
+          "truth_id": "e00100",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 72.7,
+          "vision_kmh": 67.6,
+          "lofted": false,
+          "error_kmh": -5.1,
+          "relative": -0.07
+        }
+      ],
+      "positions": {
+        "camera_ok": 246,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 226,
+          "median_m": 0.1,
+          "p90_m": 0.323,
+          "max_m": 0.586
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 222,
+            "enough": true,
+            "median_abs_kmh": 1.72,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 155,
+            "median_abs_relative": 0.069
+          },
+          "vs_flat": {
+            "n": 222,
+            "enough": true,
+            "median_abs_kmh": 1.72,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 155,
+            "median_abs_relative": 0.069
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 222,
+            "enough": true,
+            "median_abs_kmh": 1.72,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 155,
+            "median_abs_relative": 0.069
+          },
+          "vs_flat": {
+            "n": 222,
+            "enough": true,
+            "median_abs_kmh": 1.72,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 155,
+            "median_abs_relative": 0.069
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 83,
+            "enough": true,
+            "median_abs_kmh": 1.66,
+            "p90_abs_kmh": 6.74,
+            "mean_signed_kmh": -0.4,
+            "n_relative": 28,
+            "median_abs_relative": 0.036
+          },
+          "vs_flat": {
+            "n": 83,
+            "enough": true,
+            "median_abs_kmh": 1.66,
+            "p90_abs_kmh": 6.74,
+            "mean_signed_kmh": -0.4,
+            "n_relative": 28,
+            "median_abs_relative": 0.036
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 139,
+            "enough": true,
+            "median_abs_kmh": 2.07,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.7,
+            "n_relative": 127,
+            "median_abs_relative": 0.08
+          },
+          "vs_flat": {
+            "n": 139,
+            "enough": true,
+            "median_abs_kmh": 2.07,
+            "p90_abs_kmh": 7.43,
+            "mean_signed_kmh": -0.7,
+            "n_relative": 127,
+            "median_abs_relative": 0.08
+          }
+        }
+      }
+    },
+    {
+      "seed": 900017,
+      "true": {
+        "pass": 5,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00056",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 63.6,
+          "vision_kmh": 60.1,
+          "lofted": false,
+          "error_kmh": -3.5,
+          "relative": -0.055
+        },
+        {
+          "truth_id": "e00057",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 40.0,
+          "vision_kmh": 35.8,
+          "lofted": false,
+          "error_kmh": -4.2,
+          "relative": -0.105
+        },
+        {
+          "truth_id": "e00055",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 65.7,
+          "vision_kmh": 62.1,
+          "lofted": false,
+          "error_kmh": -3.6,
+          "relative": -0.055
+        }
+      ],
+      "positions": {
+        "camera_ok": 247,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 227,
+          "median_m": 0.071,
+          "p90_m": 0.208,
+          "max_m": 0.52
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 218,
+            "enough": true,
+            "median_abs_kmh": 1.05,
+            "p90_abs_kmh": 4.9,
+            "mean_signed_kmh": -0.27,
+            "n_relative": 147,
+            "median_abs_relative": 0.022
+          },
+          "vs_flat": {
+            "n": 218,
+            "enough": true,
+            "median_abs_kmh": 1.05,
+            "p90_abs_kmh": 4.9,
+            "mean_signed_kmh": -0.27,
+            "n_relative": 147,
+            "median_abs_relative": 0.022
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 218,
+            "enough": true,
+            "median_abs_kmh": 1.05,
+            "p90_abs_kmh": 4.9,
+            "mean_signed_kmh": -0.27,
+            "n_relative": 147,
+            "median_abs_relative": 0.022
+          },
+          "vs_flat": {
+            "n": 218,
+            "enough": true,
+            "median_abs_kmh": 1.05,
+            "p90_abs_kmh": 4.9,
+            "mean_signed_kmh": -0.27,
+            "n_relative": 147,
+            "median_abs_relative": 0.022
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 6.15,
+            "mean_signed_kmh": -0.48,
+            "n_relative": 18,
+            "median_abs_relative": 0.062
+          },
+          "vs_flat": {
+            "n": 82,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 6.15,
+            "mean_signed_kmh": -0.48,
+            "n_relative": 18,
+            "median_abs_relative": 0.062
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 136,
+            "enough": true,
+            "median_abs_kmh": 0.96,
+            "p90_abs_kmh": 3.05,
+            "mean_signed_kmh": -0.14,
+            "n_relative": 129,
+            "median_abs_relative": 0.02
+          },
+          "vs_flat": {
+            "n": 136,
+            "enough": true,
+            "median_abs_kmh": 0.96,
+            "p90_abs_kmh": 3.05,
+            "mean_signed_kmh": -0.14,
+            "n_relative": 129,
+            "median_abs_relative": 0.02
+          }
+        }
+      }
+    },
+    {
+      "seed": 900018,
+      "true": {
+        "pass": 3,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 0,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 0,
+          "median_m": null,
+          "p90_m": null,
+          "max_m": null
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        }
+      }
+    },
+    {
+      "seed": 900019,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 2,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00013",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 41.4,
+          "vision_kmh": 37.8,
+          "lofted": false,
+          "error_kmh": -3.6,
+          "relative": -0.087
+        },
+        {
+          "truth_id": "e00014",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 39.4,
+          "vision_kmh": 36.5,
+          "lofted": false,
+          "error_kmh": -2.9,
+          "relative": -0.074
+        }
+      ],
+      "positions": {
+        "camera_ok": 206,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 168,
+          "median_m": 0.064,
+          "p90_m": 0.113,
+          "max_m": 0.171
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 155,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 3.8,
+            "mean_signed_kmh": 1.2,
+            "n_relative": 68,
+            "median_abs_relative": 0.013
+          },
+          "vs_flat": {
+            "n": 155,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 3.8,
+            "mean_signed_kmh": 1.3,
+            "n_relative": 68,
+            "median_abs_relative": 0.013
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 152,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 3.12,
+            "mean_signed_kmh": -0.08,
+            "n_relative": 65,
+            "median_abs_relative": 0.013
+          },
+          "vs_flat": {
+            "n": 152,
+            "enough": true,
+            "median_abs_kmh": 0.76,
+            "p90_abs_kmh": 3.12,
+            "mean_signed_kmh": -0.08,
+            "n_relative": 65,
+            "median_abs_relative": 0.013
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 3,
+            "enough": false,
+            "median_abs_kmh": 64.57,
+            "p90_abs_kmh": 64.57,
+            "mean_signed_kmh": 66.45,
+            "n_relative": 3,
+            "median_abs_relative": 2.012
+          },
+          "vs_flat": {
+            "n": 3,
+            "enough": false,
+            "median_abs_kmh": 69.53,
+            "p90_abs_kmh": 69.53,
+            "mean_signed_kmh": 71.43,
+            "n_relative": 3,
+            "median_abs_relative": 2.507
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 91,
+            "enough": true,
+            "median_abs_kmh": 1.02,
+            "p90_abs_kmh": 3.12,
+            "mean_signed_kmh": 0.62,
+            "n_relative": 5,
+            "median_abs_relative": 0.127
+          },
+          "vs_flat": {
+            "n": 91,
+            "enough": true,
+            "median_abs_kmh": 1.02,
+            "p90_abs_kmh": 3.12,
+            "mean_signed_kmh": 0.62,
+            "n_relative": 5,
+            "median_abs_relative": 0.127
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 64,
+            "enough": true,
+            "median_abs_kmh": 0.51,
+            "p90_abs_kmh": 6.75,
+            "mean_signed_kmh": 2.04,
+            "n_relative": 63,
+            "median_abs_relative": 0.013
+          },
+          "vs_flat": {
+            "n": 64,
+            "enough": true,
+            "median_abs_kmh": 0.51,
+            "p90_abs_kmh": 6.75,
+            "mean_signed_kmh": 2.27,
+            "n_relative": 63,
+            "median_abs_relative": 0.013
+          }
+        }
+      }
+    },
+    {
+      "seed": 900020,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 2,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00015",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 33.8,
+          "vision_kmh": 30.6,
+          "lofted": false,
+          "error_kmh": -3.2,
+          "relative": -0.095
+        },
+        {
+          "truth_id": "e00016",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 93.5,
+          "vision_kmh": 229.7,
+          "lofted": true,
+          "error_kmh": 136.2,
+          "relative": 1.457
+        }
+      ],
+      "positions": {
+        "camera_ok": 237,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 130,
+          "median_m": 0.094,
+          "p90_m": 0.167,
+          "max_m": 2.016
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 198,
+            "enough": true,
+            "median_abs_kmh": 2.93,
+            "p90_abs_kmh": 219.47,
+            "mean_signed_kmh": 61.75,
+            "n_relative": 125,
+            "median_abs_relative": 1.156
+          },
+          "vs_flat": {
+            "n": 198,
+            "enough": true,
+            "median_abs_kmh": 2.93,
+            "p90_abs_kmh": 224.97,
+            "mean_signed_kmh": 63.42,
+            "n_relative": 125,
+            "median_abs_relative": 1.229
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 127,
+            "enough": true,
+            "median_abs_kmh": 1.48,
+            "p90_abs_kmh": 7.7,
+            "mean_signed_kmh": 1.24,
+            "n_relative": 54,
+            "median_abs_relative": 0.032
+          },
+          "vs_flat": {
+            "n": 127,
+            "enough": true,
+            "median_abs_kmh": 1.48,
+            "p90_abs_kmh": 7.7,
+            "mean_signed_kmh": 1.3,
+            "n_relative": 54,
+            "median_abs_relative": 0.032
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 71,
+            "enough": true,
+            "median_abs_kmh": 175.64,
+            "p90_abs_kmh": 241.32,
+            "mean_signed_kmh": 170.0,
+            "n_relative": 71,
+            "median_abs_relative": 2.78
+          },
+          "vs_flat": {
+            "n": 71,
+            "enough": true,
+            "median_abs_kmh": 181.43,
+            "p90_abs_kmh": 247.46,
+            "mean_signed_kmh": 174.54,
+            "n_relative": 71,
+            "median_abs_relative": 3.21
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 63,
+            "enough": true,
+            "median_abs_kmh": 2.01,
+            "p90_abs_kmh": 11.78,
+            "mean_signed_kmh": 3.63,
+            "n_relative": 18,
+            "median_abs_relative": 0.214
+          },
+          "vs_flat": {
+            "n": 63,
+            "enough": true,
+            "median_abs_kmh": 2.01,
+            "p90_abs_kmh": 11.78,
+            "mean_signed_kmh": 3.79,
+            "n_relative": 18,
+            "median_abs_relative": 0.214
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 135,
+            "enough": true,
+            "median_abs_kmh": 40.56,
+            "p90_abs_kmh": 226.99,
+            "mean_signed_kmh": 88.87,
+            "n_relative": 107,
+            "median_abs_relative": 1.524
+          },
+          "vs_flat": {
+            "n": 135,
+            "enough": true,
+            "median_abs_kmh": 40.81,
+            "p90_abs_kmh": 232.24,
+            "mean_signed_kmh": 91.25,
+            "n_relative": 107,
+            "median_abs_relative": 1.662
+          }
+        }
+      }
+    },
+    {
+      "seed": 900021,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00046",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 44.8,
+          "vision_kmh": null,
+          "lofted": false
+        },
+        {
+          "truth_id": "e00048",
+          "detected_id": "v00004",
+          "type": "pass",
+          "true_kmh": 47.6,
+          "vision_kmh": 46.9,
+          "lofted": false,
+          "error_kmh": -0.7,
+          "relative": -0.015
+        },
+        {
+          "truth_id": "e00047",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 24.0,
+          "vision_kmh": null,
+          "lofted": false
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 182,
+          "median_m": 0.124,
+          "p90_m": 0.233,
+          "max_m": 0.351
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 161,
+            "enough": true,
+            "median_abs_kmh": 1.84,
+            "p90_abs_kmh": 5.64,
+            "mean_signed_kmh": 0.89,
+            "n_relative": 107,
+            "median_abs_relative": 0.05
+          },
+          "vs_flat": {
+            "n": 161,
+            "enough": true,
+            "median_abs_kmh": 1.84,
+            "p90_abs_kmh": 5.64,
+            "mean_signed_kmh": 0.89,
+            "n_relative": 107,
+            "median_abs_relative": 0.05
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 161,
+            "enough": true,
+            "median_abs_kmh": 1.84,
+            "p90_abs_kmh": 5.64,
+            "mean_signed_kmh": 0.89,
+            "n_relative": 107,
+            "median_abs_relative": 0.05
+          },
+          "vs_flat": {
+            "n": 161,
+            "enough": true,
+            "median_abs_kmh": 1.84,
+            "p90_abs_kmh": 5.64,
+            "mean_signed_kmh": 0.89,
+            "n_relative": 107,
+            "median_abs_relative": 0.05
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 57,
+            "enough": true,
+            "median_abs_kmh": 2.35,
+            "p90_abs_kmh": 10.39,
+            "mean_signed_kmh": 3.38,
+            "n_relative": 10,
+            "median_abs_relative": 0.3
+          },
+          "vs_flat": {
+            "n": 57,
+            "enough": true,
+            "median_abs_kmh": 2.35,
+            "p90_abs_kmh": 10.39,
+            "mean_signed_kmh": 3.38,
+            "n_relative": 10,
+            "median_abs_relative": 0.3
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 104,
+            "enough": true,
+            "median_abs_kmh": 1.49,
+            "p90_abs_kmh": 4.34,
+            "mean_signed_kmh": -0.47,
+            "n_relative": 97,
+            "median_abs_relative": 0.047
+          },
+          "vs_flat": {
+            "n": 104,
+            "enough": true,
+            "median_abs_kmh": 1.49,
+            "p90_abs_kmh": 4.34,
+            "mean_signed_kmh": -0.47,
+            "n_relative": 97,
+            "median_abs_relative": 0.047
+          }
+        }
+      }
+    },
+    {
+      "seed": 900022,
+      "true": {
+        "pass": 3,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 6,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00114",
+          "detected_id": "v00006",
+          "type": "pass",
+          "true_kmh": 33.6,
+          "vision_kmh": 29.6,
+          "lofted": false,
+          "error_kmh": -4.0,
+          "relative": -0.119
+        },
+        {
+          "truth_id": "e00113",
+          "detected_id": "v00005",
+          "type": "pass",
+          "true_kmh": 40.4,
+          "vision_kmh": 35.8,
+          "lofted": false,
+          "error_kmh": -4.6,
+          "relative": -0.114
+        }
+      ],
+      "positions": {
+        "camera_ok": 212,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 192,
+          "median_m": 0.392,
+          "p90_m": 0.732,
+          "max_m": 1.333
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 192,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.06,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 53,
+            "median_abs_relative": 0.053
+          },
+          "vs_flat": {
+            "n": 192,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.06,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 53,
+            "median_abs_relative": 0.053
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 192,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.06,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 53,
+            "median_abs_relative": 0.053
+          },
+          "vs_flat": {
+            "n": 192,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.06,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 53,
+            "median_abs_relative": 0.053
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 66,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 12.4,
+            "mean_signed_kmh": -2.64,
+            "n_relative": 10,
+            "median_abs_relative": 0.379
+          },
+          "vs_flat": {
+            "n": 66,
+            "enough": true,
+            "median_abs_kmh": 1.69,
+            "p90_abs_kmh": 12.4,
+            "mean_signed_kmh": -2.64,
+            "n_relative": 10,
+            "median_abs_relative": 0.379
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 126,
+            "enough": true,
+            "median_abs_kmh": 1.22,
+            "p90_abs_kmh": 3.51,
+            "mean_signed_kmh": -0.96,
+            "n_relative": 43,
+            "median_abs_relative": 0.048
+          },
+          "vs_flat": {
+            "n": 126,
+            "enough": true,
+            "median_abs_kmh": 1.22,
+            "p90_abs_kmh": 3.51,
+            "mean_signed_kmh": -0.96,
+            "n_relative": 43,
+            "median_abs_relative": 0.048
+          }
+        }
+      }
+    },
+    {
+      "seed": 900023,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 2,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00068",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 55.6,
+          "vision_kmh": 46.9,
+          "lofted": false,
+          "error_kmh": -8.7,
+          "relative": -0.156
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 220,
+          "median_m": 0.116,
+          "p90_m": 0.516,
+          "max_m": 0.763
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 211,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 4.29,
+            "mean_signed_kmh": 2.4,
+            "n_relative": 57,
+            "median_abs_relative": 0.081
+          },
+          "vs_flat": {
+            "n": 211,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 4.29,
+            "mean_signed_kmh": 2.4,
+            "n_relative": 57,
+            "median_abs_relative": 0.081
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 211,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 4.29,
+            "mean_signed_kmh": 2.4,
+            "n_relative": 57,
+            "median_abs_relative": 0.081
+          },
+          "vs_flat": {
+            "n": 211,
+            "enough": true,
+            "median_abs_kmh": 1.15,
+            "p90_abs_kmh": 4.29,
+            "mean_signed_kmh": 2.4,
+            "n_relative": 57,
+            "median_abs_relative": 0.081
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 121,
+            "enough": true,
+            "median_abs_kmh": 1.0,
+            "p90_abs_kmh": 4.04,
+            "mean_signed_kmh": 0.84,
+            "n_relative": 7,
+            "median_abs_relative": 0.182
+          },
+          "vs_flat": {
+            "n": 121,
+            "enough": true,
+            "median_abs_kmh": 1.0,
+            "p90_abs_kmh": 4.04,
+            "mean_signed_kmh": 0.84,
+            "n_relative": 7,
+            "median_abs_relative": 0.182
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 90,
+            "enough": true,
+            "median_abs_kmh": 1.24,
+            "p90_abs_kmh": 4.67,
+            "mean_signed_kmh": 4.5,
+            "n_relative": 50,
+            "median_abs_relative": 0.076
+          },
+          "vs_flat": {
+            "n": 90,
+            "enough": true,
+            "median_abs_kmh": 1.24,
+            "p90_abs_kmh": 4.67,
+            "mean_signed_kmh": 4.5,
+            "n_relative": 50,
+            "median_abs_relative": 0.076
+          }
+        }
+      }
+    },
+    {
+      "seed": 900024,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 3,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00026",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 32.0,
+          "vision_kmh": 29.5,
+          "lofted": false,
+          "error_kmh": -2.5,
+          "relative": -0.078
+        },
+        {
+          "truth_id": "e00027",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 44.0,
+          "vision_kmh": 33.4,
+          "lofted": false,
+          "error_kmh": -10.6,
+          "relative": -0.241
+        },
+        {
+          "truth_id": "e00029",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 33.8,
+          "vision_kmh": 29.1,
+          "lofted": false,
+          "error_kmh": -4.7,
+          "relative": -0.139
+        }
+      ],
+      "positions": {
+        "camera_ok": 248,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 240,
+          "median_m": 0.165,
+          "p90_m": 0.346,
+          "max_m": 0.547
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 238,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 7.45,
+            "mean_signed_kmh": -0.37,
+            "n_relative": 105,
+            "median_abs_relative": 0.101
+          },
+          "vs_flat": {
+            "n": 238,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 7.45,
+            "mean_signed_kmh": -0.37,
+            "n_relative": 105,
+            "median_abs_relative": 0.101
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 238,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 7.45,
+            "mean_signed_kmh": -0.37,
+            "n_relative": 105,
+            "median_abs_relative": 0.101
+          },
+          "vs_flat": {
+            "n": 238,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 7.45,
+            "mean_signed_kmh": -0.37,
+            "n_relative": 105,
+            "median_abs_relative": 0.101
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 124,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 8.77,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 25,
+            "median_abs_relative": 0.081
+          },
+          "vs_flat": {
+            "n": 124,
+            "enough": true,
+            "median_abs_kmh": 1.96,
+            "p90_abs_kmh": 8.77,
+            "mean_signed_kmh": 0.12,
+            "n_relative": 25,
+            "median_abs_relative": 0.081
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 114,
+            "enough": true,
+            "median_abs_kmh": 1.85,
+            "p90_abs_kmh": 5.41,
+            "mean_signed_kmh": -0.9,
+            "n_relative": 80,
+            "median_abs_relative": 0.105
+          },
+          "vs_flat": {
+            "n": 114,
+            "enough": true,
+            "median_abs_kmh": 1.85,
+            "p90_abs_kmh": 5.41,
+            "mean_signed_kmh": -0.9,
+            "n_relative": 80,
+            "median_abs_relative": 0.105
+          }
+        }
+      }
+    },
+    {
+      "seed": 900025,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 1,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 245,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 235,
+          "median_m": 0.145,
+          "p90_m": 0.23,
+          "max_m": 0.442
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 233,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 4.02,
+            "mean_signed_kmh": 0.64,
+            "n_relative": 60,
+            "median_abs_relative": 0.03
+          },
+          "vs_flat": {
+            "n": 233,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 4.02,
+            "mean_signed_kmh": 0.64,
+            "n_relative": 60,
+            "median_abs_relative": 0.03
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 233,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 4.02,
+            "mean_signed_kmh": 0.64,
+            "n_relative": 60,
+            "median_abs_relative": 0.03
+          },
+          "vs_flat": {
+            "n": 233,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 4.02,
+            "mean_signed_kmh": 0.64,
+            "n_relative": 60,
+            "median_abs_relative": 0.03
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 176,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 3.87,
+            "mean_signed_kmh": 1.05,
+            "n_relative": 3,
+            "median_abs_relative": 0.378
+          },
+          "vs_flat": {
+            "n": 176,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 3.87,
+            "mean_signed_kmh": 1.05,
+            "n_relative": 3,
+            "median_abs_relative": 0.378
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 57,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.3,
+            "mean_signed_kmh": -0.62,
+            "n_relative": 57,
+            "median_abs_relative": 0.03
+          },
+          "vs_flat": {
+            "n": 57,
+            "enough": true,
+            "median_abs_kmh": 1.06,
+            "p90_abs_kmh": 5.3,
+            "mean_signed_kmh": -0.62,
+            "n_relative": 57,
+            "median_abs_relative": 0.03
+          }
+        }
+      }
+    },
+    {
+      "seed": 900026,
+      "true": {
+        "pass": 4,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 3,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00041",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 47.1,
+          "vision_kmh": 43.4,
+          "lofted": false,
+          "error_kmh": -3.7,
+          "relative": -0.079
+        },
+        {
+          "truth_id": "e00043",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 45.0,
+          "vision_kmh": 47.0,
+          "lofted": false,
+          "error_kmh": 2.0,
+          "relative": 0.044
+        },
+        {
+          "truth_id": "e00042",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 37.3,
+          "vision_kmh": 11.5,
+          "lofted": false,
+          "error_kmh": -25.8,
+          "relative": -0.692
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 229,
+          "median_m": 0.116,
+          "p90_m": 0.248,
+          "max_m": 0.478
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 7.66,
+            "mean_signed_kmh": 0.3,
+            "n_relative": 109,
+            "median_abs_relative": 0.061
+          },
+          "vs_flat": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 7.66,
+            "mean_signed_kmh": 0.3,
+            "n_relative": 109,
+            "median_abs_relative": 0.061
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 7.66,
+            "mean_signed_kmh": 0.3,
+            "n_relative": 109,
+            "median_abs_relative": 0.061
+          },
+          "vs_flat": {
+            "n": 230,
+            "enough": true,
+            "median_abs_kmh": 1.4,
+            "p90_abs_kmh": 7.66,
+            "mean_signed_kmh": 0.3,
+            "n_relative": 109,
+            "median_abs_relative": 0.061
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 140,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.33,
+            "mean_signed_kmh": 0.86,
+            "n_relative": 34,
+            "median_abs_relative": 0.123
+          },
+          "vs_flat": {
+            "n": 140,
+            "enough": true,
+            "median_abs_kmh": 1.28,
+            "p90_abs_kmh": 8.33,
+            "mean_signed_kmh": 0.86,
+            "n_relative": 34,
+            "median_abs_relative": 0.123
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 90,
+            "enough": true,
+            "median_abs_kmh": 1.7,
+            "p90_abs_kmh": 6.46,
+            "mean_signed_kmh": -0.56,
+            "n_relative": 75,
+            "median_abs_relative": 0.053
+          },
+          "vs_flat": {
+            "n": 90,
+            "enough": true,
+            "median_abs_kmh": 1.7,
+            "p90_abs_kmh": 6.46,
+            "mean_signed_kmh": -0.56,
+            "n_relative": 75,
+            "median_abs_relative": 0.053
+          }
+        }
+      }
+    },
+    {
+      "seed": 900027,
+      "true": {
+        "pass": 3,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00008",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 48.6,
+          "vision_kmh": 40.9,
+          "lofted": false,
+          "error_kmh": -7.7,
+          "relative": -0.158
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 183,
+          "median_m": 0.186,
+          "p90_m": 0.607,
+          "max_m": 0.897
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 173,
+            "enough": true,
+            "median_abs_kmh": 1.41,
+            "p90_abs_kmh": 6.29,
+            "mean_signed_kmh": -1.18,
+            "n_relative": 62,
+            "median_abs_relative": 0.061
+          },
+          "vs_flat": {
+            "n": 173,
+            "enough": true,
+            "median_abs_kmh": 1.41,
+            "p90_abs_kmh": 6.29,
+            "mean_signed_kmh": -1.18,
+            "n_relative": 62,
+            "median_abs_relative": 0.061
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 173,
+            "enough": true,
+            "median_abs_kmh": 1.41,
+            "p90_abs_kmh": 6.29,
+            "mean_signed_kmh": -1.18,
+            "n_relative": 62,
+            "median_abs_relative": 0.061
+          },
+          "vs_flat": {
+            "n": 173,
+            "enough": true,
+            "median_abs_kmh": 1.41,
+            "p90_abs_kmh": 6.29,
+            "mean_signed_kmh": -1.18,
+            "n_relative": 62,
+            "median_abs_relative": 0.061
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 81,
+            "enough": true,
+            "median_abs_kmh": 2.74,
+            "p90_abs_kmh": 9.01,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 12,
+            "median_abs_relative": 0.195
+          },
+          "vs_flat": {
+            "n": 81,
+            "enough": true,
+            "median_abs_kmh": 2.74,
+            "p90_abs_kmh": 9.01,
+            "mean_signed_kmh": -1.53,
+            "n_relative": 12,
+            "median_abs_relative": 0.195
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 92,
+            "enough": true,
+            "median_abs_kmh": 1.1,
+            "p90_abs_kmh": 4.19,
+            "mean_signed_kmh": -0.86,
+            "n_relative": 50,
+            "median_abs_relative": 0.043
+          },
+          "vs_flat": {
+            "n": 92,
+            "enough": true,
+            "median_abs_kmh": 1.1,
+            "p90_abs_kmh": 4.19,
+            "mean_signed_kmh": -0.86,
+            "n_relative": 50,
+            "median_abs_relative": 0.043
+          }
+        }
+      }
+    },
+    {
+      "seed": 900028,
+      "true": {
+        "pass": 0,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 0,
+        "shot": 0
+      },
+      "events": [],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 250,
+          "median_m": 0.048,
+          "p90_m": 0.102,
+          "max_m": 0.182
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.47,
+            "mean_signed_kmh": 0.77,
+            "n_relative": 2,
+            "median_abs_relative": 0.015
+          },
+          "vs_flat": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.47,
+            "mean_signed_kmh": 0.77,
+            "n_relative": 2,
+            "median_abs_relative": 0.015
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.47,
+            "mean_signed_kmh": 0.77,
+            "n_relative": 2,
+            "median_abs_relative": 0.015
+          },
+          "vs_flat": {
+            "n": 248,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.47,
+            "mean_signed_kmh": 0.77,
+            "n_relative": 2,
+            "median_abs_relative": 0.015
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 12,
+            "enough": true,
+            "median_abs_kmh": 0.67,
+            "p90_abs_kmh": 1.22,
+            "mean_signed_kmh": -0.23,
+            "n_relative": 1,
+            "median_abs_relative": 0.015
+          },
+          "vs_flat": {
+            "n": 12,
+            "enough": true,
+            "median_abs_kmh": 0.67,
+            "p90_abs_kmh": 1.22,
+            "mean_signed_kmh": -0.23,
+            "n_relative": 1,
+            "median_abs_relative": 0.015
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 236,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.43,
+            "mean_signed_kmh": 0.82,
+            "n_relative": 1,
+            "median_abs_relative": 0.362
+          },
+          "vs_flat": {
+            "n": 236,
+            "enough": true,
+            "median_abs_kmh": 0.73,
+            "p90_abs_kmh": 1.43,
+            "mean_signed_kmh": 0.82,
+            "n_relative": 1,
+            "median_abs_relative": 0.362
+          }
+        }
+      }
+    },
+    {
+      "seed": 900029,
+      "true": {
+        "pass": 2,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 3,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00083",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 37.7,
+          "vision_kmh": 33.0,
+          "lofted": false,
+          "error_kmh": -4.7,
+          "relative": -0.125
+        },
+        {
+          "truth_id": "e00082",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 45.8,
+          "vision_kmh": 43.0,
+          "lofted": false,
+          "error_kmh": -2.8,
+          "relative": -0.061
+        }
+      ],
+      "positions": {
+        "camera_ok": 250,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 216,
+          "median_m": 0.131,
+          "p90_m": 0.371,
+          "max_m": 0.57
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 210,
+            "enough": true,
+            "median_abs_kmh": 3.97,
+            "p90_abs_kmh": 8.72,
+            "mean_signed_kmh": 1.23,
+            "n_relative": 87,
+            "median_abs_relative": 0.166
+          },
+          "vs_flat": {
+            "n": 210,
+            "enough": true,
+            "median_abs_kmh": 3.97,
+            "p90_abs_kmh": 8.72,
+            "mean_signed_kmh": 1.23,
+            "n_relative": 87,
+            "median_abs_relative": 0.166
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 210,
+            "enough": true,
+            "median_abs_kmh": 3.97,
+            "p90_abs_kmh": 8.72,
+            "mean_signed_kmh": 1.23,
+            "n_relative": 87,
+            "median_abs_relative": 0.166
+          },
+          "vs_flat": {
+            "n": 210,
+            "enough": true,
+            "median_abs_kmh": 3.97,
+            "p90_abs_kmh": 8.72,
+            "mean_signed_kmh": 1.23,
+            "n_relative": 87,
+            "median_abs_relative": 0.166
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 78,
+            "enough": true,
+            "median_abs_kmh": 1.46,
+            "p90_abs_kmh": 11.2,
+            "mean_signed_kmh": 3.11,
+            "n_relative": 6,
+            "median_abs_relative": 0.312
+          },
+          "vs_flat": {
+            "n": 78,
+            "enough": true,
+            "median_abs_kmh": 1.46,
+            "p90_abs_kmh": 11.2,
+            "mean_signed_kmh": 3.11,
+            "n_relative": 6,
+            "median_abs_relative": 0.312
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 132,
+            "enough": true,
+            "median_abs_kmh": 4.65,
+            "p90_abs_kmh": 8.52,
+            "mean_signed_kmh": 0.11,
+            "n_relative": 81,
+            "median_abs_relative": 0.162
+          },
+          "vs_flat": {
+            "n": 132,
+            "enough": true,
+            "median_abs_kmh": 4.65,
+            "p90_abs_kmh": 8.52,
+            "mean_signed_kmh": 0.11,
+            "n_relative": 81,
+            "median_abs_relative": 0.162
+          }
+        }
+      }
+    },
+    {
+      "seed": 900030,
+      "true": {
+        "pass": 5,
+        "shot": 0
+      },
+      "detected": {
+        "pass": 4,
+        "shot": 0
+      },
+      "events": [
+        {
+          "truth_id": "e00079",
+          "detected_id": "v00004",
+          "type": "pass",
+          "true_kmh": 44.9,
+          "vision_kmh": 42.0,
+          "lofted": false,
+          "error_kmh": -2.9,
+          "relative": -0.065
+        },
+        {
+          "truth_id": "e00077",
+          "detected_id": "v00002",
+          "type": "pass",
+          "true_kmh": 27.4,
+          "vision_kmh": 23.7,
+          "lofted": false,
+          "error_kmh": -3.7,
+          "relative": -0.135
+        },
+        {
+          "truth_id": "e00076",
+          "detected_id": "v00001",
+          "type": "pass",
+          "true_kmh": 65.0,
+          "vision_kmh": 62.9,
+          "lofted": false,
+          "error_kmh": -2.1,
+          "relative": -0.032
+        },
+        {
+          "truth_id": "e00078",
+          "detected_id": "v00003",
+          "type": "pass",
+          "true_kmh": 43.9,
+          "vision_kmh": 41.5,
+          "lofted": false,
+          "error_kmh": -2.4,
+          "relative": -0.055
+        }
+      ],
+      "positions": {
+        "camera_ok": 249,
+        "observed": 250,
+        "ball_on_ground": {
+          "n": 245,
+          "median_m": 0.097,
+          "p90_m": 0.271,
+          "max_m": 0.476
+        }
+      },
+      "frame_speed": {
+        "all": {
+          "vs_3d": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 1.34,
+            "p90_abs_kmh": 8.12,
+            "mean_signed_kmh": -0.64,
+            "n_relative": 85,
+            "median_abs_relative": 0.037
+          },
+          "vs_flat": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 1.34,
+            "p90_abs_kmh": 8.12,
+            "mean_signed_kmh": -0.64,
+            "n_relative": 85,
+            "median_abs_relative": 0.037
+          }
+        },
+        "on the ground": {
+          "vs_3d": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 1.34,
+            "p90_abs_kmh": 8.12,
+            "mean_signed_kmh": -0.64,
+            "n_relative": 85,
+            "median_abs_relative": 0.037
+          },
+          "vs_flat": {
+            "n": 244,
+            "enough": true,
+            "median_abs_kmh": 1.34,
+            "p90_abs_kmh": 8.12,
+            "mean_signed_kmh": -0.64,
+            "n_relative": 85,
+            "median_abs_relative": 0.037
+          }
+        },
+        "in the air": {
+          "vs_3d": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          },
+          "vs_flat": {
+            "n": 0,
+            "enough": false,
+            "median_abs_kmh": null,
+            "p90_abs_kmh": null,
+            "mean_signed_kmh": null,
+            "n_relative": 0,
+            "median_abs_relative": null
+          }
+        },
+        "drawn over a player": {
+          "vs_3d": {
+            "n": 147,
+            "enough": true,
+            "median_abs_kmh": 1.59,
+            "p90_abs_kmh": 8.29,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 15,
+            "median_abs_relative": 0.088
+          },
+          "vs_flat": {
+            "n": 147,
+            "enough": true,
+            "median_abs_kmh": 1.59,
+            "p90_abs_kmh": 8.29,
+            "mean_signed_kmh": -0.58,
+            "n_relative": 15,
+            "median_abs_relative": 0.088
+          }
+        },
+        "not over a player": {
+          "vs_3d": {
+            "n": 97,
+            "enough": true,
+            "median_abs_kmh": 1.18,
+            "p90_abs_kmh": 4.1,
+            "mean_signed_kmh": -0.72,
+            "n_relative": 70,
+            "median_abs_relative": 0.034
+          },
+          "vs_flat": {
+            "n": 97,
+            "enough": true,
+            "median_abs_kmh": 1.18,
+            "p90_abs_kmh": 4.1,
+            "mean_signed_kmh": -0.72,
+            "n_relative": 70,
+            "median_abs_relative": 0.034
+          }
+        }
+      }
+    }
+  ]
+}

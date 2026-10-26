@@ -25,10 +25,10 @@ observations are merged on the pitch (ninety.vision.fuse) before events; `views/
 `--tiles` detects each frame as a 2 x 2 grid of tiles (ninety.vision.tiles).
 
 `--flight` fits the ball's flight (ninety.vision.flight) between observe and events: a ball in the
-air is moved to its fitted centre and gets `z` and `se`, which the events and the minimap then read.
-It is off by default until flight.py's DRAG_K and NOISE_PX are derived on validation clips and the
-test set is scored once with it (PR #226). It needs each frame's camera matrix, which only a single
-view's observations carry; the views' merged rows have none, so there it changes nothing.
+air is moved to its fitted centre and gets `z`, `se` and `z_se`, which the events, the restarts and
+the minimap then read. It is off by default until the test set is scored once with it on the live
+path. It needs each frame's camera matrix, which only a single view's observations carry; the
+views' merged rows have none, so there it changes nothing.
 
 Writes to `--out`:
 
@@ -69,7 +69,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import flight, fuse, observe, track, tracked_frames
+from ninety.vision import flight, fuse, observe, restarts, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX, VIEWS
@@ -164,7 +164,7 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         n_dets += sum(len(d.detections) for d in dets)
         lap("detect")
         write_detections(where / "detections.jsonl", dets)
-        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb)
+        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=bool(name))
         if name:
             _jsonl(where / "observations.jsonl", placed[name])
         lap("observe")
@@ -178,6 +178,10 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         obs = track.read_observations(out / "observations-flight.jsonl")
         lap("flight")
     found, summary = ev.detect(obs)
+    # Restarts from the same observations (ninety/vision/restarts.py): kick-offs and set pieces with
+    # their kind, merged in time; a possession change while the ball lies set is the restart's set-up.
+    set_balls, restarted = restarts.detect(obs)
+    found = restarts.merge(found, set_balls, restarted["dead_balls"])
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     lap("events")
     rows = next(iter(views.values()))
@@ -194,6 +198,7 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         "camera_ok": summary["frames_camera_ok"],
         "detections": n_dets,
         "events": summary["events"],
+        "restarts": restarted["events"],
         "named": summary["named"],
         "seconds": seconds | {"total": round(sum(seconds.values()), 3)},
         "detect_seconds_per_frame": round(seconds["detect"] / len(rows), 4),
@@ -241,7 +246,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
     ap.add_argument("--flight", action="store_true",
-                    help="fit the ball's flight before events (off until its constants are derived)")
+                    help="fit the ball's flight before events (off until scored on the test set)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--echo", action="store_true",
                     help="also print run.json and each detected event, one JSON line each (the job's log)")

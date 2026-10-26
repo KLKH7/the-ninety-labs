@@ -81,13 +81,30 @@ UNIT_WORDS = {
     "regains": ("regains", "regain", "times"),
     "overloads": ("overloads", "overload", "times"),
     "m": ("m", "metres", "metre", "meters", "meter"),
+    "shots": ("shots", "shot"),
+    "goals": ("goals", "goal"),
+    "corners": ("corners", "corner"),
+    "goal kicks": ("goal kicks", "goal kick"),
+    "penalties": ("penalties", "penalty"),
+    "throw-ins": ("throw-ins", "throw-in"),
+    "free kicks": ("free kicks", "free kick"),
+    "saves": ("saves", "save"),
+    "km": ("km", "kilometres", "kilometers"),
+    "km/h": ("km/h", "kilometres an hour", "kph"),
+    "progressive passes": ("progressive passes", "progressive pass"),
+    "long passes": ("long passes", "long pass"),
+    "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
+UNSOURCED = r"counter[- ]?attack\w*|on the break|break(?:s|ing)? at speed|fast break\w*"
+REGAIN = r"won (?:it|the ball) back|wins? (?:it|the ball) back|regain\w*"
+# A word another kind's facts also say: a counter-attack starts with a regain (GROUNDING I12, I4), so
+# "won the ball back" is a cited counter fact's own words too.
+ALSO_SAID_BY = {"counter_press": (REGAIN, {"counter"})}
 KIND_WORDS = {
     "one_two": r"one[- ]twos?|wall pass\w*",
-    "counter": r"counter[- ]attack\w*|on the break",
     "overload": (
         r"overload\w*|outnumber\w*|numbers? up|numerical (?:advantage|superiority)|extra (?:man|men|player)"
     ),
@@ -95,9 +112,7 @@ KIND_WORDS = {
         r"bypass\w*|line[- ]break\w*|broke (?:the|their) lines?|breaks? (?:the|their) lines?"
         r"|cut through|took out|taking out|packing"
     ),
-    "counter_press": (
-        r"counter[- ]?press\w*|gegenpress\w*|won (?:it|the ball) back|wins? (?:it|the ball) back|regain\w*"
-    ),
+    "counter_press": rf"counter[- ]?press\w*|gegenpress\w*|{REGAIN}",
     "pass_options": (
         r"open (?:team-?mates?|options?|players?|men)|unmarked|free (?:man|men|team-?mates?)"
         r"|passing options?|nobody (?:was )?open"
@@ -282,6 +297,36 @@ def check(
 
     # Players and positions.
     about = _people(cited, people)
+    # A cited team-sheet row says who plays where (never where anyone is): its name with its position.
+    rows = [f for f in cited if f.get("kind") == "sheet"]
+    if rows and len(rows) == len(cited):
+        # Only a sentence of sheet rows alone: cited beside a moment, a row would vouch its name for
+        # whoever the moment is about (the goalkeeper's name on another player's pass).
+        about += [{"name": f["name"], "position": f["position"]} for f in rows]
+    for f in rows:
+        for other in rows:
+            if other is not f and re.search(
+                rf"\b{re.escape(f['name'])}\b[^.;]*?\b{re.escape(other['position'])}\b", claim.text, re.I
+            ) and not re.search(
+                rf"\b{re.escape(f['name'])}\b[^.;]*?\b{re.escape(f['position'])}\b", claim.text, re.I
+            ):
+                reasons.append(
+                    f"{f['name']} is the {f['position']} on the team sheet, not the {other['position']}"
+                )
+    # A fact about two players (a one-two, a pass) said with one of them twice and the other never:
+    # whatever joins the two mentions ("X and X", "X played it to X and back").
+    for f in cited:
+        a, b = f.get("passer"), f.get("receiver")
+        if not a or not b or a == b:
+            continue
+        na, nb = (people.get(t, {}).get("name") or people.get(t, {}).get("sheet_name") for t in (a, b))
+        if not na or not nb or na == nb:
+            continue
+        for one, other in ((na, nb), (nb, na)):
+            if len(re.findall(rf"\b{re.escape(one)}\b", claim.text)) > 1 and not re.search(
+                rf"\b{re.escape(other)}\b", claim.text
+            ):
+                reasons.append(f"{one} is said as two players")
     said_names = {w["name"] for w in about if w.get("name")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
@@ -329,10 +374,65 @@ def check(
         claim.text, cited, clubs, [*sheet_names, *(w.get("say", "") for w in people.values())]
     )
 
+    # No published definition with a time window was found for a counter-attack (GROUNDING I12), so
+    # whatever is cited, a sentence never calls a regain that led to a shot one.
+    if re.search(rf"\b(?:{UNSOURCED})\b", claim.text, re.I):
+        reasons.append("'counter-attack' has no cited definition: say a regain that led to a shot")
+
+    # Words of a zero say a zero: "did not sprint" only of a count of none (merge-queue review of #323).
+    for f in cited:
+        zero_said = re.search(r"\bdid not sprint\b", claim.text)
+        if f.get("metric") == "player_sprints" and f.get("value") and zero_said:
+            reasons.append(f"it says he did not sprint; the cited fact counts {f['value']}")
+        # A zone is the fact's own third and channel, not any third (merge-queue review of #323).
+        if f.get("metric") == "player_zone":
+            where = "in the centre" if f.get("channel") == "centre" else f"on the {f.get('channel')}"
+            if not re.search(rf"\b{re.escape(str(f.get('third')))} third {re.escape(where)}\b", claim.text):
+                reasons.append(f"the zone is their {f.get('third')} third {where}")
+
+    # A pass pair says who passed to whom, in that order, and that it counts only named passes.
+    for f in cited:
+        if f.get("metric") != "pair_passes":
+            continue
+        a, b = f.get("passer_is"), f.get("receiver_is")
+        if a and b and not re.search(rf"\b{re.escape(a)} passed to {re.escape(b)}\b", claim.text):
+            reasons.append(f"the pair is {a} to {b}, said in that order")
+        # The reverse is another pair: said beside the right one, it needs its own cited fact.
+        reverse = any(
+            g.get("metric") == "pair_passes" and g.get("passer_is") == b and g.get("receiver_is") == a
+            for g in cited
+        )
+        if a and b and not reverse and re.search(rf"\b{re.escape(b)} passed to {re.escape(a)}\b", claim.text):
+            reasons.append(f"{b} to {a} is not a cited pair")
+        # Each saying of the pair carries its own count straight after it, so two cited pairs cannot
+        # trade counts (merge-queue review of #321).
+        if a and b:
+            said = rf"\b{re.escape(a)} passed to {re.escape(b)}\b(?: ({_N}) times?\b)?"
+            for m in re.finditer(said, claim.text):
+                if m.group(1) is None or float(m.group(1)) != f.get("value"):
+                    reasons.append(f"{a} to {b} is {f.get('value')} times, said straight after the pair")
+                    break
+        if "of the passes the video could name both players of" not in claim.text:
+            reasons.append("a pass pair says it counts only the passes the video could name both players of")
+
+    # A fact whose side the video could not tell names no club (a shot measured to the nearer goal):
+    # a club may be named only when another cited fact is that club's (merge-queue review of #318).
+    if any(f.get("side_known") is False and f.get("team") is None for f in cited):
+        sided = {f.get("club") for f in cited if f.get("club")}
+        for name in clubs.values():
+            if re.search(rf"\b{re.escape(name)}\b", claim.text) and name not in sided:
+                reasons.append(f"{name} is named, but the side of the cited fact is not known")
+
     # Kind words.
     kinds = {f.get("kind") for f in cited}
     for kind, words in KIND_WORDS.items():
-        if re.search(rf"\b(?:{words})\b", claim.text, re.I) and kind not in kinds:
+        if not re.search(rf"\b(?:{words})\b", claim.text, re.I) or kind in kinds:
+            continue
+        shared, others = ALSO_SAID_BY.get(kind, ("", set()))
+        rest = claim.text
+        if shared and kinds & others:
+            rest = re.sub(rf"\b(?:{shared})\b", "", rest, flags=re.I)
+        if re.search(rf"\b(?:{words})\b", rest, re.I):
             reasons.append(f"'{kind.replace('_', ' ')}' needs a cited {kind} fact")
 
     if reasons:
@@ -352,8 +452,11 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
     presses = [f for f in cited if f.get("kind") == "counter_press" and f.get("metric") == "pressers"]
     regains = [f for f in cited if f.get("metric") == "regains_within_5s"]
     passes = [f for f in cited if f.get("metric") == "open_teammates_ahead"]
-    if presses or regains:
-        won = any(f.get("regained") for f in presses) or any(f.get("value") for f in regains)
+    counters = [f for f in cited if f.get("metric") == "regain_to_shot_s"]  # each starts at a regain (I12)
+    if presses or regains or counters:
+        won = (
+            any(f.get("regained") for f in presses) or any(f.get("value") for f in regains) or bool(counters)
+        )
         if NEVER_WON.search(text):
             if won:
                 out.append("it says the ball was not won back; the cited facts say it was")
@@ -409,6 +512,25 @@ DIRECTED = (
     "passes_with_no_open_teammate_ahead",
     "extra_players",
     "overload_moments",
+    "regain_to_shot_s",
+    "possession_share",
+    "final_third_share",
+    *(f"{k}{a}" for k in ("progressive", "final_third_entry", "long", "intercepted") for a in ("", "_all")),
+    "pair_passes",
+    "player_km",
+    "player_top_kmh",
+    "player_sprints",
+    "player_zone",
+    "shots_all",
+    "shots",
+    "shot_distance_m",
+    "score",
+    "saves",
+    *(
+        f"{k}{a}"
+        for k in ("corner", "goal_kick", "penalty_kick", "throw_in", "free_kick")
+        for a in ("", "_all")
+    ),
 )
 _N = r"\d+(?:\.\d+)?"
 
@@ -442,6 +564,47 @@ TEMPLATES = {
         r"had a spare player there",
     ],
     "overload_moments": [rf"built {_N} overloads?", rf"most often {_THIRD}"],
+    "regain_to_shot_s": [rf"won the ball back and had a shot {_N} seconds later"],
+    **{
+        f"{k}{a}": [rf"(?:completed|played|had|there (?:was|were)) {_N} {w}"]
+        for k, w in (
+            ("progressive", r"progressive pass(?:es)?"),
+            ("final_third_entry", r"pass(?:es)? into the final third"),
+            ("long", r"long pass(?:es)?"),
+            ("intercepted", r"pass(?:es)? intercepted"),
+        )
+        for a in ("", "_all")
+    },
+    "player_km": [rf"has covered {_N} km", r"from the footage shown", rf"give or take {_N}%"],
+    "player_top_kmh": [rf"reached a top speed of {_N} km/h"],
+    "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
+    "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
+    "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
+    "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "score": [
+        r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
+    ],
+    "saves": [rf"made {_N} saves?"],
+    **{
+        f"{k}{a}": [rf"(?:had|there (?:was|were)) {_N} {w}"]
+        for k, w in (
+            ("corner", r"corners?"),
+            ("goal_kick", r"goal kicks?"),
+            ("penalty_kick", r"penalt(?:y|ies)"),
+            ("throw_in", r"throw-ins?"),
+            ("free_kick", r"free kicks?"),
+        )
+        for a in ("", "_all")
+    },
+    "shots_all": [rf"there were {_N} shots?", rf"and players took {_N} shots? from inside the penalty area"],
+    "shots": [rf"had {_N} shots?", rf"and took {_N} shots? from inside the penalty area"],
+    "shot_distance_m": [
+        rf"(?:shot|a shot came) from {_N} m out", rf"where the posts were {_N} degrees apart",
+    ],
+    "final_third_share": [
+        r"the ball was in",
+        rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",
+    ],
 }
 
 

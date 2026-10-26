@@ -3,115 +3,392 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1018" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#111418" />
     <title>The Ninety Labs phone companion</title>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body data-state="pair">
-    <div class="sticky">
-    <p class="mockbar" id="mockbar" hidden>Mock data: made-up positions, not a real match</p>
-    <header class="top">
-      <span class="brand" aria-hidden="true">Ninety <b>Labs</b></span>
-      <span class="clock-wrap"><span class="sr-only">Match time </span><output id="clock" aria-live="off">0:00</output></span>
-      <span class="status" id="status" role="status" data-state="off">Not connected</span>
-    </header>
-    </div>
-    <p class="sr-only" id="announce" aria-live="polite"></p>
-
-    <main>
-      <section id="pair" aria-labelledby="pair-title">
-        <h1 id="pair-title">Follow the match on your phone</h1>
-        <p class="lede">Enter the 6-character code on the laptop's screen, or scan its QR code with your camera.</p>
-        <form id="pair-form" novalidate>
-          <label for="code">Pairing code</label>
-          <input
-            id="code"
-            name="code"
-            autocomplete="off"
-            autocapitalize="characters"
-            autocorrect="off"
-            spellcheck="false"
-            maxlength="6"
-            inputmode="text"
-            aria-describedby="pair-error"
-          />
-          <button type="submit" class="primary" id="connect">Connect</button>
-          <p id="pair-error" class="error" role="alert"></p>
-        </form>
-        <ul class="features">
-          <li><strong>A live minimap</strong> in step with the laptop's video.</li>
-          <li><strong>Tap a player</strong> for their speed and where they have been.</li>
-          <li><strong>Ask a question.</strong> Every number is computed by code, and any answer an AI writes is checked by the fact-checking agent first.</li>
-        </ul>
-      </section>
-
-      <section id="live" hidden aria-label="Live match">
-        <section class="card" aria-labelledby="map-title">
-          <div class="row">
-            <h2 id="map-title">Minimap</h2>
-            <button type="button" class="toggle" id="wind-toggle" aria-pressed="false" hidden>Team movement</button>
-          </div>
-          <div class="map" id="map-box">
-            <canvas id="map" role="img" aria-label="Minimap"></canvas>
-            <canvas id="wind" aria-hidden="true" hidden></canvas>
-          </div>
-          <div class="which" id="which" role="group" aria-labelledby="which-title" hidden>
-            <p id="which-title">Which player?</p>
-            <div class="which-row" id="which-row"></div>
-          </div>
-          <p class="sr-only">Home attack to the right of the map, Away to the left.</p>
-          <div class="legend" aria-hidden="true">
-            <span class="key home">Home →</span><span class="key away">← Away</span><span class="tap">Tap a dot to pick a player</span>
-          </div>
-          <p class="fine" id="seen-note" hidden>Shows the players the broadcast camera can see, tracked from the video. The tracker reads no shirt numbers, so each player is numbered by his track.</p>
-          <div id="wind-words" class="wind-words" hidden></div>
-          <div class="now" id="now-box">
-            <div class="now-row">
-              <button type="button" class="toggle" id="now">What's happening?</button>
-              <label class="check"><input type="checkbox" id="now-live" /> Describe as it happens</label>
-            </div>
-            <p id="now-said" aria-live="polite"></p>
-            <p class="fine" id="now-age" aria-hidden="true"></p>
-          </div>
-          <p id="refused" class="refused" role="alert" hidden></p>
-          <details class="roster" id="roster-box">
-            <summary id="roster-summary">Choose a player from a list</summary>
-            <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
-          </details>
-        </section>
-
-        <p class="card hint-card" id="pick-hint">Tap a player on the minimap to see their speed and heat map.</p>
-
-        <section class="card player" id="player" aria-labelledby="player-title" hidden>
-          <div class="row">
-            <h2 id="player-title" tabindex="-1">Player</h2>
-            <button type="button" class="close" id="close-player" aria-label="Close the player card">✕</button>
-          </div>
-          <div class="stats">
-            <p class="stat big"><span class="label">Speed now</span><span class="value"><span id="speed">–</span> <small>km/h</small></span></p>
-            <p class="stat"><span class="label">Top speed</span><span class="value"><span id="peak">–</span> <small>km/h</small></span></p>
-            <p class="stat"><span class="label">Distance</span><span class="value"><span id="distance">–</span> <small>m</small></span></p>
-          </div>
-          <h3 id="heat-title">Heat map</h3>
-          <canvas id="heat" role="img" aria-label="Heat map"></canvas>
-          <p class="fine" id="heat-legend"></p>
-          <p class="fine" id="heat-span"></p>
-          <p class="fine" id="card-note">Computed by code from tracked positions.</p>
-        </section>
-
-        <section class="card ask" id="ask" aria-labelledby="ask-title">
-          <h2 id="ask-title">Ask about <span id="ask-who">a player</span></h2>
-          <div class="chips" id="chips" role="group" aria-label="Suggested questions"></div>
-          <form id="ask-form">
-            <label for="question" class="sr-only">Your question</label>
-            <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Speed, top speed, distance…" />
-            <button type="submit" class="primary" id="ask-button">Ask</button>
+    <ion-app>
+      <!-- Pairing -->
+      <div class="ion-page" id="pair">
+        <ion-header translucent>
+          <ion-toolbar><ion-title>Ninety Labs</ion-title></ion-toolbar>
+        </ion-header>
+        <ion-content fullscreen class="ion-padding">
+          <p class="mockbar" id="mockbar" hidden>Mock data: made-up positions, not a real match</p>
+          <h1 class="pair-title" id="pair-title">Follow the match on your phone</h1>
+          <p class="lede">Scan the code on the big screen with your camera, or type it here.</p>
+          <form id="pair-form" novalidate>
+            <label for="code">Pairing code</label>
+            <input id="code" name="code" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="6" inputmode="text" aria-describedby="pair-error" />
+            <button type="submit" class="primary" id="connect" disabled>Connect</button>
+            <p id="pair-error" class="error" role="alert"></p>
           </form>
-          <p class="fine">Your question is sent as data, never as instructions. Every number comes from code; an answer written by the Companion agent reaches you only after the fact-checking agent passes it.</p>
-          <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
-        </section>
-      </section>
-    </main>
+        </ion-content>
+      </div>
+
+      <!-- Live: three tabs -->
+      <ion-tabs id="live" hidden>
+        <ion-tab tab="radar" id="panel-radar" role="tabpanel" aria-labelledby="tab-button-radar">
+          <div class="ion-page">
+            <ion-header>
+              <ion-toolbar class="band-bar" id="live-bar">
+                <ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+              </ion-toolbar>
+            </ion-header>
+            <ion-content fullscreen scroll-events="true" id="live-content">
+              <!-- The score only as vision read it off the broadcast's scorebug (`score_change` events, #356),
+                   never counted from detected goals (Kian, Oct 25): with no reading, crests and names alone.
+                   Each club's scorers under it. -->
+              <section class="band" aria-label="Match">
+                <p class="league">Ninety League</p>
+                <div class="fixture">
+                  <div class="side">
+                    <span class="side-score" id="score-home" aria-hidden="true" hidden></span>
+                    <span class="crest home" aria-hidden="true"></span>
+                    <span class="club-name home-name">London</span>
+                    <ul class="side-goals" id="goals-home" aria-label="Home goals"></ul>
+                  </div>
+                  <div class="centre">
+                    <output id="clock" aria-live="off">0:00</output>
+                    <button type="button" class="sr-only score-read" id="score-read" hidden></button>
+                    <p class="status" id="status" role="status" data-state="off">Not connected</p>
+                    <ul class="side-goals" id="goals-unsure" aria-label="Goals on a side not told surely"></ul>
+                  </div>
+                  <div class="side">
+                    <span class="side-score" id="score-away" aria-hidden="true" hidden></span>
+                    <span class="crest away" aria-hidden="true"></span>
+                    <span class="club-name away-name">Lisbon</span>
+                    <ul class="side-goals" id="goals-away" aria-label="Away goals"></ul>
+                  </div>
+                </div>
+                <p class="scorers" id="teams-note" hidden>Teams not confirmed</p>
+                <p class="scoreline" id="scoreline" hidden></p>
+              </section>
+
+              <!-- Apple Sports' text tabs under the score: the pitch, the team stats, the players. -->
+              <div class="live-tabs" role="tablist" aria-label="Live">
+                <button type="button" role="tab" id="lt-pitch" aria-controls="pane-pitch" aria-selected="true">Live</button>
+                <button type="button" role="tab" id="lt-stats" aria-controls="pane-stats" aria-selected="false" tabindex="-1">Stats</button>
+                <button type="button" role="tab" id="lt-players" aria-controls="pane-players" aria-selected="false" tabindex="-1">Players</button>
+              </div>
+              <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
+                <!-- The fan's focus (#362's choices): the latest of each tactical moment, or the players most
+                     in the game, above the pitch. Shown only for that focus (style.css). -->
+                <section class="focus-strip" id="tactics-strip" aria-label="Shape" hidden></section>
+                <section class="focus-strip" id="players-strip" aria-label="Players in the game" hidden></section>
+                <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
+                  <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
+                  <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
+              </ion-segment>
+                <section class="card pitch-card" aria-label="Pitch">
+              <div class="pitch-wrap">
+                <div class="map" id="map-box">
+                  <canvas id="map" role="img" aria-label="Pitch"></canvas>
+                  <canvas id="wind" aria-hidden="true" hidden></canvas>
+                </div>
+                <div class="which" id="which" role="group" aria-labelledby="which-title" hidden>
+                  <p id="which-title">Which player?</p>
+                  <div class="which-row" id="which-row"></div>
+                </div>
+                <p id="refused" class="refused" role="alert" hidden></p>
+              </div>
+              <p class="sr-only" id="map-sides"></p>
+                </section>
+              <!-- Just now: the latest Story moment, as the lock screen says it. -->
+              <section class="card" id="just-now" aria-labelledby="just-now-title" hidden>
+                <h2 class="section-title" id="just-now-title">Just now</h2>
+                <div id="just-now-body"></div>
+              </section>
+              <!-- Territory per 5 minutes (match.json's territory, from vision's tracked ball). Drag along it
+                   to rewind the screen to that minute; "Back to live" returns. -->
+              <section class="card" id="momentum" aria-labelledby="momentum-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="momentum-title">Territory</h2>
+                  <button type="button" class="to-live" id="to-live" hidden>Back to live</button>
+                </div>
+                <div class="strip-box">
+                  <span class="strip-key home-key home-name" aria-hidden="true"></span>
+                  <svg id="momentum-strip" class="strip" role="slider" tabindex="0" aria-label="Rewind the match to a minute" aria-valuemin="0" preserveAspectRatio="none"></svg>
+                  <span class="strip-key away-key away-name" aria-hidden="true"></span>
+                  <div class="strip-axis" aria-hidden="true"><span class="ht-label">HT</span><span class="ft-label">90′</span></div>
+                </div>
+                <div class="next-bin" aria-hidden="true"><div class="next-fill" id="next-fill"></div></div>
+                <p class="sr-only" id="momentum-note"></p>
+              </section>
+              <section class="card" id="live-summary" aria-labelledby="live-summary-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="live-summary-title">Team Stats</h2>
+                  <button type="button" class="see-all" data-pane="stats" aria-label="See all team stats">See all</button>
+                </div>
+                <ul class="stat-rows" id="summary-rows"></ul>
+              </section>
+              <!-- A dense Live feed (Kian, Oct 24): each card a glance, "See all" to its full section. -->
+              <section class="card" id="live-shots" aria-labelledby="live-shots-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="live-shots-title">Shots</h2>
+                  <button type="button" class="see-all" data-pane="stats" aria-label="See all shots">See all</button>
+                </div>
+                <svg id="live-shots-svg" class="half-pitch" aria-hidden="true"></svg>
+                <p class="sr-only" id="live-shots-said"></p>
+              </section>
+              <section class="card" id="key-moments" aria-labelledby="key-moments-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="key-moments-title">Key moments</h2>
+                  <button type="button" class="see-all" data-tab="insights" aria-label="See all key moments in Story">See all</button>
+                </div>
+                <ol class="moment-rows" id="key-rows"></ol>
+              </section>
+              <section class="card" id="lineups-teaser" aria-labelledby="lineups-teaser-title" hidden>
+                <div class="section-head">
+                  <h2 class="section-title" id="lineups-teaser-title">Line-ups</h2>
+                  <button type="button" class="see-all" data-pane="players" aria-label="See all line-ups">See all</button>
+                </div>
+                <div class="teaser-rows" id="teaser-rows"></div>
+              </section>
+              </div>
+              <div class="live-pane" id="pane-stats" role="tabpanel" aria-labelledby="lt-stats" hidden>
+              <ion-segment value="match" id="stats-period" class="seg" aria-label="Which part of the match" hidden>
+                <ion-segment-button value="match"><ion-label>Match</ion-label></ion-segment-button>
+                <ion-segment-button value="first"><ion-label>1st half</ion-label></ion-segment-button>
+                <ion-segment-button value="second"><ion-label>2nd half</ion-label></ion-segment-button>
+              </ion-segment>
+              <!-- Match stats: mirrored bars in the clubs' colours, from the footage shown. -->
+              <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
+                <h2 class="section-title" id="live-stats-title">Team Stats</h2>
+                <ul class="stat-rows" id="stat-rows"></ul>
+                <p class="sr-only" id="stats-note">From the footage shown, so far.</p>
+              </section>
+              <!-- Shot map: detected shots so far, both clubs toward one goal; only when there are any. -->
+              <section class="card" id="shot-map" aria-labelledby="shot-map-title" hidden>
+                <h2 class="section-title" id="shot-map-title">Shots</h2>
+                <ion-segment value="all" id="shot-filter" class="seg" aria-label="Whose shots">
+                  <ion-segment-button value="all"><ion-label>Both</ion-label></ion-segment-button>
+                  <ion-segment-button value="home"><ion-label class="home-name"></ion-label></ion-segment-button>
+                  <ion-segment-button value="away"><ion-label class="away-name"></ion-label></ion-segment-button>
+                </ion-segment>
+                <svg id="shots" class="half-pitch" role="img"></svg>
+                <ul class="sr-only" id="shot-list"></ul>
+                <p class="sr-only">Filled: goal. Ringed: saved. Hollow: off target or blocked. Grey: a shot whose end the video did not show. Each club shooting up the page.</p>
+              </section>
+              <section class="card" id="stats-territory" aria-labelledby="stats-territory-title" hidden>
+                <h2 class="section-title" id="stats-territory-title">Territory</h2>
+                <svg id="stats-territory-svg" class="strip" aria-hidden="true" preserveAspectRatio="none"></svg>
+                <div class="strip-axis" aria-hidden="true"><span class="ht-label">HT</span><span class="ft-label">90′</span></div>
+                <p class="sr-only" id="stats-territory-said"></p>
+              </section>
+              </div>
+              <div class="live-pane" id="pane-players" role="tabpanel" aria-labelledby="lt-players" hidden>
+              <section class="roster" id="roster-box" aria-labelledby="roster-summary">
+                <h2 class="sr-only" id="roster-summary">Players</h2>
+                <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
+              </section>
+              <section class="card" id="pass-network" aria-labelledby="pass-network-title" hidden>
+                <h2 class="section-title" id="pass-network-title">Pass network</h2>
+                <ion-segment value="home" id="network-side" class="seg" aria-label="Whose passes">
+                  <ion-segment-button value="home"><ion-label class="home-name"></ion-label></ion-segment-button>
+                  <ion-segment-button value="away"><ion-label class="away-name"></ion-label></ion-segment-button>
+                </ion-segment>
+                <svg id="network" class="full-pitch" role="img"></svg>
+                <ul class="stat-list" id="network-rows"></ul>
+                <p class="fine-note" id="network-named" hidden>Passes between players the video could name.</p>
+              </section>
+              <section class="card" id="top-players" aria-labelledby="top-players-title" hidden>
+                <h2 class="section-title" id="top-players-title">Top performers</h2>
+                <div id="top-lists"></div>
+              </section>
+              </div>
+
+
+
+
+              <p id="now-said" class="now-said" aria-live="polite"></p>
+              <p class="fine now-age" id="now-age" aria-hidden="true"></p>
+
+              <!-- Quiet rows under the pitch: picking a player without the map, and the play in words. -->
+              <p class="fine pad" id="wind-note" hidden></p>
+              <div class="rows" id="now-box">
+                <label class="row check"><span>Describe the play as it happens</span><input type="checkbox" id="now-live" /></label>
+                <button type="button" class="row row-button" id="now">What's happening now?</button>
+              </div>
+
+              <!-- Kept for the code and the tests; not on this screen (DESIGN.md: Live = score band + pitch). -->
+              <div class="gone" aria-hidden="true">
+                <ion-segment value="pitch" id="match-seg"><ion-segment-button value="pitch"><ion-label>Pitch</ion-label></ion-segment-button></ion-segment>
+                <div id="seg-pitch"></div><div id="seg-stats"></div>
+                <ul id="legend"><li id="legend-home"></li><li id="legend-away"></li><li id="legend-view"></li></ul>
+                <p id="pick-hint"></p><p id="seen-note"></p>
+                <button type="button" id="wind-toggle" aria-pressed="false" tabindex="-1">Team movement</button>
+                <div id="wind-words"></div>
+                <div id="match-card"><table id="team-stats"></table></div><p id="no-stats"></p>
+              </div>
+            </ion-content>
+          </div>
+        </ion-tab>
+
+        <ion-tab tab="ask" id="panel-ask" role="tabpanel" aria-labelledby="tab-button-ask">
+          <div class="ion-page">
+            <ion-header>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+              </ion-toolbar>
+            </ion-header>
+            <ion-content fullscreen id="ask-content">
+              <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
+              <section class="onboard" id="onboard" aria-labelledby="onboard-title" hidden></section>
+              <section class="ask-start" id="ask-start" aria-labelledby="ask-start-title">
+                <h2 class="section-title" id="ask-start-title">Ask about the match</h2>
+                <div class="chip-grid" id="ask-grid" role="group" aria-labelledby="ask-start-title"></div>
+                <h2 class="section-title" id="ask-players-title" hidden>About a player</h2>
+                <div class="chip-grid" id="ask-players" role="group" aria-labelledby="ask-players-title" hidden></div>
+              </section>
+              <h2 class="section-title recent-title" id="recent-title" hidden>Recent</h2>
+              <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
+            </ion-content>
+            <ion-footer translucent class="composer" id="ask">
+              <div class="chips" id="ask-chips" role="group" aria-label="Suggested questions"></div>
+              <form id="ask-form">
+                <label for="question" class="sr-only">Your question</label>
+                <div class="ask-pill">
+                  <textarea id="question" rows="1" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask anything"></textarea>
+                  <button type="submit" class="ask-send" id="ask-button" aria-label="Ask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+                </div>
+              </form>
+            </ion-footer>
+          </div>
+        </ion-tab>
+
+        <ion-tab tab="insights" id="panel-insights" role="tabpanel" aria-labelledby="tab-button-insights">
+          <div class="ion-page">
+            <ion-header>
+              <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title></ion-toolbar>
+            </ion-header>
+            <ion-content fullscreen>
+              <h1 class="sr-only" id="insights-title">Story</h1><p class="sr-only" id="insights-note"></p>
+              <!-- Apple Sports' play-by-play: every detected play, or only the key ones with their pictures. -->
+              <ion-segment value="key" id="story-mode" class="seg story-seg" aria-label="Which plays">
+                <ion-segment-button value="all"><ion-label>All plays</ion-label></ion-segment-button>
+                <ion-segment-button value="key"><ion-label>Key plays</ion-label></ion-segment-button>
+              </ion-segment>
+              <ol id="insights" class="insights" data-mode="key"></ol>
+            </ion-content>
+          </div>
+        </ion-tab>
+
+        <ion-tab-bar slot="bottom" translucent id="tabs" role="tablist" aria-label="Sections">
+          <ion-tab-button tab="radar" id="tab-button-radar" role="tab" aria-controls="panel-radar">
+            <svg class="tab-icon" viewBox="0 0 28 28" aria-hidden="true"><rect class="fill" x="3" y="6" width="22" height="16" rx="2.5"/><path class="inner" d="M14 6v16"/><circle class="inner" cx="14" cy="14" r="3.2"/></svg>
+            <ion-label>Live</ion-label>
+          </ion-tab-button>
+          <ion-tab-button tab="ask" id="tab-button-ask" role="tab" aria-controls="panel-ask">
+            <svg class="tab-icon" viewBox="0 0 28 28" aria-hidden="true"><path class="fill" d="M5 7.5A3.5 3.5 0 0 1 8.5 4h11A3.5 3.5 0 0 1 23 7.5v7a3.5 3.5 0 0 1-3.5 3.5H12l-5 4.5V18A3.5 3.5 0 0 1 5 14.5z"/></svg>
+            <ion-label>Ask</ion-label>
+          </ion-tab-button>
+          <ion-tab-button tab="insights" id="tab-button-insights" role="tab" aria-controls="panel-insights">
+            <svg class="tab-icon" viewBox="0 0 28 28" aria-hidden="true"><path class="fill" d="M14 3.5 16.9 10l7 .6-5.3 4.7 1.6 6.9L14 18.6l-6.2 3.6 1.6-6.9L4.1 10.6l7-.6z"/></svg>
+            <ion-label>Story</ion-label><span class="new" id="insights-new" hidden></span>
+          </ion-tab-button>
+        </ion-tab-bar>
+      </ion-tabs>
+
+      <!-- The player sheet -->
+      <ion-modal id="player-sheet" can-dismiss="true">
+        <div class="sheet-body" id="player" hidden aria-labelledby="player-title">
+          <div class="sheet-head">
+            <h2 id="player-title" tabindex="-1">Player</h2>
+            <button type="button" class="close" id="close-player" aria-label="Close the player card"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <ion-list inset id="so-far-box" hidden>
+            <ion-list-header><ion-label class="caps">So far</ion-label></ion-list-header>
+            <div class="stats">
+              <p class="stat"><span class="value" id="speed">–</span><span class="label">km/h now</span></p>
+              <p class="stat top"><span class="value" id="peak">–</span><span class="label">top km/h</span></p>
+              <p class="stat"><span class="value" id="distance">–</span><span class="label">metres run</span></p>
+            </div>
+          </ion-list>
+          <div class="chips pad" id="chips" role="group" aria-label="Ask about this player"></div>
+          <ion-list inset><ion-item lines="none"><button type="button" class="row-button" id="ask-about">Ask about him <span aria-hidden="true">›</span></button></ion-item></ion-list>
+          <section class="sheet-section" id="involved-box" hidden>
+            <h3 class="section-title">In the play</h3>
+            <ul class="kv" id="involved"></ul>
+            <p class="sr-only">From the events our detector found, so far.</p>
+          </section>
+          <section class="sheet-section" id="compare-box">
+            <h3 class="section-title">Compare with…</h3>
+            <div class="chips wrap" id="compare-chips" role="group" aria-label="Compare with another player"></div>
+            <ul class="stat-rows" id="compare-rows" hidden></ul>
+          </section>
+          <ion-list inset id="heat-box" hidden>
+            <ion-list-header><ion-label class="caps" id="heat-title">Heat map</ion-label></ion-list-header>
+            <div class="pad-in">
+              <canvas id="heat" role="img" aria-label="Heat map"></canvas>
+              <p class="sr-only" id="avg-pos"></p>
+              <p class="sr-only" id="heat-legend"></p>
+              <p class="sr-only" id="heat-span"></p>
+              <p class="sr-only" id="card-note">Computed by code from tracked positions.</p>
+            </div>
+          </ion-list>
+        </div>
+      </ion-modal>
+      <!-- How do we know? -->
+      <ion-modal id="how-sheet" can-dismiss="true">
+        <div class="sheet-body" aria-labelledby="how-title">
+          <div class="sheet-head">
+            <h2 id="how-title" tabindex="-1">How we know</h2>
+            <button type="button" class="close" id="close-how" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div id="how-body" class="how-body"></div>
+        </div>
+      </ion-modal>
+      <!-- Listening and reading (Comet's voice settings, Evernote's text size): this browser only. -->
+      <ion-modal id="settings-sheet" can-dismiss="true">
+        <div class="sheet-body settings" aria-labelledby="settings-title">
+          <div class="sheet-head">
+            <h2 id="settings-title" tabindex="-1">Listening and text</h2>
+            <button type="button" class="close" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="group group-first persona">
+            <ion-segment value="" id="persona-mode" class="seg" aria-label="How you watch">
+              <ion-segment-button value="casual"><ion-label>Casual</ion-label></ion-segment-button>
+              <ion-segment-button value="analyst"><ion-label>Analyst</ion-label></ion-segment-button>
+            </ion-segment>
+            <ion-segment value="" id="persona-club" class="seg" aria-label="Your club">
+              <ion-segment-button value="LON"><ion-label>London</ion-label></ion-segment-button>
+              <ion-segment-button value="LIS"><ion-label>Lisbon</ion-label></ion-segment-button>
+            </ion-segment>
+          </div>
+          <div class="group group-first">
+            <label class="setting-row"><span class="row-title">Demo passcode</span>
+              <input type="password" id="passcode" class="passcode" autocomplete="off" spellcheck="false" enterkeyhint="done" /></label>
+          </div>
+          <div class="group group-first">
+            <button type="button" class="setting-row row-link" id="fan-edit"><span class="row-title">Personalise</span><span class="row-value" id="fan-value"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+          </div>
+          <div class="group group-first listening">
+            <label class="setting-row"><span><span class="row-title">Read aloud</span></span>
+              <button type="button" class="speak switch-button" role="switch" aria-checked="false" aria-pressed="false" aria-label="Read new answers and moments aloud"><span class="knob"></span></button></label>
+          </div>
+          <h3 class="group-title listening" id="voice-title">Voice</h3>
+          <ul class="group listening" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>
+          <h3 class="group-title listening">Transcript</h3>
+          <div class="group listening">
+            <label class="setting-row"><span><span class="row-title">Show what is read aloud</span></span>
+              <input type="checkbox" role="switch" class="switch" id="transcript-on" /></label>
+          </div>
+          <h3 class="group-title listening" id="rate-title">Speaking rate</h3>
+          <div class="group rate-group listening">
+            <input type="range" id="rate" aria-labelledby="rate-title" />
+            <output id="rate-value" for="rate"></output>
+          </div>
+          <h3 class="group-title" id="text-title">Text size</h3>
+          <ul class="group" id="text-sizes" role="radiogroup" aria-labelledby="text-title"></ul>
+        </div>
+      </ion-modal>
+    </ion-app>
+    <p class="sr-only" id="announce" aria-live="polite"></p>
+    <p class="caption" id="caption" aria-hidden="true" hidden></p>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

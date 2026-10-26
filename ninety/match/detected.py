@@ -7,9 +7,10 @@ a ground-truth event (`"source": "truth"`) or a file named like the answer key n
 so the live path cannot be pointed at the truth by mistake (AGENTS.md, "Ground truth is the
 answer key").
 
-Until R3's detected events for the M1 clip land, `M1_CLIP` falls back to a stand-in written by
-hand from the schema. It is marked as one in its file name and in every id (`standin-`), and it was
-never derived from the clip's ground truth.
+For the M1 clip, `m1_path` serves R3's detected events (`tests/fixtures/detected-seed900001.jsonl`,
+the event detector's output from the clip's video). Only when that file is absent does it fall back
+to a stand-in written by hand from the schema. The stand-in is marked as one in its file name and
+in every id (`standin-`), and it was never derived from the clip's ground truth.
 """
 
 from __future__ import annotations
@@ -28,6 +29,11 @@ FIXTURES = ROOT / "tests" / "fixtures"
 M1_CLIP = "seed900001"
 # The answer key's file names (docs/DATA_CONTRACT.md): never a detected-events file.
 TRUTH_NAMES = frozenset({"events.jsonl", "frames.jsonl"})
+# The engine never moves a ball faster than 40 m/s (GROUNDING P3, a design bound: real recorded kicks go
+# faster, about 58 m/s, but not in this engine's matches, which is all the live path sees). A detected
+# speed above it is a misread, not a measurement: the live path keeps the event and drops the speed,
+# so no graphic, line or claim says it (vision's speed estimate is its own to fix).
+MAX_BALL_KMH = 40.0 * 3.6
 
 
 def m1_path(clip: str = M1_CLIP) -> Path:
@@ -65,7 +71,15 @@ def load(path: str | Path) -> list[dict]:
     if path.name in TRUTH_NAMES:
         raise ValueError(f"{path}: that is the answer key's name; the live path reads detected events")
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    return check(rows, str(path))
+    return [credible(e) for e in check(rows, str(path))]
+
+
+def credible(event: dict) -> dict:
+    """The event with a ball speed no ball can reach dropped to unknown (MAX_BALL_KMH, GROUNDING P3)."""
+    speed = event.get("ball_speed_kmh")
+    if speed is not None and speed > MAX_BALL_KMH:
+        return {**event, "ball_speed_kmh": None}
+    return event
 
 
 @lru_cache(maxsize=4)

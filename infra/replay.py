@@ -28,20 +28,29 @@ from pathlib import Path
 
 # Everything a format-1 bundle may hold (ninety/e2e.py): the viewer reads these and nothing else.
 FILES = {"manifest.json", "cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json",
-         "video.webm", "audio.json", "description.vtt",
+         "video.mp4", "poster.jpg",  # the footage (ninety/footage.py)
+         "video.webm",  # legacy: a bundle encoded before the footage moved to H.264 (lesson 272)
+         "audio.json", "description.vtt", "speech.json",
+         "commentary.json",  # the commentary toggle's calls (ninety/speech/commentary.py)
          "radar.json", "match.json",  # --tracked and --match (ninety/radar.py, ninety/condensed.py)
-         "agents.json"}  # --agents live: every model answer, for audit
-# Folders of footage and speech: JPEG frames (--frames) and the audio description's spoken lines
-# (ninety/speech/describe.py, when made with Azure Speech).
-FOLDERS = {"frames/": ".jpg", "audio/": ".wav"}
+         "agents.json",  # --agents live: every model answer, for audit
+         "cards.json",  # --cards: the Insight Scout's verified cards (schemas/insight_card.schema.json)
+         "scorebug.jsonl"}  # --scorebug: the broadcast's score readings (ninety/vision/scorebug.py)
+# Folders of footage and speech: JPEG frames (--frames), the audio description's spoken lines
+# (ninety/speech/describe.py, when made with Azure Speech) and the phone's read-aloud lines
+# (ninety/speech/bundle.py, --voice-audio), and each highlight's still and clip (ninety/highlights.py,
+# `record`: <event>.jpg and <event>.mp4), and the footage's HLS ladder (ninety/footage.py: playlists,
+# each rung's init.mp4 and its fMP4 segments).
+FOLDERS = {"frames/": (".jpg",), "audio/": (".wav",), "speech/": (".mp3",), "highlights/": (".jpg", ".mp4"),
+           "hls/": (".m3u8", ".mp4", ".m4s")}
 
 
 def members(bundle: Path) -> list[Path]:
     files = sorted(p for p in bundle.rglob("*") if p.is_file())
     bad = [p.relative_to(bundle).as_posix() for p in files
            if p.relative_to(bundle).as_posix() not in FILES
-           and not any(p.relative_to(bundle).as_posix().startswith(folder) and p.suffix == suffix
-                       for folder, suffix in FOLDERS.items())]
+           and not any(p.relative_to(bundle).as_posix().startswith(folder) and p.suffix in suffixes
+                       for folder, suffixes in FOLDERS.items())]
     if bad:
         raise SystemExit(f"not a viewer file, refusing to publish: {', '.join(bad)}")
     # events.jsonl is a name the answer key also uses: in a bundle it must be the detected events

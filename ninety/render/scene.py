@@ -16,7 +16,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
-from ninety.render.fouls import tip
+from ninety.render.fouls import LOOK_MAX, tip
 from ninety.render.meshpose import (
     ASSET_STATURE_M,
     BROW_Y,
@@ -237,6 +237,21 @@ FOUL_SHIN_M = 0.25
 # After the follow-through the part comes back to the stride, and the hips back up out of a lunge,
 # over TOUCH_RECOVER_S: a body does not snap back upright in two frames.
 TOUCH_RECOVER_S = 0.28
+# A ball in close control (engine.tick_carrier, D6: the softest push is not his, so it stays at his
+# feet) rides against his body and is moved by no touch of the engine's. Drawn, the swinging foot
+# plays it every step, left and right in turn, late in its swing as it comes through low to land
+# (V5), so the stride's feet do not run through it (*design*: a touch a step is what keeps a ball
+# the engine holds against his body there; the share of the swing is *design*).
+CARRY_M = 0.4  # the ball's centre this near his tracked point, on the grass, is at his feet (design)
+CARRY_GROUND_M = 0.05  # and no higher than this off it (design: a rolling ball, not a bounce)
+TAP_AT = 0.75  # how far through the foot's swing it meets the ball (design)
+TAP_HALF = 0.2  # the touch is drawn over this share of the swing either side of it (design)
+TAP_ACROSS = 0.5  # a tapping foot meets the ball this share of its radius to its own side (design)
+# The engine settles a carried ball to his feet on the side it wants it (engine.tick_carrier, D8:
+# shielding, a strike's turn), up to BALL_TO_FEET a second, with no touch of its own. A move this far
+# against his body in a frame is drawn as a foot rolling it there (*design*: twice the 4 to 5 cm a
+# frame the ball swings round him as he turns at P16's rate, which needs no foot of its own).
+SETTLE_M = 0.10
 # How a kick is drawn (design, renderer only: the engine says when the ball left and how fast). A
 # strike, or a touch that sends the ball away at KICK_OUT_MIN or faster, is a swing of the leg: the
 # foot goes back and up behind the hip over KICK_BACK_S (the knee folding, the thigh behind the
@@ -263,6 +278,10 @@ HOLD_STAND_Z = 1.0
 HOLD_BEND = 1.5
 HOLD_DROP_M = 0.33  # as low as the planted legs still reach with flat feet (measured on the asset)
 HOLD_EASE_S = 0.16
+# The highest the drawn hands reach standing, in the asset's metres (*measured*: meshpose.arm_points
+# with the hold aimed 1.8 to 3 m up tops out at 1.91). A ball caught above it is drawn caught in a
+# jump, as a header above the brow is, and no higher (HEADER_LIFT_MAX).
+HAND_REACH_Z = 1.91
 HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
 # How a throw-in is drawn (design, renderer only). The ball is the engine's and the body follows it,
 # never the reverse: it lies on the grass in front of the taker until the frame the engine names him
@@ -387,8 +406,13 @@ class Gait:
     vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
     accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
+    accel_lat: float = 0.0  # his acceleration across the way he faces (m/s^2, to his left +, pace)
+    roll: float = 0.0  # the trunk tipped into a turn (radians, to his left +, pace)
     fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
+    signal: dict | None = None  # one hand up: side, at (world), w (fouls.signal_at)
+    look: dict | None = None  # the head turned: yaw (radians from his facing), w (fouls.look_at)
     fall_dir: float = 0.0  # the way he falls, pitch radians
+    look_yaw: float = 0.0  # where his head is turned to watch the ball, from his facing (watch_ball)
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -419,12 +443,17 @@ def pace(g: Gait, vx: float, vy: float, heading: float, dt: float, ahead: list |
         ax = (sum(v[0] for v in future) - sum(v[0] for v in g.vel)) / (n * n * dt)
         ay = (sum(v[1] for v in future) - sum(v[1] for v in g.vel)) / (n * n * dt)
         g.accel = ax * math.cos(heading) + ay * math.sin(heading)
+        g.accel_lat = -ax * math.sin(heading) + ay * math.cos(heading)
     g.vel.append((vx, vy))
     del g.vel[:-ACCEL_BOX]
     v = math.hypot(vx, vy)
     target = LEAN_DRAWN * math.atan(min(g.accel, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
     g.lean += (target - g.lean) * LEAN_EASE
     g.lean = max(g.lean, -_stride_lean(v))  # slowing, back to upright and no further
+    # Into a turn, as into a change of pace: the body leans the way it is accelerated, across as
+    # along (Kugler and Janshen 2010: the ground force follows the lean), drawn by the same share.
+    across = max(-ACCEL_MAX, min(ACCEL_MAX, g.accel_lat))
+    g.roll += (LEAN_DRAWN * math.atan(across / GRAVITY) - g.roll) * LEAN_EASE
 
 
 def _stride_lean(speed: float) -> float:
@@ -510,6 +539,8 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
                 aimed[(ev["player"], i)] = {"x": them["x"] + dx / d * FOUL_REACH_M,
                                             "y": them["y"] + dy / d * FOUL_REACH_M, "z": FOUL_SHIN_M}
                 found.append((ev["player"], i, "foot", i - 1, i))
+    settled = _settles(frames, found)
+    found.extend(settled)
     out: dict[str, list[dict]] = {}
     for pid, at, part, v_in, v_out in sorted(found, key=lambda f: (f[1], f[0])):
         who = next((p for p in frames[at]["players"] if p["id"] == pid), None)
@@ -525,6 +556,13 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
             b = _closest(bi, bo, who["x"], who["y"])
         dvx = bo.get("vx", 0.0) - bi.get("vx", 0.0)
         dvy = bo.get("vy", 0.0) - bi.get("vy", 0.0)
+        if (pid, at, part, v_in, v_out) in settled:
+            # The engine gives a settled ball his velocity, so the way the foot rolls it is the way
+            # it moved against him over the frame.
+            was = next(p for p in frames[v_in]["players"] if p["id"] == pid)
+            dvx = (bo["x"] - who["x"]) - (bi["x"] - was["x"])
+            dvy = (bo["y"] - who["y"]) - (bi["y"] - was["y"])
+            dvx, dvy = dvx * round(1 / FRAME_S), dvy * round(1 / FRAME_S)
         h = who.get("heading", 0.0)
         hx, hy = math.cos(h), math.sin(h)
         lateral = (b["x"] - who["x"]) * -hy + (b["y"] - who["y"]) * hx
@@ -537,7 +575,45 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
             "out": math.hypot(bo.get("vx", 0.0), bo.get("vy", 0.0)),
             "heading": h,
             "at": (who["x"], who["y"]),
+            # A settle is the ball rolled at his feet, never a kick, however fast he runs with it.
+            "settle": (pid, at, part, v_in, v_out) in settled,
         })
+    return out
+
+
+def _settles(frames: list[dict], found: list[tuple]) -> list[tuple[str, int, str, int, int]]:
+    """Frames where a carried ball moves SETTLE_M or more against its carrier's body with no touch of
+    the engine's drawn there: the first of each run of such frames, as a touch with the foot (contacts).
+    Frames inside one of his own touches' windows are left to that touch."""
+    lo, hi = _touch_window({"part": "strike", "out": KICK_OUT_MIN})
+    near: dict[str, list[int]] = {}
+    for who, at, *_ in found:
+        near.setdefault(who, []).append(at)
+    out: list[tuple[str, int, str, int, int]] = []
+    last: dict[str, int] = {}
+    for i in range(1, len(frames)):
+        fr, pr = frames[i], frames[i - 1]
+        who = fr.get("possessor")
+        if not who or pr.get("possessor") != who:
+            continue
+        p = next((q for q in fr["players"] if q["id"] == who), None)
+        q = next((q for q in pr["players"] if q["id"] == who), None)
+        b, c = fr["ball"], pr["ball"]
+        # Only a ball he runs or stands with: in any other pose the engine is drawing a touch, a
+        # strike's turn or a hold of its own.
+        if p is None or q is None or p.get("action") not in ("walk", "run", "stand"):
+            continue
+        if max(b["z"], c["z"]) > CARRY_GROUND_M:
+            continue
+        moved = math.hypot((b["x"] - p["x"]) - (c["x"] - q["x"]), (b["y"] - p["y"]) - (c["y"] - q["y"]))
+        if moved < SETTLE_M:
+            continue
+        run = last.get(who) == i - 1
+        last[who] = i
+        if run or any(lo * round(1 / FRAME_S) < i - at < hi * round(1 / FRAME_S) for at in near.get(who, ())):
+            continue
+        out.append((who, i, "foot", i - 1, i))
+        near.setdefault(who, []).append(i)
     return out
 
 
@@ -550,7 +626,7 @@ def _closest(a: dict, b: dict, x: float, y: float) -> dict:
 
 
 def _kick(c: dict) -> bool:
-    return c["part"] == "strike" or (c["part"] == "foot" and c["out"] >= KICK_OUT_MIN)
+    return c["part"] == "strike" or (c["part"] == "foot" and c["out"] >= KICK_OUT_MIN and not c.get("settle"))
 
 
 def _touch_window(c: dict) -> tuple[float, float]:
@@ -625,6 +701,7 @@ def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int,
     g.touch = {
         "part": part,
         "side": c["side"],
+        "soft": part == "foot" and not _kick(c),  # a touch, not a kick: taken in stride on the move (_feet)
         "at": [round(at[0], 4), round(at[1], 4), round(max(at[2], 0.02), 4)],
         "w": round(w, 4),
     }
@@ -642,6 +719,74 @@ def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int,
         rise_m = min(pz - BROW_Y * k, HEADER_LIFT_MAX)
         if rise_m > 0.02:
             g.lift = round(rise_m * max(0.0, 1.0 - (u / HEADER_AIR_S) ** 2), 4)
+
+
+def carry_at(g: Gait, frame: dict, pid: str, x: float, y: float, height_m: float) -> None:
+    """A ball in close control (CARRY_M): each step the swinging foot plays it (g.touch), left and
+    right in turn, late in its swing (TAP_AT), on the ball's back on that foot's side, taken in
+    stride like any touch on the move (_feet). Leaves
+    g.touch alone when the engine's own touch, a hold or a throw is drawn, or he is not carrying it."""
+    if g.touch is not None or g.hold is not None or frame.get("possessor") != pid:
+        return
+    if g.action not in ("walk", "run") or g.speed < STRIDE_FROM_MPS:
+        return
+    b = frame["ball"]
+    rx, ry = b["x"] - x, b["y"] - y
+    if b["z"] > CARRY_GROUND_M or math.hypot(rx, ry) > CARRY_M:
+        return
+    k = height_m / ASSET_STATURE_M
+    hx, hy = math.cos(g.heading), math.sin(g.heading)
+    stride = _stride(g.speed)
+    reach = (PLANT_AHEAD_MAX + STANCE_BEHIND_MAX) * k
+    half = min(_duty(g.speed) * math.pi, math.pi * reach / stride)  # as _stride_feet has the stance
+    air = 2 * math.pi - 2 * half
+
+    def off_for(side: str) -> float:  # how far, in its touch's half-widths, from its swing meeting the ball
+        return abs(_wrap(g.phase - (STANCE_CENTRE[side] + half + TAP_AT * air))) / (TAP_HALF * air)
+
+    side = min(("l", "r"), key=off_for)
+    off = off_for(side)
+    if off >= 1.0:
+        return
+    sign = 1.0 if side == "l" else -1.0
+    # The foot behind the ball, the way he carries it (touch_at's foot, with no kick in it).
+    n = math.hypot(rx, ry) or 1.0
+    dx, dy = (rx / n, ry / n) if math.hypot(rx, ry) > BALL_RADIUS else (hx, hy)
+    bx, by, bz = b["x"], b["y"], b["z"] + BALL_RADIUS
+    # On that foot's side of the ball's back (*design*: half the radius across, so a left and a right
+    # foot do not both meet it dead centre).
+    across = TAP_ACROSS * BALL_RADIUS * sign
+    px = bx - dx * (BALL_RADIUS + 0.02) - dy * across
+    py = by - dy * (BALL_RADIUS + 0.02) + dx * across
+    g.touch = {"part": "foot", "side": side, "soft": True,
+               "at": [round(px, 4), round(py, 4), round(max(bz - 0.07, 0.03), 4)],
+               "w": round(_ease(1.0 - off), 4)}
+
+
+# A player watches the ball: his head turns toward it on the neck, no further than LOOK_MAX (fouls.py,
+# *design*), no faster than P16's 350 degrees a second, which P16 applies to where he looks too (the
+# source measures the body's turn, not the head's: *design*). Drawn only: the body faces the engine's
+# heading. A ball nearer than LOOK_NEAR_M is at his feet or on him: he looks the way he faces (*design*).
+LOOK_RATE = math.radians(350.0)
+LOOK_NEAR_M = 0.5
+# The contact poses the mesh draws whole (meshpose._CONTACT less _FEET): no lean into a turn on them.
+ROLL_FREE = ("chest", "head", "hands", "dive", "shield")
+ROLL_HEAD = 1.2  # the label's head goes 1.2 times the shoulders' way (*design*, measured near the mesh's)
+
+
+def watch_ball(g: Gait, x: float, y: float, ball: tuple[float, float, float]) -> None:
+    """Turn the head toward the ball (g.look) unless a foul's look is drawn (fouls.look_at), or he is
+    diving, throwing or down, when the head stays with the body."""
+    if g.look is not None:
+        g.look_yaw = g.look["yaw"]
+        return
+    want = 0.0
+    far = math.hypot(ball[0] - x, ball[1] - y) > LOOK_NEAR_M
+    if g.action not in ("dive", "throw") and not g.fall and far:
+        want = max(-LOOK_MAX, min(LOOK_MAX, _wrap(math.atan2(ball[1] - y, ball[0] - x) - g.heading)))
+    step = LOOK_RATE * FRAME_S
+    g.look_yaw += max(-step, min(step, want - g.look_yaw))
+    g.look = {"yaw": round(g.look_yaw, 4), "w": 1.0} if abs(g.look_yaw) > 1e-3 else None
 
 
 def _kick_path(c: dict, u: float, contact: tuple, d: tuple, heading: float, xy: tuple,
@@ -714,6 +859,11 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
     # On the move he stoops less: lowered, the legs could not reach feet the body is running past.
     moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
     g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w * moving, 4))
+    over = z - HAND_REACH_Z * k
+    if over > 0.0:
+        # Above his reach he goes up to it: his hands meet the ball on the frame the engine has him
+        # take it, as high as a jump is drawn, the ball coming down into them from there.
+        g.lift = round(min(over, HEADER_LIFT_MAX) * w, 4)
 
 
 def _hold_depth(z: float, k: float) -> float:
@@ -901,9 +1051,9 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     pivoting only when the hip can turn no further (HIP_ROT).
     """
     pel = g.heading + g.lead
-    busy = None
+    busy, soft = None, False
     if g.touch is not None and g.touch["w"] > 0 and g.touch["part"] in ("foot", "strike", "thigh"):
-        busy = g.touch["side"]
+        busy, soft = g.touch["side"], bool(g.touch.get("soft"))
     # A foot that has just played the ball comes back to the grass from where the touch drew it
     # (g.ankle), not from where it stood before the touch: the body has moved on since, and a foot
     # left there can be beyond the leg's reach (a first touch then a strike on the move).
@@ -913,11 +1063,15 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     g.played = busy
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
     # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
-    # the body, instead of following the stride into the air.
+    # the body, instead of following the stride into the air. A kick or a thigh needs it. A soft touch
+    # with the foot on the move (STRIDE_FROM_MPS or faster) is taken in stride: the other foot keeps
+    # running (*design*: a support foot left standing for the touch's 0.76 s while the body ran on at
+    # 3.5 m/s drew him skating stiff-legged through a first touch, seed 8080 frames 1866 to 1876).
     # Out of a touch or a lunge the feet go back to the stride once no foot is in the middle of a
     # step: a stepping foot handed to the stride would be dropped where the stride has it.
     stepping_now = any(f.get("swing") is not None for f in g.feet.values())
-    support = lunge or busy is not None or (g.supporting and stepping_now)
+    in_stride = soft and g.speed >= STRIDE_FROM_MPS
+    support = lunge or (busy is not None and not in_stride) or (g.supporting and stepping_now)
     g.supporting = support
     striding = False
     if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
@@ -1257,6 +1411,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "lift": round(g.lift, 4),
         "bob": round(g.bob, 4),
         "lean": round(g.lean, 4),
+        "roll": round(g.roll, 4),
         "pump": round(_pump(g.speed), 4),
         "touch": g.touch,
         "hold": g.hold,
@@ -1264,6 +1419,8 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "y": round(y, 4),
         "fall": round(g.fall, 4),
         "fall_dir": round(g.fall_dir, 4),
+        "signal": g.signal,
+        "look": g.look,
     }
 
 
@@ -1296,6 +1453,9 @@ def body_parts(
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
     if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
         lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
+    # Across, into a turn (pace), in the poses the mesh tips it in (meshpose._upper): not one of its
+    # own whole-body contact poses.
+    roll_m = 0.0 if g.action in ROLL_FREE else math.sin(g.roll) * TRUNK_M * k
     if g.action == "chest":
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":
@@ -1316,6 +1476,10 @@ def body_parts(
         if dive and z > 0.35:
             side += dive * (0.25 + 0.7 * min(z / 1.5, 1.0)) * k
             z -= abs(dive) * 0.42 * k * min((z - 0.35) / 1.2, 1.0)
+        if roll_m:
+            # Tipped from the hips up in proportion to height, the head (above the TRUNK_M of hips
+            # to shoulders) a little further: the label goes with the drawn trunk.
+            side += roll_m * min(max((z - HIP_PIVOT_Z * k) / (TRUNK_M * k), 0.0), ROLL_HEAD)
         return [
             round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(max(z + lift, 0.02), 4)
         ]

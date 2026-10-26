@@ -21,7 +21,8 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    is not verified (once it is, the reading cannot air, so it is not checked or rewritten). A
    claim may cite only its moment's evidence. A rejected claim goes back to its author with the
    reasons, at most MAX_REWRITES times. A held claim (the check could not be done, or it rests on
-   an unsure detection) is not rewritten.
+   an unsure detection) is not rewritten, except one held only for a speed vision has not
+   measured: its writer says it without the speed.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
    With `shape` (team-shape facts from tracked positions, ninety/intel/shape.py), code adds the
@@ -78,7 +79,7 @@ from ninety.agents.credentials import (  # noqa: F401  (FOUNDRY_SCOPE, TOKEN_MAR
     sign_in_then_load,
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
-from ninety.agents.factcheck import Claim, Verdict, confidence_gate
+from ninety.agents.factcheck import WITHOUT_SPEED, Claim, Verdict, confidence_gate
 from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
@@ -227,10 +228,13 @@ ACTION = {"verified": "verify", "rejected": "reject", "held": "hold"}
 
 
 def sent_back(verdict: Verdict) -> bool:
-    """A claim goes back to its author only when it is wrong (status_for: rejected). A held claim
-    is not rewritten: neither a failed check nor an unsure detection (`low_confidence`) is
-    something the writer can fix. The slice sends a low-confidence claim back; its replay pins
-    that, so the slice keeps it."""
+    """A claim goes back to its author when it is wrong (status_for: rejected), or when it is held
+    only for stating a speed vision has not measured (factcheck.SPEED_MEASURED): the writer can say
+    it without the speed. Any other held claim is not rewritten: neither a failed check nor an
+    unsure detection (`low_confidence`) is something the writer can fix. The slice sends a
+    low-confidence claim back; its replay pins that, so the slice keeps it."""
+    if status_for(verdict) == "held":
+        return bool(verdict.reasons) and all(r.endswith(WITHOUT_SPEED) for r in verdict.reasons)
     return status_for(verdict) == "rejected"
 
 
@@ -327,6 +331,10 @@ class Run:
     # Recordings made before the fact-checker stopped checking a Challenger's reading once the
     # Tactician's claim was verified replay under the rule they were recorded with.
     check_alternative_after_verified: bool = False
+    # The code checks on words about play (factcheck.play_reasons); off only to replay a recording
+    # made before them, under the rule it was recorded with.
+    play_words: bool = True
+    perceiver: object | None = None  # ninety/agents/perceive.Perceiver: the clip's other cameras
 
     def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
              fallback: str = "") -> None:
@@ -551,10 +559,14 @@ class FactChecker(Executor):
                 continue
             started = time.perf_counter()
             with telemetry.stage_span("fact_check", attempt=draft.attempt):
-                checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate)
-            if checked.judge_seconds is not None:
-                run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
-                         time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
+                checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate,
+                                         run.play_words)
+            self.judged(case, checked)
+            if checked.verdict.category == "low_confidence" and run.perceiver is not None:
+                looked = await self.look_again(case, draft, scope, checked)
+                if looked is not checked:  # checked again on the confirmed readings: its Judge call shows
+                    self.judged(case, looked)
+                checked = looked
             draft.verdict, draft.status = checked.verdict, status_for(checked.verdict)
             await run.write_claim(case, draft)
             reasons = "; ".join(checked.verdict.reasons)
@@ -573,6 +585,41 @@ class FactChecker(Executor):
                 detail = f"{draft.author}'s claim" + (f": {reasons}" if reasons else "")
             run.step("fact_checker", case.moment.id, ACTION[draft.status], started, detail)
         await ctx.send_message(ToProducer(case))
+
+    def judged(self, case: Case, checked) -> None:
+        """The Judge's step on the trace, whenever a check asked it, with how long it took."""
+        if checked.judge_seconds is not None:
+            self.run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
+                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
+
+    async def look_again(self, case: Case, draft: Draft, scope: dict[str, dict], checked):
+        """Active perception (ninety/agents/perceive.py): a claim held on a doubtful detection is
+        looked at again through the clip's other cameras; with every doubtful detection confirmed,
+        it goes through the whole fact-checker again on the confirmed readings. Every look is a
+        trace step and a Ledger record (`source: re_perceive`)."""
+        from ninety.agents import perceive
+
+        run = self.run
+        started = time.perf_counter()
+        located = {e["id"]: e for e in run.events}  # each detection's time and place, to find it again
+        confirmed, looks = perceive.recheck(run.perceiver, draft.claim.text, draft.claim.evidence, scope,
+                                            located, case.moment.minute)
+        for n, look in enumerate(looks):
+            run.step("fact_checker", case.moment.id, "re_perceive", started,
+                     f"{look.event} through {look.camera} ({look.mode}): {look.why}")
+            await run.ledger.append(Record(
+                id=f"look-{case.moment.id}-{draft.author}-{draft.attempt}-{n}", version=1, kind="fact",
+                t=run.t.get(look.event, run.t[case.moment.main_event]), source="re_perceive",
+                confidence=(look.found or {}).get("confidence"), evidence=(),
+                payload=look.as_dict()))
+        if not looks:
+            run.step("fact_checker", case.moment.id, "re_perceive", started,
+                     "no look left this minute, or no other camera")
+        if confirmed is None:
+            return checked
+        with telemetry.stage_span("fact_check", attempt=draft.attempt, re_perceived=True):
+            return await fact_check(draft.claim, confirmed, guarded(run.models.judge), run.gate,
+                                    run.play_words)
 
 
 class Producer(Executor):
@@ -720,6 +767,8 @@ async def run_workflow(
     personalize: bool = False,
     shape: list[dict] | None = None,
     check_alternative_after_verified: bool = False,
+    perceiver=None,
+    play_words: bool = True,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those. `shape` is the match's
@@ -740,7 +789,8 @@ async def run_workflow(
             by_minute[r["minute"]] = (*by_minute.get(r["minute"], ()), r["id"])
     run = Run(counted, ledger, known, match, inline_events, plant, live, gate,
               personalize, events, t=times, shape=by_minute,
-              check_alternative_after_verified=check_alternative_after_verified)
+              check_alternative_after_verified=check_alternative_after_verified, perceiver=perceiver,
+              play_words=play_words)
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
     personalizer = Personalizer(run)
@@ -798,7 +848,7 @@ async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
-    personalizer: Personalize | None = None, shape: list[dict] | None = None,
+    personalizer: Personalize | None = None, shape: list[dict] | None = None, perceiver=None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
@@ -813,11 +863,11 @@ async def run_live(
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject, personalizer, shape)
+                               content, personalize, inject, personalizer, shape, perceiver)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject, given_personalizer, shape=None):
+                    personalize, inject, given_personalizer, shape=None, perceiver=None):
     from ninety import config
     from ninety.agents import foundry
 
@@ -875,7 +925,7 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
         if inject is not None:
             models = inject(models)
         result = await run_workflow(models, events, minute, match, plant, True, inline_events,
-                                    personalize=personalize, shape=shape)
+                                    personalize=personalize, shape=shape, perceiver=perceiver)
     telemetry.flush()
     return result, turns, pins, failed[0], events
 
@@ -908,6 +958,7 @@ async def replay_workflow(recording: WorkflowRecording) -> Result:
         replay_models(replayer), inputs["events"], inputs["minute"], inputs["match"], inputs["plant"],
         False, inputs["inline_events"],
         check_alternative_after_verified=inputs.get("alternative_checked_after_verified", True),
+        play_words=inputs.get("play_words_checked", False),
     )
     if replayer.remaining:
         raise ReplayMismatch(f"the run ended with {replayer.remaining} recorded answer(s) never asked for")
@@ -978,6 +1029,7 @@ def main() -> None:
             sys.exit(f"replay stopped: {e}. Record it again with --record.")
         print_result(result, live=False)
     else:
+        from ninety.agents import evidence, foundry
         from ninety.agents.foundry import RegistryDrift
 
         if args.events:
@@ -1006,9 +1058,11 @@ def main() -> None:
             inputs = {"match": match, "seed": seed, "minutes": args.minutes, "minute": args.minute,
                       "plant": args.plant, "inline_events": inline, "events": events,
                       "moments": [m.id for m in result.moments],
-                      "alternative_checked_after_verified": False}
+                      "alternative_checked_after_verified": False, "play_words_checked": True}
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            WorkflowRecording(WORKFLOW, _commit(), pins, inputs, stamp, turns).save(args.record)
+            # The definitions the run's foundry.pinned accepted, from this same code (evidence.py).
+            defs = evidence.of_code(lambda client: list(foundry.workflow_agents(client).values()))
+            WorkflowRecording(WORKFLOW, _commit(), pins, inputs, stamp, turns, defs).save(args.record)
             print(f"recorded {len(turns)} model answer(s) to {args.record}")
     if args.cues_out:
         write_cues(result.cues, args.cues_out)

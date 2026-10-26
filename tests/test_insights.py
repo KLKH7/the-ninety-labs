@@ -302,6 +302,26 @@ def test_who_says_a_name_only_past_its_gate():
     assert roles.who("h-t9", "home", assigned, fx, open_gate)["say"] == "a London Athletic player"
 
 
+def test_a_name_binds_to_one_player_at_a_time():
+    fx = teamsheet.Fixture(7, "OAK", "FEN")
+    gate = {"name": 0.7, "role": 0.6, "line": 0.5}
+    assigned = {t: {"role": "LB", "share": 0.8, "frames": 100} for t in ("h-t5", "h-t6", "h-t7")}
+    people = {t: roles.who(t, "home", assigned, fx, gate) for t in assigned}
+    name = fx.sheet("home")[4].name
+    # h-t5 then h-t6: one left-back's track broken in two, never on the pitch together, keep the name.
+    sequential = roles.one_track_per_name(
+        {t: people[t] for t in ("h-t5", "h-t6")}, {"h-t5": (0.0, 100.0), "h-t6": (101.0, 300.0)}
+    )
+    assert [w["name"] for w in sequential.values()] == [name, name]
+    # h-t7 is there at the same time as h-t6: they cannot both be him, so neither is named.
+    spans = {"h-t5": (0.0, 100.0), "h-t6": (101.0, 300.0), "h-t7": (250.0, 400.0)}
+    both = roles.one_track_per_name(people, spans)
+    assert both["h-t5"]["name"] == name
+    for t in ("h-t6", "h-t7"):
+        assert both[t]["name"] is None and both[t]["number"] is None
+        assert both[t]["say"] == "London Athletic's left-back" and both[t]["sheet_name"] == name
+
+
 def test_no_calibration_names_nobody(tmp_path):
     assert roles.gates(tmp_path / "missing.json") == {"name": None, "role": None, "line": None}
 
@@ -378,3 +398,74 @@ def test_a_simulated_match_serves_no_insights():
 
     assert match_server.insights_of("seed7") is None
     assert match_server.line_breaks("seed7", 1, 5)["tracked"] is False
+
+
+def test_the_scorebug_files_readings_give_the_score_before_any_change():
+    # A clip joined at 2-1: the scorebug file's first reading holds it (`score_reads`); the changes come
+    # with the detected events. The score question then says the scorebug's numbers, each by its club.
+    import asyncio
+
+    from ninety.agents import companion_match as cm
+    from ninety.agents.companion import Question
+    from ninety.intel.match_insights import MatchInsights
+
+    frames = [frame(n, parked("home"), parked("away")) for n in range(0, 25 * 120, 25)]
+    read = {"id": "r1", "t": 0.0, "type": "score_read", "score": {"home": 2, "away": 1}, "x": 52.5, "y": 34.0,
+            "source": "vision", "confidence": 0.99}
+    fixture = teamsheet.Fixture(7, "OAK", "FEN")
+    mi = MatchInsights.build("x", frames, [], fixture, {}, score_reads=[read])
+    assert [(r["home"], r["away"], r["confident"]) for r in mi.facts["scorebug"]] == [(2, 1, True)]
+    answer = asyncio.run(cm.answer_match(Question("s1", None, "What's the score?", 90.0), mi)).answer
+    clubs = fixture.clubs
+    assert f"{clubs['home']} 2 goals" in answer.text and f"{clubs['away']} 1 goal" in answer.text
+    assert MatchInsights.build("x", frames, [], fixture, {}).facts["scorebug"] == []
+
+
+def test_the_served_match_reads_its_scorebug_too(monkeypatch, tmp_path):
+    # The MCP and live server build a clip's insights here: they read its scorebug file as the
+    # offline build's --scorebug does, so a match joined at 2-1 has a score before any change.
+    import json
+
+    from ninety.mcp import match_server
+
+    clip = match_server.detected.M1_CLIP
+    match_server.insights_of.cache_clear()  # it is cached per match: each case builds afresh
+    read = {"id": "r1", "t": 0.0, "type": "score_read", "score": {"home": 2, "away": 1}, "x": 52.5,
+            "y": 34.0, "source": "vision", "confidence": 0.99}
+    path = tmp_path / f"scorebug-{clip}.jsonl"
+    path.write_text(json.dumps(read) + "\n")
+    monkeypatch.setattr(match_server, "MATCH_DIR", "")  # computed, not a stored copy
+    monkeypatch.setattr(match_server, "scorebug_path", lambda c: path)
+    mi = match_server.insights_of(clip)
+    assert [(r["home"], r["away"]) for r in mi.facts["scorebug"]] == [(2, 1)]
+    monkeypatch.setattr(match_server, "scorebug_path", lambda c: tmp_path / "none.jsonl")
+    match_server.insights_of.cache_clear()
+    assert match_server.insights_of(clip).facts["scorebug"] == []
+    match_server.insights_of.cache_clear()  # leave no patched build behind for other tests
+
+
+def test_no_answer_to_a_fan_names_a_raw_track_id():
+    # Every player here is a tracked one (h-t1 ...): Ask names him by name, role or club, never by
+    # the tracker's label (ninety/agents/onair.py, TRACK_ID).
+    import asyncio
+
+    from ninety.agents import companion_match as cm
+    from ninety.agents.companion import Question
+    from ninety.agents.onair import TRACK_ID
+    from ninety.intel.match_insights import MatchInsights
+
+    frames = [frame(n, parked("home"), parked("away")) for n in range(0, 25 * 120, 25)]
+    events = [pass_event(f"v{i}", "home", frame_n=100 + 50 * i, player=f"h-t{i + 1}",
+                         receiver=f"h-t{i + 2}") for i in range(6)]
+    events += [ev("s1", 60.0, "shot", "home", player="h-t7", outcome="goal", team_confidence=0.99),
+               ev("g1", 60.4, "goal", "home", player="h-t7", team_confidence=0.99)]
+    mi = MatchInsights.build("x", frames, events, teamsheet.Fixture(7, "OAK", "FEN"), {})
+    # Ask names a player only through his `say` (ninety/intel/roles.py): never a track id, gated or not.
+    assert mi.people and all(not TRACK_ID.search(p["say"]) for p in mi.people.values()), mi.people
+    answers = []
+    questions = ("What's the score?", "Who scored the goals?", "Why did that goal happen?",
+                 "Who made the most passes?", "Who is running the most?", "Any line breaks?",
+                 "Who assisted the goal?")
+    for q in questions:
+        answers.append(asyncio.run(cm.answer_match(Question("s1", None, q, 110.0), mi)).answer.text)
+    assert not [t for t in answers if TRACK_ID.search(t)], answers

@@ -77,4 +77,17 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.17 (after #231's 0.5.15 and #235's 0.5.16): a keeper's bowl (the engine's own wind-up, action
 # "bowl") is drawn as the hold it is, both hands bringing the ball down to the grass, never a kicking
 # leg. No engine before #216 names one, so every earlier clip renders byte-identical (lesson 204).
-RENDERER_VERSION = "0.5.17"
+# 0.5.18: a foul is legible (lesson 234). The fouler raises a hand and the fouled side's three nearest
+# turn their heads to the man down, for 2 s from the engine's foul frame, drawn from its event and
+# positions (bodies still face the engine's heading). The mp4 carries a synthesised whistle at each
+# foul the picture shows. Every clip shows London Athletic (LON) against Lisbon Esportes (LIS) on the
+# score bug (Kian, Oct 24); the seed's other draws are unchanged. A clip with no foul renders the same
+# pixels as 0.5.17 given those two codes.
+# 0.5.19: broadcast kits are told apart as seen (lesson 246): the shirt's colour mixed with its
+# pattern's by area. A broadcast seed whose kits looked alike (8080) has them redrawn from their own
+# stream; every other seed, and every training or test kit (normal, low), is drawn as before.
+# 0.5.20: the broadcast look (web/render/look.js) on a stadium=broadcast clip's broadcast stream: a
+# filmic tone curve, sky fill light, the crowd muted and in shade, haze on the scenery, gentler
+# sharpening, a warm grade. Light and colour only; plain renders and the tactical views keep their
+# pixels. Vision gate: docs/eval/render-look-gate.md.
+RENDERER_VERSION = "0.5.20"

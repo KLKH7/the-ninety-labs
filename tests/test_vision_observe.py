@@ -163,7 +163,7 @@ def test_observe_judges_each_frame_against_its_neighbours(monkeypatch):
         dets.append(SimpleNamespace(frame=f, t=f / 25, detections=tuple(boxes)))
     fits = [pitch.FrameFit(view_at(10.0 if f == 5 else 0.0), 1.0, 200, True) for f in range(11)]
     monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
-    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h, **k: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
     rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets,
                            lambda path: np.zeros((720, 1280, 3), np.uint8))
     assert P is not None and [r["camera"]["ok"] for r in rows][4:7] == [True, False, False]
@@ -175,6 +175,59 @@ def test_a_trusted_frame_with_no_trusted_neighbour_near_it_is_not_trusted():
     assert [r["camera"]["ok"] for r in rows] == [False, False]
     together = observe.agree(clip({}, frames=2))
     assert [r["camera"]["ok"] for r in together] == [True, True]
+
+
+def in_shots(rows: list[dict], starts: list[int]) -> list[dict]:
+    """Label each row with its shot, the shots beginning at the given frames."""
+    for r in rows:
+        r["camera"]["shot"] = sum(r["frame"] >= s for s in starts) - 1
+    return rows
+
+
+def test_after_a_cut_frames_are_judged_against_their_own_shot():
+    # Frames 6 to 10 are another camera, 30 m from the first: each shot agrees within itself. Judged
+    # across the cut, frame 6 would meet frame 5 first (the tie goes to the earlier) and be lost.
+    rows = observe.agree(in_shots(clip({f: 30.0 for f in range(6, 11)}), [0, 6]))
+    assert all(r["camera"]["ok"] for r in rows)
+    across = observe.agree(clip({f: 30.0 for f in range(6, 11)}))
+    assert [r["camera"]["ok"] for r in across] == [True] * 6 + [False] + [True] * 4
+
+
+def test_a_shot_of_one_frame_has_no_neighbour_and_is_not_trusted():
+    # Frame 5 alone between two cuts: its camera agrees with the frames either side, but they are
+    # other shots, so nothing vouches for it.
+    rows = observe.agree(in_shots(clip({}), [0, 5, 6]))
+    assert [r["camera"]["ok"] for r in rows] == [True] * 5 + [False] + [True] * 5
+
+
+def test_observe_fits_each_shot_on_its_own_and_labels_it(monkeypatch):
+    # The images change colour at frame 6 (a cut); the fit is stubbed and must be called once per
+    # shot, with that shot's frames only.
+    from types import SimpleNamespace
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=tuple(
+        SimpleNamespace(cls="player", bbox=tuple(d["bbox"]), score=0.9) for d in row()["players"]))
+        for f in range(11)]
+    calls = []
+
+    def fit_clip(points, w, h, **k):
+        calls.append(len(points))
+        return (VIEW.cx, VIEW.cy, VIEW.cz), [pitch.FrameFit(VIEW, 1.0, 200, True) for _ in points]
+
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", fit_clip)
+    grass, stands = np.zeros((72, 128, 3), np.uint8), np.zeros((72, 128, 3), np.uint8)
+    grass[...] = (60, 120, 10)
+    stands[...] = (120, 120, 140)
+    load = lambda path: stands if int(path.stem) >= 6 else grass  # noqa: E731
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load, cuts=True)
+    assert calls == [6, 5]
+    assert [r["camera"]["shot"] for r in rows] == [0] * 6 + [1] * 5
+    assert [s["frame"] for s in rows[0]["shots"]] == [0, 6]
+    assert all(r["camera"]["ok"] for r in rows)
+    # Off by default (docs/eval/camera-cuts-plan.md, Outcome): the same images are one shot.
+    calls.clear()
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets, load)
+    assert calls == [11] and {r["camera"]["shot"] for r in rows} == {0} and "shots" not in rows[0]
 
 
 @pytest.mark.xfail(strict=True, reason="no check of one frame against another can see a whole clip offset "
@@ -199,3 +252,76 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
     assert dd.KEEP_GOOD == body["keep_good"] == 0.95
     assert body["adopted"] == "C2"
+
+
+def test_a_frame_is_judged_by_the_band_it_is_given():
+    assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
+    assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]
+
+
+def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_own(tmp_path, monkeypatch):
+    monkeypatch.setattr(observe, "FIXED_HEIGHT_BAND", (1.05, 1.15))
+    monkeypatch.setattr(observe, "HEIGHT_BAND", (0.90, 1.00))  # 1.10 is in the one band, not the other
+    rows = [row(1.10) | {"frame": k, "t": k / 25} for k in range(3)]
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    for fixed, expect in ((True, True), (False, False)):
+        first = rows[0] | ({"fixed": True} if fixed else {})
+        src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
+        observe.main(["--regate", str(src), "--out", str(out)])
+        assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
+
+
+def test_the_fixed_band_is_the_committed_validation_measurement():
+    body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
+    assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
+
+
+def hooped(primary, secondary, h=60, w=24, band=6):
+    """A player box of a shirt in horizontal hoops, primary and secondary alternating, on grass."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[:, :] = (40, 140, 50)  # grass behind
+    for y in range(h):
+        img[y, 4:w - 4] = secondary if (y // band) % 2 else primary
+    return img
+
+
+def test_a_hooped_shirt_reads_as_both_its_colours():
+    blue, white = (32, 46, 162), (242, 242, 242)
+    img = hooped(blue, white)
+    bbox = [0, 0, 24, 60]
+    two = observe.read_kit(img, bbox, "R4")
+    dark, light = np.array(two[:3]), np.array(two[3:])
+    assert np.abs(dark - blue).max() < 3 and np.abs(light - white).max() < 3
+    assert observe.KIT_READER == "R4"
+
+
+def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
+    from types import SimpleNamespace
+    box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    fits = [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h, **k: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
+    shirt = hooped((32, 46, 162), (242, 242, 242))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
+    assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
+
+
+def test_skin_is_found_by_the_published_rule_and_kits_are_not():
+    px = np.array([[200, 140, 110], [170, 120, 90], [23, 60, 25], [242, 242, 242], [20, 20, 20],
+                   [32, 46, 162]], float)
+    assert observe.skin(px).tolist() == [True, True, False, False, False, False]
+
+
+def test_r5_reads_a_dark_kit_without_the_arms_skin():
+    # A dark-green shirt with black stripes and bare arms across the patch: R4's lighter colour is the
+    # skin; R5 drops the skin first, so its lighter colour is the green.
+    img = np.zeros((60, 24, 3), np.uint8)
+    img[:, :] = (40, 140, 50)
+    for y in range(60):
+        img[y, 4:20] = (23, 60, 25) if (y // 4) % 2 else (12, 12, 12)
+    img[12:30, 4:7] = img[12:30, 17:20] = (200, 140, 110)  # arms
+    bbox = [0, 0, 24, 60]
+    turf = (np.array([40.0, 140.0, 50.0]), 0.02)  # the grass as measured on the pitch (the live path)
+    r4, r5 = observe.read_kit(img, bbox, "R4", turf), observe.read_kit(img, bbox, "R5", turf)
+    assert r4[3] > 150 and abs(r5[3] - 23) < 5 and abs(r5[4] - 60) < 5

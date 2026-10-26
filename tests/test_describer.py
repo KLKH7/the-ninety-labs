@@ -31,7 +31,8 @@ SSML_NS = "{http://www.w3.org/2001/10/synthesis}"
 
 def event(i: int, t: float, kind: str = "pass", x: float = 50.0, **extra) -> dict:
     base = {"id": f"e{i}", "t": t, "frame": int(t * 25), "type": kind, "team": "home", "player": "h4",
-            "x": x, "y": 30.0, "source": "vision", "confidence": 0.9}
+            "x": x, "y": 30.0, "source": "vision", "confidence": 0.9,
+            "team_confidence": 0.99}  # a side told firmly: a line naming a team reaches the Judge
     if kind == "pass":
         base |= {"receiver": "h8", "intended": "h8", "end_x": x + 10, "end_y": 30.0, "outcome": "success",
                  "ball_speed_kmh": 50.0}
@@ -90,10 +91,10 @@ def model_answering(text: str, asked: list | None = None):
 def test_a_supported_model_line_is_said_first_and_the_code_line_is_its_fallback():
     track, _ = d.describe(EVENTS, [CLAIM], upgrades={CLAIM["id"]: MODEL_LINE})
     line = said_for(track, CLAIM["id"])
-    assert line.source == "model" and line.text == MODEL_LINE and "Home 8" in line.spoken
+    assert line.source == "model" and line.text == MODEL_LINE and "Home's number 8" in line.spoken
     lines, _ = d.candidates(EVENTS, [CLAIM], {CLAIM["id"]: MODEL_LINE})
     (claim_line,) = [x for x in lines if x.key == CLAIM["id"]]
-    assert claim_line.versions == [MODEL_LINE, f"Fact-checked: {CLAIM['text']}"]
+    assert claim_line.versions == [MODEL_LINE, CLAIM["text"]]
     (cue,) = [c for c in d.audio_cues(track) if c["evidence"] == ["e1", "e2"]]
     assert cue["verified"] is True and cue["text"] == line.spoken
 
@@ -101,7 +102,7 @@ def test_a_supported_model_line_is_said_first_and_the_code_line_is_its_fallback(
 def test_a_model_line_with_an_unsupported_number_is_replaced_by_the_code_line():
     track, refused = d.describe(EVENTS, [CLAIM], upgrades={CLAIM["id"]: "h8 shoots at 143 km/h"})
     line = said_for(track, CLAIM["id"])
-    assert line.source == "insight" and line.text == f"Fact-checked: {CLAIM['text']}"
+    assert line.source == "insight" and line.text == CLAIM["text"]
     assert any(r["text"] == "h8 shoots at 143 km/h" and "143" in r["reason"] for r in refused)
 
 
@@ -127,7 +128,7 @@ def test_a_model_line_that_would_push_a_goal_late_falls_back_to_the_code_line():
     goal = event(3, 15.0, "goal", x=104.0, player="h8")  # room for the short line, not the long one
     track, _ = d.describe([*EVENTS, goal], [CLAIM], upgrades={CLAIM["id"]: long})
     line = said_for(track, CLAIM["id"])
-    assert line.short and line.source == "insight" and line.text == f"Fact-checked: {CLAIM['text']}"
+    assert line.short and line.source == "insight" and line.text == CLAIM["text"]
     assert said_for(track, "e3").lag_s <= d.MAX_LAG_S
 
 
@@ -429,3 +430,14 @@ def test_a_speech_outage_through_the_whole_run_still_writes_every_line(tmp_path,
     assert audio["said"] and audio["synth_failed"] == audio["synth_requests"] > 0
     assert spoken and all(c["speech"] == "unavailable" for c in spoken)
     assert SECRET not in (out / "audio.json").read_text() + (out / "manifest.json").read_text()
+
+
+@pytest.mark.parametrize("line", ["h8 scores for home", "the away side wins it", "h8 shoots, visitors"])
+def test_a_model_line_naming_a_team_on_an_unsure_side_is_held_before_the_judge(line):
+    # Audit Q3: the Describer's model is told to name teams as home or away; on a side told at 0.529
+    # (the M1 clip's) its line is held by the same confidence gate as every claim, the code line stays.
+    unsure = [e | {"team_confidence": 0.529} for e in EVENTS]
+    seen = []
+    texts, calls = asyncio.run(describer.upgrades(unsure, [CLAIM], model_answering(line),
+                                                  judge_refusing(seen=seen)))
+    assert seen == [] and texts == {} and calls[0]["problem"].startswith("confidence gate:")

@@ -53,63 +53,33 @@ def test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth(tmp_path):
     assert report["frames"] == 2 and report["camera_ok"] == 2  # it ran the whole path
     assert set(report["seconds"]) == {"load", "detect", "observe", "events", "tracked", "total"}
     assert report["commit"] == "test" and report["cpus"] >= 1
+    assert set(report["restarts"]) >= {"kick_off", "corner", "free_kick"}  # the restart detector ran
     assert any(o.endswith(".jpg") for o in run["opened"])
     assert truth_reads(run) == []
 
 
-def test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened(tmp_path):
-    # The flight fit itself is tested in tests/test_vision_flight.py; here, that the job runs it
-    # between observe and events, writes what it gave, and hands exactly that to events. Its
-    # heights are a stand-in that marks every ball, so the test does not hang on a 2-frame clip
-    # holding no flight.
-    clip, dets = clean_clip(tmp_path)
-    out = tmp_path / "out"
-    run = run_audited(f"""
-        from pathlib import Path
-        from ninety.vision import events, flight, live_job, pitch
-        from ninety.vision.detections import read_detections
-        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
-        seen = []
-        def marked(rows):
-            return [r | {{"fitted": True}} for r in rows]  # every row, ball seen or not
-        flight.heights = marked
-        real = events.detect
-        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
-        found = read_detections({str(dets)!r})
-        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found),
-                              {{"commit": "test"}}, fit_flight=True)
-        OUT = {{"report": report, "files": sorted(p.name for p in Path({str(out)!r}).iterdir()),
-               "seen": seen}}
-    """)
-    got = run["out"]
-    assert got["files"] == sorted([*OUTPUTS, "observations-flight.jsonl"])
-    assert got["report"]["flight"] is True and "flight" in got["report"]["seconds"]
-    written = [json.loads(x) for x in (out / "observations-flight.jsonl").read_text().splitlines()]
-    assert got["seen"] == [written]
-    assert written and all(r["fitted"] for r in written)
-    assert truth_reads(run) == []
+def test_the_restarts_are_merged_into_the_detected_events(tmp_path, monkeypatch):
+    # The restart detector's events join events.detect's in time, and a possession change while
+    # the ball lies set for the restart (its dead ball) is left out (restarts.merge).
+    from ninety.vision import events as ev
+    from ninety.vision import live_job, pitch, restarts
+    from ninety.vision.detections import read_detections
 
-
-def test_without_flight_the_events_read_observe_s_rows_unchanged(tmp_path):
     clip, dets = clean_clip(tmp_path)
-    out = tmp_path / "out"
-    run = run_audited(f"""
-        from pathlib import Path
-        from ninety.vision import events, flight, live_job, pitch
-        from ninety.vision.detections import read_detections
-        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
-        seen = []
-        def never(rows):
-            raise AssertionError("the flight fit ran without --flight")
-        flight.heights = never
-        real = events.detect
-        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
-        found = read_detections({str(dets)!r})
-        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found))
-        OUT = {{"report": report, "seen": seen}}
-    """)
-    written = [json.loads(x) for x in (out / "observations.jsonl").read_text().splitlines()]
-    assert run["out"]["seen"] == [written] and run["out"]["report"]["flight"] is False
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    change = {"id": "v00001", "frame": 10, "t": 0.4, "type": "possession_change", "team": "home"}
+    kept = {"id": "v00002", "frame": 30, "t": 1.2, "type": "possession_change", "team": "away"}
+    corner = {"id": "r00001", "frame": 12, "t": 0.48, "type": "set_piece", "restart": "corner",
+              "team": "home"}
+    monkeypatch.setattr(ev, "detect", lambda rows: ([change, kept], {
+        "frames_camera_ok": 2, "events": {}, "named": {}}))
+    monkeypatch.setattr(restarts, "detect", lambda rows: ([corner], {"events": {"corner": 1},
+                                                                       "dead_balls": [[5, 12]]}))
+    found = read_detections(dets)
+    report = live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found))
+    lines = (tmp_path / "out" / "detected.jsonl").read_text().splitlines()
+    assert [json.loads(line)["id"] for line in lines] == ["r00001", "v00002"]
+    assert report["restarts"] == {"corner": 1}
 
 
 @pytest.mark.parametrize("name", [*TRUTH_FILES, "notes.txt"])
@@ -246,6 +216,17 @@ def views_clip(tmp_path: Path) -> tuple[Path, Path]:
     return clip, dets
 
 
+def quick_fixed_fit(static, points, w, h):
+    """A stand-in for pitch.fit_fixed, which searches a wide grid (tested in
+    tests/test_vision_pitch_fixed.py) and takes ~2 minutes here. This clip is drawn through the
+    gantry the tests pin, so its one camera comes from the broadcast fit, held for every frame."""
+    from ninety.vision import pitch
+
+    _, fits = pitch.fit_clip(points, w, h)
+    view = fits[0].view
+    return view, [pitch.FrameFit(view, f.median_px, f.points, f.ok) for f in fits]
+
+
 def test_a_clip_of_two_views_runs_detects_each_merges_them_and_opens_no_truth(tmp_path):
     clip, dets = views_clip(tmp_path)
     out = tmp_path / "out"
@@ -254,6 +235,12 @@ def test_a_clip_of_two_views_runs_detects_each_merges_them_and_opens_no_truth(tm
         from ninety.vision import live_job, pitch
         from ninety.vision.detections import read_detections
         pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)  # the search is tested elsewhere
+        def fit_fixed(static, points, w, h):
+            # a stand-in for the wide fixed-lens search (see quick_fixed_fit in the test file)
+            _, fits = pitch.fit_clip(points, w, h)
+            view = fits[0].view
+            return view, [pitch.FrameFit(view, f.median_px, f.points, f.ok) for f in fits]
+        pitch.fit_fixed = fit_fixed
         found = read_detections({str(dets)!r})
         calls = []
         report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}),
@@ -306,3 +293,121 @@ def test_a_views_clip_with_one_view_is_refused(tmp_path):
     shutil.rmtree(clip / "views" / "tac-r")
     with pytest.raises(SystemExit, match="two views"):
         live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, monkeypatch):
+    """A view is the tactical camera, which never moves: observe fits it once (fixed=True). Without
+    it each frame is searched as the broadcast's gantry, and a view's frames place no player."""
+    from ninety.vision import observe, pitch
+    from ninety.vision.detections import read_detections
+
+    seen = []
+    real = observe.observe
+
+    def spy(images, dets, load, fixed=False):
+        seen.append(fixed)
+        return real(images, dets, load, fixed)
+
+    monkeypatch.setattr(observe, "observe", spy)
+    # The fits' searches are tested elsewhere; this test is about which mode each camera gets, and
+    # unstubbed they take ~2.5 minutes (the wide fixed grid, the gantry search).
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    monkeypatch.setattr(pitch, "fit_fixed", quick_fixed_fit)
+    clip, dets = views_clip(tmp_path)
+    found = read_detections(dets)
+    live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found), {})
+    single, dets1 = clean_clip(tmp_path / "b")
+    live_job.run(single, tmp_path / "out1", lambda: (lambda rows: read_detections(dets1)), {})
+    assert seen == [True, True, False]
+
+
+REAL_VIEWS = Path(__file__).parent / "fixtures" / "tactical-seed108"
+
+
+def test_a_real_tactical_clip_places_players_from_every_view(tmp_path):
+    """Lesson 235: two frames of validation seed108's tactical views as rendered (JPEG q85; the
+    detections ours-tactical made on them), through the whole views mode. Every view's camera is
+    trusted and most of its players are placed on the pitch; before the fix, none were."""
+    from ninety.vision.detections import read_detections
+
+    dets = {v: read_detections(REAL_VIEWS / f"detections-{v}.jsonl") for v in TAC}
+    report = live_job.run(REAL_VIEWS / "clip", tmp_path,
+                          lambda: (lambda rows: dets[Path(rows[0]["image"]).parts[-3]]), {})
+    assert report["camera_ok"] == 2
+    for v in TAC:
+        placed = tmp_path / "views" / v / "observations.jsonl"
+        rows = [json.loads(x) for x in placed.read_text().splitlines()]
+        players = [p for r in rows for p in r["players"]]
+        assert all(r["camera"]["ok"] for r in rows), v
+        assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0, v
+
+
+REAL_BROADCAST = Path(__file__).parent / "fixtures" / "broadcast-seed108"
+
+
+def test_a_real_broadcast_clip_places_players(tmp_path):
+    """Lesson 235: the broadcast mode on two frames of validation seed108 as rendered (JPEG q85;
+    ours-freeze's detections of them): the camera is trusted and most players are placed."""
+    from ninety.vision.detections import read_detections
+
+    dets = read_detections(REAL_BROADCAST / "detections.jsonl")
+    report = live_job.run(REAL_BROADCAST / "clip", tmp_path, lambda: (lambda rows: dets), {})
+    assert report["camera_ok"] == 2
+    rows = [json.loads(x) for x in (tmp_path / "observations.jsonl").read_text().splitlines()]
+    players = [p for r in rows for p in r["players"]]
+    assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0
+
+
+def test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened(tmp_path):
+    # The flight fit itself is tested in tests/test_vision_flight.py; here, that the job runs it
+    # between observe and events, writes what it gave, and hands exactly that to events. Its
+    # heights are a stand-in that marks every ball, so the test does not hang on a 2-frame clip
+    # holding no flight.
+    clip, dets = clean_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import events, flight, live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
+        seen = []
+        def marked(rows):
+            return [r | {{"fitted": True}} for r in rows]  # every row, ball seen or not
+        flight.heights = marked
+        real = events.detect
+        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
+        found = read_detections({str(dets)!r})
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found),
+                              {{"commit": "test"}}, fit_flight=True)
+        OUT = {{"report": report, "files": sorted(p.name for p in Path({str(out)!r}).iterdir()),
+               "seen": seen}}
+    """)
+    got = run["out"]
+    assert got["files"] == sorted([*OUTPUTS, "observations-flight.jsonl"])
+    assert got["report"]["flight"] is True and "flight" in got["report"]["seconds"]
+    written = [json.loads(x) for x in (out / "observations-flight.jsonl").read_text().splitlines()]
+    assert got["seen"] == [written]
+    assert written and all(r["fitted"] for r in written)
+    assert truth_reads(run) == []
+
+
+def test_without_flight_the_events_read_observe_s_rows_unchanged(tmp_path):
+    clip, dets = clean_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import events, flight, live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
+        seen = []
+        def never(rows):
+            raise AssertionError("the flight fit ran without --flight")
+        flight.heights = never
+        real = events.detect
+        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
+        found = read_detections({str(dets)!r})
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found))
+        OUT = {{"report": report, "seen": seen}}
+    """)
+    written = [json.loads(x) for x in (out / "observations.jsonl").read_text().splitlines()]
+    assert run["out"]["seen"] == [written] and run["out"]["report"]["flight"] is False

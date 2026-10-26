@@ -292,6 +292,28 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first_then_the_rest_in_ord
     asyncio.run(run())
 
 
+def test_a_late_phone_gets_a_playing_clock_as_it_stands_now(setup):
+    """The relay stores the laptop's once-a-second clock; replayed unchanged, a phone joining 0.8 s
+    later would start 0.8 s behind the big screen. A playing clock is advanced by the time it was
+    held; a paused one is not."""
+    client, app, clock = setup
+    code = pair(client)
+
+    async def run(playing):
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            await laptop.send({"type": "clock", "t": 30.0, "playing": playing})
+            async with asyncio.timeout(RECEIVE_S):
+                while app.rooms[code].latest.get("clock", {}).get("playing") is not playing:
+                    await asyncio.sleep(0)
+            clock.now += 0.8
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                return await phone.receive()
+
+    # mutation: send room.latest unchanged in the catch-up -> t stays 30.0
+    assert asyncio.run(run(True)) == {"type": "clock", "t": 30.8, "playing": True}
+    assert asyncio.run(run(False)) == {"type": "clock", "t": 30.0, "playing": False}
+
+
 def test_a_message_sent_during_a_phones_catch_up_still_reaches_it(setup):
     # Review of #145: the phone must be registered before its catch-up is sent. Registered after,
     # a laptop message arriving while the (slow) catch-up send is in flight reaches nobody.
@@ -826,3 +848,32 @@ def test_on_serves_tracked_positions(monkeypatch):
     assert answer["status"] == "verified"
     # A stand-in is refused by name, even when its frames would say tracked: `on` never loads one.
     assert client.get("/api/minimap/seed7").status_code == 503
+
+
+def test_a_screen_re_claims_its_code_after_a_restart_so_its_phones_rejoin(setup):
+    """Rooms live in memory: a restart loses them. The big screen asks for its old code back and
+    gets it while it is free, so a phone that held the code rejoins without a rescan."""
+    client, app, _ = setup
+    code = pair(client)
+    app.rooms.clear()  # the server restarted
+    assert asyncio.run(refused(client.app, f"/api/pair/{code}?role=phone")) == 4404
+    r = client.post("/api/pair", json={"clip": "seed7", "code": code})
+    assert r.status_code == 201 and r.json()["code"] == code
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                await laptop.send({"type": "clock", "t": 12.0, "playing": True})
+                assert (await phone.receive())["t"] == 12.0
+            # Held by a screen: never handed to another. Another clip: never.
+            assert client.post("/api/pair", json={"clip": "seed7", "code": code}).status_code == 409
+        # The screen dropped but the server did not restart: its code is given back as it stands.
+        again = client.post("/api/pair", json={"clip": "seed7", "code": code})
+        assert again.status_code == 200 and again.json()["code"] == code
+
+    asyncio.run(run())
+    other = next(c for c in comp.CLIPS if c != "seed7")
+    assert client.post("/api/pair", json={"clip": other, "code": code}).status_code == 409  # not its clip
+    assert client.post("/api/pair", json={"clip": "seed7", "code": "ABCDE0"}).status_code == 422
+    for bad in ("short", "abcdef", "ABCDEFG", "ABCDEI"):  # (the pairing limit allows few more posts)
+        assert not comp.PAIR_BODY.is_valid({"clip": "seed7", "code": bad}), bad

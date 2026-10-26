@@ -12,7 +12,9 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-SPRINT_THRESHOLD_KMH = 25.0
+# The most common absolute sprint threshold in match analysis (docs/GROUNDING.md I22): the one
+# constant every sprint count reads (ninety/intel/physical.py too).
+SPRINT_THRESHOLD_KMH = 25.2
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,25 @@ def pass_facts(events: Iterable[Mapping]) -> list[Fact]:
     return facts
 
 
+def goal_moments(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | None]]:
+    """Each detected goal once, as (goal, its shot or None), in time order.
+
+    A goal is a detected `goal` event (GROUNDING I24, Law 10). Its shot is the detected event just
+    before it when that is a shot that went in, as scoring.goals pairs them: the strike and the ball
+    over the line are one goal, and the goal event carries its side and confidence. A shot that went
+    in with no goal event just after it is a goal on its own (a detector that writes no goal events);
+    a goal with no shot just before it is a goal whose strike was not seen."""
+    rows = sorted(events, key=lambda e: (float(e["t"]), str(e["id"])))
+    went_in = [e.get("type") == "shot" and e.get("outcome") == "goal" for e in rows]
+    out: list[tuple[Mapping, Mapping | None]] = []
+    for k, e in enumerate(rows):
+        if e.get("type") == "goal":
+            out.append((e, rows[k - 1] if k > 0 and went_in[k - 1] else None))
+        elif went_in[k] and not (k + 1 < len(rows) and rows[k + 1].get("type") == "goal"):
+            out.append((e, e))
+    return out
+
+
 def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
     """Return shot volume, accuracy, goals, and speed facts by team and player."""
     event_list = _events(events)
@@ -131,6 +152,15 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
         groups[f"team:{_team(event)}"].append(event)
         if _player(event):
             groups[f"player:{_player(event)}"].append(event)
+    # Goals by the goal event's side (goal_moments); a player's only when his shot scored it for
+    # that side (I24's scorer).
+    scored: dict[str, list[Mapping]] = defaultdict(list)
+    for goal, shot in goal_moments(event_list):
+        scored[f"team:{_team(goal)}"].append(goal)
+        if shot is not None and _player(shot) and shot.get("team") == goal.get("team"):
+            scored[f"player:{_player(shot)}"].append(goal)
+    for scope in scored:
+        groups.setdefault(scope, [])
 
     facts: list[Fact] = []
     for scope, group in sorted(groups.items()):
@@ -138,7 +168,7 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
         on_target = [
             event for event in group if event.get("outcome") in {"on_target", "goal"}
         ]
-        goals = [event for event in group if event.get("outcome") == "goal"]
+        goals = scored.get(scope, [])
         speeds = [
             float(event["ball_speed_kmh"])
             for event in group

@@ -23,6 +23,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from ninety.match import detected
+
 # A number standing on its own: not part of an id like "e00042" or a player like "h7". A
 # sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
 # 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
@@ -51,16 +53,118 @@ WORD_NUMBER = re.compile(
 )
 # Number words that are no count: football's idioms (a one-two, a one-on-one, a one-touch pass, a
 # two-footed tackle, a one-handed save) and the pronoun "one" ("one of", "no one").
+# An N-on-M ("a two-on-one") is a word only when no unit or counted noun follows it: in "a
+# two-on-three m pass" the "three" is a distance, checked like any other (review of #268).
+_NO_UNIT_AFTER = (
+    r"(?![\s-]*(?:m|metres?|meters?|metros?|km|km/h|kph|kmh|k\.p\.h|kil[oó]met\w*|yards?|yds?|yardas?"
+    r"|feet|foot|ft|pies|mph|m\.p\.h|minutes?|minutos?|seconds?|secs?|segundos?|players|men|outfielders"
+    r"|jugadores|hombres|passes|pases|shots|tiros|disparos|goals|goles|times|veces)(?![\w/]))"
+)
 NOT_A_COUNT = re.compile(
     r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
     r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
-    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)",
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another|side)\b)"  # "one side's back line": no count
+    r"|\b(?:one|two|three|four)[\s-](?:on|v(?:s\.?|\.)?)[\s-](?:one|two|three|four)\b"  # a two-on-one
+    + _NO_UNIT_AFTER +
+    # Spanish: one-on-one ("uno contra uno", "un dos contra uno"), "one of", beating a man ("se va
+    # de uno"), "a hundred per cent", "at full tilt" ("a mil por hora"), "with both feet"
+    r"|\b(?:uno|dos|tres|cuatro)\s+(?:contra|a)\s+(?:uno|dos|tres|cuatro)\b" + _NO_UNIT_AFTER +
+    r"|\buno(?=\s+de\b)"
+    r"|\b(?:va|van|fue|ir|irse|marcha|marchó)\s+de\s+uno\b|\bcien\s+por\s+cien\b"
+    r"|\bmil\s+por\s+hora\b|\b(?:los|las|ambos)\s+dos\s+pies\b",
     re.I,
 )
-DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
-SPEED_UNITS = r"(?:km/h|kph)"
-DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
-SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{SPEED_UNITS}\b", re.I)
+# Spanish number words: the Personalizer writes Spanish variants and they are re-checked here, so
+# "cincuenta km/h" and "treinta y uno" are numbers too. As with English, words combine only as
+# Spanish writes one number. "un" and "una" are read only inside a number ("veintiún", "treinta y
+# una"): alone they are the article "a". "once" (11) is also the English adverb, so it is read
+# only before a unit or a counted noun, or after "minuto" (`_ES_ONCE`).
+ES_VALUES = (
+    {"cero": 0, "uno": 1, "una": 1, "un": 1}
+    | {w: i for i, w in enumerate("dos tres cuatro cinco seis siete ocho nueve diez once doce trece "
+                                  "catorce quince".split(), 2)}
+    | {w: i for i, w in enumerate("dieciséis diecisiete dieciocho diecinueve veinte veintiuno "
+                                  "veintidós veintitrés veinticuatro veinticinco veintiséis veintisiete "
+                                  "veintiocho veintinueve".split(), 16)}
+    | {"dieciseis": 16, "veintiuna": 21, "veintiún": 21, "veintiun": 21, "veintidos": 22,
+       "veintitres": 23, "veintiseis": 26}
+    | {w: 10 * i for i, w in enumerate("treinta cuarenta cincuenta sesenta setenta ochenta noventa"
+                                       .split(), 3)}
+    | {"cien": 100, "ciento": 100, "quinientos": 500, "quinientas": 500, "setecientos": 700,
+       "setecientas": 700, "novecientos": 900, "novecientas": 900}
+    | {f"{p}cient{g}s": n * 100 for p, n in (("dos", 2), ("tres", 3), ("cuatro", 4), ("seis", 6),
+                                            ("ocho", 8)) for g in "oa"}
+)
+
+
+def _alt(words: Iterable[str]) -> str:
+    return rf"(?:{'|'.join(sorted(words, key=len, reverse=True))})"
+
+
+_ES_TAIL = _alt(w for w, n in ES_VALUES.items() if 1 <= n <= 9)
+_ES_UNIT = _alt(w for w, n in ES_VALUES.items() if 1 <= n <= 9 and w not in ("un", "una"))
+_ES_TEEN = _alt(w for w, n in ES_VALUES.items() if 10 <= n <= 29 and w not in ("un", "una"))
+_ES_TENS = _alt(w for w, n in ES_VALUES.items() if n in range(30, 100, 10))
+_ES_HUNDREDS = _alt(w for w, n in ES_VALUES.items() if n >= 100 and w != "cien")
+_ES_BELOW_100 = rf"(?:{_ES_TENS}(?:\s+y\s+{_ES_TAIL}\b)?|{_ES_TEEN}|{_ES_UNIT}|cero)"
+_ES_BELOW_1000 = rf"(?:{_ES_HUNDREDS}(?:\s+{_ES_BELOW_100}\b)?|cien|{_ES_BELOW_100})"
+ES_WORD_NUMBER = re.compile(
+    rf"\b(?:(?:{_ES_BELOW_1000}\s+)?mil(?:\s+{_ES_BELOW_1000}\b)?|{_ES_BELOW_1000})\b", re.I
+)
+_ES_ONCE = re.compile(
+    r"(?:(?<=minuto\s)once\b|\bonce(?=[\s-]+(?:m|metros?|km/h|kil[oó]metros|minutos?|segundos?"
+    r"|pases|disparos|tiros|goles|veces|yardas|pies|millas|jugadores)\b))",
+    re.I,
+)
+# Ordinals in words ("his seventh pass", "the ninth minute", "the twenty-first minute") are read
+# as their digit form ("7th"), which the number checks already read (lesson 130). "first" and
+# "second" are football's words for halves, touches, balls and time ("first time", "a second
+# yellow"), so they are read only before "minute"; Spanish likewise ("primer minuto"). Fractions
+# and the pitch's thirds are no ordinal ("the final third", "a third of", "the fourth official").
+ORDINAL_VALUES = (
+    {w: i for i, w in enumerate("first second third fourth fifth sixth seventh eighth ninth tenth "
+                                "eleventh twelfth thirteenth fourteenth fifteenth sixteenth "
+                                "seventeenth eighteenth nineteenth".split(), 1)}
+    | {w: 10 * i for i, w in enumerate("twentieth thirtieth fortieth fiftieth sixtieth seventieth "
+                                       "eightieth ninetieth".split(), 2)}
+    | {"hundredth": 100}
+    | {f"{w}{g}": i for i, w in enumerate("primer segund tercer cuart quint sext séptim octav noven "
+                                          "décim".split(), 1) for g in "oa"}
+    | {"primer": 1, "tercer": 3, "septimo": 7, "septima": 7, "decimo": 10, "decima": 10}
+)
+_ORD_LEADS = ("first", "second", "primer", "primero", "primera", "segundo", "segunda")
+_ORD_TAIL = _alt(w for w, n in ORDINAL_VALUES.items() if 1 <= n <= 9 and w.isascii() and w.endswith(
+    ("st", "nd", "rd", "th")))
+ORDINAL = re.compile(
+    rf"\b(?:{_TENS}[\s-]+{_ORD_TAIL}"
+    rf"|{_alt(w for w in ORDINAL_VALUES if w not in _ORD_LEADS)}"
+    rf"|{_alt(_ORD_LEADS)}(?=[\s-]+minut[eo]\b))\b",
+    re.I,
+)
+NOT_AN_ORDINAL = re.compile(
+    r"\b(?:final|attacking|defensive|middle|own|opposition)[\s-]+third\b|\bthird[\s-]+man\b"
+    r"|\bfourth\s+official\b|\b(?:a|one)\s+(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+of\b"
+    r"|\btercer\s+hombre\b|\bcuarto\s+de\b|\bd[ée]cimas?\s+de\b|\btercera\s+parte\b",
+    re.I,
+)
+DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters|metro|metros)"
+SPEED_UNITS = r"(?:km/h|kph|kmh|k\.p\.h|(?:km|kil[oó]met(?:re|er|ro)s?)\s+(?:per|an|por)\s+(?:hour|hora))"
+DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{DISTANCE_UNITS}\b", re.I)
+SPEED_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})[\s-]*{SPEED_UNITS}\b", re.I)
+# Units no fact of ours is in: every distance we publish is in metres and every speed in km/h, so
+# "12 yards" is not 12 m and "33 mph" is not 33 km/h. A number in one of them is refused, whatever
+# its digits, rather than converted: the writer restates it in our unit.
+UNPUBLISHED_UNITS = (
+    # A pitch marking ("the six-yard box", "the 12-yard spot") is a name, not a measurement: its
+    # number is checked as a bare number, as before.
+    r"(?:yards?(?![\s-]+(?:box|line|area|spot|mark)\b)|yds?|yardas?|feet|foot|ft|pies?|inch(?:es)?"
+    r"|mph|m\.p\.h|mps|m/s|knots?|nudos?|miles?|millas?"
+    r"|(?:km|kil[oó]met(?:re|er|ro)s?)(?!/h)(?!\s+(?:per|an|por)\s+(?:hour|hora)\b)"
+    r"|(?:m|met(?:re|er|ro)s?)\s+(?:per|por)\s+(?:second|segundo))"
+)
+UNPUBLISHED_NUMBER = re.compile(
+    rf"(?P<number>{NUMBER_PATTERN})[\s-]*(?P<unit>{UNPUBLISHED_UNITS})(?![\w/])", re.I
+)
 # An area: "900 m²", "900m2", "900 sq m", "900 square metres" (a shape fact's unit, m²).
 AREA_UNITS = r"(?:m²|m2|sq\.?\s*m|square\s+(?:metres|meters|metre|meter))"
 AREA_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{AREA_UNITS}(?!\w)", re.I)
@@ -70,15 +174,15 @@ PLAYERS_NUMBER = re.compile(
     r"(?:players|men|outfielders|outfield\s+players)\b", re.I,
 )
 MINUTE_NUMBER = re.compile(
-    rf"(?:\bminute\s+(?P<minute_a>{NUMBER_PATTERN})\b|"
-    rf"(?P<minute_b>{NUMBER_PATTERN})\s+minutes?\b|"
+    rf"(?:\bminut[eo]\s+(?P<minute_a>{NUMBER_PATTERN})\b|"
+    rf"(?P<minute_b>{NUMBER_PATTERN})\s+minut[eo]s?\b|"
     rf"(?P<minute_c>{NUMBER_PATTERN})'|"
-    rf"\b(?P<minute_d>{NUMBER_PATTERN})(?:st|nd|rd|th)\s+minute\b)",
+    rf"\b(?P<minute_d>{NUMBER_PATTERN})(?:st|nd|rd|th)[\s-]+minut[eo]\b)",
     re.I,
 )
 SECOND_NUMBER = re.compile(
     rf"(?:\bsecond\s+(?P<second_a>{NUMBER_PATTERN})\b|"
-    rf"(?P<second_b>{NUMBER_PATTERN})\s+seconds?\b|"
+    rf"(?P<second_b>{NUMBER_PATTERN})\s+(?:second|segundo)s?\b|"
     rf":(?P<second_c>\d{{1,2}})(?!\d))",
     re.I,
 )
@@ -100,6 +204,36 @@ FOUND = re.compile(
     rf"\b(?:finds|found|picks out|picked out)\s+(?P<player>{PLAYER_ID})\b",
     re.I,
 )
+# A distance or speed the sentence gives to one player must be a value of that player's own cited
+# events (or a fact scoped to him), not just of some cited event: "h7's 30 m pass" is false when
+# h7's pass was the 12 m one and 30 m was h4's. A binding starts only at these forms, with the first
+# distance or speed at most two words on: a possessive ("h7's crisp 30 m"), "h7, whose ... 30 m", a
+# kicking verb with the player as its subject ("h7 plays a curling 30 m pass", "h7 juega un pase de
+# 30 metros"), and "his/her" when exactly one player is named before it in the sentence (or, if
+# none is, in the sentence before). A possessive, "whose" or "his" binds only its own noun phrase, the
+# first number ("h4 receives h7's 12 m pass and plays a 30 m pass" binds only 12, to h7); a kicking
+# verb binds every distance and speed up to the next player id, ";", "and"/"y" or the end of the
+# sentence ("h7 plays a 12 m pass at 40 km/h"). Any other wording (passives,
+# "from h7", "de h7") binds nothing and the number is checked against all the cited events.
+_KICKS = (
+    "plays|played|hits|hit|sends|sent|fires|fired|drives|drove|strikes|struck|clips|clipped|lofts"
+    "|lofted|threads|threaded|curls|curled|whips|whipped|pings|pinged|rolls|rolled|slides|slid"
+    "|shoots|shot|passes|passed|pasa|pasó|juega|jugó|envía|envió|envia|envio|lanza|lanzó|dispara"
+    "|disparó|golpea|golpeó|manda|mandó"
+)
+_GAP = r"(?:[^\W\d_]+\s+)"
+_UNIT_NUMBER_NEXT = rf"(?={NUMBER_PATTERN}[\s-]*(?:{DISTANCE_UNITS}|{SPEED_UNITS})\b)"
+BOUND_TO_PLAYER = re.compile(
+    rf"\b(?P<player>{PLAYER_ID})(?:['’]s\s+{_GAP}{{0,2}}|,?\s+whose\s+{_GAP}{{0,2}}"
+    rf"|(?P<verb>\s+(?:{_KICKS})\s+(?:(?:a|an|the|his|her|el|la|un|una|su)\s+)?{_GAP}{{0,2}})){_UNIT_NUMBER_NEXT}",
+    re.I,
+)
+BOUND_TO_PRONOUN = re.compile(rf"\b(?:his|her)\s+{_GAP}{{0,2}}{_UNIT_NUMBER_NEXT}", re.I)
+# Where a binding's clause ends: the next player id, a semicolon, or the end of the sentence.
+CLAUSE_END = re.compile(rf"\b{PLAYER_ID}\b|;|\b(?:and|y|but|pero|then|luego)\b|[.!?](?!\d)|$", re.I)
+# Dots inside a unit ("k.p.h.") end no clause or sentence: they are masked before either is found.
+UNIT_DOTS = re.compile(r"\b[km]\.p\.h\b\.?", re.I)
+SENTENCE = re.compile(r"(?:[^.!?;]|\.(?=\d))+")
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
 FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
@@ -113,6 +247,69 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+
+# The plausibility gate: a ball speed a claim states must be one the ball can reach in this world:
+# GROUNDING P3's bound, the one the live path already drops a faster detection's speed at
+# (ninety/match/detected.py, MAX_BALL_KMH; a design bound for our engine, not a population limit).
+# A faster reading is vision's, not the ball's (a ground projection of a ball in the air, or a
+# misread frame), and is refused, never rounded down. No bound below it is sourced for a pass
+# (docs/LESSONS.md, lesson 262).
+MAX_BALL_KMH = detected.MAX_BALL_KMH
+# Vision's ball speed, measured once on the frozen test set (#331, docs/eval/speed-report-freeze.md):
+# for a pass along the ground, n = 35, median error 3.5 km/h, p90 7.7 (vision reads 4.1 slow on
+# average). A lofted pass is not measured (one, read at 229.7 for a true 93.5: its ground track is not
+# its flight) and no shot was matched. So a detected speed may be said only for a pass along the ground,
+# with that band and never above MAX_BALL_KMH; any other detected speed is held, as a claim on an unsure
+# detection is.
+# - The band, SPEED_ERROR_KMH, is design: the p90 rounded up, so about 9 in 10 of the measured passes
+#   were within it (in-sample, n = 35). The speed is said as vision read it, the bias not corrected:
+#   shifting it would say a number no event holds.
+# - Which pass is along the ground: #331 split its pairs by the TRUE ball height, which the live path
+#   never has. Vision does not mark it yet (planned: an event's `lofted`, from its flight fit), and a
+#   band measured by true height does not hold for vision's own flag until it is measured by that flag
+#   (LOFTED_FLAG_MEASURED). Until then every detected speed is held (fail closed); a missing `lofted` is
+#   held too.
+SPEED_MEASURED = True
+SPEED_ERROR_KMH = 8
+# A speed as the screens find it to band (web/viewer/src/speed.ts, ninety/agents/onair.SPEED_TEXT).
+SHOWN_SPEED = re.compile(r"\d+(?:\.\d+)?\s*(?:km/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)\b", re.I)
+LOFTED_FLAG_MEASURED = False
+WITHOUT_SPEED = "state it without the speed"  # how a speed reason ends: what the writer is asked to do
+# Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
+# confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
+# ones 0.447 to 0.985. A claim that names a team is held unless every detected event it cites had
+# its side told above the highest wrong side, 0.96. This is no guarantee: it is the maximum of 5
+# wrong sides, so a new wrong side would exceed it about 1 time in 6 (exchangeability), and it was
+# measured on passes only, yet applies to every event. It holds most team claims on today's vision
+# (9 of the 11 right sides too), which is the point until the side is told reliably (#200, #202).
+# Re-measure when the side decision changes.
+MIN_TEAM_CONFIDENCE = 0.96
+# A claim that names a side, in English or Spanish (ninety/personalizer/core.TEAM_WORDS): "home",
+# "away", "the hosts", "the visitors", "the visiting side", "local", "visitantes", "los de casa".
+# It errs on holding: "away from goal" is held too.
+TEAM_NAMED = re.compile(
+    r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
+
+
+# A goal's side read from which of the broadcast scorebug's digits changed (condensed.scorebug_sides).
+SCOREBUG_SIDE = "scorebug"
+
+
+def side_known(event: Mapping) -> bool:
+    """Whether a team may be named from this event: a ground-truth event (no detection confidence),
+    or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
+    from an event (the template graphics, the Describer) asks this, as the confidence gate does. A
+    shape fact (ninety/intel/shape.py) carries the least sure side of the players it was computed
+    from, gated the same way."""
+    if event.get("type") == "shape":
+        side = event.get("team_confidence")
+        return side is not None and side > MIN_TEAM_CONFIDENCE
+    if event.get("confidence") is None:
+        return True
+    if event.get("team_source") == SCOREBUG_SIDE:  # a goal sided by its score change (condensed.py)
+        return True
+    side = event.get("team_confidence")
+    return side is not None and side > MIN_TEAM_CONFIDENCE
 
 
 @dataclass
@@ -133,8 +330,41 @@ def _normalize_clock(clock: str) -> str:
     return f"{minute.zfill(2)}:{second.zfill(2)}"
 
 
+def measured_speed(event: dict) -> bool:
+    """Whether a detection's ball speed is one vision's measured error covers (SPEED_MEASURED): a pass
+    vision marks as along the ground, once the band is measured by that mark (LOFTED_FLAG_MEASURED)."""
+    return (SPEED_MEASURED and LOFTED_FLAG_MEASURED and event.get("type") == "pass"
+            and event.get("lofted") is False)
+
+
+def sayable_speed(event: dict) -> bool:
+    """Whether a graphic or line may state the event's ball speed: one the ball can reach, and either
+    the simulator's or a detection's that vision's measured error covers (measured_speed). A screen
+    says it with its band (manifest.speed, web/viewer/src/speed.ts)."""
+    return plausible_speed(event) and (event.get("confidence") is None or measured_speed(event))
+
+
+def plausible_speed(event: dict) -> bool:
+    """Whether the event's ball speed is one the ball can reach (MAX_BALL_KMH): a graphic or a line
+    states the speed only then, and says the rest without it."""
+    speed = event.get("ball_speed_kmh")
+    return speed is not None and float(speed) <= MAX_BALL_KMH
+
+
+def _implausible_speed(value: float, evidence: list[dict]) -> str | None:
+    """Why a stated ball speed no ball can reach is refused: every cited event with that speed is
+    beyond MAX_BALL_KMH. None when one of them is possible."""
+    with_it = [e for e in evidence
+               if e.get("ball_speed_kmh") is not None and float(e["ball_speed_kmh"]) == value]
+    if not with_it or any(plausible_speed(e) for e in with_it):
+        return None
+    return (f"implausible speed: {value:g} km/h is faster than the ball can travel (at most "
+            f"{MAX_BALL_KMH:g} km/h): {WITHOUT_SPEED}")
+
+
 def _number_field(text: str, start: int) -> str | None:
     for field_name, pattern in (
+        ("unpublished", UNPUBLISHED_NUMBER),
         ("area_m2", AREA_NUMBER),
         ("players", PLAYERS_NUMBER),
         ("distance_m", DISTANCE_NUMBER),
@@ -149,6 +379,47 @@ def _number_field(text: str, start: int) -> str | None:
                 if number_start == start:
                     return field_name
     return None
+
+
+def _bound_players(text: str) -> dict[int, str]:
+    """Where a distance or speed is given to one player (BOUND_TO_PLAYER, BOUND_TO_PRONOUN): each
+    such number's start in `text`, and the player's id."""
+    anchors = [(m.end(), m.group("player").lower(), m.group("verb") is not None)
+               for m in BOUND_TO_PLAYER.finditer(text)]
+    masked = UNIT_DOTS.sub(lambda m: "x" * len(m.group()), text)
+    sentences = list(SENTENCE.finditer(masked))
+    for k, sentence in enumerate(sentences):
+        for m in BOUND_TO_PRONOUN.finditer(text, sentence.start(), sentence.end()):
+            before = set(PLAYER.findall(masked[sentence.start():m.start()].lower()))
+            if not before and k:
+                before = set(PLAYER.findall(sentences[k - 1].group().lower()))
+            if len(before) == 1:
+                anchors.append((m.end(), before.pop(), False))
+    bound: dict[int, str] = {}
+    for start, player, verb in sorted(anchors):
+        # A possessive, "whose" or pronoun binds its own noun phrase, the first number; a kicking
+        # verb binds its whole clause.
+        if not verb:
+            bound.setdefault(start, player)  # the anchor ends where its first number starts
+            continue
+        end = CLAUSE_END.search(masked, start).start()
+        for pattern in (DISTANCE_NUMBER, SPEED_NUMBER):
+            for m in pattern.finditer(text, start, end):
+                bound.setdefault(m.start("number"), player)
+    return bound
+
+
+def _player_values(evidence: list[dict], player: str, field_name: str) -> set[float]:
+    """The values of `field_name` in the cited events `player` made, and in the cited facts scoped
+    to him in that field's unit."""
+    return {
+        float(e[field_name]) for e in evidence
+        if not _is_fact(e) and e.get("player") == player and e.get(field_name) is not None
+    } | {
+        float(f["value"]) for f in evidence
+        if _is_fact(f) and f["unit"] == FIELD_UNITS[field_name]
+        and (found := FACT_PLAYER.match(str(f.get("scope", "")))) and found.group("player") == player
+    }
 
 
 def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) -> set[str]:
@@ -193,17 +464,53 @@ def _word_value(phrase: str) -> int:
     return total + current
 
 
+def _es_value(phrase: str) -> int:
+    """The value of one well-formed Spanish number in words (ES_WORD_NUMBER matched it)."""
+    total = current = 0
+    for word in re.findall(r"[^\W\d_]+", phrase.lower()):
+        if word == "mil":
+            total, current = total + max(current, 1) * 1000, 0
+        elif word != "y":
+            current += ES_VALUES[word]
+    return total + current
+
+
+def _ordinal_digits(m: re.Match) -> str:
+    """An ordinal in words as its digit form: "seventh" is "7th", "twenty-first" is "21st"."""
+    *tens, last = re.split(r"[\s-]+", m.group().lower())
+    n = sum(WORD_VALUES[w] for w in tens) + ORDINAL_VALUES[last]
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
 def spelled_as_digits(text: str) -> str:
-    """The text with every number written in words replaced by its digits ("fifty km/h" becomes
-    "50 km/h"), so the number checks read it like any other."""
-    idioms = [range(m.start(), m.end()) for m in NOT_A_COUNT.finditer(text)]
+    """The text with every number written in words, English or Spanish, replaced by its digits
+    ("fifty km/h" and "cincuenta km/h" become "50 km/h", "his seventh pass" becomes "his 7th
+    pass"), so the number checks read it like any other."""
+    def spans(pattern: re.Pattern, text: str) -> list[range]:
+        return [range(m.start(), m.end()) for m in pattern.finditer(text)]
+
+    not_ordinals = spans(NOT_AN_ORDINAL, text)
+    text = ORDINAL.sub(
+        lambda m: m.group() if any(m.start() in s for s in not_ordinals) else _ordinal_digits(m), text
+    )
+    idioms = spans(NOT_A_COUNT, text)
 
     def digits(m: re.Match) -> str:
         if any(m.start() in span for span in idioms):
             return m.group()
         return str(_word_value(m.group()))
 
-    return WORD_NUMBER.sub(digits, text)
+    text = WORD_NUMBER.sub(digits, text)
+    idioms = spans(NOT_A_COUNT, text)
+
+    def es_digits(m: re.Match) -> str:
+        if any(m.start() in span for span in idioms):
+            return m.group()
+        if m.group().lower() == "once" and not _ES_ONCE.match(text, m.start()):
+            return m.group()  # the English adverb
+        return str(_es_value(m.group()))
+
+    return ES_WORD_NUMBER.sub(es_digits, text)
 
 
 def _unit_follows(text: str, end: int, unit: str) -> bool:
@@ -371,6 +678,7 @@ def check(
     claim: Claim,
     known: dict[str, dict],
     roster: Iterable[Mapping | str] | None = None,
+    play: bool = True,
 ) -> Verdict:
     reasons = []
     if not claim.evidence:
@@ -393,12 +701,18 @@ def check(
             reasons.append(f"clock {clock} is not a cited clock")
     text = spelled_as_digits(claim.text)
     clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(text)]
+    bound = _bound_players(text)
     for match in NUMBER.finditer(text):
         if any(match.start() in span for span in clock_spans):
             continue
         value = float(match.group("n"))
         expected_field = _number_field(text, match.start())
-        if expected_field:
+        if expected_field == "unpublished":
+            reasons.append(
+                f"number {match.group()} is in a unit the evidence does not use: "
+                "state distances in metres and speeds in km/h"
+            )
+        elif expected_field:
             values = {
                 float(event[name])
                 for event in evidence
@@ -417,6 +731,12 @@ def check(
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
+            elif expected_field == "ball_speed_kmh" and (why := _implausible_speed(value, evidence)):
+                reasons.append(why)
+            elif (player := bound.get(match.start())) and expected_field in FIELD_UNITS and (
+                value not in _player_values(evidence, player, expected_field)
+            ):
+                reasons.append(f"number {match.group()} is not a cited {expected_field} of {player}")
         elif value not in allowed and not any(
             float(f["value"]) == value and _unit_follows(text, match.end(), str(f["unit"]))
             for f in evidence
@@ -452,21 +772,158 @@ def check(
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
     reasons += shape_reasons(text, evidence)
+    if play:  # off only to replay a recording made before these checks (ninety/agents/workflow.py)
+        reasons += play_reasons(claim.text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
 
 
+# Words about play that a cited fact must show (Kian's blind labels, docs/eval/factcheck-human-labels.md).
+# A long ball is a pass of 32 m or more: Opta's 35 yards (GROUNDING I11, *verify*).
+LONG_BALL_M = 32
+LONG_BALL = re.compile(r"\blong\s+(?:balls?|pass(?:es)?)\b", re.I)
+# Play under pressure: said only with a cited pressure event (an opponent closing the ball down).
+UNDER_PRESSURE = re.compile(
+    r"\b(?:despite|under|amid)\s+(?:the\s+|heavy\s+|intense\s+|their\s+|sustained\s+)?pressure\b"
+    r"|\bpressured\b", re.I,
+)
+# A connective that orders two moments in time. Joining an interception to the very pass it cut out
+# makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
+# the interception where the ball arrives.
+# "then" is not one: "cut out by a8, then a8 passes" orders two acts, and reading it would reject that
+# true form, so a claim that says the same act twice joined by "then" is not caught (a known gap).
+BEFORE_AFTER = re.compile(
+    r"\b(?:after|before|following|follow(?:s|ed)(?:\s+by)?|precede(?:s|d)(?:\s+by)?)\b", re.I
+)
+WINS_IT = re.compile(
+    r"intercept|\bcut(?:s|ting)?\s+(?:it\s+)?out\b|\b(?:wins?|won|winning)\s+(?:it|the\s+ball)\b", re.I
+)
+A_PASS = re.compile(r"\bpass(?:es|ed)?\b", re.I)
+
+
+def _same_act(evidence: list[dict]) -> list[tuple[dict, dict]]:
+    """(pass, interception) pairs that are one act: a cited pass cut out by a player, and his cited
+    interception as the next cited event after it."""
+    order = sorted((e for e in evidence if e.get("type")),
+                   key=lambda e: (e.get("minute") or 0, e.get("clock") or ""))
+    pairs = []
+    for n, p in enumerate(order[:-1]):
+        nxt = order[n + 1]
+        if (p.get("type") == "pass" and p.get("outcome") == "fail" and p.get("interceptor")
+                and nxt.get("type") == "interception" and nxt.get("player") == p["interceptor"]):
+            pairs.append((p, nxt))
+    return pairs
+
+
+def play_reasons(text: str, evidence: list[dict]) -> list[str]:
+    """What a claim says of the play that its cited facts must show."""
+    reasons = []
+    if LONG_BALL.search(text) and not any(
+        e.get("type") == "pass" and (e.get("distance_m") or 0) >= LONG_BALL_M for e in evidence
+    ):
+        reasons.append(f"a long ball is a pass of {LONG_BALL_M} m or more: no cited pass is")
+    if UNDER_PRESSURE.search(text) and not any(e.get("type") == "pressure" for e in evidence):
+        reasons.append("play under pressure is said, but no cited event is a pressure event")
+    for p, i in _same_act(evidence):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            for m in BEFORE_AFTER.finditer(sentence):
+                one, other = _ordered(sentence, m)
+                if ((_names_cut(one, p) and _names_pass(other, p))
+                        or (_names_pass(one, p) and _names_cut(other, p))):
+                    word = m.group().lower()
+                    reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {word} the other")
+                    return reasons
+    return reasons
+
+
+def _ordered(sentence: str, m: re.Match) -> tuple[str, str]:
+    """The two things a connective orders: either side of it, or, when it opens the sentence ("After
+    h7's pass, a8 intercepts"), its own clause and the rest."""
+    left, right = sentence[: m.start()], sentence[m.end():]
+    if left.strip():
+        return left, right
+    head, _, rest = right.partition(",")
+    return head, rest
+
+
+def _names_pass(part: str, p: dict) -> bool:
+    """This part speaks of the cut-out pass itself, as a thing ("h7's pass", "the pass from h7"), not of
+    its passer passing again ("h7 passes to h9" is another act)."""
+    who = re.escape(p["player"])
+    return re.search(rf"(?<!\w){who}['’]s\b[^,;.]*?\bpass\b|\bpass\s+(?:by|from)\s+{who}(?!\w)", part,
+                     re.I) is not None
+
+
+def _names_cut(part: str, p: dict) -> bool:
+    """This part is the interception alone: a word for it, and not the pass it cut out by its passer."""
+    return bool(WINS_IT.search(part)) and re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part) is None
+
+
+# The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said
+# of: a "rocket" only of a ROCKET or a THUNDERBOLT (a screamer that is also a rocket), and so on.
+# Words for what vision does not measure yet (where the ball crossed the goal mouth, the woodwork)
+# or that no number defines (worldie) may be said of no moment (docs/eval/highlights-plan.md).
+LABEL_WORDS = tuple((re.compile(p, re.I), frozenset(labels)) for p, labels in (
+    (r"\bthunderbolts?\b", ("THUNDERBOLT",)),
+    (r"\bscreamers?\b", ("SCREAMER", "THUNDERBOLT")),
+    (r"\blong[\s-]ranger?\b|\bfrom\s+(?:distance|range)\b", ("LONG-RANGE", "SCREAMER", "THUNDERBOLT")),
+    (r"\brockets?\b|\brocketed\b|\bpiledrivers?\b|\bblistering\b|\bthunderous\b|\bfierce\b|\bpowerful\b"
+     r"|\bhammer(?:ed|s)?\b|\bblast(?:ed|s)?\b|\bnet[\s-]?buster\b", ("ROCKET", "THUNDERBOLT")),
+    (r"\breflex(?:es)?\b|\bpoint[\s-]blank\b", ("REFLEX SAVE",)),
+    (r"\btap[\s-]?in\b|\btapped\s+in\b|\bpoacher'?s?\b", ("TAP-IN",)),
+    (r"\btop\s+bins\b|\btop\s+corner\b|\bbottom\s+corner\b|\bupper\s+90\b|\bcrossbar\b|\boff\s+the\s+(?:bar|post)\b"
+     r"|\bwoodwork\b|\bpost\b|\bworldie\b|\bwonder[\s-]?goal\b|\bgolazo\b|\bbanger\b|\bbelter\b", ()),
+))
+
+
+def label_reasons(text: str, label: str) -> list[str]:
+    """A caption may use a fan's word only of a moment the code gave that label: what earns it is
+    a measured number (ninety/highlights.py), never the writer's taste."""
+    return [f"'{m.group()}' is not said of a {label}: the code gave this moment no such label"
+            for pattern, labels in LABEL_WORDS if label not in labels
+            for m in [pattern.search(text)] if m]
+
+
+# How the attack started (ninety/highlights.py, `origin`; the plan's Amendment 2). A caption may name
+# a restart only of a moment whose origin is that restart. Counter-attacks are never given (the rule
+# does not try them), so their words are always refused.
+SET_PIECES = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off")
+ORIGIN_WORDS = tuple((re.compile(p, re.I), frozenset(origins)) for p, origins in (
+    # "corner" the restart, not a part of the goal ("top corner", "far corner of the net")
+    (r"(?<!top )(?<!far )(?<!near )(?<!upper )(?<!lower )(?<!bottom )\bcorners?(?:[\s-]kicks?)?\b"
+     r"(?!\s+of\s+the)", ("corner",)),
+    (r"\bthrow[\s-]?ins?\b", ("throw_in",)),
+    (r"\bgoal[\s-]?kicks?\b", ("goal_kick",)),
+    (r"\bkick[\s-]?offs?\b", ("kick_off",)),
+    (r"\bset[\s-]?pieces?\b|\bdead[\s-]ball\b|\brestarts?\b", SET_PIECES),
+    (r"\bfree[\s-]?kicks?\b", ("free_kick",)),
+    (r"\bpenalt(?:y|ies)\b|\bspot[\s-]kicks?\b|\bfrom\s+the\s+spot\b", ("penalty_kick",)),
+    (r"\bcounter(?:[\s-]?attack(?:s|ing)?)?\b|\bon\s+the\s+break\b", ()),
+))
+
+
+def origin_reasons(text: str, origin: str | None) -> list[str]:
+    """A caption may say how the attack started only as the code found it (ninety/highlights.py)."""
+    said = origin.replace("_", " ") if origin else "not seen"
+    return [f"'{m.group()}' does not fit how this attack started ({said})"
+            for pattern, origins in ORIGIN_WORDS if origin not in origins
+            for m in [pattern.search(text)] if m]
+
+
 def confidence_gate(
-    claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE
+    claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE, team_view: bool = False
 ) -> Verdict:
     """Holds back a claim that cites a detected event the detector is not sure of.
 
     Only detected events carry a confidence (ninety/match/facts.compact); ground-truth events in
     the pre-M1 recordings have none and pass. A shape fact (ninety/intel/shape.py) is unsure when
-    too few of the team were tracked for it (`confident` false), and holds a claim the same way.
-    The verdict's category, `low_confidence`, makes the claim held, not rejected
-    (ninety/agents/contracts.status_for): the claim may be right, but nothing airs until a
-    confident detection supports it.
+    too few of the team were tracked for it (`confident` false), and holds a claim the same way. A
+    claim that names a team ("home", "away") is held too unless every detected event it cites had
+    its side told with `team_confidence` above MIN_TEAM_CONFIDENCE; an unknown side counts as
+    unsure. With `team_view` (a variant written from one club's side, whatever its words: "our
+    side", "they") every claim is a team claim. The verdict's category, `low_confidence`, makes the
+    claim held, not rejected (ninety/agents/contracts.status_for): the claim may be right, but
+    nothing airs until a confident detection supports it.
     """
     reasons = [
         f"event {i} was detected with confidence {known[i]['confidence']:.2f}, "
@@ -479,6 +936,33 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
+    if any(True for _ in SPEED_NUMBER.finditer(spelled_as_digits(claim.text))):
+        for i in claim.evidence:
+            event = known.get(i, {})
+            if (event.get("confidence") is not None and event.get("ball_speed_kmh") is not None
+                    and not measured_speed(event)):
+                why = ("it is not a pass" if event.get("type") != "pass" else
+                       "this pass was in the air" if event.get("lofted")
+                       else "this pass is not marked on the ground" if event.get("lofted") is None
+                       else "vision's ground mark is not measured yet")
+                reasons.append(f"event {i}'s ball speed is vision's, whose error is measured only for a pass "
+                               f"along the ground ({why}): {WITHOUT_SPEED}")
+        measured = any(measured_speed(known.get(i, {})) for i in claim.evidence)
+        stated = len(SPEED_NUMBER.findall(spelled_as_digits(claim.text)))
+        if measured and len(SHOWN_SPEED.findall(claim.text)) < stated:
+            # A screen bands only a speed in digits with one of its units (web/viewer/src/speed.ts): any
+            # other form ("sixty-one km/h", "61 kmh") would air with no band.
+            reasons.append(f"a measured speed is said in digits with km/h (\"61 km/h\"), so the screens can "
+                           f"give its band; else {WITHOUT_SPEED}")
+    if TEAM_NAMED.search(claim.text) or team_view:
+        for i in claim.evidence:
+            event = known.get(i, {})
+            side = event.get("team_confidence")
+            # A detected event (it has a confidence) whose side is unknown counts as unsure.
+            if not side_known(event):
+                told = "unknown" if side is None else f"{side:.2f}"
+                reasons.append(f"event {i}'s side was told with confidence {told}, not above "
+                               f"{MIN_TEAM_CONFIDENCE:.2f}: a claim naming a team waits for a surer side")
     return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)
 
 

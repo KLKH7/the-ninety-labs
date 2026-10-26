@@ -105,32 +105,47 @@ def _centred(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return [(x - cx, y - cy) for x, y in points]
 
 
-def assign(frames: Sequence[Mapping], team: str) -> dict[str, dict]:
-    """Each track of `team` seen in at least MIN_FRAMES sampled frames: its role, its share, and
-    in how many sampled frames it was seen."""
+def _rows(frames: Sequence[Mapping], team: str) -> list[tuple[list[str], list[tuple[float, float]]]]:
+    """The sampled frames of `team` with 2 to 11 tracked players: their ids and centred places."""
     sampled = [f for f in frames if int(f["frame"]) % STEP_FRAMES == 0] or list(frames)
     rows = []
     for f in sampled:
         own = [p for p in f["players"] if p["team"] == team]
         if 2 <= len(own) <= len(ROLES):
             rows.append(([p["id"] for p in own], _centred([_team_frame(team, p) for p in own])))
+    return rows
+
+
+def _places(rows, rounds: int) -> dict[str, tuple[float, float]]:
     refs = dict(zip(ROLES, _centred([TEMPLATE[r] for r in ROLES]), strict=True))
-    votes: dict[str, Counter] = defaultdict(Counter)
-    for rnd in range(ROUNDS + 1):
+    for _ in range(rounds):
         sums: dict[str, list[float]] = {r: [0.0, 0.0, 0.0] for r in ROLES}
-        last = rnd == ROUNDS
-        for ids, pts in rows:
+        for _ids, pts in rows:
             cost = [[(x - refs[r][0]) ** 2 + (y - refs[r][1]) ** 2 for r in ROLES] for x, y in pts]
             for k, col in enumerate(hungarian(cost)):
-                role = ROLES[col]
-                s = sums[role]
+                s = sums[ROLES[col]]
                 s[0] += pts[k][0]
                 s[1] += pts[k][1]
                 s[2] += 1
-                if last:
-                    votes[ids[k]][role] += 1
-        if not last:
-            refs = {r: (s[0] / s[2], s[1] / s[2]) if s[2] else refs[r] for r, s in sums.items()}
+        refs = {r: (s[0] / s[2], s[1] / s[2]) if s[2] else refs[r] for r, s in sums.items()}
+    return refs
+
+
+def places(frames: Sequence[Mapping], team: str) -> dict[str, tuple[float, float]]:
+    """Each role's reference place in `team`'s shape, relative to its centre, after ROUNDS rounds."""
+    return _places(_rows(frames, team), ROUNDS)
+
+
+def assign(frames: Sequence[Mapping], team: str) -> dict[str, dict]:
+    """Each track of `team` seen in at least MIN_FRAMES sampled frames: its role, its share, and
+    in how many sampled frames it was seen."""
+    rows = _rows(frames, team)
+    refs = _places(rows, ROUNDS)
+    votes: dict[str, Counter] = defaultdict(Counter)
+    for ids, pts in rows:
+        cost = [[(x - refs[r][0]) ** 2 + (y - refs[r][1]) ** 2 for r in ROLES] for x, y in pts]
+        for k, col in enumerate(hungarian(cost)):
+            votes[ids[k]][ROLES[col]] += 1
     out = {}
     for track, c in votes.items():
         seen = sum(c.values())
@@ -193,6 +208,31 @@ def who(
     return out
 
 
+def one_track_per_name(
+    people: Mapping[str, Mapping], spans: Mapping[str, tuple[float, float]]
+) -> dict[str, dict]:
+    """A name binds to one player at a time. Tracks named the same starter that are never on the
+    pitch together are one player's track broken in pieces, and keep it; two that are there at the
+    same time (a swap, or a misread) cannot both be him, so neither is named: each falls back to
+    what its role allows, and its sheet name stays known, so a sentence naming him is held."""
+    by: dict[tuple[str, str], list[str]] = {}
+    for track, w in people.items():
+        if w.get("name"):
+            by.setdefault((w["team"], w["name"]), []).append(track)
+    out = {track: dict(w) for track, w in people.items()}
+
+    def together(a: str, b: str) -> bool:
+        (a0, a1), (b0, b1) = spans[a], spans[b]
+        return a0 <= b1 and b0 <= a1
+
+    for tracks in by.values():
+        for track in tracks:
+            if any(other != track and together(track, other) for other in tracks):
+                out[track].update(name=None, number=None)
+                out[track]["say"] = say(out[track])
+    return out
+
+
 def say(w: Mapping) -> str:
     """How a sentence names the player: "Tomas Varick", "London Athletic's left-back", "a London Athletic
     defender", or "a London Athletic player"."""
@@ -209,4 +249,6 @@ def say(w: Mapping) -> str:
     return f"{article} {club} player"
 
 
-__all__ = ["CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "say", "who"]
+__all__ = [
+    "CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "one_track_per_name", "places", "say",
+    "who"]

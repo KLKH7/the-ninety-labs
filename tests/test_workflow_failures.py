@@ -3,6 +3,8 @@ and what must recover. Expected values are written here, not read from the table
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from ninety.eval import workflow_failures as wf
@@ -10,21 +12,24 @@ from ninety.match.facts import compact
 
 ROWS = {r["scenario"]: r for r in wf.rows()}
 BASE = ROWS["none"]
-KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(wf.m1_ground().events))}
+M1 = wf.m1_ground()
+MAIN, SIDE = M1.main, M1.side
+KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(M1.events))}
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    # The insight, then its seven variants re-checked (casual, club and player_focus in English;
-    # analyst, casual, club and player_focus in the stand-in's marked Spanish). player_focus is
-    # written because the detected pass names its passer's track: eight Judge calls.
-    "none": ("verified", None, 8, True, 0),
+    # The insight, then its five variants re-checked (casual and player_focus in English; analyst,
+    # casual and player_focus in the stand-in's marked Spanish). player_focus is written because the
+    # detected pass names its passer's track; no club variant, because the M1 clip's side was told at
+    # 0.529, too unsure to tell from a club's view (factcheck.side_known): six Judge calls.
+    "none": ("verified", None, 6, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
-    # The insight still airs; the in-process fallback gives the English variants (casual, club and
-    # player_focus), re-checked the same way, and no Spanish, which is held: four Judge calls.
-    "personalizer down": ("verified", None, 4, True, 0),
+    # The insight still airs; the in-process fallback gives the English variants (casual and
+    # player_focus), re-checked the same way, and no Spanish, which is held: three Judge calls.
+    "personalizer down": ("verified", None, 3, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
     "low confidence": ("held", "low_confidence", 0, False, 2),
@@ -46,7 +51,7 @@ def test_failure_row(name):
     assert set(row["templates"]) <= set(BASE["templates"])
     assert len(BASE["templates"]) - len(row["templates"]) == lost
     if lost:  # only the unsure detection's graphics are gone
-        assert all(f"-{wf.SIDE}-" in i for i in set(BASE["templates"]) - set(row["templates"]))
+        assert all(f"-{SIDE}-" in i for i in set(BASE["templates"]) - set(row["templates"]))
     if row["status"] == "held":
         assert any("stays" in step for step in row["fallback"])  # the trace says the template stayed
 
@@ -60,7 +65,7 @@ def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the
     assert row["insights"] == [i for i in BASE["insights"] if i["lang"] == "en"]
     assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
     # player_focus too: the detected pass names its passer's track.
-    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es", "club/es",
+    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es",
                                                                  "player_focus/es"]
 
 
@@ -82,7 +87,7 @@ def test_a_baseline_on_another_moment_than_the_main_pass_still_reads_its_claim()
     # The live baseline on M1 read "none" with a verified insight on screen: the Analyst had led
     # with another moment than the scripted main pass. Here it leads with the second pass.
     async def analyst(prompt: str) -> str:
-        return wf.picks(wf.SIDE, [wf.SIDE, wf.MAIN])
+        return wf.picks(SIDE, [SIDE, MAIN])
 
     other = wf.Scenario("none", "nothing (the baseline)", claim="verified",
                         override=lambda agent: {"analyst": analyst})
@@ -135,7 +140,7 @@ def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_cha
     # is refused, and the baseline fails.
     near_english = personalizer_writing(lambda text: text.replace("complete", "completes"))
     row = baseline_with(near_english)
-    assert len(row["variants_refused"]) == 4 and row["variants_english"] == []  # with player_focus
+    assert len(row["variants_refused"]) == 3 and row["variants_english"] == []  # with player_focus, no club
     assert all("reads as English" in r for r in row["variants_refused"])
     assert not wf.recovered(row, row)["every variant airs without a failure"]
     # The table measures what aired on its own: with the gate gone, the English airs and is caught.
@@ -143,14 +148,14 @@ def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_cha
 
     monkeypatch.setattr(cues, "reads_english", lambda text: False)
     row = baseline_with(near_english)
-    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4
+    assert row["variants_refused"] == [] and len(row["variants_english"]) == 3
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
 def test_the_baseline_fails_when_the_spanish_profiles_are_left_out():
     row = baseline_with(personalizer_writing(lambda text: None))
     assert row["variants_refused"] == [] and row["variants_english"] == []
-    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "club/es", "player_focus/es"]
+    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "player_focus/es"]
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
@@ -158,7 +163,7 @@ def test_the_offline_spanish_is_spanish():
     assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
     assert BASE["variants_english"] == BASE["variants_missing"] == BASE["variants_refused"] == []
     spanish = [i["text"] for i in BASE["insights"] if i["lang"] == "es"]
-    assert spanish and all(text == wf.claim_in_spanish(wf.MAIN, KNOWN) for text in spanish)
+    assert spanish and all(text == wf.claim_in_spanish(MAIN, KNOWN) for text in spanish)
 
 
 def test_the_baseline_fails_when_a_spanish_profile_gets_english():
@@ -310,7 +315,7 @@ def test_every_variant_is_fact_checked_before_it_airs():
         from ninety.agents.contracts import Variant
 
         # Every persona gets a number the evidence does not hold.
-        return [Variant(p.persona, p.lang, claim.text.replace("42 km/h", "99 km/h"), tuple(claim.evidence))
+        return [Variant(p.persona, p.lang, re.sub(r"\d+ m\b", "99 m", claim.text), tuple(claim.evidence))
                 for p in profiles]
 
     result = minute(True, personalizer=inflating)
@@ -368,14 +373,14 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
 
     monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Signed(3600)))
     monkeypatch.setattr(workflow, "simulated_events", simulate)
-    m1 = {wf.MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
+    m1 = {MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
     built = {e["id"]: compact(e) for e in EVENTS}
     seed = (PASSES[0]["id"], PASSES[1]["id"], built)
     # The live models each scenario still calls: the Analyst in 4, the Tactician in 3; the
     # Challenger in 4 on the M1 clip, 3 on a seed (the low-confidence row, M1 only, has its Analyst
     # and Tactician injected).
     replies = {"moment-analyst": [], "tactician": [], "challenger": [], "judge": [SUPPORTED] * 60}
-    for (main, side, known), challenges in (((wf.MAIN, wf.SIDE, m1), 4), (seed, 3), (seed, 3)):
+    for (main, side, known), challenges in (((MAIN, SIDE, m1), 4), (seed, 3), (seed, 3)):
         replies["moment-analyst"] += [wf.picks(main, [main, side])] * 4
         replies["tactician"] += [wf.reply(wf.claim_on(main, known))] * 3
         replies["challenger"] += ['{"agree": true}'] * challenges
@@ -396,7 +401,7 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     personalizer_asked: list[str] = []
 
     def spanish(text: str) -> str:  # the claims here are wf.claim_on's, worded as claim_in_spanish's
-        return text.replace("complete a pass of", "completa un pase de").replace(" at ", " a ")
+        return text.replace("A completed pass of", "Un pase completado de").replace(" at ", " a ")
 
     @contextlib.asynccontextmanager
     async def published_ask(credential=None):
@@ -451,6 +456,14 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
     assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
+    # Which definition of each agent ran, in the data and in the report (lesson 216).
+    from ninety.agents import evidence, foundry
+
+    roles = {"ninety-moment-analyst", "ninety-tactician", "ninety-challenger", "ninety-judge",
+             "ninety-personalizer"}
+    assert body[evidence.KEY] == {n: e for n, e in foundry.load_registry().items() if n in roles}
+    data = evidence.read(tmp_path / "failure-table-live.json")[0]
+    assert evidence.read(tmp_path / "failure-table-live.md") == (data, "recorded")
 
 def test_the_worst_personalized_minute_fits_the_superstep_budget():
     # Three moments, both writers rejected on every draft but the Tactician's last, which airs and
@@ -480,3 +493,18 @@ def test_a_report_with_a_nan_is_refused_not_written(module):
     mod = importlib.import_module(f"ninety.eval.{module}")
     with pytest.raises(ValueError):
         mod.results({"rows": [{"x": float("nan")}]} if module == "agent_ablation" else [{"x": float("nan")}])
+
+
+def test_the_ground_picks_its_passes_by_what_they_are_not_by_id():
+    # A detected event's id is its place in the clip's order: a new kind of event (a possession
+    # change, #289) renumbers every event after it. The ground must still pick the same two passes.
+    events = [dict(e) for e in M1.events]
+    first = next(i for i, e in enumerate(events) if e["id"] == MAIN)
+    planted = {**events[first], "type": "possession_change", "outcome": None, "t": events[first]["t"] + 0.1}
+    shifted = events[:first + 1] + [planted] + events[first + 1:]
+    for n, e in enumerate(shifted, start=1):
+        e["id"] = f"v{n:05d}"
+    g = wf.ground_of("m1", shifted)
+    by_id = {e["id"]: e for e in shifted}
+    assert (by_id[g.main]["t"], by_id[g.side]["t"]) == (66.88, 73.72)
+    assert g.side != SIDE  # the premise: the side pass's id did move

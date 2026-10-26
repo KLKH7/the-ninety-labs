@@ -9,7 +9,7 @@ apart, never pooled (deterministic and model-graded results stay apart):
 - model: the Companion's plan step, only with --live, which calls the published model and costs
   money (tell the Coordinator first). A request the model never answered is counted apart from
   a wrong plan (lesson 131). With --live the model's answers are also run over the stand-in match
-  (docs/eval/standin-insights-seed7.json), fact-checked and judged, and timed end to end.
+  (docs/eval/standin-insights-seed8076.json), fact-checked and judged, and timed end to end.
 
     uv run python -m ninety.eval.companion_tools --out docs/eval/companion-tools.json
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import time
 from collections import Counter
 from decimal import Decimal
@@ -64,16 +65,24 @@ def score(plans: list[tuple[dict, list[str] | None]]) -> dict:
     }
 
 
-async def model_plans(questions: list[dict], ask) -> tuple[list, list[float]]:
+# Seconds between questions in a live run (*design*): the first run, asking back to back, met 48
+# rate-limit refusals (HTTP 429) from the student subscription's deployment, so one question at a
+# time, paced, measures the model rather than the quota. Not timed in any latency.
+PACE_S = 3.0
+
+
+async def model_plans(questions: list[dict], ask, pace: float = 0.0) -> tuple[list, list[float]]:
     out, ms = [], []
-    for q in questions:
+    for k, q in enumerate(questions):
+        if k and pace:
+            await asyncio.sleep(pace)
         names = cm_clubs(q)
         question = Question("eval", None, q["text"], 60.0 * (q["minute"] - 1) + 30)
         t0 = time.perf_counter()
         try:
             reply = await ask(cm.plan_prompt(question, _Clubs(names)))
             ms.append((time.perf_counter() - t0) * 1000)
-            body = json.loads(reply[reply.index("{") : reply.rindex("}") + 1])
+            body = cm.first_object(reply)  # the plan only, as the service reads it
             out.append((q, [c["name"] for c in cm._calls(body, _Clubs(names), q["minute"])]))
         except Exception:  # noqa: BLE001  an outage or malformed reply: not answered, counted apart
             out.append((q, None))
@@ -159,6 +168,57 @@ def code_follow_ups(questions: list[dict]) -> dict:
     return follow_up_quality(out, mi)
 
 
+def headline_fits(question: str, answer, mi) -> bool:
+    """Whether an answer's headline is the direct answer its question asks for: a player or club
+    (no number) for who or which, a number with its unit for how many or how fast, a place for where
+    (a number when no place was measured). Every number it shows is one the sentence says."""
+    from ninety.intel.teamsheet import SHORT
+
+    head, kind = answer.headline, cm.question_kind(question)
+    if head is None:
+        return kind is None
+    if any(n not in re.findall(r"\d+(?:\.\d+)?", answer.text) for n in re.findall(r"\d+(?:\.\d+)?", head)):
+        return False
+    if kind == "who":
+        sheet = {s["name"] for t in ("home", "away") for s in mi.fixture.as_dict()["sheets"][t]}
+        return not re.search(r"\d", head) and (
+            head in sheet or head in set(SHORT.values()) | set(mi.fixture.clubs.values()) or "'s " in head
+        )
+    if kind == "number":
+        return head[:1].isdigit()
+    if kind == "where":
+        return head.startswith(tuple(cm.CHANNEL_PHRASE.values())) or head[:1].isdigit()
+    return head[:1].isdigit()
+
+
+def code_headlines(questions: list[dict]) -> dict:
+    """Code's verified answers to each held-out question on the stand-in match: does the headline
+    fit the question's kind?"""
+    from ninety.intel.match_insights import MatchInsights
+
+    mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
+    rows, by = [], Counter()
+    for q in questions:
+        a, b = SEEDS[str(q["seed"])]
+        text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
+        r = asyncio.run(
+            cm.answer_match(Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1), mi)
+        )
+        if r.answer.status != "verified":
+            continue
+        kind = cm.question_kind(text) or "other"
+        fits = headline_fits(text, r.answer, mi)
+        by[(kind, fits)] += 1
+        rows.append({"question": text, "kind": kind, "headline": r.answer.headline, "fits": fits})
+    kinds = sorted({k for k, _ in by})
+    return {
+        "answers": len(rows),
+        "fit": sum(r["fits"] for r in rows),
+        "by_kind": {k: f"{by[(k, True)]}/{by[(k, True)] + by[(k, False)]}" for k in kinds},
+        "rows": rows,
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=Path("docs/eval/companion-tools.json"))
@@ -176,6 +236,7 @@ def main(argv: list[str] | None = None) -> None:
     }
     report["code"]["chosen"] = dict(Counter(t for _, c in code for t in c))
     report["code"]["follow_ups"] = code_follow_ups(questions)
+    report["code"]["headlines"] = code_headlines(questions)
     if args.live:
         report["model"] = asyncio.run(live(questions))
     args.out.write_text(json.dumps(report, indent=1) + "\n")
@@ -185,9 +246,16 @@ def main(argv: list[str] | None = None) -> None:
         "",
         "Generated by `uv run python -m ninety.eval.companion_tools`. Questions: "
         "[companion-tools-questions.json](companion-tools-questions.json), seeds 920001 and 920002, "
-        "labelled before any score. Code router only: the model's plan step needs a live run (not run "
-        "here; nothing was spent). The router's word lists and the questions were written by the same "
-        "author.",
+        "labelled before any score. "
+        + (
+            "The published model's plans and answers were scored too (below), at the cost it states. "
+            if "model" in report
+            else "Code router only: the model's plan step needs a live run (not run here; nothing was "
+            "spent). "
+        )
+        + "The router's word lists and the questions were written by the same author, and the position "
+        "words that send a who-plays question to the team sheet (lesson 239) were added after the first "
+        "live run's misses on these questions were read: the lineup rows are no longer held out.",
         "",
         f"- Code router: **{c['right']}/{c['answered']}** right ({c['accuracy']}).",
         f"- Follow-up suggestions on code's verified answers (stand-in match): "
@@ -195,6 +263,10 @@ def main(argv: list[str] | None = None) -> None:
         f"can answer and none repeats; {c['follow_ups']['answerable']} suggestions answerable, "
         f"{c['follow_ups']['repeats']} with a repeat, {c['follow_ups']['off_club']} about the other club.",
         "- By tool: " + ", ".join(f"{k} {v}" for k, v in c["by_tool"].items()),
+        f"- Headlines on code's verified answers (stand-in match): {c['headlines']['fit']}/"
+        f"{c['headlines']['answers']} are the direct answer the question's kind asks for (a name for "
+        "who, a number with its unit for how many, a place for where); by kind: "
+        + ", ".join(f"{k} {v}" for k, v in c["headlines"]["by_kind"].items()),
         "",
         "Wrong:",
         "",
@@ -212,8 +284,11 @@ def main(argv: list[str] | None = None) -> None:
             "- By tool: " + ", ".join(f"{k} {v}" for k, v in p["by_tool"].items()),
             f"- Plan latency: {m['plan_latency']}; answer end to end (plan, tools, answer, check, Judge): "
             f"{m['answer_latency']}.",
+            choice_line(m),
             f"- How answers ended on the stand-in match: {m['answers']} (code: the model's draft was "
-            "refused or failed, and code's checked answer was shown).",
+            "refused or failed, and code's checked answer was shown); "
+            f"{m.get('service_errors', 0)} of them because the service failed (counted apart: the "
+            "model's writing was not tested there).",
             f"- The agents, as pinned: {m['agents']}.",
             f"- Cost (estimated): {m['cost']}.",
         ]
@@ -223,7 +298,7 @@ def main(argv: list[str] | None = None) -> None:
         print("wrong:", w)
 
 
-STANDIN = QUESTIONS.parent / "standin-insights-seed7.json"  # ninety/eval/insight_standin.py, 20 minutes
+STANDIN = QUESTIONS.parent / "standin-insights-seed8076.json"  # ninety/eval/insight_standin.py, 20 minutes
 
 
 # Estimates for the Judge's calls, whose prompt the judge function builds: its instructions
@@ -257,15 +332,17 @@ async def live(questions: list[dict]) -> dict:
         used["calls"] += 1
         return await models.judge(claim, evidence)
 
-    plans, plan_ms = await model_plans(questions, ask)
+    plans, plan_ms = await model_plans(questions, ask, PACE_S)
     mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
     ends, ms, rows, ups = Counter(), [], [], []
     for q in questions:
+        await asyncio.sleep(PACE_S)
         a, b = SEEDS[str(q["seed"])]
         text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
         question = Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1)
         t0 = time.perf_counter()
         r = await cm.answer_match(question, mi, ask, judge, timeout=30.0)
+        code = await cm.answer_match(question, mi)  # code's own choice, for comparison
         ms.append((time.perf_counter() - t0) * 1000)
         end = f"{r.source}:{r.answer.status}"
         ends[end] += 1
@@ -278,6 +355,9 @@ async def live(questions: list[dict]) -> dict:
                 "text": r.answer.text,
                 "tools": [c["name"] for c in r.tools],
                 "reasons": list(r.reasons),
+                "label": q["tool"],
+                "chose": tool_of(r, mi),
+                "code_chose": tool_of(code, mi),
             }
         )
     usd = lc.price(lc.INPUT) * used["in"] + lc.price(lc.OUTPUT) * used["out"]
@@ -286,6 +366,10 @@ async def live(questions: list[dict]) -> dict:
         "plans": score(plans),
         "plan_latency": latency(plan_ms),
         "answers": dict(ends),
+        # Answers where the service itself failed (a rate limit, an outage): code answered, and the
+        # model's writing was never tested on them.
+        "service_errors": sum("model service error" in r["reasons"] for r in rows),
+        "choice": choice(rows),
         "answer_latency": latency(ms),
         "follow_ups": follow_up_quality(ups, mi),
         "rows": rows,
@@ -300,6 +384,45 @@ async def live(questions: list[dict]) -> dict:
             "how": "tokens at 4 characters a token (latency_cost.tokens); each Judge call adds its "
             "instructions and a reply at the sizes in companion_tools",
         },
+    }
+
+
+def choice_line(m: dict) -> str:
+    """The report's line on choice: the model picks a checked sentence; did it answer the question?"""
+    ch = m.get("choice")
+    if not ch:
+        return ""
+    mo, same, every = ch["model"], ch["code_on_same"], ch["code_all"]
+    return (
+        "- The model chooses which checked sentence answers the question (v4: it returns one of code's "
+        "say_as sentences word for word). Its choice came from the question's labelled tool in "
+        f"{mo['from_labelled_tool']}/{mo['answers']} of its aired answers; code's own choice on those "
+        f"questions: {same['from_labelled_tool']}/{same['answers']}; code on all questions: "
+        f"{every['from_labelled_tool']}/{every['answers']}."
+    )
+
+
+def tool_of(r, mi) -> str | None:
+    """Which tool the answer's first cited fact came from: each called tool is run alone again."""
+    if r.answer.status != "verified" or not r.answer.evidence:
+        return None
+    for c in r.tools:
+        if any(f["id"] == r.answer.evidence[0] for f in cm.run_tools(mi, [c])):
+            return c["name"]
+    return None
+
+
+def choice(rows: list[dict]) -> dict:
+    """How often the sentence chosen came from the tool the question was labelled with, for the
+    model's verified answers and, on the same questions, for code's."""
+    def score(key, which):
+        got = [r for r in rows if which(r) and r[key] is not None and r["label"] is not None]
+        return {"answers": len(got), "from_labelled_tool": sum(r[key] == r["label"] for r in got)}
+
+    return {
+        "model": score("chose", lambda r: r["end"] == "model:verified"),
+        "code_on_same": score("code_chose", lambda r: r["end"] == "model:verified"),
+        "code_all": score("code_chose", lambda r: True),
     }
 
 

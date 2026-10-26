@@ -5,6 +5,7 @@
 // short tone placed by `pan` says where the play is, and the browser's own voice says the line.
 // A seek or a pause stops the voice: nothing is said late.
 
+import { speakAloud } from "./speech";
 import type { AudioLine } from "./bundle";
 
 const TONE_HZ = 880; // design: a soft, high blip, apart from crowd noise
@@ -22,6 +23,7 @@ export class Narrator {
   private last = Number.NaN;
   private ctx: AudioContext | null = null;
   private current: AudioBufferSourceNode | null = null;
+  private speaking = false; // the browser's voice is ours: stop() never cuts the commentary's line
 
   constructor(
     private readonly lines: AudioLine[],
@@ -58,12 +60,14 @@ export class Narrator {
   stop() {
     this.current?.stop();
     this.current = null;
-    if (typeof speechSynthesis !== "undefined" && (speechSynthesis.speaking || speechSynthesis.pending)) {
+    if (this.speaking && typeof speechSynthesis !== "undefined" && (speechSynthesis.speaking || speechSynthesis.pending)) {
       speechSynthesis.cancel();
     }
+    this.speaking = false;
   }
 
   private audio(): AudioContext | null {
+    if (typeof navigator !== "undefined" && navigator.webdriver) return null; // automated: silent (speech.ts)
     if (!this.ctx && typeof AudioContext !== "undefined") this.ctx = new AudioContext();
     if (this.ctx?.state === "suspended") void this.ctx.resume();
     return this.ctx;
@@ -101,10 +105,7 @@ export class Narrator {
   }
 
   private speak(line: AudioLine) {
-    if (typeof speechSynthesis === "undefined") return;
-    const u = new SpeechSynthesisUtterance(line.spoken);
-    u.lang = "en-GB";
-    u.rate = 1.1;
-    speechSynthesis.speak(u);
+    this.speaking = true;
+    speakAloud(line.spoken, { lang: "en-GB", rate: 1.1 });
   }
 }

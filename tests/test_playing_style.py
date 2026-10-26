@@ -60,7 +60,8 @@ def test_channels_are_named_as_each_team_attacks():
 
 
 def test_a_channel_share_is_said_of_its_channel():
-    rows = style.passes([p("v1", 1, "home", 40, 60, 50, 60)] * 3 + [p("v4", 4, "home", 40, 10, 50, 10)])
+    # 16 passes, 75% and 25%: a share is said only over MIN_SHARE_PASSES (15) passes or more.
+    rows = style.passes([p("v1", 1, "home", 40, 60, 50, 60)] * 12 + [p("v4", 4, "home", 40, 10, 50, 10)] * 4)
     fact = {**style.channels(rows, "home", 1, 5, "London Athletic"), "clubs": CLUBS}
     known = {fact["id"]: fact}
     [text] = companion.code_texts(fact)
@@ -123,6 +124,16 @@ def test_one_two(gap, between, want):
         rows.append(p("x", 11, "home", 50, 30, 55, 40, player="h-t2", receiver="h-t3"))
     rows.append(p("b", 10 + gap, "home", 50, 30, 60, 32, player="h-t2", receiver="h-t1"))
     assert len(style.one_twos(style.passes(rows))) == want
+
+
+def test_a_pass_to_himself_and_back_is_no_one_two():
+    # The simulator logs a knock-on as a pass whose receiver is the passer (runs/u7: 22 of 265): two
+    # of them in a row looked like a one-two between a player and himself.
+    rows = [
+        p("a", 10, "home", 40, 30, 45, 30, player="h-t1", receiver="h-t1"),
+        p("b", 12, "home", 45, 30, 50, 31, player="h-t1", receiver="h-t1"),
+    ]
+    assert style.one_twos(style.passes(rows)) == []
 
 
 def test_style_questions_route_to_the_style_tool():

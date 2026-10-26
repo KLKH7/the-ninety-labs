@@ -16,9 +16,11 @@ and the phone hides the row.
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from ninety.intel.scene import FPS, TEAM_SIZE, TEAMS, minute_of
 
@@ -27,16 +29,25 @@ STEP_S = 1.0  # the stat's time scale, the tracked frames' smoothing (see the mo
 # (*design*: past that with the position error to spare) is a track jumping, not a player running.
 MAX_STEP_MPS = 12.0
 BIN_MIN = 5  # the phone's strips: one bar per five match minutes (*design*)
+# How far the tracked distance may sit from the truth, as the phone labels it ("±21%"): the worst
+# five-minute bin over every freeze-engine match graded (ninety/eval/team_distance_eval.py --calibrate,
+# docs/eval/team-distance.md).
+CALIBRATION = Path(__file__).with_name("team_distance_calibration.json")
 
 
-def _sampled(frames: Sequence[Mapping]) -> list[Mapping]:
-    step = round(STEP_S * FPS)
+def within_pct() -> int | None:
+    return json.loads(CALIBRATION.read_text())["within_pct"] if CALIBRATION.exists() else None
+
+
+def _sampled(frames: Sequence[Mapping], step_s: float = STEP_S) -> list[Mapping]:
+    step = round(step_s * FPS)
     return [f for f in frames if int(f["frame"]) % step == 0]
 
 
-def distance(frames: Sequence[Mapping], team: str) -> dict:
+def distance(frames: Sequence[Mapping], team: str, step_s: float | None = None) -> dict:
     """The team's tracked distance over the frames: metres, coverage, steps skipped as jumps."""
-    sampled = _sampled(frames)
+    step_s = STEP_S if step_s is None else step_s
+    sampled = _sampled(frames, step_s)
     last: dict[str, tuple[float, float, float]] = {}
     metres = 0.0
     jumps = 0
@@ -50,7 +61,7 @@ def distance(frames: Sequence[Mapping], team: str) -> dict:
             x, y = float(p["x"]), float(p["y"])
             prev = last.get(p["id"])
             last[p["id"]] = (t, x, y)
-            if prev is None or t - prev[0] > STEP_S * 1.5:
+            if prev is None or t - prev[0] > step_s * 1.5:
                 continue
             step = math.hypot(x - prev[1], y - prev[2])
             if step > MAX_STEP_MPS * (t - prev[0]):
@@ -66,7 +77,7 @@ def team_stats(frames: Sequence[Mapping]) -> dict:
     by_bin: dict[int, list[Mapping]] = defaultdict(list)
     for f in frames:
         by_bin[(minute_of(float(f["t"])) - 1) // BIN_MIN].append(f)
-    out: dict = {"from_footage": True, "bin_min": BIN_MIN, "distance": {}}
+    out: dict = {"from_footage": True, "bin_min": BIN_MIN, "within_pct": within_pct(), "distance": {}}
     for team in TEAMS:
         whole = distance(frames, team)
         bins = []
@@ -88,4 +99,4 @@ def team_stats(frames: Sequence[Mapping]) -> dict:
     return out
 
 
-__all__ = ["BIN_MIN", "MAX_STEP_MPS", "STEP_S", "distance", "team_stats"]
+__all__ = ["BIN_MIN", "CALIBRATION", "MAX_STEP_MPS", "STEP_S", "distance", "team_stats", "within_pct"]

@@ -20,13 +20,34 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, offside, overloads, pass_options, roles, shape, style
+from ninety.intel import (
+    ball_share,
+    counter_press,
+    line_breaks,
+    naming,
+    offside,
+    overloads,
+    pass_options,
+    passing,
+    physical,
+    roles,
+    scoring,
+    set_pieces,
+    shape,
+    shot_map,
+    style,
+)
+from ninety.intel import identity as identity_mod
 from ninety.intel import team_stats as team_stats_mod
-from ninety.intel.scene import TEAMS, Frames, xy
+from ninety.intel.scene import TEAMS, Frames, minute_of, xy
 from ninety.intel.teamsheet import Fixture
 
 BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
+HALF_MIN = 45  # Law 7: two halves of 45 minutes (GROUNDING I23)
+# The kinds a key moment is drawn from, each already a checked fact (GROUNDING I23, *design*).
+MOMENT_KINDS = ("goal", "shot", "counter", "one_two", "line_break")
+TOP_LINE_BREAKS = 3  # design: a window's key line breaks are its biggest three
 KIND_FACTS = ("line_break", "overload", "counter_press", "pass_options")
 
 
@@ -40,6 +61,14 @@ class MatchInsights:
     gates: dict = field(default_factory=dict)
     team_stats: dict = field(default_factory=dict)  # the phone's match stats (ninety/intel/team_stats.py)
     stats: dict = field(default_factory=dict)  # the Stats tab's grouped rows (ninety/intel/stats_table.py)
+    # A joined match's broadcast tracks (the ids its events name) -> what a fan may be told of each,
+    # through the camera join (ninety/intel/naming.broadcast_people); empty for a single camera.
+    broadcast: dict = field(default_factory=dict)
+    # Names from the player-ID feed (ninety/intel/identity.py), tactical and broadcast tracks: the
+    # bundle's line-up only. No fact, person record or statistic above reads them.
+    identity: dict = field(default_factory=dict)
+    identity_broadcast: dict = field(default_factory=dict)
+    identity_source: dict = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -49,17 +78,39 @@ class MatchInsights:
         events: Sequence[Mapping],
         fixture: Fixture,
         gate: Mapping | None = None,
+        association: Mapping[str, Mapping] | None = None,
+        score_reads: Sequence[Mapping] = (),
+        feed: identity_mod.Feed | None = None,
+        broadcast_frames: Sequence[Mapping] | None = None,
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
             raise ValueError(f"{clip}: frames must be source 'tracked', got {bad}")
         f = Frames(frames)
-        gate = dict(roles.gates() if gate is None else gate)
-        people = {}
-        for team in TEAMS:
-            assigned = roles.assign(f.frames, team)
-            for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
-                people[track] = roles.who(track, team, assigned, fixture, gate)
+        detected_events = list(events)  # as vision detected them, before any person is moved
+        broadcast: dict[str, dict] = {}
+        if association is not None:
+            # A joined match: the players are the tactical camera's tracks and the events name the
+            # broadcast's, two id spaces in which one id is two different men. Names come from the
+            # whole-pitch tracks (ninety/intel/naming.py), and every person an event names is moved
+            # to his tactical track before any fact reads him, or to none (lesson 259).
+            gate = dict(naming.gates() if gate is None else gate)
+            people = naming.people(f.frames, fixture, gate)
+            broadcast = naming.broadcast_people(association, people, fixture, gate)
+            events = naming.tactical_events(events, association, gate)
+        else:
+            gate = dict(roles.gates() if gate is None else gate)
+            people = {}
+            for team in TEAMS:
+                assigned = roles.assign(f.frames, team)
+                for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
+                    people[track] = roles.who(track, team, assigned, fixture, gate)
+            spans: dict[str, tuple[float, float]] = {}
+            for fr in f.frames:
+                for p in fr["players"]:
+                    t0, t1 = spans.get(p["id"], (fr["t"], fr["t"]))
+                    spans[p["id"]] = (min(t0, fr["t"]), max(t1, fr["t"]))
+            people = roles.one_track_per_name(people, spans)
         shapes = shape_drawings(f.frames)
         facts = {
             "line_break": line_breaks.line_breaks(events, f),
@@ -72,7 +123,7 @@ class MatchInsights:
                     **r,
                     "kind": "shape",
                     "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
-                    "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
+                    "also": shape_also(r),
                     "visual": {
                         "kind": "shape",
                         "minute": r["minute"],
@@ -88,34 +139,45 @@ class MatchInsights:
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
         facts["one_two"] = style.one_twos(facts["pass"])
+        # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
+        facts["possession"] = ball_share.possession_rows(events)
+        facts["territory"] = ball_share.territory_rows(f.frames)
+        facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
+        facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
+        facts["running"] = physical.rows(f.frames)  # each track's running, per minute (I22)
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
-        facts["goal"] = [
-            {
-                "id": f"goal:{e['id']}",
-                "kind": "goal",
-                "team": e["team"],
-                "minute": int(float(e["t"]) // 60) + 1,
-                "t": round(float(e["t"]), 2),
-                "event": e["id"],
-                "event_confidence": e.get("confidence"),
-                "team_confidence": e.get("team_confidence"),
-                "player": e.get("player"),
-                "confident": True,
-            }
-            for e in events
-            if e.get("type") == "goal"
-        ]
+        facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
+        facts["save"] = scoring.saves(events)
+        # The score as the broadcast shows it: the changes among the events, and the scorebug file's
+        # readings (`score_reads`), whose first holds the score before any change.
+        facts["scorebug"] = scoring.scorebug([*events, *score_reads])
+        facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
+        facts["spell"] = spell_rows(events)  # runs of passes, receiver to passer (ninety/speech/spells.py)
         for rows in facts.values():
             for r in rows:
-                r["club"] = clubs[r["team"]]
-                for k in ("passer", "receiver"):
+                r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
+                for k in ("passer", "receiver", "assister"):
                     if r.get(k) in people:
                         r[f"{k}_is"] = people[r[k]]["say"]
+                if r.get("kind") == "goal" and r.get("player") in people:
+                    r["scorer_is"] = people[r["player"]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
         mi = cls(clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames))
+        mi.broadcast = broadcast
         from ninety.intel.stats_table import stats_table
 
         mi.stats = stats_table(mi)  # the phone's Stats tab, from the same tools the Companion reads
+        if feed is not None:
+            # Last, after every fact and stat is computed: the feed names tracks and nothing else
+            # (an event's side from the feed is set before, in the detected file: identity.sided).
+            if not feed.matches(fixture):
+                raise ValueError(f"{clip}: the player-ID feed is another fixture's (seed "
+                                 f"{feed.meta.get('seed')}, {feed.meta['teams']})")
+            mi.identity = identity_mod.tactical(f.frames, feed)
+            if association is not None:
+                mi.identity_broadcast = identity_mod.named_broadcast(
+                    association, mi.identity, feed, detected_events, broadcast_frames)
+            mi.identity_source = identity_mod.disclosure(feed)
         return mi
 
     # -- what the tools answer -------------------------------------------------------------
@@ -237,10 +299,14 @@ class MatchInsights:
         by: dict[str, list[dict]] = {}
         for f in self._rows("line_break", minute_from, minute_to, club):
             if f.get("passer") and f["hi"] > 0:
-                by.setdefault(f["passer"], []).append(f)
+                # One named player's pieces of track are one row (roles.one_track_per_name); an
+                # unnamed track is its own.
+                name = self.people.get(f["passer"], {}).get("name")
+                by.setdefault(f"{f['team']}:{name}" if name else f["passer"], []).append(f)
         ranked = sorted(by.items(), key=lambda kv: (-sum(f["value"] for f in kv[1]), kv[0]))
         out = []
-        for k, (track, rows) in enumerate(ranked[:5], 1):
+        for k, (_, rows) in enumerate(ranked[:5], 1):
+            track = rows[0]["passer"]
             who = self.people.get(track, {})
             out.append(
                 {
@@ -252,6 +318,7 @@ class MatchInsights:
                     "minute_from": minute_from,
                     "minute_to": minute_to,
                     "player": track,
+                    "tracks": sorted({f["passer"] for f in rows}),
                     "player_is": who.get("say"),
                     "rank": k,
                     "value": sum(f["value"] for f in rows),
@@ -270,6 +337,142 @@ class MatchInsights:
         if team is not None:
             out = [r for r in out if r["team"] == team]
         return {"facts": out, "summary": []}
+
+    def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession;
+        and the longest spells of passes in a row (a run vision followed receiver to passer, which
+        needs no side told), longest first."""
+        out = self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+        spells = [r for r in self.facts.get("spell", ()) if minute_from <= r["minute"] <= minute_to]
+        spells.sort(key=lambda r: (-r["value"], r["t"]))
+        return {**out, "facts": [*out.get("facts", []), *spells[:1]]}
+
+    def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Where the ball was over the minutes: each club's share with it in its attacking third."""
+        return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
+
+    def shots(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The shot map over the minutes: each shot's spot, its distance from the goal and the angle
+        the posts make there, nearest first; and each club's shots and those from inside the penalty area."""
+        team = self.team(club)
+        rows = self._rows("shot", minute_from, minute_to, club)
+        top = sorted(rows, key=lambda r: (r["value"], r["t"]))[:MAX_FACTS]
+        clubs = self.fixture.clubs
+        got = shot_map.summary(self.facts.get("shot", ()), minute_from, minute_to)
+        summary = [
+            {**r, "club": clubs.get(t)} for t, r in got.items() if t == "all" or team in (None, t)
+        ]
+        return {"facts": top, "summary": summary}
+
+    def passing(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """What the passes did over the minutes (progressive, into the final third, long,
+        intercepted), each club's count and the total; and the pairs of named players who passed to
+        each other most."""
+        team = self.team(club)
+        rows = self.facts.get("pass_type", ())
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in passing.summary(rows, minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        pairs = [
+            {**r, "club": clubs[r["team"]]}
+            for r in passing.network(rows, self.people, minute_from, minute_to)
+            if team in (None, r["team"])
+        ]
+        return {"facts": pairs, "summary": summary}
+
+    def physical(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each named player's distance (km, from the footage shown, with its measured label), top
+        speed, sprints above 25.2 km/h and the zone he was in most, over the minutes."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        lb, bar = physical.labels(), team_stats_mod.within_pct()
+        # Each figure is said only when the grading of named players (docs/eval/physical.md) is no
+        # worse than the bar the phone already accepts for it: team distance's label for distance and
+        # sprint counts, the phone card's worst measured top-speed error for top speed (GROUNDING I22).
+        held = physical.held(lb, bar)
+        facts = []
+        for r in physical.players(self.facts.get("running", ()), self.people, minute_from, minute_to):
+            if team not in (None, r["team"]):
+                continue
+            r = {**r, "club": clubs[r["team"]]}
+            why = held.get(r["metric"])
+            if why:
+                r["confident"], r["why_held"] = False, why
+            elif r["metric"] == "player_km":
+                r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
+            facts.append(r)
+        return {"facts": facts, "summary": []}
+
+    def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each kind of restart over the minutes: the total, and each club's count with bounds."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        summary = [
+            {**r, "club": clubs.get(r["team"])}
+            for r in set_pieces.summary(self.facts.get("restart", ()), minute_from, minute_to)
+            if r["team"] is None or team in (None, r["team"])
+        ]
+        return {"facts": [], "summary": summary}
+
+    def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Each goal up to minute_to with its scorer and assist, oldest first, and each club's saves
+        over the minutes; the score's own counts are bookkeeping, never said (option B)."""
+        team = self.team(club)
+        clubs = self.fixture.clubs
+        goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]
+        shown = [r for r in self.facts.get("scorebug", ()) if r["minute"] <= minute_to]
+        # The latest reading, its two numbers each bound to its club (lesson 221), as the score's are.
+        summary = [{**shown[-1], "value": shown[-1]["home"], "unit": "goals", "clubs": clubs, "club": None,
+                    "also": [[shown[-1]["away"], "goals", rf"\b{clubs['away']}\b[^.\d]*$"]]}] if shown else []
+        summary += [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
+        summary += [
+            {**r, "club": clubs[t]}
+            for t, r in scoring.save_counts(self.facts.get("save", ()), minute_from, minute_to).items()
+            if team in (None, t)
+        ]
+        timeline = sorted((g for g in goals if team in (None, g["team"])), key=lambda g: g["t"])
+        return {"facts": timeline[:MAX_FACTS], "summary": summary}
+
+    def halves(self, minute_from: int = 1, minute_to: int | None = None, club: str | None = None) -> dict:
+        """The same summaries for each half (Law 7's 45 minutes) up to minute_to (the match so far
+        when None): where the ball was, the shots and what the passes did, first half then second, so
+        a fan can compare them. minute_from is ignored: a half starts where the Law starts it."""
+        now = self.minutes if minute_to is None else min(minute_to, self.minutes)
+        spans = [(1, min(HALF_MIN, now))]
+        if now > HALF_MIN:
+            spans.append((HALF_MIN + 1, now))
+        summary = []
+        for lo, hi in spans:
+            for tool in (self.territory, self.shots, self.passing):
+                summary += tool(lo, hi, club)["summary"]
+        return {"facts": [], "summary": summary}
+
+    def key_moments(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """The window's key moments, latest first: its goals, shots, regains that led to a shot,
+        one-twos and its biggest line breaks, each a fact code can say."""
+        moments = []
+        for kind in MOMENT_KINDS:
+            rows = [r for r in self._rows(kind, minute_from, minute_to, club) if r.get("confident")]
+            if kind == "line_break":
+                rows = sorted(rows, key=lambda r: (-r["value"], r["t"]))[:TOP_LINE_BREAKS]
+            moments += rows
+        # Every goal stays, however many other moments there are: a recap never drops a goal. The
+        # rest fill the remaining places, latest first.
+        goals = [r for r in moments if r["kind"] == "goal"]
+        rest = sorted((r for r in moments if r["kind"] != "goal"), key=lambda r: -r["t"])
+        kept = goals + rest[: max(0, MAX_FACTS - len(goals))]
+        kept.sort(key=lambda r: -r["t"])
+        return {"facts": kept, "summary": []}
+
+    def _window_summary(self, fn, kind: str, minute_from: int, minute_to: int, club: str | None) -> dict:
+        team = self.team(club)
+        got = fn(self.facts.get(kind, ()), minute_from, minute_to)
+        clubs = self.fixture.clubs
+        summary = [{**r, "club": clubs[t], "clubs": clubs} for t, r in got.items() if team in (None, t)]
+        return {"facts": [], "summary": summary}
 
     def style(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """How each club played over the minutes: its passing channels, its width beside the other
@@ -335,11 +538,23 @@ class MatchInsights:
                 "away_code": self.fixture.away_code,
             },
             "minutes": self.minutes,
+            # The two team sheets (names, shirts, positions): pre-match facts, never a track's.
+            "sheets": {t: [{k: s[k] for k in ("number", "name", "position", "line")} for s in rows]
+                       for t, rows in self.fixture.as_dict()["sheets"].items()},
             "gates": self.gates,
             "people": self.people,
             "team_stats": self.team_stats,
             "stats": self.stats,
             "facts": self.facts,
+            **({"broadcast": self.broadcast, "lineup": naming.lineup(self.broadcast)}
+               if self.broadcast else {}),
+            # With a player-ID feed, the line-up is the feed's (marked source id_feed), and the
+            # tactical tracks' names come with it for the radar and the player card.
+            **({"identity": self.identity_source, "identity_tracks": self.identity,
+                "identity_broadcast": self.identity_broadcast,
+                "lineup_tactical": identity_mod.lineup(self.identity)}
+               if self.identity_source else {}),
+            **({"lineup": identity_mod.lineup(self.identity_broadcast)} if self.identity_broadcast else {}),
         }
 
     @classmethod
@@ -354,7 +569,21 @@ class MatchInsights:
             dict(body.get("gates") or {}),
             dict(body.get("team_stats") or {}),
             dict(body.get("stats") or {}),
+            dict(body.get("broadcast") or {}),
+            dict(body.get("identity_tracks") or {}),
+            dict(body.get("identity_broadcast") or {}),
+            dict(body.get("identity") or {}),
         )
+
+
+CHANGE_CONTEXT = r"\b(?:up|back|by|forward|deeper|higher|further)\s+$"
+
+
+def shape_also(r: Mapping) -> list:
+    """A shape fact's other number: its change, said right after the move ("pushed up 6 m"), while
+    its value (the line's height) is the one after "to". Both are metres, so each is bound to its own
+    role (lesson 221)."""
+    return [[abs(r["change"]), r["unit"], CHANGE_CONTEXT]] if r.get("change") else []
 
 
 def shape_drawings(frames: Sequence[Mapping]) -> dict[tuple[str, int], dict]:
@@ -401,6 +630,29 @@ def load_fixture(path: Path) -> Fixture:
     return Fixture(int(body["seed"]), params["home_code"], params["away_code"])
 
 
+def spell_rows(events: Sequence[Mapping]) -> list[dict]:
+    """Each spell of possession (ninety/speech/spells.py) as an insight fact: its passes, when it ended,
+    and its side only when every pass's was told surely."""
+    from ninety.agents import factcheck
+    from ninety.speech import spells
+
+    rows = []
+    for run in spells.spells(list(events)):
+        last, team = run[-1], run[-1].get("team")
+        sure = team in TEAMS and all(e.get("team") == team and factcheck.side_known(e) for e in run)
+        rows.append({"id": f"spell:{last['id']}", "kind": "spell", "metric": "spell_passes",
+                     "team": team if sure else None, "minute": minute_of(float(last["t"])),
+                     "t": round(float(last["t"]), 2), "value": len(run), "unit": "passes", "confident": True,
+                     "events": [e["id"] for e in run]})
+    return rows
+
+
+def score_reads(path: Path) -> list[dict]:
+    """A clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score, the vision ones."""
+    rows = (json.loads(line) for line in path.read_text().splitlines() if line.strip())
+    return [r for r in rows if r.get("type") in scoring.SCORE_TYPES and r.get("source") == "vision"]
+
+
 def main(argv: list[str] | None = None) -> None:
     from ninety.match import detected, tracking
 
@@ -412,12 +664,31 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("fixture", type=Path, help="the clip's clip.json, or {seed, home_code, away_code}")
     ap.add_argument("--clip", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--association", type=Path,
+                    help="a joined match's association.json: names cross the camera join (naming.py)")
+    ap.add_argument("--identity-feed", type=Path, default=None,
+                    help="the simulated tracking provider's player-ID feed (ninety/sim/identity_feed.py): "
+                         "names for the line-up only, never a fact or a stat")
+    ap.add_argument("--broadcast-vision", type=Path, default=None,
+                    help="with --identity-feed: the segments' vision runs, to name the broadcast's tracks "
+                         "directly from the feed too (ninety/intel/identity.py, step 6)")
+    ap.add_argument("--scorebug", type=Path, default=None,
+                    help="the clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score")
     args = ap.parse_args(argv)
     body = json.loads(args.tracked.read_text())
     frames = [f for f in body["frames"] if f.get("source") == tracking.TRACKED]
     if len(frames) != len(body["frames"]):
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
-    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture))
+    association = json.loads(args.association.read_text())["tracks"] if args.association else None
+    reads = score_reads(args.scorebug) if args.scorebug is not None else []
+    feed, b_frames = None, None
+    if args.identity_feed:  # the player-ID feed: names (and nothing else) for the line-up
+        b_frames = (identity_mod.broadcast_frames(args.broadcast_vision, args.fixture.parent)
+                    if args.broadcast_vision else [])
+        feed = identity_mod.load_for(args.identity_feed, [*frames, *b_frames], load_fixture(args.fixture))
+    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
+                             association=association, score_reads=reads,
+                             feed=feed, broadcast_frames=b_frames)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 

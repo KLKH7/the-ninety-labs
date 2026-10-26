@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, plausible_speed, sayable_speed, side_known
 from ninety.agents.ledger import InMemoryLedger, Ledger, load_match
 from ninety.match.facts import match_events
 
@@ -24,7 +24,7 @@ TEMPLATE_TYPES = ("pass", "shot", "goal")  # the events a template graphic airs 
 SHOT_OUTCOME = {"on_target": "on target", "off_target": "off target", "blocked": "blocked", "goal": "goal"}
 
 
-def _pass_text(event: dict, persona: str) -> str:
+def _pass_text(event: dict, persona: str, speed: bool = False) -> str:
     """A pass names who it was for (`intended`), who got it (`receiver`, completed only), who cut it
     out (`interceptor`) and who only touched it (`deflected_by`): different people, never one field
     read as another. A touch is only a touch: "cut out" needs the opponent to have won it."""
@@ -47,39 +47,51 @@ def _pass_text(event: dict, persona: str) -> str:
         if intended:
             return f"{player} looks for {intended}"
         return f"{player} plays a pass"
-    parts = [f"{player} → {target}" if target else f"{player} pass"]
+    parts = [f"{player} → {target}" if target else "a pass" if player == UNNAMED else f"{player} pass"]
     if outcome == "fail":
         parts[0] += f" ({stopped})" if stopped else " (incomplete)"
     elif outcome is None and target:
         parts[0] += " (in flight)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
-    if event.get("ball_speed_kmh") is not None:
+    # A speed only when it may be said (factcheck.sayable_speed); `speed` asks for any a kick can give,
+    # as a writer's draft may state, for the fact-checker to decide.
+    if plausible_speed(event) if speed else sayable_speed(event):
         parts.append(f"{event['ball_speed_kmh']} km/h")
     return ", ".join(parts)
+
+
+UNNAMED = "a player"  # who an event is about when neither the player nor, surely, the side is known
 
 
 def _who(event: dict) -> str:
-    """The player, or the team when the detector could not say who it was."""
-    return event.get("player") or event["team"]
+    """The player, or the team when the detector could not say who it was and its side is known
+    (factcheck.side_known); else neither: a graphic never names a side the detector is unsure of."""
+    return event.get("player") or (event["team"] if side_known(event) else UNNAMED)
 
 
-def _shot_text(event: dict, persona: str) -> str:
+def _shot_text(event: dict, persona: str, speed: bool = False) -> str:
     player = _who(event)
-    if event["type"] == "goal":
-        return f"{player} scores"
+    if event["type"] == "goal" or (persona == "casual" and event.get("outcome") == "goal"):
+        return "a goal" if player == UNNAMED else f"{player} scores"
     if persona == "casual":
         return f"{player} takes a shot"
-    parts = [f"{player} shot"]
-    if event.get("outcome") in SHOT_OUTCOME:
-        parts.append(SHOT_OUTCOME[event["outcome"]])
-    if event.get("ball_speed_kmh") is not None:
+    if event.get("outcome") == "goal":
+        # A shot that went in reads as a goal, not "a player shot, goal" (video-prep, Oct 25).
+        parts = ["a goal" if player == UNNAMED else f"{player} scores"]
+    else:
+        parts = ["a shot" if player == UNNAMED else f"{player} shot"]
+        if event.get("outcome") in SHOT_OUTCOME:
+            parts.append(SHOT_OUTCOME[event["outcome"]])
+    # A speed only when it may be said (factcheck.sayable_speed); `speed` asks for any a kick can give,
+    # as a writer's draft may state, for the fact-checker to decide.
+    if plausible_speed(event) if speed else sayable_speed(event):
         parts.append(f"{event['ball_speed_kmh']} km/h")
     return ", ".join(parts)
 
 
-def _text(event: dict, persona: str) -> str:
-    return _pass_text(event, persona) if event["type"] == "pass" else _shot_text(event, persona)
+def _text(event: dict, persona: str, speed: bool = False) -> str:
+    return _pass_text(event, persona, speed) if event["type"] == "pass" else _shot_text(event, persona, speed)
 
 
 async def template_cues(ledger: Ledger, min_confidence: float = MIN_CONFIDENCE) -> list[dict]:

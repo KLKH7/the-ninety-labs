@@ -13,7 +13,12 @@ the counts must agree). For each frame it writes one line:
      "players": [{"bbox", "score", "x", "y", "rgb"}],     # foot point on the pitch, kit colour
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
 
-The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). A
+The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). It
+also cuts between cameras. With `--cuts`, a cut is found where the picture changes at once
+(pitch.shot_starts) and each shot is fitted on its own (pitch.fit_shots), its index written as
+`camera.shot`. It is off by default: on validation it trusted a tight lens's frames 1 to 1.3 m
+wrong, and on the test set a reverse angle 44 m wrong, the mirror of the main camera through the
+centre spot, which the markings cannot tell apart (docs/eval/camera-cuts-plan.md, lesson 244). A
 lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
 pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
 through that one camera.
@@ -68,6 +73,9 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # to 8.2 m (observed, under the plan's 8.5 m) and kept every good frame the heights kept. It sees an
 # isolated wrong frame only: frames wrong the same way agree and pass together. A tie between two
 # neighbours goes to the earlier (fixed with the plan's values, not tuned).
+# A neighbour is looked for within the frame's own shot (`camera.shot`, pitch.shot_starts): the
+# premise is a camera that pans continuously, and across a cut it is another camera
+# (docs/eval/camera-cuts-plan.md). Without a cut every frame is in shot 0, as before.
 # Known limit (lesson 159): frames whose wrong cameras agree with each other still pass, since no
 # check of one frame against another can see them: a whole clip offset the same way (validation
 # seed 108, about 2 to 8 m), and a run of 4 frames on test clip 900003, about 46 m wrong.
@@ -75,6 +83,14 @@ NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
 HEIGHT_BAND = (0.966, 1.121)
+# The same test for a fixed lens (the tactical camera): its own band, from its own frames, because
+# the ratio depends on the camera's height and distance and on how players are drawn. Measured by
+# the same rule (step B: the 1st to 99th percentile on frames whose ground mapping is within 1.0 m)
+# on tactical1's 23 validation clips, both lenses, renderer 0.5.15, ours-freeze tiled: 11,250 good
+# frames of 11,500 (docs/eval/ball-three-cams/band-fixed.json, session D; reproduced exactly in
+# docs/eval/band-broadcast.json). It keeps 98% of them; of the 250 bad frames (one lens of seed
+# 2042 fitted 69 m wrong) it trusts one, which `agree` then has no trusted neighbour for.
+FIXED_HEIGHT_BAND = (1.002, 1.151)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
@@ -93,6 +109,121 @@ def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
     if not len(patch):
         return None
     return [round(float(v), 1) for v in np.median(patch, axis=0)]
+
+
+# Reading a kit (docs/eval/kit-colour-plan.md). Each reader takes the shirt patch kit_rgb samples.
+# The live path reads both of the shirt's colours (R4): a patterned shirt is two colours, and the
+# second can fill most of the patch (hoops and a yoke, halves), which made one median read a blue
+# kit as white (validation seed 120). Adopted on validation by the plan's rule.
+KIT_READER = "R4"
+GRASS_STEP_PX = 8  # the pitch is sampled on this grid to measure its grass (design: thousands of pixels)
+
+
+def shirt_patch(rgb: np.ndarray, bbox) -> np.ndarray:
+    """The box's upper-middle part (20 to 50% down, the middle 60% across), as (N, 3) floats."""
+    x0, y0, x1, y1 = bbox
+    w, h = x1 - x0, y1 - y0
+    H, W = rgb.shape[:2]
+    xa, xb = int(max(0, x0 + 0.2 * w)), int(min(W, x1 - 0.2 * w))
+    ya, yb = int(max(0, y0 + 0.2 * h)), int(min(H, y0 + 0.5 * h))
+    return rgb[ya:yb, xa:xb].reshape(-1, 3).astype(np.float32)
+
+
+def _chroma(px: np.ndarray) -> np.ndarray:
+    return px / (px.sum(axis=1, keepdims=True) + 1e-6)
+
+
+def grass(rgb: np.ndarray, P: np.ndarray | None, boxes) -> tuple[np.ndarray, float] | None:
+    """The frame's grass: the median colour of pixels that the camera places on the pitch, outside
+    every box, sampled every GRASS_STEP_PX, and its spread (the 90th percentile of their chromaticity
+    distance to that median). None without a camera or such pixels."""
+    if P is None:
+        return None
+    H, W = rgb.shape[:2]
+    us, vs = np.meshgrid(np.arange(0, W, GRASS_STEP_PX), np.arange(0, H, GRASS_STEP_PX))
+    us, vs = us.ravel().astype(float), vs.ravel().astype(float)
+    keep = np.ones(len(us), bool)
+    for x0, y0, x1, y1 in boxes:
+        keep &= ~((us >= x0) & (us <= x1) & (vs >= y0) & (vs <= y1))
+    Hm = np.c_[P[:, 0], P[:, 1], P[:, 3]]
+    g = np.c_[us, vs, np.ones(len(us))] @ np.linalg.inv(Hm).T
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gx, gy = g[:, 0] / g[:, 2], g[:, 1] / g[:, 2]
+    keep &= (g[:, 2] != 0) & (gx >= 0) & (gx <= 105) & (gy >= 0) & (gy <= 68)
+    if keep.sum() < 50:
+        return None
+    px = rgb[vs[keep].astype(int), us[keep].astype(int)].astype(np.float32)
+    med = np.median(px, axis=0)
+    spread = float(np.percentile(np.linalg.norm(_chroma(px) - _chroma(med[None])[0], axis=1), 90))
+    return med, spread
+
+
+def _not_grass(patch: np.ndarray, turf) -> np.ndarray:
+    """R1: drop the pixels within the measured grass's own spread, not by a fixed green rule; without
+    a measured grass, R0's rule."""
+    if turf is None:
+        r, g, b = patch[:, 0], patch[:, 1], patch[:, 2]
+        return patch[~((g > r + 10) & (g > b + 10))]
+    med, spread = turf
+    return patch[np.linalg.norm(_chroma(patch) - _chroma(med[None])[0], axis=1) > spread]
+
+
+def _two_means(px: np.ndarray, feats: np.ndarray, iters: int = 10) -> tuple[np.ndarray, np.ndarray]:
+    """Split pixels into two groups on `feats`, started from the two ends of the brightness order."""
+    order = np.argsort(px.sum(axis=1))
+    a, b = feats[order[len(order) // 4]], feats[order[3 * len(order) // 4]]
+    lab = np.zeros(len(px), bool)
+    for _ in range(iters):
+        lab = np.linalg.norm(feats - b, axis=1) < np.linalg.norm(feats - a, axis=1)
+        if lab.all() or not lab.any():
+            break
+        a, b = feats[~lab].mean(axis=0), feats[lab].mean(axis=0)
+    return px[~lab], px[lab]
+
+
+def skin(px: np.ndarray) -> np.ndarray:
+    """Which pixels are skin by the published daylight RGB rule (Kovac, Peer and Solina 2003, Human
+    skin colour clustering for face detection): R > 95, G > 40, B > 20, max - min > 15, |R - G| > 15,
+    R > G and R > B (docs/eval/kit-colour-plan.md, R5)."""
+    r, g, b = px[:, 0], px[:, 1], px[:, 2]
+    return ((r > 95) & (g > 40) & (b > 20) & (px.max(axis=1) - px.min(axis=1) > 15)
+            & (np.abs(r - g) > 15) & (r > g) & (r > b))
+
+
+def read_kit(rgb: np.ndarray, bbox, reader: str = "R0", turf=None) -> list[float] | None:
+    """The kit as the reader named sees it (docs/eval/kit-colour-plan.md): R0 today's median; R1 with
+    the measured grass dropped; R2 the larger of two colours; R3 the same with brightness divided
+    by the patch's; R4 both colours, darker first; R5 R4 with skin-coloured pixels dropped first.
+    None when nothing is left."""
+    patch = shirt_patch(rgb, bbox)
+    if not len(patch):
+        return None
+    if reader == "R0":
+        return kit_rgb(rgb, bbox)
+    patch = _not_grass(patch, turf)
+    if len(patch) < 4:
+        return None
+    if reader == "R5":  # R4 without skin; R4's reading stands when too little is left
+        kept = patch[~skin(patch)]
+        patch = kept if len(kept) >= 4 else patch
+        reader = "R4"
+    if reader == "R1":
+        return [round(float(v), 1) for v in np.median(patch, axis=0)]
+    if reader == "R3":
+        bright = patch.sum(axis=1, keepdims=True) / (np.median(patch.sum(axis=1)) + 1e-6)
+        feats = np.c_[_chroma(patch), bright]
+    else:
+        feats = patch
+    lo, hi = _two_means(patch, feats)
+    if reader in ("R2", "R3"):
+        big = lo if len(lo) >= len(hi) else hi
+        return [round(float(v), 1) for v in np.median(big if len(big) else patch, axis=0)]
+    lo_b = lo.sum(axis=1).mean() if len(lo) else np.inf
+    hi_b = hi.sum(axis=1).mean() if len(hi) else np.inf
+    dark, light = (lo, hi) if lo_b <= hi_b else (hi, lo)
+    dark = dark if len(dark) else light
+    light = light if len(light) else dark
+    return [round(float(v), 1) for v in np.r_[np.median(dark, axis=0), np.median(light, axis=0)]]
 
 
 def _ground(P: np.ndarray, uv: tuple[float, float], z: float = 0.0) -> tuple[float, float] | None:
@@ -133,15 +264,18 @@ def principal_ground(P: np.ndarray) -> tuple[float, float] | None:
 def agree(rows: list[dict]) -> list[dict]:
     """Keep trusted only the frames the heights trusted whose image centre lands within NEIGHBOUR_M of
     where the nearest other height-trusted frame's does, within NEIGHBOUR_FRAMES (the earlier on a
-    tie); a frame with no such neighbour is not trusted. Untrusted frames lose their positions."""
-    centre = {}
+    tie) in the same shot; a frame with no such neighbour is not trusted. Untrusted frames lose
+    their positions."""
+    centre, shot = {}, {}
     for r in rows:
         cam = r["camera"]
+        shot[r["frame"]] = cam.get("shot", 0)
         if cam.get("heights_ok") and cam.get("P") is not None:
             centre[r["frame"]] = principal_ground(np.array(cam["P"]))
     for r in rows:
         f, c = r["frame"], centre.get(r["frame"])
-        near = sorted((abs(g - f), g) for g in centre if g != f and abs(g - f) <= NEIGHBOUR_FRAMES)
+        near = sorted((abs(g - f), g) for g in centre
+                      if g != f and abs(g - f) <= NEIGHBOUR_FRAMES and shot[g] == shot[f])
         other = centre[near[0][1]] if near else None
         r["camera"]["ok"] = bool(c is not None and other is not None
                                  and math.dist(c, other) <= NEIGHBOUR_M)
@@ -151,10 +285,10 @@ def agree(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def place(row: dict, markings: bool = True) -> dict:
-    """Judge the frame's camera by its players' heights and, with `markings` (the broadcast), its
-    marking fit's own verdict too; when it is trusted, place every detection on the pitch through
-    it (players at the foot point, the ball one radius up)."""
+def place(row: dict, band: tuple[float, float] = HEIGHT_BAND, markings: bool = True) -> dict:
+    """Judge the frame's camera by its players' heights (their median ratio inside `band`) and,
+    with `markings` (the broadcast), its marking fit's own verdict too; when it is trusted, place
+    every detection on the pitch through it (players at the foot point, the ball one radius up)."""
     cam = row["camera"]
     P = np.array(cam["P"]) if cam.get("P") is not None else None
     ratio = height_ratio(row["players"], P) if P is not None else None
@@ -162,7 +296,7 @@ def place(row: dict, markings: bool = True) -> dict:
     # With no player to measure, the heights cannot judge the camera, and the markings' verdict
     # stands (one frame of 3,250 on validation, untrusted either way).
     if ratio is not None:
-        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1] and (cam["markings_ok"] or not markings)
+        ok = band[0] <= ratio <= band[1] and (cam["markings_ok"] or not markings)
     else:
         ok = bool(P is not None and cam["markings_ok"])
     cam["height_ratio"] = None if ratio is None else round(ratio, 4)
@@ -179,12 +313,27 @@ def place(row: dict, markings: bool = True) -> dict:
     return row
 
 
-def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[dict]:
+def recolour(rows: list[dict], images: list[Path], load) -> list[dict]:
+    """Read every player's kit again from the clip's images (KIT_READER), keeping each frame's
+    camera and boxes: for observations made before the reader changed. Images and lines pair in order."""
+    if len(images) != len(rows):
+        raise ValueError(f"{len(images)} images but {len(rows)} observation lines: they pair one to one")
+    for r, img in zip(rows, images, strict=True):
+        rgb = load(img)
+        P = np.array(r["camera"]["P"]) if r["camera"].get("P") is not None else None
+        turf = grass(rgb, P, [d["bbox"] for d in r["players"] + r["ball"]])
+        for d in r["players"]:
+            d["rgb"] = read_kit(rgb, d["bbox"], KIT_READER, turf) if d["score"] >= SCORE_MIN else None
+    return rows
+
+
+def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: bool = False) -> list[dict]:
     """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
-    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
+    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera; `cuts`
+    to fit the broadcast shot by shot at the cuts the images show (off by default, above)."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
-    rgbs, points = [], []
+    rgbs, points, thumbs = [], [], []
     counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
@@ -192,34 +341,46 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[d
         rgbs.append(rgb)
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
+            if cuts:
+                thumbs.append(pitch.thumbnail(rgb))
             continue
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
     if not fixed:
-        gantry, fits = pitch.fit_clip(points, W, H)
+        starts = pitch.shot_starts(thumbs) if cuts else [0]
+        gantries, fits = pitch.fit_shots(points, W, H, starts)
     else:
         view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
-        gantry = (view.cx, view.cy, view.cz)
+        starts, gantries = [0], [(view.cx, view.cy, view.cz)]
+    shot_of = np.searchsorted(starts, np.arange(len(fits)), side="right") - 1
     rows = []
-    for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
+    for k, (rgb, fd, fit) in enumerate(zip(rgbs, dets, fits, strict=True)):
         players, balls = [], []
+        P = fit.view.P() if fit.view else None
+        turf = grass(rgb, P, [d.bbox for d in fd.detections])
         for d in fd.detections:
             if d.cls == "player":
                 players.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None,
-                                "rgb": kit_rgb(rgb, d.bbox) if d.score >= SCORE_MIN else None})
+                                "rgb": (read_kit(rgb, d.bbox, KIT_READER, turf)
+                                        if d.score >= SCORE_MIN else None)})
             else:
                 balls.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None})
         rows.append(place({
             "frame": fd.frame, "t": fd.t,
             "camera": {"ok": fit.ok, "median_px": fit.median_px, "points": fit.points,
+                       "shot": int(shot_of[k]),
                        "P": ([[round(float(v), 6) for v in row] for row in fit.view.P()]
                              if fit.view else None)},
             "players": players, "ball": balls,
-        }, markings=not fixed))
+        }, FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND, markings=not fixed))
     rows = agree(rows)
-    rows[0]["gantry"] = [round(v, 3) for v in gantry]
+    rows[0]["gantry"] = None if gantries[0] is None else [round(v, 3) for v in gantries[0]]
+    if len(starts) > 1:
+        rows[0]["shots"] = [{"frame": rows[s]["frame"],
+                             "gantry": None if g is None else [round(v, 3) for v in g]}
+                            for s, g in zip(starts, gantries, strict=True)]
     if fixed:
         rows[0]["fixed"] = True
     return rows
@@ -238,29 +399,38 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--fixed", action="store_true",
                     help="a fixed lens (the tactical camera): one camera for the whole clip")
+    ap.add_argument("--cuts", action="store_true",
+                    help="the broadcast: fit each shot on its own at the cuts the images show "
+                         "(off by default)")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
-                         "without the camera fit (its cameras are kept)")
+                         "without the camera fit (its cameras are kept); with the clip's folder too, "
+                         "its kits are read again from the images")
     a = ap.parse_args(argv)
     if a.regate is not None:
         rows = []
         lines = [json.loads(x) for x in a.regate.read_text().splitlines() if x.strip()]
         fixed = bool(lines and lines[0].get("fixed"))
+        band = FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND
         for x in lines:
-            rows.append(place(x, markings=not fixed))
+            rows.append(place(x, band, markings=not fixed))
+        if a.clip is not None:  # with the clip's folder, its kits are read again too
+            rows = recolour(rows, sorted((a.clip / "images").glob("*.jpg")),
+                            lambda p: np.asarray(Image.open(p).convert("RGB")))
         rows = agree(rows)
     else:
         if a.clip is None or a.detections is None:
             ap.error("a clip and --detections, or --regate")
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
-        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")), fixed=a.fixed)
+        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")),
+                       fixed=a.fixed, cuts=a.cuts)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
     ok = sum(r["camera"]["ok"] for r in rows)
     print(json.dumps({"out": str(a.out), "frames": len(rows), "camera_ok": ok,
-                      "gantry": rows[0].get("gantry")}))
+                      "gantry": rows[0].get("gantry"), "shots": len(rows[0].get("shots", [0]))}))
 
 
 if __name__ == "__main__":

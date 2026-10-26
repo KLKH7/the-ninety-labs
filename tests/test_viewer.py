@@ -6,6 +6,7 @@ it, so the test can never silently stop running there).
 """
 
 import functools
+import json
 import os
 import shutil
 import threading
@@ -47,16 +48,22 @@ def browser():
 @pytest.fixture(scope="module")
 def site(browser, tmp_path_factory):
     """dist/ with a bundle at bundle/, served over HTTP the way a static host would."""
+    yield from serve_site(browser, tmp_path_factory, "--plant")
+
+
+def serve_site(browser, tmp_path_factory, *extra, events: list[dict] | None = None):
     root = tmp_path_factory.mktemp("site")
     page = browser.new_page(viewport={"width": W, "height": H})
     page.set_content('<body style="margin:0;background:#2e7d32"></body>')
     jpeg = page.screenshot(type="jpeg")
     page.close()
-    clip, detections, events = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    clip, detections, events_file = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    if events is not None:
+        events_file.write_text("".join(json.dumps(e) + "\n" for e in events))
     www = root / "www"
     shutil.copytree(DIST, www)
-    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", "--plant",
-            "--events-file", str(events)]
+    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", *extra,
+            "--events-file", str(events_file)]
     # Playwright's sync API holds this thread's event loop; ninety-e2e runs its own in another.
     worker = threading.Thread(target=e2e.main, args=(args,))
     worker.start()
@@ -93,7 +100,10 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     claim = page.locator("#claims .claim")
     assert claim.count() == 1
     assert claim.locator(".chip").text_content() == "Accepted"
-    assert "h8 shot, on target, 101 km/h." in claim.inner_text()
+    # The fixture's speed is not measured, so the trace says the claim without it (src/speed.ts); the
+    # fact-checker's reason still names the planted 143 it rejected.
+    assert "h8 shoots, on target." in claim.inner_text()
+    assert "km/h" not in claim.inner_text()
     assert claim.locator(".step.reject").count() == 1
     assert "143" in claim.locator(".step.reject").inner_text()
     assert "Events" in page.locator("#pipeline").inner_text()
@@ -105,17 +115,18 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
+    page.keyboard.press("2")  # the analyst's graphics
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-m-e2" in on_air(page):
+        if "cue-e2-analyst" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
-    assert set(on_air(page)) == {"insight-m-e2"}
-    assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
-    assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
+    # The agents' claim about the shot only restates it, so it is not an INSIGHT (ninety/agents/
+    # insight_bar.py): the shot's own graphic airs, and the claim stays in the trace (How we know).
+    assert set(on_air(page)) == {"cue-e2-analyst"}
+    assert "insight" not in page.locator("#on-air").inner_text().lower()
+    assert page.locator("#claims .claim").count() >= 1
 
     page.keyboard.press("1")
     page.wait_for_function("document.querySelector('#overlay').dataset.onAir === 'cue-e2-casual'")
@@ -224,4 +235,140 @@ def test_a_fallback_cue_says_so_on_screen_and_to_a_screen_reader(browser, site):
             break
         page.keyboard.press(".")
     assert "(fallback: held: timeout)" in page.inner_text("#on-air")
+    assert not errors
+
+
+# Tracked players (dry run of the demo, Oct 24): h-t4's side was told surely, a-t9's was not, and
+# h-t8 is only the receiver, whose side that pass did not measure.
+TRACKED = [
+    {"id": "e1", "t": 60.4, "frame": 1510, "type": "pass", "team": "home", "team_confidence": 0.99,
+     "player": "h-t4", "receiver": "h-t8", "intended": "h-t8", "interceptor": None, "deflected_by": None,
+     "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 35.0, "outcome": "success", "ball_speed_kmh": 48.0,
+     "source": "vision", "confidence": 0.9},
+    {"id": "e2", "t": 61.2, "frame": 1530, "type": "shot", "team": "away", "team_confidence": 0.3,
+     "player": "a-t9", "receiver": None, "x": 80.0, "y": 34.0, "end_x": 104.0, "end_y": 33.0,
+     "outcome": "on_target", "ball_speed_kmh": 101.4, "source": "vision", "confidence": 0.9},
+]
+
+
+@pytest.fixture(scope="module")
+def tracked_site(browser, tmp_path_factory):
+    yield from serve_site(browser, tmp_path_factory, events=TRACKED)
+
+
+def test_a_tracked_player_on_an_unsure_side_is_a_player_on_screen(browser, tracked_site):
+    # A track id's letter is the tracker's side vote. The screen names the club only for a side the
+    # fact-checker vouches for (the bundle's sides_known); every other tracked player is "a player".
+    page, errors = open_viewer(browser, tracked_site)
+    page.get_by_role("button", name="Watch it").click()
+    page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.3")
+    page.keyboard.press("1")  # casual: the templates' sentences
+    seen = set()
+    for _ in range(40):
+        seen.add(page.locator("#on-air").inner_text().strip())
+        page.keyboard.press(".")
+    text = " | ".join(t for t in seen if t)
+    assert "Crowmere player" in text, text  # h-t4: a side told surely
+    assert "Dunhollow" not in text, text  # a-t9: the tracker's vote alone never names a club
+    assert "a player" in text or "A player" in text, text
+    assert not errors
+
+
+def aired_speeds(page) -> list[str]:
+    import re
+
+    texts = page.evaluate("window.ninetyCues.map((c) => c.text)")
+    return [m for t in texts for m in re.findall(r"[\d.]+(?: ± \d+)? km/h", t)]
+
+
+def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tracked_site):
+    import re
+
+    # Option H (Oct 25): vision's ball speeds (48 and 101 km/h here) are held until #331's error is
+    # measured; the bundle says nothing about it, so no graphic states one, and the shot still airs.
+    page, errors = open_viewer(browser, tracked_site)
+    assert aired_speeds(page) == []
+    texts = page.evaluate("window.ninetyCues.map((c) => c.text)")
+    assert any("shoots" in t for t in texts), texts
+    said = page.evaluate("window.ninetyNarrator.lines.flatMap((l) => [l.text, l.spoken])")
+    assert said and not any(re.search(r"\d\s*(km/h|kilomet)", t) for t in said), said  # the voice too
+    assert "km/h" not in page.locator("#claims").inner_text()
+    page.get_by_role("button", name="Watch it").click()
+    page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.3")
+    page.keyboard.press("2")  # the analyst's graphics, which state speeds
+    seen = set()
+    for _ in range(40):
+        seen.add(page.locator("#on-air").inner_text().strip())
+        page.keyboard.press(".")
+    assert any(seen) and not any("km/h" in t for t in seen), seen
+    assert not errors
+
+
+@pytest.fixture(scope="module")
+def ground_site(browser, tmp_path_factory):
+    # The tracked clip with its pass marked along the ground by vision (`lofted` false), and that mark
+    # taken as measured, as it will be (factcheck.LOFTED_FLAG_MEASURED): the one speed vision's measured
+    # error covers, so the bundle's manifest.speed opens.
+    from ninety.agents import factcheck
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
+        yield from serve_site(browser, tmp_path_factory,
+                              events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
+
+
+def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, ground_site):
+    # Once measured (manifest.speed), a speed shows with its error band; 147 km/h is above P3's
+    # 40 m/s (144 km/h), so no ball went that fast and it never airs (the demo's 4-1 graphic).
+    import json
+
+    from ninety.agents import factcheck
+
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def fast(route):
+        cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        first = next(c for c in cues if "48" in c["text"] and "km/h" in c["text"])
+        fast_text = first["text"].replace("48.0 km/h", "147 km/h")
+        cues.append({**first, "id": first["id"] + "-fast", "text": fast_text})
+        route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/cues.jsonl", fast)
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(ground_site)
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    speeds = aired_speeds(page)
+    band = f" ± {factcheck.SPEED_ERROR_KMH} km/h"
+    assert speeds and all(s.endswith(band) for s in speeds), speeds  # 48 km/h, with its band
+    assert not any(s.startswith("147") for s in speeds), speeds
+    assert not any(s.startswith("101") for s in speeds), speeds  # the shot's speed is not measured
+    assert not errors
+
+
+def test_every_way_a_speed_is_written_or_said_is_gated(browser, site):
+    """Merge-queue review of #378: the gate fails closed on any number with a speed unit, written or
+    spoken, and `measured: false` airs nothing even with an error given."""
+    page, errors = open_viewer(browser, site)
+
+    def say(text, gate=None):
+        return page.evaluate("([t, g]) => window.ninetySpeed(t, g)", [text, gate])
+
+    held = [
+        ("a pass (incomplete), 19 m, 146 km/h", "a pass (incomplete), 19 m"),
+        ("h-t1 plays a 19 m pass at 49 km/h, but it doesn't arrive.",
+         "h-t1 plays a 19 m pass, but it doesn't arrive."),
+        ("A player plays it 13 metres to another player, at 49 kilometres an hour.",
+         "A player plays it 13 metres to another player."),
+        ("a 101.4 km/h strike", "a strike"),
+        ("scores, 147 km/h", "scores"),
+    ]
+    for text, want in held:
+        assert say(text) == want
+        assert say(text, {"measured": False, "error_kmh": 3.5}) == want
+    measured = {"measured": True, "error_kmh": 3.5}
+    assert say("a 19 m pass at 49 km/h.", measured) == "a 19 m pass at 49 ± 4 km/h."
+    assert say("at 49 kilometres an hour.", measured) == "at 49 kilometres an hour, give or take 4."
+    assert say("scores, 147 km/h", measured) == "scores"  # above P3: no ball goes that fast
     assert not errors

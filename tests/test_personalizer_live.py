@@ -23,12 +23,28 @@ from ninety.personalizer.core import model_personalizer, problem, verified_text
 from ninety.personalizer.server import create_app
 
 URL = "http://personalizer.test/"
-EVENTS = detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")
+# The stand-in carries no side confidence, so every side in it is unsure (factcheck.side_known) and
+# no club variant would be written. These tests are about variants on a side told surely: 0.99 is
+# above MIN_TEAM_CONFIDENCE. The unsure case is pinned below.
+# Each pass is marked as along the ground (`lofted` false), the only detected speed vision's measured
+# error covers (factcheck.measured_speed): the claim's speed is the number each variant must keep.
+EVENTS = [{**e, "team_confidence": 0.99, **({"lofted": False} if e["type"] == "pass" else {})}
+          for e in detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")]
 SURE = next(e for e in EVENTS if e["type"] == "pass" and e.get("receiver") and e["confidence"] >= 0.8
             and compact(e)["minute"] == 2 and e.get("ball_speed_kmh"))
 ROW = compact(SURE)
 CLAIM = Claim(f"{ROW['player']} finds {ROW['receiver']} at {ROW['ball_speed_kmh']} km/h.", [ROW["id"]])
 SPANISH = translate.translated(verified_text, translate.mock)
+
+
+@pytest.fixture(autouse=True)
+def ground_mark_measured(monkeypatch):
+    # The claim states the pass's speed, the number each variant must keep: these tests are about the
+    # Personalizer, not the speed hold (tests/test_spoken_variety.py pins that), so vision's ground mark
+    # is taken as measured here.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
 ALL = {(p, lang) for p in ("analyst", "casual", "club", "player_focus") for lang in ("en", "es")}
 
 
@@ -136,6 +152,8 @@ def test_profiles_cover_every_written_persona_in_both_languages_but_the_claim_it
     focus = next(p for p in profiles if p.persona == "player_focus")
     assert club.club == SURE["team"] and focus.player == SURE["player"]
     assert not any(p.persona == "player_focus" for p in personal.profiles_for({**SURE, "player": None}))
+    for unsure in ({**SURE, "team_confidence": None}, {**SURE, "team_confidence": 0.96}):
+        assert not any(p.persona == "club" for p in personal.profiles_for(unsure))
 
 
 def test_every_verified_variant_airs_as_a_schema_valid_cue(mock_mode):

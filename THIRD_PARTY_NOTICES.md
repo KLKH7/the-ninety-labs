@@ -26,19 +26,40 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 
 ## Viewer and phone companion (`web/viewer`, `web/phone`)
 
-The viewer and the phone ship as plain HTML, CSS and JavaScript. One package reaches the page a
-viewer opens: qrcode-generator, which draws the viewer's "Connect your phone" QR code. The rest
-build them, and none reaches a page. Pinned in `web/viewer/package-lock.json` and
-`web/phone/package-lock.json` (the phone has no runtime dependency).
+The viewer and the phone ship as plain HTML, CSS and JavaScript. These packages reach a page: in the
+viewer, qrcode-generator, which draws the pairing QR code, and hls.js, which plays the HLS ladder; in the phone, Ionic's web components
+(@ionic/core, pinned exactly in `web/phone/package.json`), its view layer in iOS mode, with what
+they bring into the bundle (ionicons, the Stencil runtime, tslib). The rest build them, and none
+reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-lock.json`.
 
 | Package | Used for | Licence |
 |---|---|---|
 | qrcode-generator 2.0.4 (viewer, in the page) | the QR code of the phone's address | MIT |
+| hls.js 1.5.20 (viewer, in the page) | plays the footage's HLS ladder wherever Media Source Extensions run (native HLS only where they do not) | Apache-2.0 |
+| @ionic/core 9.0.6 (phone, in the page) | tabs, headers, segments, lists, sheets: the phone's view layer | MIT |
+| ionicons 8.1.0 (through @ionic/core, in the page) | the icon component Ionic loads | MIT |
+| @stencil/core 4.45.2 (through @ionic/core, its runtime in the page) | the runtime of Ionic's web components | MIT |
+| tslib 2.8.1 (through @ionic/core, in the page) | TypeScript helpers | 0BSD |
 | vite 6.4.4, and through it esbuild, rollup, postcss, nanoid and 57 more | dev server and build | MIT |
 | typescript 5.9.3 | type checking | Apache-2.0 |
 | @types/node | types for the build config | MIT |
 | source-map-js (through vite) | source maps | BSD-3-Clause |
 | picocolors (through vite) | coloured terminal output | ISC |
+
+## Broadcast renderer (`web/render`)
+
+The renderer runs in Chromium through Playwright. One package reaches the page, pinned in
+`web/package-lock.json`.
+
+| Package | Used for | Licence |
+|---|---|---|
+| three 0.170.0 (in the page) | the WebGL renderer, and from its `examples/jsm` the physical sky (`objects/Sky.js`, the Preetham daylight model) that lights the broadcast look's fill (`web/render/look.js`) | MIT |
+
+## Sound
+
+The referee's whistle on the broadcast's mp4 is synthesised by our own code
+(`ninety/render/audio.py`: a tone with a flutter, generated sample by sample with the Python
+standard library). No recording or third-party sound is used, so there is nothing to license.
 
 ## Data
 
@@ -322,6 +343,20 @@ in `AGENTS.md`.
 | FFmpeg | av, opencv-python-headless | LGPL-2.1-or-later | LGPL, bundled unmodified and dynamically linked |
 | NVIDIA CUDA libraries | torch (Linux, `vision` group) | NVIDIA proprietary | redistributable runtime, optional group only |
 
+## Tools run, not shipped
+
+Programs the producer runs on their own machine to make a bundle. No code of theirs is in the repo,
+a wheel, the container image or a bundle; only their output is.
+
+| Tool | What for | Licence | Why it is allowed |
+|---|---|---|---|
+| ffmpeg (the producer's system install, e.g. Homebrew's) | `ninety/footage.py`: encodes the bundle's video.mp4, HLS ladder and highlight clips | that build's licence (Homebrew's is GPL, `--enable-gpl`) | run as an external program on the producer's Mac, never linked or shipped; its output, the video, is not covered by the GPL. The H.264 encoder used is Apple's VideoToolbox (`h264_videotoolbox`, part of macOS), never libx264 (GPL); the AAC encoder is ffmpeg's own (`aac`). This is not the FFmpeg bundled inside `av` or OpenCV's wheels (above) |
+
+The encode is macOS only (VideoToolbox): on Linux, CI and the Azure image, `ninety-e2e` finds no
+H.264 encoder and ships JPEG frames. **Open for Kian:** H.264 and AAC are patent-licensed formats
+(royalty terms from their patent pools, e.g. for free internet video). Whether distributing our
+demo's H.264/AAC video needs anything is a question for Kian, not settled here.
+
 ## Algorithms adapted, not dependencies
 
 `ninety/sim/fmath.py` reimplements, in our own Python, the algorithms and polynomial coefficients
@@ -332,3 +367,19 @@ notice, which its terms ask us to keep:
 > Developed at SunPro, a Sun Microsystems, Inc. business.
 > Permission to use, copy, modify, and distribute this software is freely granted, provided that
 > this notice is preserved.
+
+The phone companion ports two MIT-licensed UI components to plain TypeScript and CSS (no code of
+theirs is installed or bundled as a dependency):
+
+- `web/phone/src/ticker.ts` follows Magic UI's NumberTicker (its spring: stiffness 100, damping 60),
+  [magicuidesign/magicui](https://github.com/magicuidesign/magicui), MIT, Copyright (c) Magic UI.
+- The `.skeleton` style in `web/phone/src/style.css` follows shadcn/ui's Skeleton (a pulsing
+  rounded block), [shadcn-ui/ui](https://github.com/shadcn-ui/ui), MIT, Copyright (c) 2023 shadcn.
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions: The above copyright notice and this
+> permission notice shall be included in all copies or substantial portions of the Software.
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

@@ -1,16 +1,21 @@
 :root {
-  --bg: #0b1018;
-  --panel: #131b27;
-  --line: #233044;
-  --ink: #eef2f7;
-  --muted: #9aa7b8;
-  --accent: #36d39a;
-  --tag: #f2c14e;
-  --bad: #ff7a7a;
-  --focus: #7cc4ff;
+  /* Strict Apple, as the phone (web/phone DESIGN.md): black, flat #1C1C1E, white type, system
+     blue for focus and links only; the clubs' colours are the only colour. */
+  --bg: #000;
+  --panel: #1c1c1e;
+  --line: rgba(84, 84, 88, 0.65);
+  --ink: #fff;
+  --muted: rgba(235, 235, 245, 0.6);
+  --accent: #fff;
+  --tag: rgba(235, 235, 245, 0.6);
+  --bad: #ff453a;
+  --focus: #0a84ff;
+  --home: #3a68c0;
+  --away: #d23a44;
+  --fill: rgba(118, 118, 128, 0.24);
   --aspect: 16 / 9;
   color-scheme: dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -21,13 +26,12 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .skip { position: absolute; left: 16px; top: -48px; background: var(--focus); color: #000; padding: 8px 12px; border-radius: 6px; z-index: 2; }
 .skip:focus { top: 8px; }
 
-.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.bar h1 { font-size: 1.1rem; margin: 0 auto 0 0; letter-spacing: 0.02em; }
-.bar h1 span { color: var(--accent); }
-.persona { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.persona button { background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600; padding: 6px 16px; border-radius: 999px; cursor: pointer; }
-.persona button[aria-checked="true"] { background: var(--ink); color: var(--bg); }
-.persona button[aria-checked="true"] kbd { color: var(--bg); border-color: var(--bg); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 12px 16px; border-bottom: 0.5px solid var(--line); }
+.bar h1 { font-size: 17px; font-weight: 600; margin: 0 auto 0 0; }
+.persona { display: inline-flex; background: var(--fill); border-radius: 9px; padding: 2px; }
+.persona button { background: none; border: 0; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 16px; border-radius: 7px; cursor: pointer; }
+.persona button[aria-checked="true"] { background: rgba(255, 255, 255, 0.24); }
+.persona kbd { border: 0; padding: 0; margin-left: 4px; color: var(--muted); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
 
 /* The radar sits beside the video; on a narrow screen straight under it, before the pipeline. */
@@ -37,26 +41,26 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .layout > .pipeline { grid-area: pipe; align-self: start; margin: 0; }
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "player" "side" "pipe"; } }
 
-.stage { position: relative; aspect-ratio: var(--aspect); background: #000; border-radius: 8px; overflow: hidden; }
+.stage { position: relative; aspect-ratio: var(--aspect); background: #000; border-radius: 20px; overflow: hidden; }
 .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage canvas[hidden], .stage video[hidden] { display: none; }
 
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
-.controls button { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 18px; min-width: 88px; cursor: pointer; }
+.controls button { background: var(--fill); color: var(--ink); border: 0; border-radius: 999px; font: inherit; font-weight: 600; padding: 8px 18px; min-width: 88px; cursor: pointer; }
 .controls input[type="range"] { flex: 1 1 120px; min-width: 0; accent-color: var(--accent); }
-.controls output { font: 600 1rem ui-monospace, monospace; min-width: 5ch; }
+.controls output { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 5ch; }
 .keys { color: var(--muted); font-size: 0.85rem; margin: 8px 0; }
-.audio-note { margin: 0 0 8px; padding: 8px 12px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 4px; }
+.audio-note { margin: 0 0 8px; padding: 12px 16px; background: var(--panel); border-radius: 20px; }
 .toggle[hidden], #audio-keys[hidden], .audio-note[hidden] { display: none; }
 
-.pipeline { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem; }
+.pipeline { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; padding: 12px 14px; background: var(--panel); border: 0; border-radius: 20px; font-size: 0.9rem; }
 .pipeline dt { color: var(--muted); }
 .pipeline dd { margin: 0; }
 .pipeline dd.warn { color: var(--tag); }
 .pipeline dd.warn::before { content: "⚠ "; }
 
 .side { display: grid; gap: 16px; align-content: start; }
-.radar-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 10px; }
+.radar-panel { background: var(--panel); border: 0; border-radius: 20px; padding: 12px 14px 10px; }
 .radar-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .radar-head h2 { margin: 0; font-size: 1.05rem; }
 .radar-source { color: var(--muted); font-size: 0.8rem; }
@@ -66,16 +70,16 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .radar-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .radar-legend .dir { color: var(--muted); opacity: 0.8; }
 .radar-legend .key { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
-.radar-legend .home { background: #4ea1ff; }
-.radar-legend .away { background: #ffb02e; box-shadow: inset 0 0 0 2px #2a1800; }
+.radar-legend .home { background: var(--home); }
+.radar-legend .away { background: var(--away); }
 .radar-legend .guess { border: 2px solid var(--ink); opacity: 0.75; }
 .radar-legend .view { border-radius: 2px; width: 16px; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.7); }
 .radar-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--tag); }
 .radar-note:empty { display: none; }
-.phone-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.phone-panel { background: var(--panel); border: 0; border-radius: 20px; padding: 14px 16px; }
 .phone-panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .phone-panel .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
-#phone-pair { background: var(--accent); color: #04130d; border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 16px; cursor: pointer; }
+#phone-pair { background: var(--focus); color: #fff; border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 16px; cursor: pointer; }
 #phone-pair:disabled { opacity: 0.6; }
 .phone-qr { width: 168px; margin: 14px 0 8px; background: #fff; border-radius: 6px; line-height: 0; }
 .phone-qr svg { width: 100%; height: auto; }
@@ -83,19 +87,19 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 #phone-pairing a { color: var(--focus); overflow-wrap: anywhere; }
 #phone-pairing .phone-code { font: 800 1.9rem ui-monospace, monospace; letter-spacing: 0.25em; color: var(--ink); }
 #phone-pairing[hidden] { display: none; }
-.phone-state { margin: 8px 0 0; font-size: 0.85rem; color: var(--accent); }
+.phone-state { margin: 8px 0 0; font-size: 0.85rem; color: var(--ink); }
 .phone-error { margin: 4px 0 0; font-size: 0.85rem; color: var(--bad); }
 .phone-state:empty, .phone-error:empty { display: none; }
-.trace { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; align-self: start; }
+.trace { background: var(--panel); border: 0; border-radius: 20px; padding: 14px 16px; align-self: start; }
 .trace h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .trace .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
 #claims { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.claim { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-.claim[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.claim { border: 0; border-radius: 20px; padding: 12px; }
+.claim[aria-current="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .claim-head { display: flex; align-items: center; gap: 10px; }
 .chip { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
-.accepted .chip { background: var(--accent); color: #04130d; }
-.held_back .chip { background: var(--bad); color: #1d0505; }
+.accepted .chip { background: var(--fill); color: var(--ink); }
+.held_back .chip { background: var(--bad); color: #fff; }
 .meta { color: var(--muted); font-size: 0.8rem; }
 .claim-text { font-weight: 600; margin: 8px 0; }
 .steps { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 4px; }
@@ -103,7 +107,7 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .step .action { font: 600 0.72rem ui-monospace, monospace; text-transform: uppercase; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 .step.reject, .step.hold { color: var(--bad); }
 .step.reject strong, .step.hold strong { color: var(--bad); }
-.step.verify .action { color: var(--accent); border-color: var(--accent); }
+.step.verify .action { color: var(--ink); border-color: var(--ink); }
 .seek { margin-top: 10px; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -114,15 +118,19 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .match { margin-bottom: 10px; }
 .match[hidden], .stats-panel[hidden], .time-skip[hidden] { display: none; }
 .match-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
-.match-tag { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bg); background: var(--tag); border-radius: 999px; padding: 2px 9px; }
-.score { font: 800 1.35rem system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.match-tag { order: 9; font-size: 13px; font-weight: 400; color: var(--muted); }
+.match-top { align-items: center; }
+.score-crest { display: inline-flex; width: 28px; height: 28px; }
+.score-crest:empty { display: none; }
+.score-crest svg { width: 100%; height: 100%; }
+.score { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .chapter-now { color: var(--muted); font-size: 0.9rem; }
 .match-honest { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
 .match-honest.warn { color: var(--tag); }
 .match-honest.warn::before { content: "⚠ "; }
 body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match-keys { display: none; }
 
-.time-skip { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); z-index: 1; background: rgba(13, 27, 62, 0.94); color: #fff; border-left: 5px solid #e8ff3a; padding: 7px 14px; font: 700 clamp(0.8rem, 1.6vw, 1.05rem) system-ui, sans-serif; letter-spacing: 0.02em; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+.time-skip { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); z-index: 1; background: rgba(0, 0, 0, 0.82); color: #fff; border-left: 0; padding: 7px 14px; font: 600 clamp(0.8rem, 1.6vw, 1.05rem) -apple-system, BlinkMacSystemFont, system-ui, sans-serif; border-radius: 999px; white-space: nowrap; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) {
   html[data-motion="full"] .time-skip:not(.still) { animation: skip-in 0.25s ease-out; }
 }
@@ -131,20 +139,209 @@ body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match
 .chapter-bar { position: relative; margin-top: 10px; }
 .chapter-bar ol { list-style: none; display: flex; gap: 3px; margin: 0; padding: 0; }
 .chapter-bar li { min-width: 28px; flex-basis: 0; display: flex; }
-.chapter { flex: 1; min-width: 0; height: 42px; border: 0; border-radius: 4px; padding: 3px 7px; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: center; font: inherit; background: #2a3a50; color: var(--ink); }
-.chapter-time { font: 600 0.7rem ui-monospace, monospace; opacity: 0.8; }
+.chapter { flex: 1; min-width: 0; height: 42px; border: 0; border-radius: 4px; padding: 3px 7px; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: center; font: inherit; background: var(--panel); color: var(--ink); }
+.chapter-time { font-size: 0.7rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
 .chapter-label { font-size: 0.8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chapter.goal { background: var(--accent); color: #04130d; }
-.chapter.save { background: #7cc4ff; color: #04172b; }
-.chapter.shot { background: #c9a6ff; color: #1b0d33; }
-.chapter.set_piece { background: var(--tag); color: #231800; }
-.chapter[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
-.chapter:not([aria-current="true"]) { opacity: 0.72; }
+/* Kinds are words, not colours: a goal's chapter carries a white dot; the one playing is lifted
+   as a segmented control's selection is. */
+.chapter.goal .chapter-label::before { content: "● "; }
+.chapter[aria-current="true"] { background: #3a3a3c; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24); }
 .playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; pointer-events: none; transform: translateX(-1px); }
 
-.stats-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.stats-panel { background: var(--panel); border: 0; border-radius: 20px; padding: 12px 14px; }
 .stats { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .stats th, .stats td { padding: 5px 4px; text-align: right; border-top: 1px solid var(--line); }
 .stats tr:first-child th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 0.8rem; }
 .stats th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; }
 .stats td { font-weight: 700; }
+
+/* The big screen (main.ts, bigScreen): the broadcast, its graphics, score and clock, the chapters
+   and the QR code; everything else is on the phone. ?dev=1 shows it all. */
+body[data-screen="big"] .dev-only,
+body[data-screen="big"] .skip,
+body[data-screen="big"] #radar-section,
+body[data-screen="big"] .stats-panel,
+body[data-screen="big"] .trace,
+body[data-screen="big"] .layout > .pipeline,
+body[data-screen="big"] .match-honest:not(.warn) { display: none !important; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "player side"; grid-template-rows: auto; }
+body[data-screen="big"] .phone-panel { position: sticky; top: 16px; text-align: center; }
+body[data-screen="big"] .phone-panel .hint { font-size: 0.8rem; }
+body[data-screen="big"] .phone-qr { width: 100%; max-width: 208px; margin: 10px auto 6px; }
+body[data-screen="big"] #phone-pair { display: none; }
+body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
+@media (max-width: 900px) { body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "side"; } }
+
+/* The big screen's pairing card: a lower-third, like a TV app's sign-in card (black, white type), up for PAIR_CARD_S at kick-off and each chapter (match.ts). */
+.pair-card { position: absolute; right: 3%; bottom: 7%; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 10px;
+  background: #000; color: #fff; border-radius: 10px; font: 500 clamp(0.8rem, 1.5vw, 1.05rem)/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 70%; }
+.pair-card[hidden] { display: none; }
+.pair-qr { width: clamp(56px, 7vw, 92px); flex: none; background: #fff; border-radius: 6px; padding: 4px; line-height: 0; }
+.pair-qr svg { width: 100%; height: auto; }
+.pair-text { display: grid; gap: 2px; }
+.pair-kicker { font-size: 0.75em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b8bec8; }
+.pair-line b { font-weight: 700; }
+.pair-code { color: #fff; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .pair-card:not(.still) { animation: pair-in 0.35s ease-out; }
+}
+@keyframes pair-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* On the big screen the card replaces the side panel. */
+body[data-screen="big"] .side { display: none; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player"; }
+
+/* ---- The big screen as a streaming player (Kian, Oct 24): the picture full-bleed, nothing round
+   it. The score is the broadcast's own scorebug; the controls (src/hud.ts) sit on the picture and
+   fade while it plays. Personas and motion are the phone's. */
+.hud { display: none; }
+body[data-screen="big"] { background: #000; overflow: hidden; }
+body[data-screen="big"] .bar,
+body[data-screen="big"] .keys,
+body[data-screen="big"] .chapter-bar,
+body[data-screen="big"] .audio-note,
+body[data-screen="big"] .controls { display: none !important; }
+/* The score and chapter stay for a screen reader (announced), not on screen: the scorebug says it. */
+body[data-screen="big"] .match { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+body[data-screen="big"] .layout { display: flex; padding: 0; max-width: none; height: 100vh; gap: 0; background: #000; }
+body[data-screen="big"] .player { flex: 1; min-width: 0; height: 100%; display: grid; place-items: center; position: relative; }
+body[data-screen="big"] .stage { width: min(100%, calc(100vh * var(--ar, 1.7778))); border-radius: 0; }
+
+body[data-screen="big"] .hud { display: grid; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 64px 3% 2.2%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0)); color: #fff;
+  font: 600 clamp(13px, 1.2vw, 17px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+@media (prefers-reduced-motion: no-preference) { body[data-screen="big"] .hud { transition: opacity 0.35s ease; } }
+body[data-screen="big"][data-ui="off"] .hud { opacity: 0; pointer-events: none; }
+body[data-screen="big"][data-ui="off"] .stage { cursor: none; }
+.hud-row { display: flex; align-items: center; justify-content: space-between; }
+.hud-left, .hud-right { display: flex; align-items: center; gap: clamp(8px, 1.2vw, 18px); }
+.hud .icon { width: clamp(36px, 3.2vw, 48px); height: clamp(36px, 3.2vw, 48px); padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; display: grid; place-items: center; cursor: pointer; min-width: 0; }
+.hud .icon:hover { background: rgba(255, 255, 255, 0.14); }
+.hud .icon[hidden] { display: none; }
+.hud .icon svg { width: 62%; height: 62%; fill: currentColor; }
+.hud .icon svg .line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hud #play svg:first-child { display: none; }
+.hud #play[data-paused="true"] svg:first-child { display: block; }
+.hud #play[data-paused="true"] svg:last-child { display: none; }
+.hud #hud-qr[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+.hud output { font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, 0.85); }
+/* The scrubber: a thin white track, the chapters as ticks on it (as Hulu marks its chapters). */
+.hud-scrub { position: relative; height: 18px; display: flex; align-items: center; }
+.hud-scrub input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: none; cursor: pointer; }
+.hud-scrub input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.hud-scrub input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #fff; }
+.hud-scrub input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+.hud-scrub input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: #fff; }
+.hud-scrub input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+.ticks { position: absolute; inset: 0 7px; pointer-events: none; }
+.ticks i { position: absolute; top: 7px; width: 2px; height: 4px; margin-left: -1px; background: #000; }
+.ticks i.goal { top: 3px; height: 12px; background: #fff; border-radius: 1px; }
+
+/* The pairing card at kick-off and from the QR button: centred low, clear of the scorebug. */
+body[data-screen="big"] .pair-card { right: 3%; bottom: 7%; z-index: 4; }
+body[data-screen="big"][data-ui="on"] .pair-card[data-at="up"] { bottom: calc(7% + 72px); }
+/* With the controls up, the graphics rise above them, as subtitles do in a streaming player. */
+@media (prefers-reduced-motion: no-preference) { body[data-screen="big"] #overlay { transition: transform 0.35s ease; } }
+body[data-screen="big"][data-ui="on"] #overlay { transform: translateY(-9%); }
+/* The audio menu, as a streaming app's: a dark panel above the control bar, right. */
+.audio-menu { position: absolute; right: 3%; bottom: calc(2.2% + 92px); z-index: 4; display: flex; gap: 28px; padding: 18px 22px; border-radius: 14px;
+  background: rgba(28, 28, 30, 0.92); color: #fff; font: 500 clamp(13px, 1.1vw, 16px) -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.audio-menu[hidden] { display: none; }
+.audio-menu fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; align-content: start; min-width: 9em; }
+.audio-menu legend { padding: 0 0 8px; font-size: 1.15em; font-weight: 600; color: #fff; }
+.audio-menu label { display: flex; align-items: center; gap: 10px; cursor: pointer; color: rgba(235, 235, 245, 0.6); }
+.audio-menu label:has(input:checked) { color: #fff; }
+/* The chosen row carries a check mark, as Netflix's menu does; the radio's circle is not drawn. */
+.audio-menu input { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin: 0; flex: none; }
+.audio-menu input:checked { background: no-repeat center / 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8.5 3.2 3L13 4.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.audio-menu input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.hud #hud-audio[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+/* Commentary subtitles, as streaming subtitles: white on a soft black box, low centre, above the
+   lower thirds' line and clear of the controls. */
+.captions { position: absolute; left: 50%; bottom: 23%; transform: translateX(-50%); z-index: 2; max-width: 70%; margin: 0; padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.75); color: #fff; border-radius: 4px; text-align: center;
+  font: 500 clamp(16px, 2.2vw, 30px)/1.3 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.captions[hidden] { display: none; }
+body[data-screen="big"][data-ui="on"] .captions { bottom: calc(23% + 40px); }
+.audio-menu [hidden] { display: none; }
+
+/* ---- The companion on the computer (src/dock.ts, Kian Oct 26): the phone app docked right of
+   the picture, open by default; a bottom sheet below 1000 px; an overlay in full screen. */
+.companion { display: none; }
+body[data-screen="big"] .companion { display: flex; flex-direction: column; flex: none; width: 380px; height: 100%; position: relative;
+  background: #000; border-left: 0.5px solid rgba(84, 84, 88, 0.65); color: #fff; }
+body[data-screen="big"][data-dock="closed"] .companion { display: none; }
+.companion-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; padding: 0 12px 0 6px; flex: none; }
+.companion-grab { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; color: #fff; font: 600 17px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.companion-grab:hover { background: rgba(255, 255, 255, 0.08); }
+.companion-grab .chev { width: 18px; height: 18px; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.companion-phone { display: inline-flex; align-items: center; gap: 6px; background: #1c1c1e; color: #fff; border: 0; border-radius: 999px; padding: 7px 13px 7px 10px;
+  font: 500 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
+.companion-phone:hover, .companion-phone[aria-expanded="true"] { background: #2c2c2e; }
+.companion-phone svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.companion-pair { display: flex; gap: 14px; align-items: center; margin: 0 12px 12px; padding: 12px; background: #1c1c1e; border-radius: 14px; flex: none; }
+.companion-pair[hidden] { display: none; }
+.companion-qr { width: 112px; flex: none; background: #fff; border-radius: 8px; line-height: 0; }
+.companion-qr svg { width: 100%; height: auto; }
+.companion-pair p { margin: 0; font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: rgba(235, 235, 245, 0.6); }
+.companion-pair b { color: #fff; font-weight: 600; overflow-wrap: anywhere; }
+.companion-body { position: relative; flex: 1; min-height: 0; }
+.companion-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; color-scheme: dark; }
+.companion-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: rgba(235, 235, 245, 0.6); font: 400 15px -apple-system, system-ui, sans-serif; pointer-events: none; }
+.companion-wait[hidden] { display: none; }
+.hud #hud-companion[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+
+/* The first-run pill, under the broadcast's scorebug: one quiet line, gone after first use. */
+.ask-hint { display: none; }
+body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 11.5%; z-index: 3;
+  padding: 6px 14px; border-radius: 999px; border: 0.5px solid rgba(255, 255, 255, 0.14); background: rgba(28, 28, 30, 0.72); color: #fff;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font: 500 clamp(12px, 1vw, 15px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
+body[data-screen="big"] .ask-hint:hover { background: rgba(44, 44, 46, 0.86); }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] body[data-screen="big"] .ask-hint:not([hidden]) { animation: pair-in 0.5s ease-out 1s both; }
+}
+
+/* Below 1000 px: the picture on top, the companion a sheet under it; closed, only its handle. */
+@media (max-width: 999px) {
+  body[data-screen="big"] .layout { flex-direction: column; }
+  body[data-screen="big"] .player { flex: none; height: auto; }
+  body[data-screen="big"] .stage { width: 100%; }
+  body[data-screen="big"] .companion,
+  body[data-screen="big"][data-dock="closed"] .companion { display: flex; width: auto; height: auto; flex: 1; min-height: 52px; border-left: 0; border-radius: 14px 14px 0 0; background: #1c1c1e; margin-top: 4px; }
+  body[data-screen="big"][data-dock="closed"] .companion { flex: none; }
+  body[data-screen="big"][data-dock="closed"] .companion-body,
+  body[data-screen="big"][data-dock="closed"] .companion-pair { display: none; }
+  .companion-grab .chev { transform: rotate(90deg); }
+  body[data-dock="closed"] .companion-grab .chev { transform: rotate(-90deg); }
+  .companion-pair { background: #2c2c2e; }
+  .companion-phone { background: #2c2c2e; }
+}
+
+/* Full screen (hud.ts): the picture alone, the companion closed; the control bar's button docks it
+   beside the picture again, never over the controls. */
+body[data-screen="big"] .layout:fullscreen { width: 100vw; height: 100vh; }
+body[data-screen="big"] .layout:fullscreen .ask-hint { display: none; }
+/* The kick-off QR card is for a screen with no companion beside it, and never under the audio menu. */
+body[data-screen="big"][data-dock="open"] .pair-card,
+body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: none; }
+
+/* The picture waiting for data (src/player.ts): a quiet ring, never a silent black frame. */
+.spinner { position: absolute; left: 50%; top: 50%; z-index: 2; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22); border-top-color: #fff; pointer-events: none; }
+.spinner[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The ••• menu: the demo passcode, as the audio menu is drawn. */
+/* Every control is a 44 pt target (Apple's HIG). */
+.more-menu input[type="password"] { -webkit-appearance: none; appearance: none; width: 15em; height: auto; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 10px;
+  background: rgba(118, 118, 128, 0.24); color: #fff; font: inherit; }
+.more-row { display: flex; gap: 8px; }
+.more-row button { border: 0; border-radius: 999px; min-height: 44px; padding: 6px 18px; font: inherit; font-weight: 600; cursor: pointer; background: rgba(118, 118, 128, 0.24); color: #fff; }
+.more-row button[type="submit"] { background: #fff; color: #000; }
+.more-state { margin: 0; font-size: 0.85em; color: rgba(235, 235, 245, 0.6); }
+.hud #hud-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+/* The control bar's buttons keep a 44 pt target on a narrow window: the ring stays its size, the
+   hit area does not shrink below 44 px. */
+.hud .icon { position: relative; }
+.hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }

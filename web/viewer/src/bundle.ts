@@ -58,7 +58,11 @@ export interface Manifest {
   /** Runs of consecutive match frames: image `index` shows match frame `frame`. More than one when
    * the broadcast cut from a dead ball to its restart (ninety/match/timeline.py). */
   segments?: { index: number; frame: number; frames: number }[];
-  footage: { kind: "video" | "frames"; src: string; pattern?: string; frames: number };
+  /** `mp4`, `hls`, `poster`, `audio` from #397 (H.264 + an HLS ladder); `src` stays the legacy file. */
+  footage: {
+    kind: "video" | "frames"; src: string; pattern?: string; frames: number;
+    mp4?: string; hls?: string; poster?: string; audio?: "muxed" | null;
+  };
   detector: string | null;
   detections: { source: string; frames: number };
   events: { source: string; count: number; standin: boolean; held: string[] };
@@ -68,8 +72,18 @@ export interface Manifest {
   audio?: { mode: string; lines: number; dropped: number; max_lag_s: number; vtt: string };
   /** radar.json (ninety/radar.py), when the bundle was made with vision's tracked output. */
   radar?: { source: string; frames: number; footprints: number } | null;
+  /** The clubs' names (src/teams.ts), when the bundle names them. */
+  teams?: { home: string; away: string };
+  /** The track ids whose side the fact-checker vouches for (ninety/e2e.py `sides_known`). */
+  sides_known?: string[];
+  /** Whether vision's ball-speed error is measured (#331), and that error; absent, it is not (src/speed.ts). */
+  speed?: { measured?: boolean; error_kmh?: number | null } | null;
   /** match.json (ninety/condensed.py), for a condensed match. */
   match?: { chapters: number; goals: number; min_confidence: number } | null;
+  /** commentary.json (src/commentary.ts): pre-rendered commentary lines, for the big screen's
+   * audio menu; `stadium` a crowd-and-whistles bed in video time, when the bundle has one. */
+  commentary?: { count: number } | null;
+  stadium?: string | null;
 }
 
 /** One line of audio.json (ninety/speech/describe.py `Said`). */

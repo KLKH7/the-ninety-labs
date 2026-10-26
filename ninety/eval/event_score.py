@@ -43,7 +43,7 @@ LENIENT_M = 2.0
 # team; a substitution has no meaningful place and is graded on time only.
 PLAYER_PLACED = {"pressure", "kickoff"}
 FOULED_PLACED = {"foul"}  # placed where the fouled player was (engine.foul): the other side
-NOT_PLACED = {"substitution"}
+NOT_PLACED = {"substitution", "score_change"}  # a score change is read from the scorebug, not a place
 
 
 def in_a_cut(k: int, cuts: list[dict] | None) -> bool:
@@ -163,6 +163,27 @@ def ratio(num: int, den: int) -> float | None:
     return num / den if den else None
 
 
+def at_restart(truth: list[dict]) -> set[str]:
+    """The ids of the true possession changes given at a restart: the engine writes one at the same
+    moment as the kick-off or set piece of its side when that side did not have the ball
+    (Engine.tick_restart). The rest are won in open play (docs/eval/possession-change-plan.md)."""
+    restarts = {(e["t"], e["team"]) for e in truth if e["type"] in ("kickoff", "set_piece")}
+    return {e["id"] for e in truth if e["type"] == "possession_change" and (e["t"], e["team"]) in restarts}
+
+
+def by_phase(truth: list[dict], pairs: list[dict]) -> dict:
+    """Possession changes' recall split into open play and at a restart: the detector claims only
+    the first, so a restart's is a miss named as such."""
+    restart = at_restart(truth)
+    matched = {p["truth_id"] for p in pairs if p["type"] == "possession_change"}
+    out = {}
+    for phase, ids in (("open_play", {e["id"] for e in truth if e["type"] == "possession_change"} - restart),
+                       ("at_restart", restart)):
+        tp = len(ids & matched)
+        out[phase] = {"true": len(ids), "tp": tp, "fn": len(ids) - tp, "recall": ratio(tp, len(ids))}
+    return out
+
+
 def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
     n_true = Counter(e["type"] for e in truth)
     n_detected = Counter(e["type"] for e in detected)
@@ -185,6 +206,8 @@ def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
             "time_error_s": {"mean": sum(dts) / len(dts), "max": max(dts)} if dts else None,
             "distance_m": {"mean": sum(dists) / len(dists), "max": max(dists)} if dists else None,
         }
+        if kind == "possession_change":
+            per_type[kind]["by_phase"] = by_phase(truth, pairs)
     return {"per_type": per_type, "pairs": pairs}
 
 

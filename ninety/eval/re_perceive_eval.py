@@ -1,0 +1,205 @@
+"""Does looking again help? Active perception measured on validation clips, graded offline.
+
+    uv run python -m ninety.eval.re_perceive_eval --clips <dir> [<dir> ...] --out docs/eval/re-perceive
+
+Each clip folder holds what the live path wrote for a multi-view clip (ninety/vision/live_job.py):
+`detected.jsonl` (the merged events) and `views/<camera>/observations.jsonl`, plus the clip's answer
+key `events.jsonl` for grading here only (grading is its allowed use; nothing on the live path reads
+it). Validation clips only, never test clips.
+
+For every detected pass, shot or goal the fact-checker would hold on its side (a team claim on a side
+told at or below factcheck.MIN_TEAM_CONFIDENCE) or on its detection (below MIN_CONFIDENCE), this runs
+the same look the fact-checker takes (ninety/agents/perceive.recheck, as a team claim) and counts:
+
+- resolved: the look confirmed it, so the claim would now air; graded right when the true event
+  matched to it (same type, within 1 s and 2 m: the event scorer's rules) is on the detected side;
+- contradicted: a camera saw the other side, so the claim stays held; graded right when the
+  detected side was wrong;
+- unresolved: still held.
+
+A wrong resolution airs a false team claim that holding would have kept off the screen: it is the
+number that decides whether the look is worth it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from pathlib import Path
+
+from ninety.agents import perceive
+from ninety.agents.cues import TEMPLATE_TYPES
+from ninety.agents.factcheck import MIN_CONFIDENCE, side_known
+
+
+def _jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def truth_of(event: dict, truth: list[dict]) -> dict | None:
+    near = [t for t in truth if t["type"] == event["type"] and abs(t["t"] - event["t"]) <= perceive.MATCH_S
+            and math.hypot(t["x"] - event["x"], t["y"] - event["y"]) <= perceive.MATCH_M]
+    return min(near, key=lambda t: abs(t["t"] - event["t"]), default=None)
+
+
+def clip_rows(clip: Path) -> list[dict]:
+    views = {p.parent.name: _jsonl(p) for p in sorted((clip / "views").glob("*/observations.jsonl"))}
+    truth = _jsonl(clip / "events.jsonl")  # grading only
+    return rows_for(clip.name, _jsonl(clip / "detected.jsonl"), views, truth)
+
+
+def rows_for(name: str, detected: list[dict], views: dict[str, list[dict]], truth: list[dict]) -> list[dict]:
+    """The held detections of one clip, each looked at again through `views` and graded on `truth`."""
+    out = []
+    for event in detected:
+        if event["type"] not in TEMPLATE_TYPES:
+            continue
+        held = event["confidence"] < MIN_CONFIDENCE or not side_known(event)
+        if not held:
+            continue
+        p = perceive.Perceiver(views)
+        team_claim = not side_known(event)
+        text = "Home and away." if team_claim else "A pass."  # a team claim where the side is unsure
+        scope, looks = perceive.recheck(p, text, [event["id"]], {event["id"]: event}, {event["id"]: event}, 0)
+        contradicted = any("other side" in lk.why for lk in looks)
+        outcome = "resolved" if scope else "contradicted" if contradicted else "unresolved"
+        match = truth_of(event, truth)
+        side_right = None if match is None else match["team"] == event["team"]
+        # What a resolution airs: a team claim on its side (right if the side is), or a claim on a
+        # detection (right if the event happened).
+        right = side_right if team_claim else match is not None
+        out.append({"clip": name, "event": event["id"], "type": event["type"], "outcome": outcome,
+                    "held_on": "side" if team_claim else "detection",
+                    "matched": match is not None, "side_right": side_right, "right": right,
+                    "looks": [lk.as_dict() for lk in looks]})
+    return out
+
+
+def summary(rows: list[dict]) -> dict:
+    def count(outcome, right):
+        return sum(r["outcome"] == outcome and r.get("right", r["side_right"]) is right for r in rows)
+    return {
+        "held": len(rows),
+        "held_on_side": sum(r.get("held_on") == "side" for r in rows),
+        "held_on_detection": sum(r.get("held_on") == "detection" for r in rows),
+        "resolved": sum(r["outcome"] == "resolved" for r in rows),
+        "resolved_right": count("resolved", True), "resolved_wrong": count("resolved", False),
+        "resolved_false_event": sum(r["outcome"] == "resolved" and not r["matched"] for r in rows),
+        "contradicted": sum(r["outcome"] == "contradicted" for r in rows),
+        "contradicted_right": count("contradicted", False), "contradicted_wrong": count("contradicted", True),
+        "unresolved": sum(r["outcome"] == "unresolved" for r in rows),
+    }
+
+
+def report(s: dict, clips: list[str], cameras: list[str] | None = None) -> str:
+    return "\n".join([
+        "# Active perception on validation clips",
+        "",
+        f"Generated by `uv run python -m ninety.eval.re_perceive_eval` on {len(clips)} validation clips "
+        f"({', '.join(clips)}), graded against the answer key offline."
+        + (f" Cameras looked through: {', '.join(cameras)}." if cameras else ""),
+        "",
+        f"- Held claims: **{s['held']}** ({s['held_on_side']} on an unsure side, a team claim; "
+        f"{s['held_on_detection']} on an unsure detection, a claim naming no side).",
+        f"- Resolved by a second look (the claim would air): **{s['resolved']}**: right "
+        f"{s['resolved_right']}, wrong **{s['resolved_wrong']}** (a wrong side, or a false event), on a "
+        f"false detection {s['resolved_false_event']}. A look never re-reads a side (lesson 227), so a "
+        "claim held on its side cannot resolve.",
+        f"- Contradicted (a whole-clip look told the other side; held, with that reason): "
+        f"{s['contradicted']}: rightly {s['contradicted_right']}, wrongly {s['contradicted_wrong']}.",
+        f"- Unresolved (still held): {s['unresolved']}.",
+        "",
+        "A wrong resolution airs a false team claim that holding would have kept off the screen.",
+        "",
+        "**Reading.** A look may confirm a detection but never re-read a side (lesson 227): the side "
+        "threshold was measured on the broadcast clip's whole-clip vote, and each camera's vote is "
+        "another reading until it is measured. So on today's vision a second look airs nothing held "
+        "on its side: safe, and no gain yet. It still holds a claim when a whole-clip look tells the "
+        "other side. It opens a gate only when a camera's own side reading is measured and good.",
+    ]) + "\n"
+
+
+def broadcast_rows(name: str, detected: list[dict], association: dict, broadcast: dict,
+                   truth: list[dict]) -> list[dict]:
+    """Mode `broadcast_side` (docs/eval/re-perceive-broadcast-plan.md): every detected event the
+    fact-checker holds on its side, asked of the broadcast through the association, graded on
+    `truth`: a resolution is right when the true event's side is the side resolved; a contradiction
+    is right when the detected side was wrong."""
+    out = []
+    for event in detected:
+        if event["type"] not in TEMPLATE_TYPES or side_known(event):
+            continue
+        outcome, why = perceive.broadcast_side(event, association, broadcast)
+        match = truth_of(event, truth)
+        side_right = None if match is None else match["team"] == event["team"]
+        out.append({"clip": name, "event": event["id"], "type": event["type"], "outcome": outcome,
+                    "held_on": "side", "matched": match is not None, "side_right": side_right,
+                    "right": side_right, "why": why})
+    return out
+
+
+def split_rows(seeds: list[int], fused: Path, views: dict[str, Path], truth_root: Path) -> list[dict]:
+    """Clips laid out as vision's validation run writes them: the fused observations per seed
+    (`<fused>/seed<N>.jsonl`, whose events are what the live path detects), each camera's
+    observations per seed (`<view dir>/seed<N>.jsonl`), and the answer key per seed
+    (`<truth_root>/seed<N>/events.jsonl`, grading only)."""
+    from ninety.vision import events as vision_events
+
+    out = []
+    for seed in seeds:
+        name = f"seed{seed}"
+        detected, _ = vision_events.detect(_jsonl(fused / f"{name}.jsonl"))
+        cams = {cam: _jsonl(d / f"{name}.jsonl") for cam, d in views.items()
+                if (d / f"{name}.jsonl").exists()}
+        out += rows_for(name, detected, cams, _jsonl(truth_root / name / "events.jsonl"))
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--clips", type=Path, nargs="*", default=[], help="validation clip folders")
+    ap.add_argument("--seeds", type=int, nargs="*", default=[], help="validation seeds (split layout)")
+    ap.add_argument("--fused", type=Path, help="split layout: fused observations, seed<N>.jsonl")
+    ap.add_argument("--view", action="append", default=[], metavar="NAME=DIR",
+                    help="split layout: one camera's observations, seed<N>.jsonl (repeatable)")
+    ap.add_argument("--truth-root", type=Path, help="split layout: <dir>/seed<N>/events.jsonl")
+    ap.add_argument("--joined", type=Path, nargs="*", default=[],
+                    help="mode broadcast_side: join runs (views/detected.jsonl, joined/association.json)")
+    ap.add_argument("--broadcast-sides", type=Path,
+                    help="mode broadcast_side: {sides: {clip: {broadcast track: [side, confidence]}}}")
+    ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
+    args = ap.parse_args()
+    if args.joined:
+        sides = json.loads(args.broadcast_sides.read_text())
+        rows = []
+        for run in args.joined:
+            if run.name not in sides["sides"]:
+                continue  # no broadcast run for this clip
+            rows += broadcast_rows(run.name, _jsonl(run / "views" / "detected.jsonl"),
+                                   json.loads((run / "joined" / "association.json").read_text())["tracks"],
+                                   {k: tuple(v) for k, v in sides["sides"][run.name].items()},
+                                   _jsonl(args.truth_root / run.name / "events.jsonl"))
+        s = summary(rows)
+        names = sorted({r["clip"] for r in rows} | {r.name for r in args.joined if r.name in sides["sides"]})
+        args.out.with_suffix(".json").write_text(json.dumps(
+            {"mode": "broadcast_side", "clips": names, "broadcast_sides_from": sides.get("code"),
+             "summary": s, "rows": rows}, indent=1, allow_nan=False) + "\n")
+        print(json.dumps(s, indent=1))
+        return
+    rows = [r for clip in args.clips for r in clip_rows(clip)]
+    if args.seeds:
+        views = dict(v.split("=", 1) for v in args.view)
+        rows += split_rows(args.seeds, args.fused, {k: Path(d) for k, d in views.items()}, args.truth_root)
+    args.clips = args.clips or [Path(f"seed{s}") for s in args.seeds]
+    s = summary(rows)
+    names = [c.name for c in args.clips]
+    args.out.with_suffix(".json").write_text(json.dumps({"clips": names, "summary": s, "rows": rows},
+                                                        indent=1, allow_nan=False) + "\n")
+    cameras = sorted({v.split("=", 1)[0] for v in args.view})
+    args.out.with_suffix(".md").write_text(report(s, names, cameras))
+    print(report(s, names, cameras))
+
+
+if __name__ == "__main__":
+    main()

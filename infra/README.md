@@ -22,8 +22,9 @@ subscription allows five regions; that one has our models).
 | Foundry content-safety policy `ninety-guardrail` | attached to every published agent: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect attacks |
 
 The Foundry resource (`ninety-labs-ai`) and its project were created by hand earlier: the Bicep
-references them to add the connection and the policy, but does not manage them. Also not managed
-here yet: Speech (`ninety-labs-speech`). Cosmos DB and the
+references them to add the connection and the policy, but does not manage them. Speech
+(`ninety-labs-speech`, F0, key auth off) was too: the Bicep references it only to give the API's
+identity Cognitive Services Speech User on it, for Live read-aloud. Cosmos DB and the
 Personalizer app are added with the code that uses them
 ([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)). The live detection job
 ([live-job.bicep](live-job.bicep), [live-job.sh](live-job.sh)) is deployed on its own into this
@@ -134,7 +135,11 @@ One container app serves everything a judge opens, from one image ([Dockerfile](
   (`/api/pair`, the WebSocket relay, `/api/ask`) runs in the same process (ninety/api/companion.py).
 - **Live mode** (`/api/live/...`, and the companion's `/api/ask`): anything that costs a model call or speech, behind the demo
   passcode (`x-ninety-passcode`, one secret for both), read from Key Vault. Without a configured passcode it refuses
-  everyone.
+  everyone. `/api/live/speak` reads an Ask answer aloud in the pinned voice (ninety/speech/voice.py), and only
+  text the API itself just answered with, so it is no free voice for arbitrary text. It is limited to 20 a
+  minute per IP and 50,000 characters a day, and signs in as the API's identity (`AZURE_CLIENT_ID`).
+  The Replay bundle's read-aloud lines are pre-generated (`ninety-e2e --voice-audio`), so Replay never
+  calls Speech.
 - **Spanish on air:** the default is the real Personalizer, so nothing to set. If the demo ever runs the
   mock translator, set `NINETY_TRANSLATOR=mock` on the API container as well as the Personalizer: the
   on-air gate reads it where cues air, and otherwise holds the `[es]` variants (#186).
@@ -223,6 +228,17 @@ first MCP call waits for the same start inside its 100 s tool timeout. The app n
 which shortens the start-up share, and the live smoke test fails a first request slower than 60 s.
 Most of the start-up is imports the phone companion pulls in at load (the Foundry, OpenAI and Blob
 SDKs, about 3.6 of 4.6 s on a laptop); loading them on first use would shorten it further.
+
+### Which clips the phone and the MCP server serve
+
+The served clips are config, not code. Besides the M1 clip (`tests/fixtures`), every folder under
+`NINETY_SERVED_DIR` that holds a match package is served under the folder's name: `tracked.json`
+(tracked positions), `detected.jsonl` (detected events) and `clip.json` (seed and club codes), plus
+`scorebug.jsonl` when the scorebug was read. These are the files an e2e run leaves in `runs/<match>/`.
+The wind map, the player card and Ask then work for that clip (`ninety/match/tracking.py`,
+`served_clips`). The demo match's package is about 30 MB (its `tracked.json`), so the image is meant to
+take it as a pinned release asset, unpacked to `NINETY_SERVED_DIR`, the way it takes the replay. That
+change to the image is a deploy, and waits for its approval.
 
 ## The MCP key
 

@@ -17,7 +17,10 @@ def site(tmp_path):
     replay = tmp_path / "replay"
     replay.mkdir()
     (replay / "manifest.json").write_text(json.dumps({"format": 1}))
-    (replay / "video.webm").write_bytes(bytes(range(256)) * 4)
+    (replay / "video.mp4").write_bytes(bytes(range(256)) * 4)
+    (replay / "hls" / "720p").mkdir(parents=True)
+    (replay / "hls" / "master.m3u8").write_text("#EXTM3U\n")
+    (replay / "hls" / "720p" / "seg0000.m4s").write_bytes(b"\0" * 64)
     phone = tmp_path / "phone"
     phone.mkdir()
     (phone / "index.html").write_text("<!doctype html><title>phone</title>")
@@ -39,15 +42,24 @@ def test_the_phone_companion_is_served_beside_the_viewer(site):
     for path in ("/phone/", "/phone"):
         r = site.get(path)
         assert r.status_code == 200 and "<title>phone</title>" in r.text, path
-    assert "frame-ancestors 'none'" in site.get("/phone/").headers["content-security-policy"]
+    # Framed only by this origin's big screen (its companion panel), never by another site.
+    assert "frame-ancestors 'self'" in site.get("/phone/").headers["content-security-policy"]
     assert site.get("/phone/../secret.txt").status_code == 404
     assert "immutable" in site.get("/phone/assets/index-def.js").headers["cache-control"]
 
 
 def test_the_replay_bundle_is_served_with_byte_ranges(site):
     assert site.get("/bundle/manifest.json").json() == {"format": 1}
-    r = site.get("/bundle/video.webm", headers={"range": "bytes=10-19"})
+    r = site.get("/bundle/video.mp4", headers={"range": "bytes=10-19"})
     assert r.status_code == 206 and r.content == bytes(range(10, 20))
+    assert r.headers["content-type"] == "video/mp4"
+
+
+def test_the_hls_ladder_is_served_by_its_types(site):
+    # ninety/footage.py: hls.js and Safari read the playlists and fMP4 segments by these types.
+    playlist = site.get("/bundle/hls/master.m3u8").headers["content-type"]
+    assert playlist.startswith("application/vnd.apple.mpegurl")
+    assert site.get("/bundle/hls/720p/seg0000.m4s").headers["content-type"] == "video/iso.segment"
 
 
 def test_nothing_outside_the_bundle_is_served(site):
@@ -113,3 +125,17 @@ def test_without_a_viewer_or_bundle_the_api_still_answers(tmp_path):
     assert client.get("/").status_code == 404
     assert client.get("/bundle/manifest.json").status_code == 404
     assert client.get("/phone/").status_code == 404
+
+
+def test_only_the_phones_pages_may_apply_inline_styles_and_scripts_stay_self_everywhere(site):
+    """The phone's Ionic components write <style> elements at run time (web/phone/src/ionic.ts), so
+    its pages allow inline styles; nothing else does, and no page allows an inline script."""
+    for path in ("/phone/", "/phone", "/phone/assets/index-def.js"):
+        csp = site.get(path).headers["content-security-policy"]
+        assert "style-src 'self' 'unsafe-inline'" in csp, path
+        assert "frame-ancestors 'self'" in csp and "connect-src 'self'" in csp, path
+    for path in ("/", "/bundle/manifest.json", "/api/health", "/phoney", "/assets/index-abc.js"):
+        assert "style-src" not in site.get(path).headers["content-security-policy"], path
+    for path in ("/", "/phone/"):
+        # default-src 'self' rules scripts
+        assert "script-src" not in site.get(path).headers["content-security-policy"]
