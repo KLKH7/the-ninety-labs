@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
 from ninety.agents.factcheck import side_known
@@ -59,6 +60,60 @@ def grade(tactical: dict, broadcast: dict, events: list[dict], owner_v, owner_b,
     return {"track_names": score(named_t), "events": len(actors), "event_names": score(named_e),
             "event_coverage": round(len(named_e) / len(actors), 3) if actors else None,
             "tracks_named": len(tracks)}
+
+
+def unnamed_reasons(events: list[dict], named: dict, seen: set[str], majority: set[str]) -> dict[str, int]:
+    """Why each event is or is not named, the first reason that holds, in the plan's order
+    (docs/eval/identity-direct-plan.md). `seen`, `majority`: track numbers with a calibrated frame,
+    and with a feed player for most of their frames. Every event gets exactly one."""
+    out = Counter()
+    for e in events:
+        who = e.get("player")
+        if who and who in named:
+            out["named"] += 1
+        elif not who:
+            out["no_player_attributed"] += 1
+        elif identity._number(who) not in seen:
+            out["calibration_withheld"] += 1  # never fires today: the tracker skips uncalibrated frames
+        elif identity._number(who) not in majority:
+            out["no_feed_majority"] += 1
+        else:
+            out["name_held_by_another_track"] += 1
+    return dict(out)
+
+
+def gate_met(held_out: dict) -> bool:
+    """The plan's gate: held-out event-actor precision at least TARGET."""
+    return (held_out["event_names"]["precision"] or 0) >= TARGET
+
+
+def direct_path(args, frames, association, events, owner_v, owner_b, eid, tv, assoc: float,
+                held) -> tuple[dict, bool]:
+    """The broadcast's tracks matched to the feed directly, combined with the join (pre-registered:
+    docs/eval/identity-direct-plan.md): graded once, with every unnamed event's reason."""
+    b_frames = identity.broadcast_frames(args.vision, args.clip)
+    feed_b = identity.load_for(args.feed, [*frames, *b_frames], load_fixture(args.clip / "clip.json"))
+    direct = identity.tactical(b_frames, feed_b, any_side=True)
+    via = identity.broadcast(association, tv, {"association": assoc})
+    comb = identity.combined(identity.event_ids(events, association), via, direct, association)
+    # The direct path's own tracks, graded as tracks (by number, as owner_b is keyed).
+    own = [_true(owner_b, t) == eid[w["player"]] for t, w in direct.items()]
+    report = {"plan": "docs/eval/identity-direct-plan.md", "direct_tracks": len(direct),
+              "direct_track_names": score(own),
+              "held_out": grade(tv, comb, events, owner_v, owner_b, held, eid),
+              "all": grade(tv, comb, events, owner_v, owner_b, lambda t: True, eid),
+              "paths": dict(Counter(w["path"] for w in comb.values()))}
+    for k in ("held_out", "all"):  # grade()'s track_names are the tactical camera's, reported above
+        report[k].pop("track_names")
+        report[k].pop("tracks_named")
+    seen = {identity._number(p["id"]) for f in b_frames for p in f["players"]}
+    loose = identity.assign(b_frames, feed_b, any_side=True, one_at_a_time=False)
+    calibrated = {f["frame"] for f in b_frames}
+    report["events"] = len(events)
+    report["reasons"] = unnamed_reasons(events, comb, seen, {identity._number(t) for t in loose})
+    report["events_on_withheld_frames"] = sum(e["frame"] not in calibrated for e in events)
+    report["events_side_sure"] = sum(map(side_known, identity.sided(events, comb)))
+    return report, gate_met(report["held_out"])
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -112,15 +167,20 @@ def main(argv: list[str] | None = None) -> None:
         out["events_side_sure"] = {"without_feed": sum(map(side_known, events)),
                                    "with_feed": sum(map(side_known, sided))}
         out["events_side_changed"] = sum(a["team"] != b["team"] for a, b in zip(events, sided, strict=True))
+    direct_met = None
+    if chosen:
+        out["direct"], direct_met = direct_path(args, frames, association, events, owner_v, owner_b, eid, tv,
+                                                chosen["association"], held)
     args.out.write_text(json.dumps(out, indent=1) + "\n")
     # The gate is used only if the held-out half also meets the target on both units.
     h = out.get("held_out") or {}
     met = bool(h) and all((h[u]["precision"] or 0) >= TARGET for u in ("track_names", "event_names"))
     args.calibration.write_text(json.dumps({"association": chosen and chosen["association"],
                                             "target": TARGET, "held_out_met": met,
+                                            "direct_held_out_met": bool(direct_met),
                                             "source": "docs/eval/identity.json"}, indent=1) + "\n")
     shown = ("chosen", "held_out", "all", "frame_coverage", "tracks", "id_corrections", "events_sided",
-             "events_total", "events_side_sure", "events_side_changed")
+             "events_total", "events_side_sure", "events_side_changed", "direct")
     print(json.dumps({k: out.get(k) for k in shown},
                      indent=1))
 
