@@ -610,6 +610,7 @@ def check(
     claim: Claim,
     known: dict[str, dict],
     roster: Iterable[Mapping | str] | None = None,
+    play: bool = True,
 ) -> Verdict:
     reasons = []
     if not claim.evidence:
@@ -701,8 +702,91 @@ def check(
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
     reasons += shape_reasons(text, evidence)
+    if play:  # off only to replay a recording made before these checks (ninety/agents/workflow.py)
+        reasons += play_reasons(claim.text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
+
+
+# Words about play that a cited fact must show (Kian's blind labels, docs/eval/factcheck-human-labels.md).
+# A long ball is a pass of 32 m or more: Opta's 35 yards (GROUNDING I11, *verify*).
+LONG_BALL_M = 32
+LONG_BALL = re.compile(r"\blong\s+(?:balls?|pass(?:es)?)\b", re.I)
+# Play under pressure: said only with a cited pressure event (an opponent closing the ball down).
+UNDER_PRESSURE = re.compile(
+    r"\b(?:despite|under|amid)\s+(?:the\s+|heavy\s+|intense\s+|their\s+|sustained\s+)?pressure\b"
+    r"|\bpressured\b", re.I,
+)
+# A connective that orders two moments in time. Joining an interception to the very pass it cut out
+# makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
+# the interception where the ball arrives.
+# "then" is not one: "cut out by a8, then a8 passes" orders two acts, and reading it would reject that
+# true form, so a claim that says the same act twice joined by "then" is not caught (a known gap).
+BEFORE_AFTER = re.compile(
+    r"\b(?:after|before|following|follow(?:s|ed)(?:\s+by)?|precede(?:s|d)(?:\s+by)?)\b", re.I
+)
+WINS_IT = re.compile(
+    r"intercept|\bcut(?:s|ting)?\s+(?:it\s+)?out\b|\b(?:wins?|won|winning)\s+(?:it|the\s+ball)\b", re.I
+)
+A_PASS = re.compile(r"\bpass(?:es|ed)?\b", re.I)
+
+
+def _same_act(evidence: list[dict]) -> list[tuple[dict, dict]]:
+    """(pass, interception) pairs that are one act: a cited pass cut out by a player, and his cited
+    interception as the next cited event after it."""
+    order = sorted((e for e in evidence if e.get("type")),
+                   key=lambda e: (e.get("minute") or 0, e.get("clock") or ""))
+    pairs = []
+    for n, p in enumerate(order[:-1]):
+        nxt = order[n + 1]
+        if (p.get("type") == "pass" and p.get("outcome") == "fail" and p.get("interceptor")
+                and nxt.get("type") == "interception" and nxt.get("player") == p["interceptor"]):
+            pairs.append((p, nxt))
+    return pairs
+
+
+def play_reasons(text: str, evidence: list[dict]) -> list[str]:
+    """What a claim says of the play that its cited facts must show."""
+    reasons = []
+    if LONG_BALL.search(text) and not any(
+        e.get("type") == "pass" and (e.get("distance_m") or 0) >= LONG_BALL_M for e in evidence
+    ):
+        reasons.append(f"a long ball is a pass of {LONG_BALL_M} m or more: no cited pass is")
+    if UNDER_PRESSURE.search(text) and not any(e.get("type") == "pressure" for e in evidence):
+        reasons.append("play under pressure is said, but no cited event is a pressure event")
+    for p, i in _same_act(evidence):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            for m in BEFORE_AFTER.finditer(sentence):
+                one, other = _ordered(sentence, m)
+                if ((_names_cut(one, p) and _names_pass(other, p))
+                        or (_names_pass(one, p) and _names_cut(other, p))):
+                    word = m.group().lower()
+                    reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {word} the other")
+                    return reasons
+    return reasons
+
+
+def _ordered(sentence: str, m: re.Match) -> tuple[str, str]:
+    """The two things a connective orders: either side of it, or, when it opens the sentence ("After
+    h7's pass, a8 intercepts"), its own clause and the rest."""
+    left, right = sentence[: m.start()], sentence[m.end():]
+    if left.strip():
+        return left, right
+    head, _, rest = right.partition(",")
+    return head, rest
+
+
+def _names_pass(part: str, p: dict) -> bool:
+    """This part speaks of the cut-out pass itself, as a thing ("h7's pass", "the pass from h7"), not of
+    its passer passing again ("h7 passes to h9" is another act)."""
+    who = re.escape(p["player"])
+    return re.search(rf"(?<!\w){who}['’]s\b[^,;.]*?\bpass\b|\bpass\s+(?:by|from)\s+{who}(?!\w)", part,
+                     re.I) is not None
+
+
+def _names_cut(part: str, p: dict) -> bool:
+    """This part is the interception alone: a word for it, and not the pass it cut out by its passer."""
+    return bool(WINS_IT.search(part)) and re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part) is None
 
 
 # The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said

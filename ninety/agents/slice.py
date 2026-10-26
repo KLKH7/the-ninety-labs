@@ -167,12 +167,12 @@ class Checked:
 
 
 async def fact_check(
-    claim: Claim, known: dict[str, dict], judge: Judge, gate: Gate = confidence_gate
+    claim: Claim, known: dict[str, dict], judge: Judge, gate: Gate = confidence_gate, play: bool = True
 ) -> Checked:
     """The fact-checking agent, for the slice and the workflow alike: the code checks first (free,
     exact about numbers, players and ids), then the confidence gate (a claim resting on an unsure
     detection is held), then the Judge (meaning), which is asked only when both pass."""
-    verdict = check(claim, known)
+    verdict = check(claim, known, play=play)
     if verdict.ok:
         verdict = gate(claim, known)
     if not verdict.ok:
