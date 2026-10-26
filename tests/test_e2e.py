@@ -512,3 +512,19 @@ def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
     shown = " ".join(c["text"] for c in cues(out))
     club = re.compile(r"\b[Aa] [A-Z]\w+ player\b")  # "a Crowmere player": a side named
     assert "player" in shown and bool(club.search(shown)) is (sure > 0.96)
+
+
+def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tmp_path):
+    """--scorebug: the readings go in as scorebug.jsonl, and the manifest carries the one gate every
+    screen uses, scoring.SCOREBUG_MEASURED, with the fact-checker's confidence."""
+    from ninety.agents.factcheck import MIN_CONFIDENCE
+    from ninety.intel import scoring
+
+    sb = tmp_path / "sb.jsonl"
+    sb.write_text(json.dumps({"id": "s1", "t": 60.0, "frame": 1500, "type": "score_read", "team": None,
+                              "score": {"home": 0, "away": 0}, "confidence": 0.99}) + "\n")
+    out, manifest = run(tmp_path, "--scorebug", str(sb))
+    assert manifest["scorebug"] == {"readings": 1, "measured": scoring.SCOREBUG_MEASURED,
+                                    "min_confidence": MIN_CONFIDENCE}
+    assert (out / "scorebug.jsonl").read_text().count("score_read") == 1
+    assert "scorebug.jsonl" in manifest["files"]

@@ -79,6 +79,7 @@ from ninety.agents.factcheck import (
     side_known,
 )
 from ninety.agents.slice import Recording, replayer, tamper
+from ninety.intel.scoring import SCOREBUG_MEASURED
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected, territory
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
@@ -107,6 +108,19 @@ class Clip:
     def images(self) -> list[Path]:
         return sorted((self.dir / "images").glob("*.jpg"))
 
+
+
+def read_scorebug(path: Path) -> list[dict]:
+    """The scorebug's readings for the phone (ninety/vision/scorebug.py, #356): its start readings
+    (`score_read`) and each change of score (`score_change`, with its side), oldest first. Anything
+    else, or a reading without a score, stops the bundle."""
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    for r in rows:
+        if r.get("type") not in ("score_read", "score_change") or not isinstance(r.get("score"), dict):
+            raise SystemExit(f"{path}: not a scorebug reading: {str(r)[:120]}")
+        if r["type"] == "score_change" and r.get("team") not in ("home", "away"):
+            raise SystemExit(f"{path}: a score_change names its side: {str(r)[:120]}")
+    return sorted(rows, key=lambda r: r["t"])
 
 
 def read_cards(path: Path) -> list[dict]:
@@ -767,6 +781,15 @@ async def run(args: argparse.Namespace) -> dict:
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"],
                       "highlights": len(body["highlights"]["moments"])}
+    scorebug_info = None
+    if args.scorebug:
+        readings = read_scorebug(args.scorebug)
+        write_jsonl(out / "scorebug.jsonl", readings)
+        # One gate for every screen: the phone shows the scorebug's score only once the reader is
+        # measured (scoring.SCOREBUG_MEASURED, as the Companion), and only readings at or above the
+        # fact-checker's event confidence.
+        scorebug_info = {"readings": len(readings), "measured": SCOREBUG_MEASURED,
+                         "min_confidence": MIN_CONFIDENCE}
     cards_info = None
     if args.cards:
         cards = read_cards(args.cards)
@@ -808,12 +831,14 @@ async def run(args: argparse.Namespace) -> dict:
         "radar": radar_info,
         "match": match_info,
         "cards": cards_info,
+        "scorebug": scorebug_info,
         "commentary": commentary_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
                   "description.vtt", "commentary.json"] + (["radar.json"] if radar_info else [])
                  + (["agents.json"] if agents_mode == "graph live" else [])
                  + (["match.json"] if match_info else [])
-                 + (["cards.json"] if cards_info else []),
+                 + (["cards.json"] if cards_info else [])
+                 + (["scorebug.jsonl"] if scorebug_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.voice_audio:
@@ -891,6 +916,9 @@ def parser() -> argparse.ArgumentParser:
                          "save filter and the labels it passed; without it every save is in, unlabelled")
     ap.add_argument("--cards", type=Path, default=None,
                     help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
+    ap.add_argument("--scorebug", type=Path, default=None,
+                    help="the scorebug's readings (scorebug.jsonl from ninety/vision/scorebug.py): the phone "
+                         "shows the broadcast's score from them, once the reader is measured")
     ap.add_argument("--team-stats", type=Path, default=None,
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")

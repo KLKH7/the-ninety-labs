@@ -125,18 +125,28 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
     }
 
 
-# The score as the broadcast's scorebug shows it, from `score_change` events read from the graphic's
-# pixels, never counted from goals. Planned: the reader and its event come in #356, not on main yet,
-# so nothing emits a `score_change` today. Said only once the reader's accuracy is measured on
-# validation clips (#356's plan); until then a score question points at the scorebug.
-SCOREBUG_MEASURED = False
+# The score as the broadcast's scorebug shows it, read from the graphic's pixels (ninety/vision/
+# scorebug.py, #356), never counted from goals: `score_read` (a reading held, the first one so a clip
+# that starts at 2-1 has a score) and `score_change` (a change, with the side that scored). Measured
+# on the validation clips against a bar stated first (docs/eval/scorebug-plan.md, "Validation,
+# current reader"): no false change (16 of 16 match a true goal of their side), 880 of 880 digits
+# right, 16 of 16 goals found, on our renderer's fixed scorebug only (scores of 10 or more, an
+# absent or occluded bug and replay graphics are unmeasured). So a score is said as the bug shows it.
+SCOREBUG_MEASURED = True
+SCORE_TYPES = ("score_read", "score_change")
 
 
 def scorebug(events: Iterable[Mapping]) -> list[dict]:
-    """Each score the scorebug was read to show, from the frame it changed, oldest first."""
+    """Each score the scorebug was read to show, oldest first: the first reading, then each one that
+    differs from the last (a reading held again says nothing new)."""
     out = []
-    for e in sorted((e for e in events if e.get("type") == "score_change" and e.get("score")),
+    last = None
+    for e in sorted((e for e in events if e.get("type") in SCORE_TYPES and e.get("score")),
                     key=lambda e: (e["t"], e["id"])):
+        held = (int(e["score"]["home"]), int(e["score"]["away"]))
+        if held == last:
+            continue
+        last = held
         conf = e.get("confidence")
         out.append({
             "id": f"scorebug:{e['id']}", "kind": "scorebug", "metric": "scorebug", "team": None,
