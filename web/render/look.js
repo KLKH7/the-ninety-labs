@@ -21,19 +21,20 @@ export const LOOK = {
   hemiScale: 0.3,         // the old flat fill, kept a little so the shade side is never black
   sunScale: 1.0,
   shadowMap: 4096,
-  turfEnv: 0.35,           // the sky's fill on the turf, relative to the rest (it turned the grass cyan)
+  turfEnv: 0.25,           // the sky's fill on the turf, relative to the rest (it turned the grass cyan)
   saturation: 1.16,
   sharpen: 0.22,           // was 0.4 in the plain look
   crowdSat: 0.55,          // crowd clothing saturation kept
   crowdLight: 0.62,        // and lightness kept, before the roof shade
   roofShade: 0.45,         // the back rows' brightness relative to the front (in the roof's shadow)
+  haze: [70, 700],         // m: daylight haze from near to full, so the far stand sits back (aerial perspective)
 };
 
 // The grade, in linear light before the tone curve (render.js post shader, BROADCAST_LOOK).
 export const GRADE_GLSL = `
   vec3 broadcastGrade(vec3 c) {
     // white balance a touch warm, as a daylight broadcast is graded
-    c *= vec3(1.035, 1.0, 0.955);
+    c *= vec3(1.045, 1.0, 0.94);
     float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
     // a little more colour in the mid-tones, less in the highlights (ACES adds its own)
     float mid = smoothstep(0.02, 0.25, luma) * (1.0 - smoothstep(0.6, 1.4, luma));
@@ -122,6 +123,12 @@ export function applyBroadcastLook(r) {
   const [, surround, pitch] = r.decor;
   for (const m of [surround, pitch]) m.material.envMapIntensity = LOOK.turfEnv;
   shadeCrowd(r.crowd);
+  // Haze: the scenery only, never a player or the ball, so nothing labelled changes colour with depth.
+  r.scene.fog = new THREE.Fog(new THREE.Color(0.62, 0.68, 0.74), LOOK.haze[0], LOOK.haze[1]);
+  for (const b of r.bodies) {
+    for (const m of Object.values(b.materials)) m.fog = false;
+    if (b.eyeMat) b.eyeMat.fog = false;
+  }
   // Graphics are drawn after the grade and keep their exact colours (vision reads the scorebug).
   r.overlayScene.traverse((o) => { if (o.material) o.material.toneMapped = false; });
   r.post.defines = { ...(r.post.defines || {}), BROADCAST_LOOK: 1, LOOK_SAT: LOOK.saturation.toFixed(3) };
