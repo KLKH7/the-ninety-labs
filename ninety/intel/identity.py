@@ -292,6 +292,17 @@ def event_ids(events: Sequence[Mapping], association: Mapping[str, Mapping]) -> 
     return sorted({e[k] for e in events for k in people if e.get(k)} | set(association))
 
 
+def named_broadcast(association: Mapping[str, Mapping], named_tactical: Mapping[str, Mapping], feed: Feed,
+                    events: Sequence[Mapping], b_frames: Sequence[Mapping] | None = None) -> dict[str, dict]:
+    """The broadcast ids' names: through the join (step 5) and, with the broadcast's frames and the
+    direct path's pre-registered gate met, directly too, combined (steps 6-7)."""
+    g = gate()
+    via = broadcast(association, named_tactical, g)
+    if not b_frames or not g["direct"]:
+        return via
+    return combined(event_ids(events, association), via, tactical(b_frames, feed, any_side=True), association)
+
+
 def sided(events: Sequence[Mapping], named_broadcast: Mapping[str, Mapping]) -> list[dict]:
     """The events, each whose player the feed names given his side (step 8); nothing else changes."""
     out = []
@@ -332,13 +343,17 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--detected", type=Path, required=True)
     ap.add_argument("--fixture", type=Path, required=True, help="the clip's clip.json")
     ap.add_argument("--feed", type=Path, required=True)
+    ap.add_argument("--broadcast-vision", type=Path, default=None,
+                    help="the segments' vision runs (<seg>/broadcast/tracked.json): name the broadcast's "
+                         "tracks directly too (step 6)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     frames = json.loads(args.tracked.read_text())["frames"]
-    feed = load_for(args.feed, frames, load_fixture(args.fixture))
+    b_frames = broadcast_frames(args.broadcast_vision) if args.broadcast_vision else []
+    feed = load_for(args.feed, [*frames, *b_frames], load_fixture(args.fixture))
     association = json.loads(args.association.read_text())["tracks"]
-    named = broadcast(association, tactical(frames, feed), gate())
     events = [json.loads(x) for x in args.detected.read_text().splitlines() if x.strip()]
+    named = named_broadcast(association, tactical(frames, feed), feed, events, b_frames)
     rows = sided(events, named)
     args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     n = sum(r.get("team_source") == SOURCE for r in rows)
@@ -346,6 +361,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 __all__ = ["CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
+           "broadcast_frames", "combined", "event_ids", "named_broadcast",
            "disclosure", "gate", "lineup", "load", "load_for", "sided", "tactical"]
 
 

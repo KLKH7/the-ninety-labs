@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from ninety import e2e
-from ninety.intel import identity
+from ninety.intel import identity, naming
 from ninety.intel import match_insights as mi_mod
 from ninety.intel.match_insights import MatchInsights
 from ninety.intel.roles import TEMPLATE
@@ -367,9 +367,61 @@ def test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target(t
     held = json.loads((ROOT / "docs/eval/identity.json").read_text())["held_out"]
     met = all(held[u]["precision"] >= body["target"] for u in ("track_names", "event_names"))
     assert body["held_out_met"] == met
+    direct = json.loads((ROOT / "docs/eval/identity.json").read_text())["direct"]["held_out"]["event_names"]
+    assert body["direct_held_out_met"] == (direct["precision"] >= body["target"])  # the plan's gate
     p = tmp_path / "c.json"
-    p.write_text(json.dumps({**body, "held_out_met": False}))
-    assert identity.gate(p) == {"association": None}
+    p.write_text(json.dumps({**body, "held_out_met": False, "direct_held_out_met": False}))
+    assert identity.gate(p) == {"association": None, "direct": False}
+
+
+# --- the broadcast camera, matched to the feed directly (docs/eval/identity-direct-plan.md) ------
+
+def test_the_broadcast_frames_are_renumbered_as_the_join_renumbers_them(tmp_path):
+    for name, tid in (("seed1-t000100", "h-t3"), ("seed1-t000000", "a-t2")):
+        (tmp_path / name / "broadcast").mkdir(parents=True)
+        (tmp_path / name / "broadcast" / "tracked.json").write_text(json.dumps(
+            {"frames": [{"frame": 1, "t": 0.04, "players": [{"id": tid, "team": "home", "x": 1, "y": 1}]}]}))
+    got = [p["id"] for f in identity.broadcast_frames(tmp_path) for p in f["players"]]
+    assert got == ["a-t2", f"h-t{naming.PER_SEGMENT + 3}"]  # segments in name order: t000000 first
+
+
+def test_a_broadcast_track_on_the_wrong_side_is_named_and_given_the_feed_s_side(feed_path):
+    frames = tracked(engine_frames(), wrong_side="h-t9")  # h9's track, read as away (a-t9)
+    feed = identity.load(feed_path)
+    assert "a-t9" not in identity.tactical(frames, feed)
+    w = identity.tactical(frames, feed, any_side=True)["a-t9"]
+    assert (w["player"], w["team"]) == ("LON07", "home")  # h9 is the right winger, shirt 7
+
+
+def test_combined_finds_a_track_by_number_and_keeps_the_more_confident_name():
+    direct = {"h-t7": {"name": "D", "share": 0.9}, "a-t8": {"name": "E", "share": 0.6},
+              "h-t5": {"name": "F", "share": 0.6}}
+    via = {"a-t8": {"name": "J", "share": 1.0}, "h-t5": {"name": "G", "share": 1.0},
+           "h-t9": {"name": "K", "share": 1.0}}
+    association = {"a-t8": {"confidence": 0.5}, "h-t5": {"confidence": 0.9}, "h-t9": {"confidence": 0.5}}
+    got = identity.combined(["a-t7", "a-t8", "h-t5", "h-t9"], via, direct, association)
+    assert got["a-t7"]["name"] == "D" and got["a-t7"]["track"] == "a-t7"  # the event's letter, by number
+    assert got["a-t8"]["name"] == "E"  # direct 0.6 beats the join's 1.0 x 0.5
+    assert got["h-t5"]["name"] == "G"  # the join's 1.0 x 0.9 beats direct 0.6
+    assert got["h-t9"]["path"] == "join"
+    tie = identity.combined(["a-t8"], {"a-t8": {"name": "J", "share": 0.6}}, direct,
+                            {"a-t8": {"confidence": 1.0}})
+    assert tie["a-t8"]["name"] == "E"  # a tie goes to the broadcast's own track
+
+
+def test_the_direct_path_is_used_only_when_its_gate_was_met(feed_path, tmp_path, monkeypatch):
+    frames = tracked(engine_frames())
+    feed = identity.load(feed_path)
+    events = [{"player": "h-t5"}]
+    for met, expect in ((True, {"h-t5"}), (False, set())):
+        p = tmp_path / f"{met}.json"
+        p.write_text(json.dumps({"association": 0.75, "held_out_met": True, "direct_held_out_met": met}))
+        monkeypatch.setattr(identity, "CALIBRATION", p)
+        monkeypatch.setattr(identity, "gate", lambda path=p: _gate(path))
+        assert set(identity.named_broadcast({}, {}, feed, events, frames)) == expect
+
+
+_gate = identity.gate
 
 
 # --- the feed is used ONLY for identity and side ------------------------------------------------
