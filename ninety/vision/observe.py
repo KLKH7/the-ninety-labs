@@ -333,12 +333,16 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
     to fit the broadcast shot by shot at the cuts the images show (off by default, above)."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
-    rgbs, points, thumbs = [], [], []
+    # Neither pass keeps the frames: a clip's decoded frames do not fit in memory (2.8 MB each at
+    # 1280 x 720, so 4 GB a minute at 25 fps). The first keeps only the markings' points, the fixed
+    # lens's running line counts and the cut finder's thumbnails; the second reads each image again
+    # for the kit colours, which need the camera the first pass's points fitted.
+    points, thumbs, size = [], [], None
     counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
+        size = size or rgb.shape[:2]
         boxes = [d.bbox for d in fd.detections if d.score >= SCORE_MIN]
-        rgbs.append(rgb)
         if not fixed:
             points.append(pitch.line_points(rgb, boxes))
             if cuts:
@@ -347,7 +351,7 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
         mask = pitch.line_mask(rgb, boxes)
         counts = mask.astype(np.uint32) if counts is None else counts + mask
         points.append(pitch.mask_points(mask))
-    H, W = rgbs[0].shape[:2]
+    H, W = size
     if not fixed:
         starts = pitch.shot_starts(thumbs) if cuts else [0]
         gantries, fits = pitch.fit_shots(points, W, H, starts)
@@ -356,7 +360,8 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
         starts, gantries = [0], [(view.cx, view.cy, view.cz)]
     shot_of = np.searchsorted(starts, np.arange(len(fits)), side="right") - 1
     rows = []
-    for k, (rgb, fd, fit) in enumerate(zip(rgbs, dets, fits, strict=True)):
+    for k, (img, fd, fit) in enumerate(zip(images, dets, fits, strict=True)):
+        rgb = load(img)  # read again: the kit reader needs the fitted camera, known only now
         players, balls = [], []
         P = fit.view.P() if fit.view else None
         turf = grass(rgb, P, [d.bbox for d in fd.detections])

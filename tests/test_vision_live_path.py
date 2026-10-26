@@ -24,9 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LIVE = ["ninety/vision/flight.py",
         "ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
         "ninety/vision/events.py", "ninety/vision/tracked_frames.py", "ninety/vision/live_job.py",
-        "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/outcomes.py",
-        "ninety/vision/join.py", "ninety/vision/restarts.py", "ninety/vision/sides.py",
-        "ninety/vision/scorebug.py"]
+        "ninety/vision/precompute.py", "ninety/vision/tiles.py", "ninety/vision/fuse.py",
+        "ninety/vision/outcomes.py", "ninety/vision/join.py", "ninety/vision/restarts.py",
+        "ninety/vision/sides.py", "ninety/vision/scorebug.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 

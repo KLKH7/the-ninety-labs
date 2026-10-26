@@ -22,6 +22,17 @@ param containerAppsEnvironmentId string
 @description('The live detection image in our registry, by digest: <registry>.azurecr.io/ninety-live@sha256:...')
 param image string
 
+// The run's length grows with the clip: about frames x the measured seconds per frame (run.json,
+// detect_seconds_per_frame, plus observe). Set it from a measured run on a short window of the
+// demo clip, with headroom, never from a guess (infra/live-job.sh, "Sizing").
+@description('Seconds one execution may run before Azure stops it.')
+@minValue(300)
+param replicaTimeoutSeconds int = 3600
+
+@description('vCPUs for the job; on the Consumption profile memory is twice this in GiB.')
+@allowed(['2', '4'])
+param cpu string = '2'
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
@@ -61,8 +72,8 @@ resource liveJob 'Microsoft.App/jobs@2024-03-01' = {
     workloadProfileName: 'Consumption'
     configuration: {
       triggerType: 'Manual'
-      // One clip on CPU; the first measured run sets a tighter limit (docs/EVALUATION.md)
-      replicaTimeout: 3600
+      replicaTimeout: replicaTimeoutSeconds
+      // No retry: a failed run of a whole match is looked at and started again by hand, not repeated
       replicaRetryLimit: 0
       manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
       registries: [{ server: registry.properties.loginServer, identity: liveIdentity.id }]
@@ -72,7 +83,7 @@ resource liveJob 'Microsoft.App/jobs@2024-03-01' = {
         {
           name: 'live'
           image: image
-          resources: { cpu: json('2'), memory: '4Gi' }
+          resources: { cpu: json(cpu), memory: '${int(cpu) * 2}Gi' }
         }
       ]
     }

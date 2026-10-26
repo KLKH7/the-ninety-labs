@@ -254,6 +254,32 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert body["adopted"] == "C2"
 
 
+def test_observe_keeps_no_more_than_one_decoded_frame_at_a_time(monkeypatch):
+    """A clip's frames do not fit in memory (a minute is about 4 GB), so each decoded image must be
+    let go before the next is read; the kit colours are still read, from the image read again."""
+    import weakref
+
+    from ninety.vision.detections import Detection, FrameDetections
+    from ninety.vision.model import model
+
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    shirt = Detection(cls="player", bbox=(100.0, 100.0, 120.0, 150.0), score=0.9)
+    dets = [FrameDetections(clip="c", frame=k, t=k / 25, model=model("ours-v4"), detections=(shirt,))
+            for k in range(6)]
+    alive, most = [], []
+
+    def load(_):
+        most.append(sum(r() is not None for r in alive))
+        img = np.full((360, 640, 3), (200, 30, 30), dtype=np.uint8)  # a red shirt, no grass
+        alive.append(weakref.ref(img))
+        return img
+
+    rows = observe.observe([Path(f"{k}.jpg") for k in range(6)], dets, load)
+    assert max(most) <= 1, most  # only the frame still in hand when the next is read
+    kits = [r["players"][0]["rgb"] for r in rows]
+    assert all(k is not None and k[0] > k[1] and k[0] > k[2] for k in kits), kits  # a red shirt
+
+
 def test_a_frame_is_judged_by_the_band_it_is_given():
     assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
     assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]

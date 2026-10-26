@@ -77,8 +77,9 @@ never install (it comes only with the `rfdetr[plus]` extra).
 The live detection image (`infra/live-job.Dockerfile`) installs this group as locked, except
 torch and torchvision, which it takes as PyTorch's CPU builds of the same versions (BSD-3-Clause,
 from download.pytorch.org, pinned by sha256). On Linux the locked torch also pulls NVIDIA's CUDA
-libraries (`nvidia-*`, `cuda-toolkit`), which are under NVIDIA's own licence, not one on our list;
-the image leaves every one of them out, and a test fails if the lock gains one it does not.
+libraries (`nvidia-*`, `cuda-toolkit`, listed below); a CPU job never uses them and they would
+make the image several GB larger, so the image leaves every one of them out, and a test fails if
+the lock gains one it does not.
 
 | Package | Used for | Licence |
 |---|---|---|

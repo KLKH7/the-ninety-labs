@@ -3356,3 +3356,16 @@ short and actionable. This file is public: no research sources, product names or
   marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
 - **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
   marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 280. A stage that keeps every frame it reads only works on short clips
+- **What happened:** `ninety.vision.observe` decoded every image of a clip and kept them all until
+  its second pass, which only needed each frame's shirt colours. At 1280 x 720 that is 2.8 MB a
+  frame, about 4 GB a minute of footage: the live detection job, sized at 4 GiB, would have run out
+  of memory on the 60 s demo window, and a condensed full match was out of reach on any size. Every
+  test clip so far was 10 s (250 frames, 0.7 GB), so nothing showed it.
+- **Rule:** a stage that walks a clip's frames keeps per frame only what a later pass needs (here
+  the markings' points), never the decoded image; a later pass that needs the pixels again reads
+  the image again (the kit colours, which need the fitted camera). Memory must not grow with the
+  clip's length beyond its per-frame results.
+- **Check:** `tests/test_vision_observe.py::test_observe_keeps_no_more_than_one_decoded_frame_at_a_time`
+  (fails on the old version: every frame read so far was still alive).

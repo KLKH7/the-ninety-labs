@@ -1,7 +1,7 @@
 """Live detection on one clip: frames in; detections, events and tracked positions out, timed.
 
     uv run --group vision python -m ninety.vision.live_job <clip> \\
-        --checkpoint ours-v4 --weights <checkpoint_best_total.pth> --out <dir>
+        --checkpoint <name in its train-manifest.json> --weights <checkpoint_best_total.pth> --out <dir>
 
 What the Container Apps job runs on the demo clip (docs/TEAM.md, Thu Oct 22; docs/ARCHITECTURE.md,
 "vision on CPU"): the whole live path of event detection in one process, each stage the module that
@@ -238,7 +238,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Run the live path of event detection on one clip, timed.")
     ap.add_argument("clip", type=Path,
                     help=f"a folder holding only {INDEX} and {IMAGES}/, or only {VIEWS}/<name>/ with those")
-    ap.add_argument("--checkpoint", required=True, help='our checkpoint name, e.g. ours-v4, or "coco"')
+    ap.add_argument("--checkpoint", required=True, help='its name in its training record, or "coco"')
     ap.add_argument("--weights", type=Path, default=None, help="checkpoint file (not for coco)")
     ap.add_argument("--manifest", type=Path, default=None,
                     help="its training record (default: train-manifest.json beside the weights)")
