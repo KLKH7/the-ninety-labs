@@ -3217,3 +3217,16 @@ short and actionable. This file is public: no research sources, product names or
   frames in the shape the real files have.
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 268. Two pull requests green separately can be red together
+- **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
+  #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
+  other, two phone tests that assumed a bundle without sheets (the no-sheet roster and the Live teaser's
+  shirts) failed on `main` and on every open branch that took `main` (#380).
+- **Rule:** when two pull requests overlap in what they read or write (a shared bundle field, fixture
+  or helper), the second is merged only after CI has run on its head with the first already in `main`,
+  not on a green that predates the first. A test of the no-sheet path removes the sheets it does not want
+  rather than relying on what a fixture happens to hold.
+- **Check:** `tests/test_phone_companion.py::test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track`
+  and `::test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s_numbers` drop the
+  bundle's `sheets` first and still assert the no-sheet results (0 rows; the line-up's 4 shirts).
