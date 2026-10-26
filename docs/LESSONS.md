@@ -3107,3 +3107,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
   complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
 - **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
+### 259. Two cameras' track ids are two id spaces; a name or a position crosses only through the join
+- **What happened:** on the joined demo match the players are the tactical camera's tracks and the
+  events name the broadcast's. Both trackers number from 1 in each segment, so `h-t7` is one man in
+  the events and another in the frames: 89 of the 253 event actors on 8080 also exist as a tactical
+  id. MatchInsights looked event actors up in the tactical frames and names by id. The passer of a
+  line break was usually 10 to 70 m from the event's place, and offside readings found the wrong
+  receiver or none (26 readings; 128 once fixed). Graded for the first time on real vision against
+  the answer key, the names in use were right 0.835 of the time (510 of 611 tracks). The gate that
+  should have stopped them (0.203) had been measured on simulated tracks only, where it did not bind.
+- **Rule:** an id is read only in the space it was made in. A broadcast id reaches the tactical
+  frames, and a name reaches a broadcast id, only through the association (with its measured gate
+  and the same side on both cameras), or not at all. A gate measured on simulated tracks is not a
+  gate on real ones until the live path's own output has been graded against its answer key.
+- **Check:** `tests/test_naming.py` (events move to their tactical tracks or to none; a name crosses
+  only above the gate and on the same side); docs/eval/roles.md, "Names on the demo match's own tracks".

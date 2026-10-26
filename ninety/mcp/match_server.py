@@ -143,7 +143,15 @@ def insights_of(match: str) -> MatchInsights | None:
     except tracking.NotTracked:
         return None
     events = detected.load(DETECTED[match]())
-    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)))
+    # A joined match (ninety.vision.join) has its camera join beside its tracked frames: the events
+    # name broadcast tracks, the frames tactical ones, and the names cross between them.
+    # In the fixtures it is association-<clip>.json; in a joined run's folder, association.json.
+    tracked_file = tracking.tracked_path(match)
+    joined = tracked_file.with_name(
+        "association.json" if tracked_file.name == "tracked.json" else f"association-{match}.json")
+    association = json.loads(joined.read_text())["tracks"] if joined.exists() else None
+    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)),
+                               association=association)
 
 
 def _insight(match: str, tool: str, *args) -> dict:
