@@ -381,7 +381,7 @@ def test_the_broadcast_frames_are_renumbered_as_the_join_renumbers_them(tmp_path
         (tmp_path / name / "broadcast").mkdir(parents=True)
         (tmp_path / name / "broadcast" / "tracked.json").write_text(json.dumps(
             {"frames": [{"frame": 1, "t": 0.04, "players": [{"id": tid, "team": "home", "x": 1, "y": 1}]}]}))
-    got = [p["id"] for f in identity.broadcast_frames(tmp_path) for p in f["players"]]
+    got = [p["id"] for f in identity.broadcast_frames(tmp_path) for p in f["players"]]  # no clip: no check
     assert got == ["a-t2", f"h-t{naming.PER_SEGMENT + 3}"]  # segments in name order: t000000 first
 
 
@@ -391,6 +391,49 @@ def test_a_broadcast_track_on_the_wrong_side_is_named_and_given_the_feed_s_side(
     assert "a-t9" not in identity.tactical(frames, feed)
     w = identity.tactical(frames, feed, any_side=True)["a-t9"]
     assert (w["player"], w["team"]) == ("LON07", "home")  # h9 is the right winger, shirt 7
+
+
+def test_both_sides_tracks_compete_for_a_player_in_one_matching():
+    """With any_side, a home and an away track near one feed player are matched together: the away
+    track on him wins the window, so the home track holds him for only half its frames."""
+    at = {k: {"H1": (10.0, 10.0)} for k in range(500)}
+    frames = [{"frame": k, "t": k / 25, "players": [
+        {"id": "h-t1", "team": "home", "x": 10.3, "y": 10.0},
+        *([{"id": "a-t2", "team": "away", "x": 10.0, "y": 10.0}] if k < 250 else [])]} for k in range(500)]
+    assert set(identity.assign(frames, exact_feed(at), any_side=True)) == {"a-t2"}
+
+
+def test_broadcast_runs_that_are_not_the_join_s_segments_are_refused(tmp_path):
+    clip = tmp_path / "clip"
+    clip.mkdir()
+    (clip / "clip.json").write_text(json.dumps({"segments": [{"frame": 0}, {"frame": 100}]}))
+    (clip / "match_join.json").write_text(json.dumps({"segments": 2}))
+    vision = tmp_path / "vision"
+    for name in ("seed1-t000000", "seed1-t000100"):
+        (vision / name / "broadcast").mkdir(parents=True)
+        (vision / name / "broadcast" / "tracked.json").write_text(json.dumps({"frames": []}))
+    assert identity.broadcast_frames(vision, clip) == []
+    (vision / "seed1-t000050" / "broadcast").mkdir(parents=True)  # a stray run
+    (vision / "seed1-t000050" / "broadcast" / "tracked.json").write_text(json.dumps({"frames": []}))
+    with pytest.raises(ValueError, match="join"):
+        identity.broadcast_frames(vision, clip)
+
+
+def test_two_directly_named_tracks_never_share_a_number():
+    with pytest.raises(ValueError, match="number"):
+        identity.combined(["h-t3"], {}, {"h-t3": {"share": 1.0}, "a-t3": {"share": 1.0}}, {})
+
+
+def test_every_event_gets_one_reason_in_the_plan_s_order():
+    from ninety.eval.identity_eval import gate_met, unnamed_reasons
+
+    events = [{"player": p} for p in ("h-t1", None, "a-t2", "h-t3", "h-t4")]
+    got = unnamed_reasons(events, {"h-t1": {}}, seen={"1", "3", "4"}, majority={"1", "4"})
+    assert got == {"named": 1, "no_player_attributed": 1, "calibration_withheld": 1, "no_feed_majority": 1,
+                   "name_held_by_another_track": 1}
+    assert gate_met({"event_names": {"precision": 0.95}})
+    assert not gate_met({"event_names": {"precision": 0.94}})
+    assert not gate_met({"event_names": {"precision": None}})
 
 
 def test_combined_finds_a_track_by_number_and_keeps_the_more_confident_name():

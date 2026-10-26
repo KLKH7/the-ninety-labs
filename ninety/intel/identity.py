@@ -248,12 +248,22 @@ def broadcast(association: Mapping[str, Mapping], named: Mapping[str, Mapping],
     return out
 
 
-def broadcast_frames(vision: Path) -> list[dict]:
+def broadcast_frames(vision: Path, clip: Path | None = None) -> list[dict]:
     """Every segment's broadcast tracked frames (pitch metres, only frames that passed the camera
-    trust test), ids renumbered as the join renumbers them: segments in name order (step 6)."""
+    trust test), ids renumbered as the join renumbers them: segments in time order, which is name
+    order (seed<N>-t<start frame, zero-padded>; step 6). With the joined clip's folder, refused
+    unless the segments are exactly the join's: as many as match_join.json says, each starting
+    where one of clip.json's pieces does, so a stray run can never shift another segment's ids."""
     from ninety.vision.match_join import renumber
 
     names = sorted(p.name for p in Path(vision).iterdir() if (p / "broadcast" / "tracked.json").is_file())
+    if clip is not None:
+        joined = json.loads((Path(clip) / "match_join.json").read_text())["segments"]
+        starts = {int(s["frame"]) for s in json.loads((Path(clip) / "clip.json").read_text())["segments"]}
+        stray = [n for n in names if int(n.rsplit("-t", 1)[1]) not in starts]
+        if len(names) != joined or stray:
+            raise ValueError(f"{vision}: {len(names)} broadcast runs for the join's {joined} segments"
+                             f"{f'; not the clip`s: {stray}' if stray else ''}")
     out = []
     for k, name in enumerate(names):
         body = json.loads((Path(vision) / name / "broadcast" / "tracked.json").read_text())
@@ -272,6 +282,8 @@ def combined(ids: Sequence[str], via_join: Mapping[str, Mapping], direct: Mappin
     a tie to the direct path). A track is found by its number, which the tracker gives once for
     both sides in a segment, since an event's id letter can differ from its track's."""
     by_num = {_number(t): w for t, w in direct.items()}
+    if len(by_num) != len(direct):  # the tracker numbers a segment's tracks once for both sides
+        raise ValueError("two directly named tracks share a number")
     out = {}
     for track in sorted(set(ids)):
         j, d = via_join.get(track), by_num.get(_number(track))
@@ -280,6 +292,8 @@ def combined(ids: Sequence[str], via_join: Mapping[str, Mapping], direct: Mappin
                  "path": "join"}
         if d is not None:
             d = {**d, "track": track, "confidence": d["share"], "path": "direct"}
+        # design: the direct path's share against the join's share times the association's
+        # confidence (both a fraction of frames the name held on); a tie to the broadcast's own track
         pick = d if d is not None and (j is None or d["confidence"] >= j["confidence"]) else j
         if pick is not None:
             out[track] = pick
@@ -349,7 +363,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     frames = json.loads(args.tracked.read_text())["frames"]
-    b_frames = broadcast_frames(args.broadcast_vision) if args.broadcast_vision else []
+    b_frames = broadcast_frames(args.broadcast_vision, args.fixture.parent) if args.broadcast_vision else []
     feed = load_for(args.feed, [*frames, *b_frames], load_fixture(args.fixture))
     association = json.loads(args.association.read_text())["tracks"]
     events = [json.loads(x) for x in args.detected.read_text().splitlines() if x.strip()]

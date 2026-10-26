@@ -660,7 +660,8 @@ def main(argv: list[str] | None = None) -> None:
     reads = score_reads(args.scorebug) if args.scorebug is not None else []
     feed, b_frames = None, None
     if args.identity_feed:  # the player-ID feed: names (and nothing else) for the line-up
-        b_frames = identity_mod.broadcast_frames(args.broadcast_vision) if args.broadcast_vision else []
+        b_frames = (identity_mod.broadcast_frames(args.broadcast_vision, args.fixture.parent)
+                    if args.broadcast_vision else [])
         feed = identity_mod.load_for(args.identity_feed, [*frames, *b_frames], load_fixture(args.fixture))
     mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
                              association=association, score_reads=reads,
