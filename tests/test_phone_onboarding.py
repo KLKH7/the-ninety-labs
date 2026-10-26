@@ -230,7 +230,9 @@ def test_back_skip_and_send_have_a_44_point_hit_area_and_the_arrow_keys_move_bet
               const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
               const hit = (x, y) => { const t = document.elementFromPoint(x, y);
                 return !!t && (t === el || el.contains(t)); };
-              const grow = (dx, dy) => { let n = 0; while (n < 40 && hit(cx + dx * (n + 1), cy + dy * (n + 1))) n++; return n; };
+              const grow = (dx, dy) => { let n = 0;
+                while (n < 40 && hit(cx + dx * (n + 1), cy + dy * (n + 1))) n++;
+                return n; };
               return { up: grow(0, -1), down: grow(0, 1), left: grow(-1, 0), right: grow(1, 0) }; }""",
             selector)
 
