@@ -130,7 +130,8 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
 # that starts at 2-1 has a score) and `score_change` (a change, with the side that scored). Measured
 # on the validation clips against a bar stated first (docs/eval/scorebug-plan.md, "Validation,
 # current reader"): no false change (16 of 16 match a true goal of their side), 880 of 880 digits
-# right, 16 of 16 goals found. So a score is said as the scorebug shows it.
+# right, 16 of 16 goals found, on our renderer's fixed scorebug only (scores of 10 or more, an
+# absent or occluded bug and replay graphics are unmeasured). So a score is said as the bug shows it.
 SCOREBUG_MEASURED = True
 SCORE_TYPES = ("score_read", "score_change")
 
