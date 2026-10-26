@@ -2576,6 +2576,18 @@ short and actionable. This file is public: no research sources, product names or
   broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
   `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
 
+### 233. A variant is compared with its reference at the same commit, not with the reference's old number
+- **What happened:** the sides plan's spatial variant S was to ship if it beat T1a, recorded as 0.681
+  outfield accuracy. Run again on the branch S was built on, the same observations through the same
+  measure gave T1a 0.731: the tracking and kit code differ between that branch and the one T1a was
+  first run on. Compared with the old number, S (0.750) would have looked 0.07 better; at the same
+  commit it is 0.02 better.
+- **Rule:** a decision rule that compares two variants runs both at one commit, on the same inputs,
+  and the comparison is recorded before the new variant's number is read. A number carried over from
+  another branch is context, never the bar.
+- **Check:** `docs/eval/sides-tactical/SPATIAL-PLAN.md`, Deviations (T1a re-run at the commit, before
+  any S number), and `T1a-validation-r4stack.json` next to `S-validation.json`.
+
 ### 221. A number matched by value and unit alone passes in the wrong role
 - **What happened:** the insight fact-check let a sentence state any number a cited fact held,
   written with that number's unit. A planted claim "6 players against 1 player" passed when the
@@ -3071,3 +3083,27 @@ short and actionable. This file is public: no research sources, product names or
   everything" is noticed.
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 256. A measured feature is merged after its measurement, and a fix is checked against the rule it narrows
+- **What happened:** the goal and save detector (#271) was marked ready and auto-merged into main
+  while its validation re-score and its test score were still waiting on a pod, so main carried an
+  unmeasured claim for an evening. Separately, its amendment 3 asked for a keeper marked by his kit,
+  narrower than the plan's own rule 5 (also the player nearest his goal line in his area); the
+  validation re-score found it, and the fix still found no save, because the true cause was the
+  ball's height (a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him).
+- **Rule:** a PR whose description promises a measurement is not marked ready or set to auto-merge
+  until the measurement is in it; whoever merges it checks. An amendment that restates a rule is
+  checked against the rule's own wording, and a fix that a re-score shows does nothing is not merged.
+- **Check:** [docs/eval/shot-outcomes/RESULT.md](eval/shot-outcomes/RESULT.md) states the order
+  (merged 22:28Z before the score); #363 (amendment 6) closed with its validation numbers.
+
+### 257. A test split is scored only after its copy-back is confirmed complete
+- **What happened:** the shot-outcome test clips were copied back from the pod as each finished. The
+  test was scored at 23:47Z on the 42 then on the Mac, read as a pod that had stopped at its cap; it was
+  still running, and all 79 arrived minutes later. The rule for a partly run split covers clips that
+  never come back, not clips still on their way, so the 42-clip score was an early look, not the
+  result. The code was already frozen, so it changed nothing, but it is disclosed
+  (docs/eval/shot-outcomes/RESULT.md).
+- **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
+  complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
+- **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.

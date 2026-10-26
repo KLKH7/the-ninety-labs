@@ -239,10 +239,6 @@ body[data-screen="big"][data-ui="off"] .stage { cursor: none; }
 /* The pairing card at kick-off and from the QR button: centred low, clear of the scorebug. */
 body[data-screen="big"] .pair-card { right: 3%; bottom: 7%; z-index: 4; }
 body[data-screen="big"][data-ui="on"] .pair-card[data-at="up"] { bottom: calc(7% + 72px); }
-/* Docked (Kian's open choice, ?qr=dock): the QR alone, small, top right below the scorebug's row. */
-body[data-screen="big"] .pair-card[data-at="docked"] { top: 3.5%; bottom: auto; right: 2.5%; padding: 6px; gap: 0; background: rgba(0, 0, 0, 0.6); }
-.pair-card[data-at="docked"] .pair-text { display: none; }
-.pair-card[data-at="docked"] .pair-qr { width: clamp(44px, 4.6vw, 64px); }
 /* With the controls up, the graphics rise above them, as subtitles do in a streaming player. */
 @media (prefers-reduced-motion: no-preference) { body[data-screen="big"] #overlay { transition: transform 0.35s ease; } }
 body[data-screen="big"][data-ui="on"] #overlay { transform: translateY(-9%); }

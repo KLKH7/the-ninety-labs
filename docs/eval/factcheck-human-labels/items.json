@@ -1,0 +1,174 @@
+[
+ {
+  "id": "L01",
+  "sentence": "h4 makes the most important intervention of the match.",
+  "facts": [
+   "07:54 Interception by h4 (home team): match minute 8"
+  ]
+ },
+ {
+  "id": "L02",
+  "sentence": "h4 wins the ball with an interception.",
+  "facts": [
+   "07:54 Interception by h4 (home team): match minute 8"
+  ]
+ },
+ {
+  "id": "L03",
+  "sentence": "The failed pass at 01:47 was intercepted by h10 after a sequence of short successful passes by the away team involving a5 and a8, with pressure applied on a5 by h6 at the moment of the pass.",
+  "facts": [
+   "01:41 Pass by a11 (away team) to a5: completed, 10 m, ball at 48 km/h, match minute 2",
+   "01:44 Pass by a5 (away team) to a8: completed, 9 m, ball at 41 km/h, match minute 2",
+   "01:46 Pass by a8 (away team) to a5: completed, 5 m, ball at 32 km/h, match minute 2",
+   "01:47 Pass by a5 (away team) cut out by h10: not completed, 14 m, ball at 50 km/h, match minute 2",
+   "01:47 Pressure by h6 (home team) on a5: match minute 2"
+  ]
+ },
+ {
+  "id": "L04",
+  "sentence": "h10's 13 m pass to h8 is cut out.",
+  "facts": [
+   "00:03 Pass by h10 (home team) to h8: completed, 13 m, ball at 50 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L05",
+  "sentence": "h10 plays a pass at 1:03.",
+  "facts": [
+   "00:03 Pass by h10 (home team) to h6: completed, 14 m, ball at 53 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L06",
+  "sentence": "a-t11 plays a pass, but it doesn't arrive.",
+  "facts": [
+   "12:35 Pass by a-t11 (away team): not completed, 0 m, match minute 13, detected with confidence 0.39, its team told with confidence 0.44"
+  ]
+ },
+ {
+  "id": "L07",
+  "sentence": "h10 tries their luck at 99 km/h, an ambitious effort.",
+  "facts": [
+   "01:46 Shot by h10 (home team): on target, 30 m, ball at 99 km/h, match minute 2"
+  ]
+ },
+ {
+  "id": "L08",
+  "sentence": "h1 plays a long ball to h9.",
+  "facts": [
+   "13:17 Pass by h1 (home team) to h9: completed, 43 m, ball at 104 km/h, match minute 14"
+  ]
+ },
+ {
+  "id": "L09",
+  "sentence": "h7 plays a 17 m pass to h3.",
+  "facts": [
+   "00:07 Pass by h7 (home team) to h2: completed, 17 m, ball at 40 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L10",
+  "sentence": "a3 plays a cautious pass to a1.",
+  "facts": [
+   "00:27 Pass by a3 (away team) to a1: completed, 8 m, ball at 34 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L11",
+  "sentence": "h8 is the best player on the pitch.",
+  "facts": [
+   "00:09 Pass by h8 (home team) to h10: completed, 12 m, ball at 46 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L12",
+  "sentence": "h6 picks out h7 with a 8 m pass, a confident ball forward.",
+  "facts": [
+   "00:05 Pass by h6 (home team) to h7: completed, 8 m, ball at 39 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L13",
+  "sentence": "h11 shoots at 84 km/h.",
+  "facts": [
+   "10:40 Shot by h11 (home team): off target, 22 m, ball at 84 km/h, match minute 11"
+  ]
+ },
+ {
+  "id": "L14",
+  "sentence": "a2 finds h8 with a 27 m pass.",
+  "facts": [
+   "00:43 Pass by a2 (away team) cut out by h8: not completed, 27 m, ball at 61 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L15",
+  "sentence": "a3 plays a patient pass to a1.",
+  "facts": [
+   "00:27 Pass by a3 (away team) to a1: completed, 8 m, ball at 34 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L16",
+  "sentence": "After intercepting at 01:10, home completed six successive successful passes despite pressure, demonstrating strong possession and build-up play in minute 2.",
+  "facts": [
+   "01:10 Pass by a9 (away team) cut out by h10: not completed, 29 m, ball at 59 km/h, match minute 2",
+   "01:14 Pass by h10 (home team) to h4: completed, 21 m, ball at 56 km/h, match minute 2",
+   "01:16 Pass by h4 (home team) to h11: completed, 29 m, ball at 57 km/h, match minute 2",
+   "01:21 Pass by h11 (home team) to h4: completed, 21 m, ball at 55 km/h, match minute 2",
+   "01:24 Pass by h4 (home team) to h7: completed, 14 m, ball at 40 km/h, match minute 2",
+   "01:27 Pass by h7 (home team) to h2: completed, 19 m, ball at 62 km/h, match minute 2",
+   "01:31 Pass by h2 (home team) to h7: completed, 16 m, ball at 44 km/h, match minute 2"
+  ]
+ },
+ {
+  "id": "L17",
+  "sentence": "a2 finds a10 with a 27 m pass.",
+  "facts": [
+   "00:43 Pass by a2 (away team) cut out by h8: not completed, 27 m, ball at 61 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L18",
+  "sentence": "h10 plays a pass at 00:03.",
+  "facts": [
+   "00:03 Pass by h10 (home team) to h8: completed, 13 m, ball at 50 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L19",
+  "sentence": "The interception by a8 at 01:35 came immediately after h7’s failed long pass at 01:33, disrupting the home team’s attack in minute 2.",
+  "facts": [
+   "01:33 Pass by h7 (home team) cut out by a8: not completed, 21 m, ball at 51 km/h, match minute 2",
+   "01:35 Interception by a8 (away team): match minute 2"
+  ]
+ },
+ {
+  "id": "L20",
+  "sentence": "h10 picks out h8 with a 13 m pass, a confident ball forward.",
+  "facts": [
+   "00:03 Pass by h10 (home team) to h8: completed, 13 m, ball at 50 km/h, match minute 1"
+  ]
+ },
+ {
+  "id": "L21",
+  "sentence": "a5 makes a risky tackle on h9.",
+  "facts": [
+   "00:17 Tackle by a5 (away team) on h9: completed, match minute 1"
+  ]
+ },
+ {
+  "id": "L22",
+  "sentence": "a9 finds h10 with a 17 m pass.",
+  "facts": [
+   "02:39 Pass by a9 (away team) cut out by h10: not completed, 17 m, ball at 44 km/h, match minute 3"
+  ]
+ },
+ {
+  "id": "L23",
+  "sentence": "a7 deliberately gives the ball away.",
+  "facts": [
+   "01:16 Pass by a7 (away team) cut out by h11: not completed, 16 m, ball at 42 km/h, match minute 2"
+  ]
+ }
+]

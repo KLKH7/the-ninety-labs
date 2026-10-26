@@ -351,8 +351,8 @@ async function start() {
     tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
     tracks.described = !!b.audio;
   }
-  // Kian's open choice for the QR after kick-off: only behind the button, or also docked small.
-  const qrState = { open: false, closed: false, dock: new URLSearchParams(location.search).get("qr") === "dock" };
+  // The QR after kick-off is behind the control bar's button only (Kian, Oct 25: option A).
+  const qrState = { open: false, closed: false };
   const hud = big
     ? setupHud({
         footage,
