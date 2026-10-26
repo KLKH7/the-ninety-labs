@@ -838,6 +838,123 @@ ion-modal { --backdrop-opacity: 0.45; }
   background: var(--text-2); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10.5' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M12 7.2l4.2 3-1.6 4.9H9.4L7.8 10.2z'/%3E%3Cpath d='M12 7.2V2.2M16.2 10.2l4.6-1.6M14.6 15.1l2.8 4.2M9.4 15.1l-2.8 4.2M7.8 10.2 3.2 8.6' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10.5' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3Cpath d='M12 7.2l4.2 3-1.6 4.9H9.4L7.8 10.2z'/%3E%3Cpath d='M12 7.2V2.2M16.2 10.2l4.6-1.6M14.6 15.1l2.8 4.2M9.4 15.1l-2.8 4.2M7.8 10.2 3.2 8.6' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E") center / contain no-repeat; }
 #goals-unsure { min-height: 0; margin-top: 6px; }
 
+/* ---- First-run onboarding in Ask (onboarding.ts): iOS's setup screens on black: a large title,
+   an inset grouped list with blue ticks, page dots, blue Back and Skip. No captions. */
+.onboard { padding: 4px 0 24px; }
+.onboard[hidden] { display: none; }
+.onboarding #answers, .onboarding #recent-title { display: none; }
+.onboard-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 44px; padding: 0 8px; }
+.nav-link { border: 0; background: none; color: #0a84ff; font: inherit; font-size: 17px; min-height: 44px; padding: 0 8px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+.nav-link svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.nav-link.gone { visibility: hidden; }
+.onboard-back { grid-column: 1; grid-row: 1; justify-self: start; }
+.onboard-skip { grid-column: 3; grid-row: 1; justify-self: end; }
+.page-dots { grid-column: 2; grid-row: 1; display: flex; gap: 8px; }
+.page-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(235, 235, 245, 0.3); }
+.page-dots i.on { background: #fff; }
+.onboard-title { margin: 28px 20px 20px; font-size: 34px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.15; }
+.onboard-title:focus { outline: none; }
+/* Settings: the Personalise row, iOS's value-and-chevron row. */
+.row-link { width: 100%; border: 0; background: none; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.row-link .row-title { flex: 1; }
+.row-value { color: var(--text-2); font-size: 17px; }
+.row-link .chev { width: 16px; height: 16px; fill: none; stroke: rgba(235, 235, 245, 0.3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+/* A fan who cares most about players sees the player questions first. */
+.ask-start[data-focus="players"] { display: flex; flex-direction: column; }
+.ask-start[data-focus="players"] #ask-players-title { order: -2; margin-top: 32px; }
+.ask-start[data-focus="players"] #ask-players { order: -1; }
+.ask-start[data-focus="players"] #ask-start-title { margin-top: 22px; }
+.ask-start[data-focus="players"][hidden] { display: none; }
+
+/* ---- Ask, Perplexity / ChatGPT style (Kian, Oct 25): one raised pill composer with the send
+   button inside it, dimmed until there is text; the empty state and the onboarding sit low, near
+   the thumb, above the composer; starter questions as a two-column card grid with a glyph. */
+ion-footer.composer { padding: 8px 0 14px; }
+#ask-form { display: block; padding: 0 16px; }
+.ask-pill { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 18px; border-radius: 26px;
+  background: #1c1c1e; border: 1px solid rgba(84, 84, 88, 0.65); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); }
+.ask-pill:focus-within { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); border-color: rgba(142, 142, 147, 0.8); }
+#question { flex: 1; min-width: 0; min-height: 40px; max-height: 128px; padding: 9px 0; border: 0; border-radius: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: 17px; line-height: 22px; resize: none; overflow-y: auto; }
+#question::placeholder { color: #98989d; } /* 5.8:1 on the pill's #1c1c1e (WCAG 1.4.3 asks 4.5:1) */
+#question:focus, #question:focus-visible { outline: none; }
+.ask-send { flex: none; width: 36px; height: 36px; min-height: 36px; padding: 0; margin: 0 0 2px; border-radius: 18px; background: #0a84ff; color: #fff; opacity: 1;
+  display: grid; place-items: center; transition: background-color 0.15s, color 0.15s; }
+.ask-send svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.ask-pill:has(#question:placeholder-shown) .ask-send { background: #3a3a3c; color: rgba(235, 235, 245, 0.45); opacity: 1; }
+/* The empty state and the onboarding fill the page and sit at its foot, above the composer. */
+#ask-content::part(scroll) { display: flex; flex-direction: column; }
+#ask-content .ask-start { margin-block: auto; }
+.ask-start { padding: 24px 16px 12px; }
+#ask-start-title { margin: 0 4px 14px; font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
+.ask-start #ask-players-title { margin: 22px 4px 12px; font-size: 20px; }
+.chip-grid { gap: 8px; margin-top: 0; }
+#panel-ask .q-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px;
+  min-height: 92px; padding: 12px 14px 13px; border: 0; border-radius: 18px; background: #1c1c1e;
+  font-size: 15px; line-height: 20px; font-weight: 500; text-align: left; white-space: normal; cursor: pointer; }
+#panel-ask .q-card:active { background: #2c2c2e; }
+.q-glyph { width: 22px; height: 22px; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ask-start[data-focus="players"] #ask-players-title { margin-top: 0; }
+.ask-start[data-focus="players"] #ask-start-title { margin-top: 22px; font-size: 20px; }
+/* The onboarding fills the page: its page dots and Skip at the top, the question and the choices
+   at the foot, near the thumb. */
+#ask-content .onboard:not([hidden]) { margin-top: 0; flex: 1; display: flex; flex-direction: column; padding: 4px 0 20px; }
+
+#ask-button { min-height: 36px; padding: 0; border-radius: 18px; }
+/* Ask's footer (composer and tab bar) is already in ion-content's offset: no extra clearance, so
+   the empty state sits just above the composer. */
+ion-tab #ask-content { --padding-bottom: 12px; }
+
+/* The onboarding's choices as hero tiles (Coordinator, Oct 25): the clubs' crests at 96 pt over
+   their names, the modes and focuses a large glyph over theirs; the title and tiles centred in the
+   space above the composer; the chosen tile ringed in iOS blue with its tick. */
+.onboard-body { margin-block: auto; padding: 0 16px; }
+.onboard-title { margin: 0 4px 20px; text-align: center; }
+.onboard-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.onboard-tiles[data-step="focus"] { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.onboard-option { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  min-height: 168px; padding: 22px 10px 18px; border: 0; border-radius: 22px; background: #1c1c1e; color: var(--text);
+  font: inherit; text-align: center; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(84, 84, 88, 0.5); transition: box-shadow 0.15s, background-color 0.15s; }
+.onboard-tiles[data-step="club"] .onboard-option { min-height: 196px; }
+.onboard-option:active { background: #2c2c2e; }
+.onboard-option[aria-checked="true"] { box-shadow: inset 0 0 0 2px #0a84ff; }
+.onboard-option .row-title { font-size: 17px; font-weight: 600; line-height: 21px; }
+.onboard-tiles[data-step="focus"] .onboard-option .row-title { font-size: 15px; line-height: 19px; }
+.onboard-crest { width: 96px; height: 96px; display: grid; place-items: center; }
+.onboard-crest svg { max-width: 100%; max-height: 100%; width: auto; height: 100%; }
+.onboard-glyph { width: 44px; height: 44px; fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.onboard-option .tick { position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; fill: none; stroke: #0a84ff; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.onboard-option[aria-checked="true"] .tick { visibility: visible; }
+/* The empty state, centred in the space above the composer. */
+#ask-start-title { text-align: center; }
+.q-glyph { width: 26px; height: 26px; stroke-width: 1.6; stroke: rgba(235, 235, 245, 0.7); }
+
+/* No composer while the choices are up (Kian, Oct 25): the tiles take the whole page above the tab
+   bar; once they are made or skipped, the composer rises in. */
+#panel-ask.onboarding ion-footer.composer { display: none; }
+#panel-ask.composer-in ion-footer.composer { animation: composer-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes composer-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #panel-ask.composer-in ion-footer.composer { animation-duration: 0.01s; } }
+
+/* Onboarding is full-screen (Kian, Oct 25): no match header (the tiles carry the crests) and no
+   composer; the tab bar stays, so Live and Story are a tap away. iOS 17/18 controls: Back a round
+   grey glass button with a white chevron, Skip a grey capsule, the page dots centred between. */
+#panel-ask.onboarding ion-header { display: none; }
+#panel-ask.onboarding #ask-content { --offset-top: 0px !important; }
+#ask-content .onboard:not([hidden]) { padding-top: calc(env(safe-area-inset-top) + 10px); }
+.onboard-nav { padding: 0 16px; min-height: 44px; }
+.onboard .nav-link { min-height: 0; padding: 0; gap: 0; color: #fff; font-size: 15px; font-weight: 600;
+  background: rgba(118, 118, 128, 0.24); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
+.onboard-back { width: 36px; height: 36px; border-radius: 50%; justify-content: center; }
+.onboard-back svg { width: 20px; height: 20px; stroke-width: 2.6; margin-left: -1px; }
+.onboard-skip { height: 32px; padding: 0 14px !important; border-radius: 16px; }
+.onboard .nav-link:active { background: rgba(118, 118, 128, 0.36); }
+/* A 44 pt hit area (Apple's minimum) behind controls that look smaller: Back 36, Skip 32, send 36. */
+.onboard .nav-link, .ask-send { position: relative; }
+.onboard .nav-link::before, .ask-send::before { content: ""; position: absolute; left: 50%; top: 50%;
+  width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+
 /* The score read off the broadcast's scorebug (#356): Apple Sports' numerals over smaller crests;
    with no reading, the crests stand alone where the numerals were (1A). A tap says how we know. */
 .side-score[hidden] { display: none; }
