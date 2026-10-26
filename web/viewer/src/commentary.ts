@@ -74,11 +74,13 @@ export class AudioTracks {
     stadium: string | null,
     private captionEl: HTMLElement,
     private video: HTMLVideoElement | null = null,
+    muxed = false, // the manifest says the footage carries the crowd bed (footage.audio, #397)
   ) {
+    this.own = muxed && !!video;
     this.bed = stadium ? new Audio(new URL(stadium, new URL(base, location.href)).href) : null;
     if (this.bed) this.bed.loop = false;
     this.voice.preload = "auto";
-    if (!this.bed) this.murmur = new Murmur();
+    if (!this.bed && !this.own) this.murmur = new Murmur();
     if (commentary?.lines.length) this.track = "commentary";
   }
 

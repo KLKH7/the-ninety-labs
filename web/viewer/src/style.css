@@ -324,3 +324,10 @@ body[data-screen="big"] .layout:fullscreen .ask-hint { display: none; }
 /* The kick-off QR card is for a screen with no companion beside it, and never under the audio menu. */
 body[data-screen="big"][data-dock="open"] .pair-card,
 body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: none; }
+
+/* The picture waiting for data (src/player.ts): a quiet ring, never a silent black frame. */
+.spinner { position: absolute; left: 50%; top: 50%; z-index: 2; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22); border-top-color: #fff; pointer-events: none; }
+.spinner[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
+@keyframes spin { to { transform: rotate(360deg); } }

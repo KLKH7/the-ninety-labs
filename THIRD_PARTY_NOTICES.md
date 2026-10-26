@@ -26,8 +26,8 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 
 ## Viewer and phone companion (`web/viewer`, `web/phone`)
 
-The viewer and the phone ship as plain HTML, CSS and JavaScript. Two packages reach a page: in the
-viewer, qrcode-generator, which draws the pairing QR code; in the phone, Ionic's web components
+The viewer and the phone ship as plain HTML, CSS and JavaScript. These packages reach a page: in the
+viewer, qrcode-generator, which draws the pairing QR code, and hls.js, which plays the HLS ladder; in the phone, Ionic's web components
 (@ionic/core, pinned exactly in `web/phone/package.json`), its view layer in iOS mode, with what
 they bring into the bundle (ionicons, the Stencil runtime, tslib). The rest build them, and none
 reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-lock.json`.
@@ -35,6 +35,7 @@ reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-
 | Package | Used for | Licence |
 |---|---|---|
 | qrcode-generator 2.0.4 (viewer, in the page) | the QR code of the phone's address | MIT |
+| hls.js 1.5.20 (viewer, in the page) | plays the footage's HLS ladder where the browser has no native HLS | Apache-2.0 |
 | @ionic/core 9.0.6 (phone, in the page) | tabs, headers, segments, lists, sheets: the phone's view layer | MIT |
 | ionicons 8.1.0 (through @ionic/core, in the page) | the icon component Ionic loads | MIT |
 | @stencil/core 4.45.2 (through @ionic/core, its runtime in the page) | the runtime of Ionic's web components | MIT |

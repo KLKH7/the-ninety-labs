@@ -6,6 +6,7 @@ import { setupDock } from "./dock";
 import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
+import { attachPlayer } from "./player";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 import { airSpeed, airSpeeds, claimSpeeds, commentarySpeeds, spokenSpeeds } from "./speed";
@@ -58,13 +59,14 @@ interface Footage {
 const POSTER_S = 0.6 / 2 + 1 / 25;
 
 function videoFootage(b: Bundle): Footage {
-  video.src = b.base + b.manifest.footage.src;
+  // HLS, else MP4, else the legacy file, recovering from errors and stalls (src/player.ts).
+  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"));
   return {
     time: () => video.currentTime,
     duration: b.manifest.footage.frames / b.manifest.fps,
     paused: () => video.paused,
-    play: () => void video.play(),
-    pause: () => video.pause(),
+    play: () => player.want(true),
+    pause: () => player.want(false),
     seek: (s) => (video.currentTime = s),
   };
 }
@@ -370,7 +372,8 @@ async function start() {
       : null;
     const commentary = readCommentary(body);
     if (commentary) commentary.lines = commentarySpeeds(commentary.lines, m.speed);
-    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null);
+    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null,
+      m.footage.audio === "muxed");
     tracks.described = !!b.audio;
     (window as unknown as { ninetyTracks: AudioTracks }).ninetyTracks = tracks; // read by tests/test_match_mode.py
     // The companion on the computer (src/dock.ts): the phone app, paired to this screen.

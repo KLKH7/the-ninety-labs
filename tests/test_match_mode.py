@@ -162,6 +162,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     manifest = json.loads((www / "commentary" / "manifest.json").read_text())
     (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
                                                                   "stadium": "stadium.wav"}))
+    _hls_bundle(www, "hls")  # the same match as an HLS ladder, where ffmpeg is installed
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -635,3 +636,70 @@ def test_after_a_server_restart_the_big_screen_claims_its_same_code_back(browser
     assert len(laptops) == 2  # and the relay joined again
     assert "code=K7MP3Q" in page.get_attribute("#companion-frame", "src")
     ctx.close()
+
+
+def _hls_bundle(www, out: str) -> bool:
+    """The match bundle with an H.264 HLS ladder and MP4 (as #397 writes them), made by ffmpeg."""
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        return False
+    dst = www / out
+    if dst.exists():
+        return True
+    shutil.copytree(www / "match", dst)
+    x264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "50", "-keyint_min", "50", "-sc_threshold", "0"]
+    src = ["-f", "lavfi", "-i", "testsrc=size=320x180:rate=25", "-t", "12"]
+    rungs = []
+    for h in (360, 180):
+        (dst / "hls" / f"{h}p").mkdir(parents=True)
+        hls = ["-f", "hls", "-hls_time", "2", "-hls_segment_type", "fmp4", "-hls_playlist_type", "vod"]
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *src, "-vf", f"scale=-2:{h}", *x264, *hls,
+                        str(dst / "hls" / f"{h}p" / "index.m3u8")], check=True, timeout=120)
+        rungs.append(f"#EXT-X-STREAM-INF:BANDWIDTH={h * 4000},RESOLUTION={h * 16 // 9}x{h},"
+                     f'CODECS="avc1.640028"\n{h}p/index.m3u8\n')
+    (dst / "hls" / "master.m3u8").write_text("#EXTM3U\n#EXT-X-VERSION:7\n" + "".join(rungs))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *src, *x264, "-movflags", "+faststart",
+                    str(dst / "video.mp4")], check=True, timeout=120)
+    m = json.loads((dst / "manifest.json").read_text())
+    m["footage"] = {"kind": "video", "src": "video.mp4", "mp4": "video.mp4", "hls": "hls/master.m3u8",
+                    "frames": m["footage"]["frames"], "audio": None}
+    (dst / "manifest.json").write_text(json.dumps(m))
+    return True
+
+
+def test_hls_playback_starts_low_and_survives_a_forced_media_error(browser, site):  # noqa: F811
+    """src/player.ts in Chrome (H.264 needs the branded build; Playwright's Chromium has no
+    H.264): hls.js plays the ladder from its lowest rendition, and a fatal media error is
+    recovered with the picture playing on, the spinner down."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(site + "hls/manifest.json").close()
+    except urllib.error.HTTPError:
+        pytest.skip("no ffmpeg to encode the ladder")
+    try:
+        chrome = browser.browser_type.launch(channel="chrome", headless=True)
+    except Exception:
+        pytest.skip("no Chrome here (Playwright's Chromium cannot play H.264)")
+    page = chrome.new_page(viewport={"width": 1280, "height": 900})
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site + "?bundle=hls/")
+    page.wait_for_selector("body[data-state=ready]")
+    page.wait_for_function("window.ninetyPlayer && document.querySelector('#video').readyState >= 2")
+    assert page.evaluate("window.ninetyPlayer.state.source") == "hls.js"
+    # The lowest rung first, for a fast first frame; ABR climbs from it.
+    assert page.evaluate("(h => h.levels[h.startLevel].height)(window.ninetyPlayer.hls())") == 180
+    page.click("#play")
+    page.wait_for_function("document.querySelector('#video').currentTime > 1")
+    # recoverMediaError detaches and re-attaches the media: without the player holding on to what
+    # the viewer wanted, the picture stops here (it did, before want()).
+    page.evaluate("window.ninetyPlayer.fail()")
+    at = page.evaluate("document.querySelector('#video').currentTime")
+    page.wait_for_function(f"document.querySelector('#video').currentTime > {at} + 1")  # it plays on
+    assert page.evaluate("window.ninetyPlayer.state.recoveries") >= 1
+    assert page.is_hidden("#spinner")
+    assert not errors
+    chrome.close()
