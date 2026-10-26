@@ -218,6 +218,13 @@ def test_the_bundle_says_a_highlight_s_player_by_club_never_by_track_id():
     assert r["moments"][0]["caption"] == "A player scores from 26 m."
 
 
+def test_a_side_is_said_by_its_club_s_name_never_home_or_away():
+    events = [ev("g1", 61.0, "goal", player=None, x=105.0)]
+    out = asyncio.run(captioner.captions(reel(events, MEASURED)["moments"], events, None, None,
+                                         clubs={"home": "London", "away": "Lisbon"}))
+    assert out[0]["text"] == "A London player scores."
+
+
 def test_the_bundle_captions_every_highlight_with_code_by_default():
     events, r = scene()
     record = asyncio.run(e2e.caption_reel(r, events, "code"))
