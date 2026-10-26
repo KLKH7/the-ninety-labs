@@ -242,6 +242,7 @@ async def run_workflow(
     events: list[dict] | None = None,
     stats: list[dict] | None = None,
     inline: bool = False,
+    match: str | None = None,
 ) -> Outcome:
     """Runs the slice; checks claims against `events` and `stats`, or the engine's when not given.
     A claim may cite an event or a window stat by id. With `inline`, the Analyst's prompt carries
@@ -252,7 +253,8 @@ async def run_workflow(
     known = {e["id"]: e for e in [*events, *(stats or ())]}
     trace: list[str] = []
     rows = [e for e in events if e.get("minute") == minute] if inline else None
-    analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed), rows)
+    # `match`: the id the Analyst is told (an evaluation gives one no server serves: lesson 90).
+    analyst = AnalystExecutor(ask, trace, plant, live, match or match_server.match_id(seed), rows)
     checker = FactCheckExecutor(known, judge_fn, trace, live)
     # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
     builder = WorkflowBuilder(start_executor=analyst)

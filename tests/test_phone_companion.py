@@ -130,7 +130,7 @@ def test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot(b
     box = page.locator("#map").bounding_box()  # measured once the page has stopped moving
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
-    assert page.inner_text("#player-title") == "Dunhollow player 3"  # a side the bundle vouches for
+    assert page.inner_text("#player-title") == "Dunhollow player"  # a sure side; no track number
     assert not errors
 
 
@@ -144,7 +144,7 @@ def test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone(
     box = page.locator("#map").bounding_box()
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
-    assert page.inner_text("#player-title") == "Player 1"
+    assert page.inner_text("#player-title") == "A player"  # neither his side nor the tracker's number
     assert not errors
 
 
@@ -322,7 +322,7 @@ def test_a_player_is_named_by_the_answers_names_or_his_club_never_his_id(browser
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     label = page.evaluate("[window.ninetyPhone.name('a-t12'), window.ninetyPhone.name('h7'), "
                           "window.ninetyPhone.name('a-t12', {'a-t12': \"Lisbon's left-back\"})]")
-    assert label == ["Lisbon player 12", "London 7", "Lisbon's left-back"]
+    assert label == ["Lisbon player", "London 7", "Lisbon's left-back"]  # never the tracker's number
     assert not errors
 
 
@@ -572,7 +572,7 @@ def test_live_match_stats_are_match_json_s_numbers_as_mirrored_rows(browser, sit
     last = [s for s in stats if s["t"] <= 62.8][-1]
     rows = page.locator("#stat-rows .stat-row")
     labels = [rows.nth(i).get_attribute("aria-label") for i in range(rows.count())]
-    assert f"Shots: Crowmere {last['home']['shots']}, Dunhollow {last['away']['shots']}" in labels
+    assert f"Shots seen: Crowmere {last['home']['shots']}, Dunhollow {last['away']['shots']}" in labels
     home, away = last["home"]["passes_completed"], last["away"]["passes_completed"]
     assert f"Passes completed: Crowmere {home}, Dunhollow {away}" in labels
     assert not errors
@@ -862,7 +862,7 @@ def test_a_row_where_neither_club_has_any_yet_is_a_grey_track(browser, site):  #
     for i in range(rows.count()):
         row = rows.nth(i)
         empty[row.get_attribute("aria-label").split(":")[0]] = "empty" in row.get_attribute("class").split()
-    assert empty["Shots"] and empty["Shots on target"] and not empty["Passes completed"]
+    assert empty["Shots seen"] and empty["Shots on target seen"] and not empty["Passes completed"]
     assert not errors
 
 
@@ -1134,6 +1134,54 @@ def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: 
     assert not re.search(r"\d", what), what
     assert not errors
 
+
+
+def test_a_scorer_vision_could_not_name_is_his_club_s_goal_never_a_track_id(browser, site):  # noqa: F811
+    """video-prep, Oct 25: the scorer lines read "Player 7240 22′". A tracked scorer nobody names is
+    his club's goal; the shot list says the club; no screen shows the tracker's number."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def goal(route):
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal", "player": "h-t7240"} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", goal)
+    ctx.route("**/bundle/events.jsonl", goal)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#goals-home .side-goal")
+    assert page.inner_text("#goals-home .side-goal") == "Crowmere goal 2′"
+    for tab in ("radar", "insights"):
+        page.click(f"#tab-button-{tab}")
+        page.wait_for_timeout(300)
+        assert "7240" not in page.evaluate("document.body.innerText"), tab
+    assert not errors
+    ctx.close()
+
+
+def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(browser, site):  # noqa: F811
+    """Merge-queue review of #371 (WCAG 2.5.3): with track numbers gone, every unnamed player was
+    "London player" or "A player" in a screen reader's ear while the screen showed where he plays."""
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.click("#lt-players")
+    page.wait_for_selector("#roster .who")
+    for b in page.locator("#roster .who").all():
+        assert b.locator(".name").inner_text() in b.get_attribute("aria-label"), b.get_attribute("aria-label")
+    page.locator("#roster .who").first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
+    bare = {"A player", "Crowmere player", "Dunhollow player"}
+    assert chips and not bare & set(chips), chips
+    assert not errors
 
 
 def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browser, site):  # noqa: F811

@@ -1,0 +1,1036 @@
+{
+  "window_s": 1.0,
+  "changes": {
+    "recall": {
+      "k": 0,
+      "n": 16,
+      "rate": 0.0,
+      "wilson95": [
+        0.0,
+        0.19
+      ]
+    },
+    "precision": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": null
+    },
+    "timing_error_s": [],
+    "refused_reads": 0
+  },
+  "digits": {
+    "right_of_read": {
+      "k": 627,
+      "n": 627,
+      "rate": 1.0,
+      "wilson95": [
+        0.99,
+        1.0
+      ]
+    },
+    "unread": {
+      "k": 254,
+      "n": 881,
+      "rate": 0.288,
+      "wilson95": [
+        0.26,
+        0.32
+      ]
+    }
+  },
+  "clips": [
+    {
+      "clip": "seed910001-t009044",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t010051",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t013560",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910001-t029456",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910001-t031824",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t038092",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t054715",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t076806",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910001-t098798",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01594"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910001-t112344",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01779"
+      ],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910001-t118339",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01831"
+      ],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910002-t002678",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910002-t003656",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 18,
+        "read": 18
+      }
+    },
+    {
+      "clip": "seed910002-t006248",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910002-t009688",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910002-t024491",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 17,
+        "read": 17
+      }
+    },
+    {
+      "clip": "seed910002-t025633",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00421"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910002-t034686",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910002-t035661",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910002-t041736",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00630"
+      ],
+      "false": [],
+      "digits": {
+        "right": 5,
+        "read": 5
+      }
+    },
+    {
+      "clip": "seed910002-t045527",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910002-t098428",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01426"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910003-t012112",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910003-t013337",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910003-t018159",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910003-t024121",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910003-t037535",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910003-t047434",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00809"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910003-t055164",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910003-t058990",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910003-t074333",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910004-t001003",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t001770",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910004-t002930",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t016497",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t021318",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t022620",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t023628",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t030821",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910004-t041696",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00635"
+      ],
+      "false": [],
+      "digits": {
+        "right": 7,
+        "read": 7
+      }
+    },
+    {
+      "clip": "seed910004-t087766",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01287"
+      ],
+      "false": [],
+      "digits": {
+        "right": 5,
+        "read": 5
+      }
+    },
+    {
+      "clip": "seed910004-t114624",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01690"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910005-t000426",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910005-t000717",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 7,
+        "read": 7
+      }
+    },
+    {
+      "clip": "seed910005-t007214",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 8,
+        "read": 8
+      }
+    },
+    {
+      "clip": "seed910005-t028554",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910005-t042004",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910005-t049379",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910005-t073508",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910005-t077303",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 8,
+        "read": 8
+      }
+    },
+    {
+      "clip": "seed910006-t005749",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910006-t010840",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910006-t011589",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910006-t012320",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910006-t025620",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 17,
+        "read": 17
+      }
+    },
+    {
+      "clip": "seed910006-t028945",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910006-t032639",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00531"
+      ],
+      "false": [],
+      "digits": {
+        "right": 12,
+        "read": 12
+      }
+    },
+    {
+      "clip": "seed910006-t036959",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910006-t038663",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910006-t042401",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00653"
+      ],
+      "false": [],
+      "digits": {
+        "right": 5,
+        "read": 5
+      }
+    },
+    {
+      "clip": "seed910006-t045474",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00678"
+      ],
+      "false": [],
+      "digits": {
+        "right": 5,
+        "read": 5
+      }
+    },
+    {
+      "clip": "seed910007-t005677",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910007-t013636",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 12,
+        "read": 12
+      }
+    },
+    {
+      "clip": "seed910007-t015741",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910007-t022626",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910007-t026714",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910007-t038856",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910007-t039752",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 12,
+        "read": 12
+      }
+    },
+    {
+      "clip": "seed910007-t040110",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910007-t125222",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01883"
+      ],
+      "false": [],
+      "digits": {
+        "right": 14,
+        "read": 14
+      }
+    },
+    {
+      "clip": "seed910008-t003470",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 11,
+        "read": 11
+      }
+    },
+    {
+      "clip": "seed910008-t005224",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910008-t016737",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910008-t017411",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 10,
+        "read": 10
+      }
+    },
+    {
+      "clip": "seed910008-t019309",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 9,
+        "read": 9
+      }
+    },
+    {
+      "clip": "seed910008-t025082",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e00406"
+      ],
+      "false": [],
+      "digits": {
+        "right": 4,
+        "read": 4
+      }
+    },
+    {
+      "clip": "seed910008-t029767",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910008-t053299",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910008-t063508",
+      "goals": 0,
+      "changes": 0,
+      "matched": 0,
+      "missed": [],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    },
+    {
+      "clip": "seed910008-t112955",
+      "goals": 1,
+      "changes": 0,
+      "matched": 0,
+      "missed": [
+        "e01807"
+      ],
+      "false": [],
+      "digits": {
+        "right": 0,
+        "read": 0
+      }
+    }
+  ]
+}
