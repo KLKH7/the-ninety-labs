@@ -335,6 +335,8 @@ interface BundleManifest {
   teams?: unknown;
   sides_known?: unknown;
   min_team_confidence?: unknown;
+  /** scorebug.jsonl (ninety-e2e --scorebug): shown only once the reader is measured. */
+  scorebug?: { readings: number; measured: boolean; min_confidence: number } | null;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -356,6 +358,8 @@ interface DetectedEvent {
   confidence?: number | null;
   team_confidence?: number | null;
   interceptor?: string | null;
+  /** score_change only (#356): the score the broadcast's scorebug shows from this event on. */
+  score?: { home: number; away: number } | null;
 }
 /** The side threshold the fact-checker uses (the bundle's `min_team_confidence`, from
  * ninety/agents/factcheck.py); null for a bundle that does not say, where every detected side is unsure. */
@@ -371,6 +375,7 @@ function sureSide(e: DetectedEvent): "home" | "away" | null {
   return minTeamConfidence !== null && typeof told === "number" && told > minTeamConfidence ? e.team : null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
+let scorebugEvents: DetectedEvent[] = []; // the scorebug's readings (scorebug.jsonl), in time order
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -420,6 +425,26 @@ async function loadBundle() {
           if (!line.trim()) continue;
           const e = JSON.parse(line) as DetectedEvent;
           bundleEvents.set(e.id, e);
+        }
+      }
+      // The scorebug's own readings (vision's, from the broadcast's graphic: ninety/vision/
+      // scorebug.py), when the bundle carries them: a start reading and each change of score.
+      // One gate with the Companion (ninety/intel/scoring.py, SCOREBUG_MEASURED, which the bundle
+      // carries): nothing from the scorebug until its reader is measured; then only readings at or
+      // above the fact-checker's confidence, and never one that takes a goal away (a misread).
+      scorebugEvents = [];
+      const gate = m.scorebug;
+      const sb = gate?.measured ? await fetch(new URL("scorebug.jsonl", base)).catch(() => null) : null;
+      if (gate && sb?.ok) {
+        let last = { home: 0, away: 0 };
+        for (const line of (await sb.text()).split("\n")) {
+          if (!line.trim()) continue;
+          const e = JSON.parse(line) as DetectedEvent;
+          if ((e.type !== "score_read" && e.type !== "score_change") || !e.score) continue;
+          if ((e.confidence ?? 1) < gate.min_confidence) continue;
+          if (e.score.home < last.home || e.score.away < last.away) continue;
+          last = e.score;
+          scorebugEvents.push(e);
         }
       }
     }
@@ -1822,6 +1847,7 @@ let insightsAt = 0;
 let insightsBusy = false;
 let insightsShownTo = -1;
 let insightsLoaded = false; // the first fetch has answered, with cards or with none
+let insightsMissing = false; // the server has no cards route or none for this clip: not asked again
 
 function showUnread() {
   const badge = $("insights-new");
@@ -1836,6 +1862,7 @@ async function refreshInsights(force = false) {
   const t = viewTime();
   try {
     // The bundle's cards.json (the Insight Scout's, precomputed for the replay), else the feed's.
+    if (!bundleCards && insightsMissing) return; // the server has none for this clip: asked once
     const cards = bundleCards ?? (await feed.insights(state.clip, t));
     // A replay must not show what is still to come: only cards up to the big screen's clock.
     const shown = cards.filter((c) => c.t <= t + 1e-6).sort((a, b) => b.t - a.t);
@@ -1854,8 +1881,9 @@ async function refreshInsights(force = false) {
     insightsShownTo = t;
     $("insights-note").textContent = "What the broadcast can't show, computed by code from the tracked positions, newest first.";
   } catch (e) {
+    if (e instanceof ApiError && e.status === 404) insightsMissing = true;
     $("insights-note").textContent =
-      e instanceof ApiError && e.status === 404 ? "No hidden stats for this match yet." : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
+      e instanceof ApiError && e.status === 404 ? "" : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
   } finally {
     insightsBusy = false;
     if (!insightsLoaded) {
@@ -1903,7 +1931,7 @@ function playSentence(e: DetectedEvent): string | null {
     case "shot":
       // A shot vision could not tell the end of (outcome null, #368: saves are not read from video)
       // says only that it was taken, never "wide".
-      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${low(who(e.player))}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
     case "out_of_play":
       return "The ball goes out of play.";
     case "set_piece":
@@ -2040,17 +2068,30 @@ $("story-mode").addEventListener("ionChange", (e) => {
  * would contradict the broadcast's scorebug). The scorer's name when the detection names him, else
  * "London goal"; a goal on a side not told surely sits under the clock as "Goal". Each line opens
  * How we know, with the detection's confidence; none is printed on the band. */
+/** How near a scorebug change must be to a goal to give it a side (design: the graphic updates just
+ * after the ball goes in; on the demo match each goal event is 0.2 to 1.6 s before its change, and
+ * changes are minutes apart, so 3 s cannot pick the wrong one). */
+const SCOREBUG_MATCH_S = 3;
 let spottedKey = "";
 function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
   // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
   const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
-  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}`;
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
   if (key === spottedKey) return;
   spottedKey = key;
   const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
+  // A goal vision could not give a side takes the side whose count the broadcast's scorebug raised
+  // within SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels).
+  const sideOf = (g: { t: number; team?: string | null }): "home" | "away" | null => {
+    if (g.team === "home" || g.team === "away") return g.team;
+    const change = scorebugEvents.find(
+      (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
+    );
+    return change ? (change.team as "home" | "away") : null;
+  };
   for (const side of ["home", "away", null] as const) {
-    const mine = goals.filter((g) => (g.team ?? null) === side);
+    const mine = goals.filter((g) => sideOf(g) === side);
     // One line per scorer, his goals' minutes in order.
     const lines = new Map<string, typeof mine>();
     for (const g of mine) {
@@ -2079,6 +2120,44 @@ function renderSpotted(m: MatchData, t: number) {
   }
 }
 
+/** The score, only as vision read it off the broadcast's own scorebug: the latest `score_change`
+ * (#356) at or before t; nothing before the first reading. Never counted from detected goals
+ * (Kian, Oct 25): vision can miss a goal, the scorebug cannot. */
+export function scorebugAt(events: Iterable<{ type: string; t: number; score?: { home: number; away: number } | null }>, t: number) {
+  let best: { t: number; score: { home: number; away: number } } | null = null;
+  for (const e of events) {
+    if ((e.type !== "score_change" && e.type !== "score_read") || !e.score || e.t > t + 1e-6) continue;
+    if (!best || e.t >= best.t) best = { t: e.t, score: e.score };
+  }
+  return best;
+}
+let scorebugKey = "";
+function renderScorebug(t: number) {
+  const read = scorebugAt(scorebugEvents, t);
+  const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
+  if (key === scorebugKey) return;
+  scorebugKey = key;
+  document.body.dataset.scorebug = read ? "read" : "";
+  for (const side of ["home", "away"] as const) {
+    const el = $(`score-${side}`);
+    el.hidden = !read;
+    // The first reading is set, not counted up from 0; a change after it ticks.
+    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
+  }
+  const btn = $("score-read");
+  btn.hidden = !read;
+  btn.textContent = read ? `Score, read from the broadcast's score graphic: ${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}` : "";
+  for (const el of document.querySelectorAll<HTMLElement>(".score-line")) el.dataset.score = read ? `${read.score.home} ${read.score.away}` : "";
+}
+for (const id of ["score-home", "score-away", "score-read"]) {
+  $(id).addEventListener("click", () => {
+    const read = scorebugAt(scorebugEvents, viewTime());
+    if (!read) return;
+    void openHow({ t: read.t, visual: null, source: "code", evidence: [],
+      why: { question: "", text: `${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}: read from the broadcast's score graphic at ${clock(read.t)}, never counted from the goals vision spotted.` } });
+  });
+}
+
 let statsKey = "";
 function showMatch(t: number) {
   const m = state.match;
@@ -2092,6 +2171,7 @@ function showMatch(t: number) {
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
   renderSpotted(m, t);
+  renderScorebug(t);
   renderShots(t);
   renderSquad();
   if (playsUpTo(t).length !== playsShown) renderInsights();
