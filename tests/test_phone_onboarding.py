@@ -213,3 +213,52 @@ def test_the_composer_is_one_pill_with_send_inside_centred_and_return_sends(brow
     assert abs(page.locator(".ask-pill").bounding_box()["height"] - pill["height"]) <= 1  # back to one line
     assert not errors
     ctx.close()
+
+
+def test_back_skip_and_send_have_a_44_point_hit_area_and_the_arrow_keys_move_between_tiles(browser, site):  # noqa: F811
+    ctx, page, errors = open_phone(browser, site)
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#onboard:visible")
+    tiles = page.locator(".onboard-option")
+    tiles.nth(0).click()  # step 2, so Back shows
+    page.wait_for_selector(".onboard-back:not(.gone)")
+
+    def reach(selector):
+        """How far from its centre a tap still lands on the control, up and across."""
+        return page.evaluate(
+            """(sel) => { const el = document.querySelector(sel), r = el.getBoundingClientRect();
+              const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+              const hit = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+              const grow = (dx, dy) => { let n = 0; while (n < 40 && hit(cx + dx * (n + 1), cy + dy * (n + 1))) n++; return n; };
+              return { up: grow(0, -1), down: grow(0, 1), left: grow(-1, 0), right: grow(1, 0) }; }""",
+            selector)
+
+    for sel in (".onboard-back", ".onboard-skip"):
+        reach_px = reach(sel)
+        assert min(reach_px["up"], reach_px["down"]) >= 21, (sel, reach_px)  # 44 pt tall
+        assert reach_px["left"] + reach_px["right"] >= 43, (sel, reach_px)  # and 44 pt wide
+    tiles.nth(0).focus()
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.dataset.value") == page.locator(
+        ".onboard-option").nth(1).get_attribute("data-value")
+    assert page.evaluate("document.querySelectorAll('.onboard-option[tabindex=\"0\"]').length") == 1
+    page.keyboard.press("ArrowUp")
+    page.keyboard.press("ArrowUp")  # wraps to the last tile
+    last = page.locator(".onboard-option").last.get_attribute("data-value")
+    assert page.evaluate("document.activeElement.dataset.value") == last
+    assert not errors
+    ctx.close()
+
+
+def test_the_send_button_has_a_44_point_hit_area(browser, site):  # noqa: F811
+    ctx, page, errors = open_phone(browser, site, init="localStorage.setItem('ninety.fan', '{\"skipped\":true}')")
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#ask-form:visible")
+    miss = page.evaluate(
+        """() => { const el = document.querySelector('#ask-button'), r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          const hit = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+          return [hit(cx, cy - 21), hit(cx, cy + 21), hit(cx - 21, cy), hit(cx + 21, cy)]; }""")
+    assert all(miss), miss
+    assert not errors
+    ctx.close()

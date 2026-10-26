@@ -81,8 +81,24 @@ export function mountOnboarding(root: HTMLElement, done: (fan: Fan | null, editi
     list.replaceChildren(
       ...CHOICES[s].map(([key, label]) => row(key, label, chosen === key, s === "club" ? crestOf(short(CLUBS[key as Club])) : null)),
     );
+    // One tab stop in the group (the ticked tile, else the first); the arrow keys move between tiles.
+    const tiles = [...list.querySelectorAll<HTMLButtonElement>(".onboard-option")];
+    const stop = tiles.find((t) => t.getAttribute("aria-checked") === "true") ?? tiles[0];
+    tiles.forEach((t) => (t.tabIndex = t === stop ? 0 : -1));
     if (focus) title.focus({ preventScroll: true });
   }
+
+  list.addEventListener("keydown", (e) => {
+    const next = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!next) return;
+    const tiles = [...list.querySelectorAll<HTMLButtonElement>(".onboard-option")];
+    const at = tiles.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const to = tiles[(at + next + tiles.length) % tiles.length];
+    tiles.forEach((t) => (t.tabIndex = t === to ? 0 : -1));
+    to.focus();
+  });
 
   function choose(key: string) {
     const s = STEPS[step];

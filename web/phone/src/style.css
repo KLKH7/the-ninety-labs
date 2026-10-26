@@ -876,7 +876,7 @@ ion-footer.composer { padding: 8px 0 14px; }
 .ask-pill:focus-within { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); border-color: rgba(142, 142, 147, 0.8); }
 #question { flex: 1; min-width: 0; min-height: 40px; max-height: 128px; padding: 9px 0; border: 0; border-radius: 0; background: transparent;
   color: var(--text); font: inherit; font-size: 17px; line-height: 22px; resize: none; overflow-y: auto; }
-#question::placeholder { color: rgba(235, 235, 245, 0.45); }
+#question::placeholder { color: #98989d; } /* 5.8:1 on the pill's #1c1c1e (WCAG 1.4.3 asks 4.5:1) */
 #question:focus, #question:focus-visible { outline: none; }
 .ask-send { flex: none; width: 36px; height: 36px; min-height: 36px; padding: 0; margin: 0 0 2px; border-radius: 18px; background: #0a84ff; color: #fff; opacity: 1;
   display: grid; place-items: center; transition: background-color 0.15s, color 0.15s; }
@@ -950,6 +950,10 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 .onboard-back svg { width: 20px; height: 20px; stroke-width: 2.6; margin-left: -1px; }
 .onboard-skip { height: 32px; padding: 0 14px !important; border-radius: 16px; }
 .onboard .nav-link:active { background: rgba(118, 118, 128, 0.36); }
+/* A 44 pt hit area (Apple's minimum) behind controls that look smaller: Back 36, Skip 32, send 36. */
+.onboard .nav-link, .ask-send { position: relative; }
+.onboard .nav-link::before, .ask-send::before { content: ""; position: absolute; left: 50%; top: 50%;
+  width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
 
 /* The score read off the broadcast's scorebug (#356): Apple Sports' numerals over smaller crests;
    with no reading, the crests stand alone where the numerals were (1A). A tap says how we know. */
