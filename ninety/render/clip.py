@@ -47,6 +47,7 @@ from ninety.render.scene import (
     advance_gaits,
     ball_parts,
     body_parts,
+    carry_at,
     contacts,
     crowded_start,
     drawn_ball,
@@ -382,6 +383,7 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
