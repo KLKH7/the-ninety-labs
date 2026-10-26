@@ -26,6 +26,7 @@ from tests.test_phone import (  # noqa: F401
     MOCK_DIST,
     PHONE_SIZE,
     browser,
+    open_ask,
     tap_player,
     turn_on_read_aloud,
     unavailable,
@@ -202,7 +203,7 @@ QUESTIONS = [
 
 
 def ask(page, text: str):
-    page.click("#tab-button-ask")
+    open_ask(page)
     n = page.locator("#answers .answer:not(.pending)").count()
     page.fill("#question", text)
     page.click("#ask-button")
@@ -378,7 +379,7 @@ def test_the_tabs_move_with_the_arrow_keys(browser, site):  # noqa: F811
     page.focus("#tab-button-radar")
     page.keyboard.press("ArrowRight")
     focused("ask")
-    page.wait_for_selector("#ask-form")
+    page.wait_for_selector("#ask-content")
     page.keyboard.press("End")
     focused("insights")
     page.wait_for_selector("#insights-title")
@@ -1001,6 +1002,7 @@ def test_a_match_without_squad_numbers_shows_no_empty_squad_cards(browser, site)
 def test_ask_opens_on_a_grid_of_questions_then_recent_answers(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     page.click("#tab-button-ask")
+    page.click(".onboard-skip")  # a first visit opens on the onboarding (tests/test_phone_onboarding.py)
     page.wait_for_selector("#ask-start:visible")
     assert page.locator("#ask-grid .chip").count() >= 4
     assert page.is_hidden("#ask-chips") and page.is_hidden("#recent-title")  # one set of suggestions
