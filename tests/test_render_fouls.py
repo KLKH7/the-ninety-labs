@@ -321,8 +321,10 @@ def test_he_gets_up_on_one_knee_and_is_up_with_the_engine():
 def test_a_head_on_foul_turns_him_smoothly():
     """Running into a foul that sends him back the way he came, the drawn way down turns no more
     than 30 degrees a frame (audit: averaging opposite directions flipped it)."""
-    rows = [g for pl, g in _drawn(_spell_frames(vx=-6.0, way=0.0)) if pl.get("fall")]
+    rows = [g for pl, g in _drawn(_spell_frames(vx=-2.0, way=0.0)) if pl.get("fall")]
     ways = [g.fall_dir for g in rows]
+    turn = (ways[-1] - ways[0] + math.pi) % (2 * math.pi) - math.pi
+    assert abs(turn) > math.radians(120)  # he does turn from his run to the way he was sent
     for a, b in zip(ways, ways[1:], strict=False):
         assert abs((b - a + math.pi) % (2 * math.pi) - math.pi) <= math.radians(30)
 

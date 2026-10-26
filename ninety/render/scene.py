@@ -1058,7 +1058,7 @@ def dive_pose(g: Gait, x: float, y: float, height_m: float) -> None:
         g.crouch = None  # his feet are planted again: the lowered body bends the knees (lift)
         # On a knee only while the engine has him still: moving, he gets up as he goes.
         still = min(max(1.0 - g.speed / DIVE_UP_STILL_MPS, 0.0), 1.0)
-        g.lift = fouls.crouch_lift(crouch * still, "l", height_m)
+        g.lift = min(g.lift, fouls.crouch_lift(crouch * still, "l", height_m))  # a catch's lowering stays
     g.fall_dir = way
     g.tip_ahead = DIVE_TIP_AHEAD_M
     lx, ly = -math.sin(g.heading), math.cos(g.heading)

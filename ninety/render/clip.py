@@ -453,7 +453,9 @@ def render_clip(
                         "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
-                row_players.append(fouls.row(pl, g.fall, g.fall_dir))
+                # The row's fall is a fouled player's, down where the engine has him down (P18); a
+                # keeper's dive is drawn tipped too, but his row is the dive's (lesson 280).
+                row_players.append(fouls.row(pl, g.fall if pl.get("fall") else 0.0, g.fall_dir))
             bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)

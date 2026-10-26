@@ -1508,6 +1508,7 @@ def _draw_keeper(rows):
     for i, fr in enumerate(frames):
         advance({"a1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
         pl = fr["players"][0]
+        g.lift = 0.0  # touch_at's, with no touch
         fouls.fall_at(g, [], pl, i, FPS, keeper.height_m)  # as the clip: standing, then the dive drawn
         dive_pose(g, pl["x"], pl["y"], keeper.height_m)
         body_parts(pl["x"], pl["y"], keeper, g)
