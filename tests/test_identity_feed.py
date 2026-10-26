@@ -194,11 +194,11 @@ def test_swaps_are_between_close_team_mates_and_each_is_corrected(tmp_path):
     assert not [r for r in _lines(path)[1:] if r["type"] == "id_correction"]
 
 
-@pytest.mark.parametrize("seconds,seed", [(600, 5), (120, 1), (120, 6)])  # 1 and 6: a swap open at the end
+@pytest.mark.parametrize("seconds,seed", [(600, 5), (120, 19), (120, 26)])  # 19, 26: a swap open at the end
 def test_a_swap_relabels_exactly_its_span_and_every_one_is_corrected(tmp_path, seconds, seed):
     """Raw rows: inside each correction's span LON01's id is at h2's spot, outside it at his own;
     once loaded, every LON01 is at his own spot, a swap still open at the stream's end included."""
-    roster, frames = _pair(seconds, 0.5)
+    roster, frames = _pair(seconds, 0.9)  # within SWAP_M, and 8 noise sds from the midpoint
     path = tmp_path / "f.jsonl"
     identity_feed.write(path, roster, frames, FX, None, seed=seed)
     lines = _lines(path)
@@ -208,10 +208,10 @@ def test_a_swap_relabels_exactly_its_span_and_every_one_is_corrected(tmp_path, s
         x = next((e[3] + 52.5 for e in r["players"] if e[0] == "LON01"), None)
         if x is not None:
             swapped = any(a - 1e-6 <= r["t"] < b - 1e-6 for a, b in spans)
-            assert (abs(x - 50.5) < abs(x - 50.0)) == swapped, r["t"]
+            assert (abs(x - 50.9) < abs(x - 50.0)) == swapped, r["t"]
     for k, at in identity.load(path).at.items():
         if "LON01" in at:
-            assert abs(at["LON01"][0] - 50.0) < abs(at["LON01"][0] - 50.5), k / 25
+            assert abs(at["LON01"][0] - 50.0) < abs(at["LON01"][0] - 50.9), k / 25
 
 
 def test_the_reader_applies_corrections(feed_path, tmp_path):

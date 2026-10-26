@@ -30,11 +30,11 @@ import argparse
 import heapq
 import json
 import math
-import random
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from ninety.intel.teamsheet import Fixture
+from ninety.sim import fmath
 
 SCHEMA = "ninety-id-feed/2"
 PROVIDER = "simulated optical tracking provider (seeded from the match engine)"
@@ -88,10 +88,10 @@ def metadata(fixture: Fixture, players: list[dict], half_time: float | None, see
 def rows(frames: Iterable[Mapping], ids: Mapping[str, str], teams: Mapping[str, str],
          numbers: Mapping[str, int], half_time: float | None, seed: int) -> Iterable[dict]:
     """Frame rows and id_correction rows, each with its capture time `t` and delivery time."""
-    rng = random.Random(f"id-feed-{seed}")
+    rng = fmath.Random(f"id-feed-{seed}")  # portable normals: the same feed on every machine
     dt = 1.0 / FPS
     axis = NOISE_M / math.sqrt(2)  # an RMSE of NOISE_M in the plane is NOISE_M / sqrt 2 on each axis
-    s = axis * math.sqrt(1 - NOISE_RHO ** 2)  # AR(1) innovations whose stationary sd is `axis`
+    s = axis * math.sqrt(1 - NOISE_RHO * NOISE_RHO)  # AR(1) innovations whose stationary sd is `axis`
     noise: dict[str, tuple[float, float]] = {}
     dropped: dict[str, int] = {}  # id -> frames left
     low: dict[str, int] = {}  # id -> low-confidence frames left
