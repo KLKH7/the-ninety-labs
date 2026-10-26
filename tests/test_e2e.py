@@ -469,3 +469,19 @@ def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
     out, _ = run(tmp_path, events=[fast])
     said = "".join((out / f).read_text() for f in ("cues.jsonl", "audio.json", "commentary.json"))
     assert "251" not in said
+
+
+def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tmp_path):
+    """--scorebug: the readings go in as scorebug.jsonl, and the manifest carries the one gate every
+    screen uses, scoring.SCOREBUG_MEASURED, with the fact-checker's confidence."""
+    from ninety.agents.factcheck import MIN_CONFIDENCE
+    from ninety.intel import scoring
+
+    sb = tmp_path / "sb.jsonl"
+    sb.write_text(json.dumps({"id": "s1", "t": 60.0, "frame": 1500, "type": "score_read", "team": None,
+                              "score": {"home": 0, "away": 0}, "confidence": 0.99}) + "\n")
+    out, manifest = run(tmp_path, "--scorebug", str(sb))
+    assert manifest["scorebug"] == {"readings": 1, "measured": scoring.SCOREBUG_MEASURED,
+                                    "min_confidence": MIN_CONFIDENCE}
+    assert (out / "scorebug.jsonl").read_text().count("score_read") == 1
+    assert "scorebug.jsonl" in manifest["files"]

@@ -143,12 +143,26 @@ def test_a_save_under_the_event_gate_is_unsure():
     assert not got["away"]["confident"] and (got["away"]["lo"], got["away"]["hi"]) == (0, 1)
 
 
-def test_a_scorebug_reading_is_never_confident_until_the_reader_is_measured(monkeypatch):
+def test_a_scorebug_reading_is_confident_once_measured_and_never_under_the_gate(monkeypatch):
     change = {"id": "s1", "t": 1300.0, "type": "score_change", "team": "home",
               "score": {"home": 1, "away": 0}, "confidence": 0.95, "source": "vision"}
-    assert scoring.SCOREBUG_MEASURED is False  # flipped only by the reader's measurement (planned, #356)
+    # Flipped by the reader's validation against its pre-stated bar (docs/eval/scorebug-plan.md, #356).
+    assert scoring.SCOREBUG_MEASURED is True
     (row,) = scoring.scorebug([change])
-    assert (row["home"], row["away"], row["confident"]) == (1, 0, False)
+    assert (row["home"], row["away"], row["confident"]) == (1, 0, True)
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", False)
+    assert scoring.scorebug([change])[0]["confident"] is False
     monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", True)
-    assert scoring.scorebug([change])[0]["confident"] is True
     assert scoring.scorebug([{**change, "confidence": 0.3}])[0]["confident"] is False  # under the gate
+
+
+def test_the_first_reading_holds_the_score_before_any_change_and_a_held_reading_says_nothing_new():
+    def read(i, t, home, away, kind="score_read"):
+        return {"id": i, "t": t, "type": kind, "score": {"home": home, "away": away}, "confidence": 0.99,
+                "source": "vision", **({"team": "home"} if kind == "score_change" else {})}
+
+    # A clip that starts at 2-1: the first reading says so, before any change is seen.
+    rows = scoring.scorebug([read("r1", 0.0, 2, 1), read("r2", 54.0, 2, 1),
+                             read("c1", 300.0, 3, 1, "score_change"), read("r3", 320.0, 3, 1)])
+    assert [(r["event"], r["home"], r["away"]) for r in rows] == [("r1", 2, 1), ("c1", 3, 1)]
+    assert all(r["confident"] for r in rows)
