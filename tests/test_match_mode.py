@@ -43,7 +43,7 @@ EVENTS = [
     event("v2", 61.0, "shot", "home", "goal", team_confidence=0.99),
     event("v3", 62.2, "pass", "away", "success"),
     event("v4", 62.5, "shot", "home", "goal", confidence=MIN_CONFIDENCE - 0.2),  # unsure: never counts
-    event("v5", 62.8, "shot", "away", "on_target"),  # the clip's last frame is 62.96 s
+    event("v5", 62.8, "shot", "away", "on_target", team_confidence=0.99),  # the clip's last frame is 62.96 s
 ]
 
 
@@ -75,6 +75,70 @@ def test_the_kinds_rank_goal_save_shot_set_piece_build_up(events, kind):
 def test_a_goal_on_a_side_not_told_surely_counts_for_no_club():
     unsure = [event("g", 61.0, "shot", "home", "goal", team_confidence=0.3)]
     assert condensed.build(META, unsure)["goals"] == [{"t": 61.0, "team": None, "event": "g"}]
+
+
+# Lesson 270: a goal is the detected `goal` event (GROUNDING I24); a shot that went in, just before
+# it, is the same goal, and the goal event carries the side.
+PAIR_AND_LONE = [
+    event("s1", 60.6, "shot", "home", "goal", team_confidence=0.2),  # the strike: its side unsure
+    event("g1", 61.0, "goal", "home", team_confidence=0.99, ball_speed_kmh=None),  # same goal, sure
+    event("g2", 62.4, "goal", "away", team_confidence=0.99, ball_speed_kmh=None),  # its strike unseen
+]
+
+
+def test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts():
+    body = condensed.build(META, PAIR_AND_LONE)
+    assert body["goals"] == [{"t": 61.0, "team": "home", "event": "g1"},
+                             {"t": 62.4, "team": "away", "event": "g2"}]
+    # Chapters (the scrubber's ticks) are named by the goal event, which carries the side.
+    assert [(c["kind"], c["label"], c["event"]) for c in body["chapters"]] == [
+        ("goal", "Goal, home", "g1"), ("goal", "Goal, away", "g2")]
+    # The reel has each goal once: at its shot, or at the goal event when no strike was seen.
+    moments = body["highlights"]["moments"]
+    assert [(m["event"], m["kind"], m["team"], m["d_m"] is None) for m in moments] == [
+        ("s1", "goal", "home", False), ("g2", "goal", "away", True)]
+    assert body["stats"][-1]["home"]["goals"] == 1 and body["stats"][-1]["away"]["goals"] == 1
+
+
+def test_a_chapter_names_no_club_its_side_was_not_told_surely():
+    unsure = [event("g1", 61.0, "goal", "home", team_confidence=0.94),
+              event("k1", 62.1, "kickoff", "away", team_confidence=0.5)]
+    body = condensed.build(META, unsure)
+    assert [c["label"] for c in body["chapters"]] == ["Goal", "Kick-off"]
+    assert body["goals"] == [{"t": 61.0, "team": None, "event": "g1"}]
+
+
+def change(cid, t, team, confidence=0.99):
+    return {"id": cid, "t": t, "frame": round(t * FPS), "type": "score_change", "team": team,
+            "score": {"home": 1, "away": 0}, "confidence": confidence}
+
+
+def test_a_goal_its_score_change_confirms_takes_the_scorebug_s_side_and_names_the_club():
+    weak = [event("g1", 61.0, "goal", "away", team_confidence=0.94)]  # the tracker's side: unsure
+    body = condensed.build(META, weak, scorebug=[change("c1", 61.2, "home")])
+    assert body["goals"] == [{"t": 61.0, "team": "home", "event": "g1"}]  # the changed digit's club
+    assert body["chapters"][0]["label"] == "Goal, home"
+    assert body["highlights"]["moments"][0]["team"] == "home"
+
+
+@pytest.mark.parametrize("scorebug", [
+    None,  # no scorebug read
+    [change("c1", 63.0, "home")],  # a change too far from the goal (beyond the reconciler's 1 s)
+    [change("c1", 61.2, "home", confidence=MIN_CONFIDENCE - 0.1)],  # a change under the gate
+])
+def test_a_goal_no_score_change_confirms_keeps_the_tracker_s_gate(scorebug):
+    weak = [event("g1", 61.0, "goal", "away", team_confidence=0.94)]
+    body = condensed.build(META, weak, scorebug=scorebug)
+    assert body["goals"] == [{"t": 61.0, "team": None, "event": "g1"}]
+    assert body["chapters"][0]["label"] == "Goal"
+
+
+def test_a_shot_that_went_in_with_no_goal_event_is_still_a_goal():
+    lone_shot = [event("s1", 60.6, "shot", "home", "goal", team_confidence=0.99),
+                 event("p1", 61.0, "pass", "away", "success")]
+    body = condensed.build(META, lone_shot)
+    assert body["goals"] == [{"t": 60.6, "team": "home", "event": "s1"}]
+    assert [m["event"] for m in body["highlights"]["moments"]] == ["s1"]
 
 
 def test_the_scoreline_counts_only_confident_detected_goals():
