@@ -91,8 +91,8 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     out, manifest = run(tmp_path)
     claim = only_claim(out)
     assert claim["status"] == "accepted" and claim["verdict"] == "verified" and claim["evidence"] == ["e2"]
-    # Its first draft said vision's speed ("at 101 km/h"), which is not measured yet
-    # (factcheck.SPEED_MEASURED): held, sent back, and said again without it.
+    # Its first draft said vision's speed of a shot ("at 101 km/h"), which is not measured: only a pass
+    # along the ground is (factcheck.measured_speed). Held, sent back, and said again without it.
     assert claim["text"] == "h8 shoots, on target."
     assert claim["mode"] == "graph offline" and manifest["agents"]["mode"] == "graph offline"
     assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 2}
@@ -102,7 +102,9 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     assert roles == ["analyst", "tactician", "challenger", "fact_checker", "tactician", "judge",
                      "fact_checker", "producer"]
     (held,) = [s for s in claim["steps"] if s["action"] == "hold"]
-    assert "101 km/h" in claim["steps"][1]["detail"] and "not measured" in held["detail"]
+    # The trace keeps why it was held; the draft's speed itself is out of the bundle's words, as no cited
+    # event may state it (onair.gate_speeds), so no screen can band it as if it were measured.
+    assert "not a pass" in held["detail"] and "km/h" not in claim["steps"][1]["detail"]
     # Offline the Judge never ran; the trace must not say it did.
     judge = [s for s in claim["steps"] if s["role"] == "judge"]
     assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
@@ -119,7 +121,8 @@ def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     assert [s["action"] for s in claim["steps"]] == [
         "pick", "tamper", "draft", "agree", "reject", "rewrite", "hold", "rewrite", "skip", "verify", "air"]
     (rejected,) = [s for s in claim["steps"] if s["action"] == "reject"]
-    assert "143" in rejected["detail"] and "143" in claim["steps"][2]["detail"]
+    # The planted number is named in the rejection; the draft that stated it as a speed shows it no more.
+    assert "143" in rejected["detail"] and "143" not in claim["steps"][2]["detail"]
     assert rejected["detail"].startswith("back to the tactician")
     insight = [c for c in cues(out) if c["kind"] == "insight"]
     assert insight and all("143" not in c["text"] for c in insight)
@@ -539,3 +542,23 @@ def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tm
                                     "min_confidence": MIN_CONFIDENCE}
     assert (out / "scorebug.jsonl").read_text().count("score_read") == 1
     assert "scorebug.jsonl" in manifest["files"]
+
+
+def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_band(tmp_path, monkeypatch):
+    # web/viewer/src/speed.ts opens its gate from this (#378): a speed on screen only with its band.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)  # as it will be once measured
+    # No event here is marked along the ground, so nothing vision read is covered: the gate stays shut.
+    _, manifest = run(tmp_path / "a")
+    assert manifest["speed"] == {"measured": False, "error_kmh": factcheck.SPEED_ERROR_KMH}
+    # A pass vision marks along the ground: its speed shows (the screens band it); the shot's
+    # held draft does not keep its speed in the trace, so the band can't vouch for it.
+    ground = [{**e, "lofted": False} if e["type"] == "pass" else e for e in EVENTS]
+    out, manifest = run(tmp_path / "b", events=ground)
+    assert manifest["speed"]["measured"] is True
+    shown = [c["text"] for c in cues(out) if c["kind"] != "insight"]
+    passes = [e for e in ground if e["type"] == "pass" and e.get("ball_speed_kmh")]
+    assert passes and any("km/h" in t for t in shown)
+    claim = only_claim(out)
+    assert all("101" not in s["detail"] for s in claim["steps"]) and "101" not in claim["text"]
