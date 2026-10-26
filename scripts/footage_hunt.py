@@ -27,41 +27,39 @@ import numpy as np
 from ninety.render import edit as _edit  # the renderer's own dead-ball cuts: what is on screen
 
 FPS = 25
-ACTIONS = [
-    "walk",
-    "stand",
-    "run",
-    "foot",
-    "strike",
-    "down",
-    "hands",
-    "thigh",
-    "throw",
-    "chest",
-    "bowl",
-    "head",
-    "dive",
-]
 RUN, OUT = Path(sys.argv[1]), Path(sys.argv[2])
 OUT.mkdir(parents=True, exist_ok=True)
 
 ev = [json.loads(x) for x in (RUN / "events.jsonl").read_text().splitlines() if x.strip()]
-_ball, _xy, _act, ids = [], [], [], None
+ACTIONS: dict[str, int] = {}  # every action the engine draws, numbered as met (seed- and engine-agnostic)
+_ball, _xy, _act, _dive, _poss, ids, roles, teams = [], [], [], [], [], None, None, None
 with open(RUN / "frames.jsonl") as fh:
     for line in fh:
         f = json.loads(line)
         b = f["ball"]
         _ball.append((f["t"], b["x"], b["y"], b["z"], b["vx"], b["vy"], b["vz"]))
-        ids = ids or [p["id"] for p in f["players"]]
+        if ids is None:
+            ids = [p["id"] for p in f["players"]]
+            roles = [p.get("role") for p in f["players"]]
+            teams = [p["team"] for p in f["players"]]
         _xy.append([(p["x"], p["y"]) for p in f["players"]])
-        _act.append([ACTIONS.index(p["action"]) for p in f["players"]])
+        _act.append([ACTIONS.setdefault(p["action"], len(ACTIONS)) for p in f["players"]])
+        _dive.append([p.get("dive", 0.0) for p in f["players"]])
+        _poss.append(ids.index(f["possessor"]) if f.get("possessor") in ids else -1)
 ball = np.array(_ball, dtype=np.float32)
 xy = np.array(_xy, dtype=np.float32)
-act = np.array(_act, dtype=np.int8)
+act = np.array(_act, dtype=np.int16)
+dive_amt = np.array(_dive, dtype=np.float32)
+poss = np.array(_poss, dtype=np.int16)
+touch = poss >= 0  # frames where a player touches the ball (the engine's possessor)
 END_S = float(ball[-1, 0])
 HALF_S = next(e["t"] for e in ev if e["type"] == "half_time")
-HANDS, DIVE = ACTIONS.index("hands"), ACTIONS.index("dive")
+HANDS = ACTIONS.get("hands", -99)
+SAVE_ACTIONS = [ACTIONS[k] for k in ("dive", "parry", "punch", "tip") if k in ACTIONS]
+KEEPERS = {teams[i]: i for i in range(len(ids)) if roles[i] == "GK"}
+GK_IDS = {ids[i] for i in KEEPERS.values()}
 bspeed = np.hypot(ball[:, 4], ball[:, 5])
+SIDE = {"home": 1.0, "away": -1.0}  # the direction each side attacks along x
 
 
 def attack_x(team: str) -> float:  # home attacks x=105, away x=0, no change of ends (demo-match.md)
@@ -84,11 +82,111 @@ def in_final_third(team, x) -> bool:
 
 
 def keeper_of(team_shooting: str) -> int:
-    return ids.index("a1" if team_shooting == "home" else "h1")
+    return KEEPERS["away" if team_shooting == "home" else "home"]
+
+
+def next_event_t(i: int) -> float:
+    """When the ball's flight from event i ends: the first touch by any player after it is struck,
+    or the next event if that comes first (the ball going out, a goal); the match's end if none."""
+    f0 = ev[i]["frame"] + 3
+    nxt = next(
+        (e["frame"] for e in ev[i + 1 :] if e["type"] != "pressure" and e["frame"] > ev[i]["frame"]),
+        len(touch),
+    )
+    hit = np.flatnonzero(touch[f0 : max(f0, nxt)])
+    return (f0 + hit[0]) / FPS if len(hit) else min(nxt, len(touch) - 1) / FPS
+
+
+def opponents(team: str) -> list[int]:
+    return [k for k in range(len(ids)) if teams[k] != team and roles[k] != "GK"]
+
+
+def spectacular(e) -> tuple[float, list[str]]:
+    """Extra value of a completed pass a viewer notices: long, a switch of play, through the lines,
+    or in behind the defence (all measured at the frame it is struck)."""
+    f, side = e["frame"], SIDE[e["team"]]
+    L = math.hypot(e["end_x"] - e["x"], e["end_y"] - e["y"])
+    v, tags = 0.0, []
+    if L >= 30:
+        v += 1.5
+        tags.append("long")
+    if abs(e["end_y"] - e["y"]) >= 30:
+        v += 1.5
+        tags.append("switch")
+    opp = opponents(e["team"])
+    ox = xy[f, opp, 0] * side
+    lo, hi = e["x"] * side, e["end_x"] * side
+    broken = int(((ox > lo + 1) & (ox < hi - 1)).sum())
+    if broken >= 5:  # most forward passes pass two to four opponents; five or more go through a line
+        v += 2.0
+        tags.append(f"breaks {broken}")
+    elif broken == 4:
+        v += 1.0
+    if len(ox) >= 2 and hi > np.sort(ox)[-2] + 1 and gain(e) >= 8:  # beyond the second-last defender
+        v += 2.5
+        tags.append("through ball")
+    return v, tags
+
+
+# ---- carries and take-ons (from the frames: who has the ball) ---------------------------------
+CARRY_MIN_M, TAKE_ON_NEAR_M = 10.0, 2.0
+carries = []  # (t0, t1, player index, metres gained toward goal, take-ons, into the box, metres)
+# The engine names a possessor only on the frames of a touch: a dribble is touch, run, touch. So a
+# carry is the stretch where the same player touched the ball last, until it is struck (a pass or a
+# shot leaves the foot) or another player touches it.
+struck = np.zeros(len(poss), bool)
+for e in ev:
+    if e["type"] in ("pass", "shot", "out_of_play", "foul", "offside", "goal", "half_time"):
+        struck[min(e["frame"], len(poss) - 1)] = True
+last = poss.copy()
+for f in range(1, len(last)):
+    if last[f] < 0 and not struck[f]:
+        last[f] = last[f - 1]
+poss = last
+k = 0
+n = len(poss)
+while k < n:
+    p = poss[k]
+    if p < 0:
+        k += 1
+        continue
+    j = k
+    while j + 1 < n and poss[j + 1] == p:
+        j += 1
+    if j - k >= FPS:  # held at least a second
+        side = SIDE[teams[p]]
+        gained = float((xy[j, p, 0] - xy[k, p, 0]) * side)
+        dist = float(np.hypot(*(xy[j, p] - xy[k, p])))
+        takes = 0
+        for o in opponents(teams[p]) if gained >= 3.0 else []:  # a take-on goes forward past a man
+            rel = (xy[k : j + 1, o, 0] - xy[k : j + 1, p, 0]) * side  # > 0: the defender is goal-side
+            near = np.hypot(*(xy[k : j + 1, o] - xy[k : j + 1, p]).T) <= TAKE_ON_NEAR_M
+            front = np.where(near & (rel > 0))[0]
+            if len(front) and (rel[front[0] :] < -1.0).any():
+                takes += 1
+        into_box = not in_box(teams[p], *xy[k, p]) and in_box(teams[p], *xy[j, p])
+        if dist >= CARRY_MIN_M or takes:
+            carries.append((k / FPS, j / FPS, p, gained, takes, into_box, dist))
+    k = j + 1
 
 
 # ---- per-event values -------------------------------------------------------------------------
 vals: list[tuple[float, float, str]] = []  # (t, value, tag)
+musts: list[tuple[float, float, str]] = []  # (t, priority, what): moments the edit must show, if cleanly
+for _t0, t1, p, _gained, takes, into_box, dist in carries:
+    if takes:
+        musts.append((t1, 5.0 + takes, f"take-on {ids[p]}"))
+    v = 1.0 + min(3.0, 0.1 * max(0.0, dist - CARRY_MIN_M)) if dist >= CARRY_MIN_M else 0.0
+    v += 3.0 * takes + (2.0 if into_box else 0.0)
+    vals.append(
+        (
+            t1,
+            v,
+            f"carry {dist:.0f}m"
+            + (f" take-on x{takes}" if takes else "")
+            + (" into box" if into_box else ""),
+        )
+    )
 bad_ts: list[tuple[float, str]] = []  # hard-bad moments (a window should not contain these)
 shot_info = {}
 for i, e in enumerate(ev):
@@ -96,7 +194,7 @@ for i, e in enumerate(ev):
     nxt = ev[i + 1] if i + 1 < len(ev) else None
     if ty == "pass":
         L = math.hypot((e["end_x"] or e["x"]) - e["x"], (e["end_y"] or e["y"]) - e["y"])
-        gk_pass = e["player"] in ("h1", "a1")
+        gk_pass = e["player"] in GK_IDS
         if e["outcome"] == "success":
             v = 0.35
             g = gain(e)
@@ -106,7 +204,10 @@ for i, e in enumerate(ev):
                 v += 0.8
             if in_box(e["team"], e["end_x"], e["end_y"]):
                 v += 1.5
-            vals.append((t, v, "pass+"))
+            sv, stags = spectacular(e)
+            if "through ball" in stags or sv >= 4:
+                musts.append((t, sv, "pass " + " ".join(stags)))
+            vals.append((t, v + sv, "pass+ " + " ".join(stags) if stags else "pass+"))
         else:
             aimless = e.get("intended") is None
             v = -1.5
@@ -132,12 +233,13 @@ for i, e in enumerate(ev):
         f = e["frame"]
         seg = act[f : f + 75, gi]
         hands = np.where(seg == HANDS)[0]
-        dives = (seg == DIVE).sum()
+        dives = int(np.isin(seg, SAVE_ACTIONS).sum()) + int((dive_amt[f : f + 75, gi] > 0.3).sum())
         kind = "none"
         if e["outcome"] == "on_target":
             if dives:
                 v += 8.0
                 kind = "dive save"
+                musts.append((t, 20.0, "dive save"))
             elif len(hands):
                 h = f + hands[0]
                 dist = float(np.hypot(*(xy[h, gi] - ball[h, 1:3])))
@@ -204,33 +306,60 @@ def shown_s(a, b):
 
 
 # ---- candidate windows ------------------------------------------------------------------------
-# starts: a side gains the ball (possession_change, interception, set_piece, kickoff) - a clean
-# moment to cut in; ends: the play ends (shot+3 s, out_of_play+1 s, possession lost +1 s, goal+12 s).
-starts = sorted(
-    {
-        round(e["t"] - 1.5, 2)
-        for e in ev
-        if e["type"] in ("possession_change", "set_piece", "kickoff", "interception")
-    }
-    | {round(e["t"] - 1.0, 2) for e in ev if e["type"] == "pass" and e["outcome"] == "success"}
-)
-ends = []
+# A window never opens or closes while the ball is in flight from a pass or a shot (Kian, Oct 26: a cut
+# away as a long ball was struck). Starts: a side gains the ball, a restart, or a completed pass about
+# to be played. Ends: after the play resolves: the pass has arrived and possession has settled for
+# 2.5 s, the shot is finished, the ball has gone dead, or the goal's celebration.
+flights = []  # (struck, ends) for every pass and shot
+for i, e in enumerate(ev):
+    if e["type"] in ("pass", "shot"):
+        flights.append((e["t"], next_event_t(i)))
+FL = np.array(flights) if flights else np.zeros((0, 2))
+
+
+def in_flight(t: float) -> bool:
+    return bool(((FL[:, 0] < t) & (t < FL[:, 1])).any())
+
+
+PLAYS = [
+    e for e in ev if e["type"] in ("pass", "shot", "possession_change", "out_of_play", "foul", "offside")
+]
+PT = np.array([e["t"] for e in PLAYS])
+
+
+def settled(t: float, hold: float = 2.5) -> bool:
+    """Nobody plays the ball on (and it does not change hands) for `hold` seconds after t."""
+    return not ((PT > t + 0.05) & (PT < t + hold)).any()
+
+
+starts = set()
 for e in ev:
+    if e["type"] in ("possession_change", "interception", "kickoff"):
+        starts.add(round(e["t"] - 1.5, 2))
+    elif e["type"] == "set_piece":
+        starts.add(round(e["t"] - 2.0, 2))
+    elif e["type"] == "pass" and e["outcome"] == "success":
+        starts.add(round(e["t"] - 1.0, 2))
+starts = {a for a in starts if not in_flight(a)}
+# ... and the moment a side receives the ball that it won, even off a long ball: the play starts there
+starts |= {round(e["t"] - 0.3, 2) for e in ev if e["type"] == "possession_change"}
+starts = sorted(starts)
+ends = set()
+for i, e in enumerate(ev):
+    t = e["t"]
     if e["type"] == "shot":
-        ends.append(e["t"] + 3.5)
+        ends.add(max(t + 3.5, next_event_t(i) + 2.5))
     elif e["type"] in ("out_of_play", "foul", "offside"):
-        ends.append(e["t"] + 1.0)
-    elif e["type"] == "possession_change":
-        ends.append(e["t"] + 1.0)
+        ends.add(t + 1.5)
     elif e["type"] == "goal":
-        ends.append(e["t"] + 12.0)
-    if e["type"] == "pass":
-        ends.append(
-            e["t"] - 0.3
-        )  # cut just before a pass is struck (a director cuts before a play breaks down)
-        if e["outcome"] == "success" and e["end_x"] is not None:
-            ends.append(e["t"] + 2.0)
-ends = sorted(set(round(x, 2) for x in ends))
+        ends.add(t + 12.0)
+    elif e["type"] == "possession_change" and settled(t):
+        ends.add(t + 2.5)
+    elif e["type"] == "pass" and e["outcome"] == "success":
+        arrive = next_event_t(i)
+        if settled(arrive):
+            ends.add(arrive + 2.5)
+ends = sorted(round(b, 2) for b in ends if not in_flight(b))
 
 cands = []
 for a in starts:
@@ -289,7 +418,24 @@ chosen.append(
 )
 chosen.append({"start": END_S - 12, "end": END_S, "len": 12.0, "score": 0, "bad": [], "why": "full-time"})
 
-# 3) the rest by density, clean windows only, until 18 min (+ a reserve list for the contact sheet)
+# 3) the moments a viewer should see (dive saves, take-ons, through balls), each in its best clean window
+for t, _, what in sorted(musts, key=lambda m: -m[1]):
+    if any(c["start"] <= t <= c["end"] for c in chosen):
+        continue
+    opts = [
+        c
+        for c in cands
+        if not c["bad"]
+        and c["start"] <= t - 3
+        and c["end"] >= t + 2
+        and not overlaps(c["start"], c["end"], chosen)
+    ]
+    if opts:
+        c = dict(max(opts, key=lambda c: c["score"]))
+        c["why"] = f"must: {what}"
+        chosen.append(c)
+
+# 4) the rest by density, clean windows only, until 18 min (+ a reserve list for the contact sheet)
 TARGET = 18 * 60
 MIN_SCORE = 4.0
 RESERVE_SCORE = 1.5
@@ -333,3 +479,29 @@ for c in chosen:
         f"bad={c['bad']} {c['tags'][:6]}",
     )
 print("bad moments:", len(bad_ts))
+long_carries = [c for c in carries if c[6] >= CARRY_MIN_M]
+take_ons = sum(c[4] for c in carries)
+picked_t = [(c["start"], c["end"]) for c in chosen]
+shown = [c for c in carries if any(a <= c[0] and c[1] <= b for a, b in picked_t)]
+report = {
+    "long_carries": len(long_carries),
+    "long_carries_20m": sum(1 for c in carries if c[6] >= 20),
+    "take_ons": take_ons,
+    "carries_into_box": sum(1 for c in carries if c[5]),
+    "in_the_picks": {
+        "long_carries": sum(1 for c in shown if c[6] >= CARRY_MIN_M),
+        "take_ons": sum(c[4] for c in shown),
+    },
+    "best": [
+        {
+            "clock": f"{int(c[0] // 60):02d}:{int(c[0] % 60):02d}",
+            "player": ids[c[2]],
+            "metres": round(c[6], 1),
+            "take_ons": c[4],
+            "into_box": bool(c[5]),
+        }
+        for c in sorted(carries, key=lambda c: -(c[4] * 10 + c[6]))[:15]
+    ],
+}
+(OUT / "carries.json").write_text(json.dumps(report, indent=1))
+print("carries:", json.dumps({k: v for k, v in report.items() if k != "best"}))
