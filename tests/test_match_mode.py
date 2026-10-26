@@ -314,7 +314,9 @@ def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, s
     for hidden in (".bar", "#persona", "#reduce-motion", ".chapter-bar", ".keys"):
         assert not page.is_visible(hidden), hidden
     stage = page.locator("#stage").bounding_box()
-    assert stage["width"] == 1280 or stage["height"] == 900  # full-bleed: it fills the screen one way
+    # Full-bleed beside the companion (src/dock.ts, open by default): it fills what is left one way.
+    assert page.locator("#companion").bounding_box()["width"] == 380
+    assert stage["width"] == 1280 - 380 or stage["height"] == 900
     # The score is the broadcast's own scorebug; our title row is only for a screen reader.
     assert page.locator("#match").bounding_box()["width"] <= 1
     # The controls are on the picture: play, the clock and the scrubber with the chapters on it.
@@ -322,7 +324,8 @@ def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, s
         assert page.is_visible(shown), shown
     assert page.locator("#ticks i").count() == 1  # the second chapter's start (the first is 0)
     assert page.locator("#ticks i.goal").count() == 0  # chapter 2 is a save; chapter 1 holds the goal
-    assert page.is_hidden("#hud-volume")  # the clip has no sound track: no dead control
+    # No sound track and no stadium file: the bed is the placeholder murmur, so the control is live.
+    assert page.is_visible("#hud-volume")
     assert not page.is_visible("#phone-panel") and page.locator("#pair-card").count() == 1
     assert not page.is_checked("#show-boxes")  # the detector's boxes are not broadcast graphics
     page.keyboard.press("d")
@@ -355,6 +358,8 @@ def test_the_qr_button_opens_and_closes_the_pairing_card(browser, site):  # noqa
     ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
         content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
     ctx.route_web_socket(re.compile(r".*/api/pair/.*"), lambda ws: None)
+    # The card is for a screen without the companion beside it (src/dock.ts): a viewer who closed it.
+    ctx.add_init_script("localStorage.setItem('ninety.dock', 'closed')")
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("#pair-card:not([hidden])")  # up at kick-off
@@ -401,8 +406,13 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    page.wait_for_selector("#pair-card")  # no click: the TV's pairing card is up at kick-off
-    assert page.inner_text("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
+    # No click: paired at once. The companion beside the picture is the phone app on this code, and
+    # its "Take it to your phone" carries the same code (the picture's own card stays down for it).
+    page.wait_for_function(
+        "(document.querySelector('#companion-frame').getAttribute('src') || '').includes('code=K7MP3Q')")
+    assert "embed=1" in page.get_attribute("#companion-frame", "src")
+    assert page.text_content("#companion-code") == "K7M P3Q"
+    assert page.text_content("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
     assert page.locator("#pair-qr svg").count() == 1
     link = page.get_attribute("#phone-link", "href")
     assert "code=K7MP3Q" in link and "bundle=%2Fmatch%2F" in link
@@ -434,12 +444,14 @@ def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(b
     assert not errors
 
 
-def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optional_subtitles(browser, site):  # noqa: F811
+def test_the_audio_menu_offers_stadium_or_commentary_on_by_default_with_optional_subtitles(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=commentary/")
     assert page.is_visible("#hud-audio") and page.is_visible("#hud-volume")  # the bundle has sound
     page.click("#hud-audio")
-    assert page.is_checked("input[name=track][value=stadium]")  # off by default
+    assert page.is_checked("input[name=track][value=commentary]")  # on by default (Kian, Oct 26)
     assert page.is_checked("input[name=subs][value=off]")
+    assert page.get_attribute("body", "data-bed-source") == "stadium"  # the bundle's bed file
+    page.check("input[name=track][value=stadium]")
     seek(page, 20)  # 60.82 s: inside the first line
     assert page.get_attribute("body", "data-commentary") == ""  # stadium only: no line plays
     page.check("input[name=track][value=commentary]")
@@ -466,7 +478,8 @@ def test_audio_description_stays_reachable_from_the_big_screen_through_the_audio
     """No commentary in this bundle: the menu offers Stadium and the audio description persona, by
     keyboard as by pointer, and no subtitles (they are the commentary's)."""
     page, errors = open_viewer(browser, site + "?bundle=match/", silent=True)
-    assert page.is_visible("#hud-audio") and page.is_hidden("#hud-volume")
+    assert page.is_visible("#hud-audio") and page.is_visible("#hud-volume")  # the murmur bed
+    assert page.get_attribute("body", "data-bed-source") == "murmur"
     page.focus("#hud-audio")
     page.keyboard.press("Enter")
     assert page.is_visible("#audio-menu")
@@ -530,7 +543,7 @@ def test_the_audio_menu_takes_focus_when_opened_and_gives_it_back_on_escape(brow
     page.focus("#hud-audio")
     page.keyboard.press("Enter")
     focused = page.evaluate("document.activeElement.name + ':' + document.activeElement.value")
-    assert focused == "track:stadium"
+    assert focused == "track:commentary"  # the track that plays
     page.keyboard.press("Tab")  # out of the Audio group into Subtitles (a radio group is one stop)
     assert page.evaluate("document.activeElement.name") == "subs"
     page.keyboard.press("Escape")
@@ -539,3 +552,86 @@ def test_the_audio_menu_takes_focus_when_opened_and_gives_it_back_on_escape(brow
     assert page.get_attribute("#hud-audio", "aria-expanded") == "false"
     assert not errors
     page.context.close()
+
+
+def test_the_big_screen_docks_the_companion_and_shows_the_ask_pill_once(browser, site):  # noqa: F811
+    """The phone app beside the picture on a computer (src/dock.ts): open by default, closed by its
+    own button or the control bar's, remembered; the first-run pill opens it and never returns."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    assert page.get_attribute("body", "data-dock") == "open" and page.is_visible("#companion-frame")
+    assert page.is_visible("#ask-hint")
+    assert page.inner_text("#ask-hint").startswith("Ask anything about this match")
+    page.click("#companion-toggle")
+    assert page.get_attribute("body", "data-dock") == "closed" and page.is_hidden("#companion")
+    assert page.locator("#stage").bounding_box()["width"] == 1280  # the picture takes the room back
+    page.click("#ask-hint")  # opens it and is used up
+    assert page.get_attribute("body", "data-dock") == "open" and page.is_hidden("#ask-hint")
+    page.click("#companion-qr")
+    assert page.is_visible("#companion-pair")  # "Take it to your phone": the QR code a tap away
+    page.reload()
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert page.is_hidden("#ask-hint")  # first run only
+    page.click("#hud-companion")
+    assert page.get_attribute("body", "data-dock") == "closed"
+    page.reload()
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert page.get_attribute("body", "data-dock") == "closed"  # remembered
+    assert not errors
+    page.context.close()
+
+
+def test_below_1000_px_the_companion_is_a_sheet_under_the_picture(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page.set_viewport_size({"width": 800, "height": 1000})
+    stage, sheet = page.locator("#stage").bounding_box(), page.locator("#companion").bounding_box()
+    assert stage["width"] == 800 and sheet["width"] == 800 and sheet["y"] >= stage["y"] + stage["height"]
+    page.click("#companion-toggle")
+    assert page.locator("#companion").bounding_box()["height"] == 52  # its handle only
+    assert not errors
+    page.context.close()
+
+
+def test_full_screen_is_the_player_and_its_companion_with_the_picture_alone_at_first(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page.click("#hud-full")
+    page.wait_for_function("document.body.dataset.full === 'on'")
+    assert page.evaluate("document.fullscreenElement.classList.contains('layout')")
+    assert page.get_attribute("body", "data-dock") == "closed"  # the picture alone at first
+    page.click("#hud-companion")
+    assert page.get_attribute("body", "data-dock") == "open"  # docked beside it, never over the controls
+    page.evaluate("document.exitFullscreen()")
+    page.wait_for_function("document.body.dataset.full === 'off'")
+    assert page.get_attribute("body", "data-dock") == "open"  # as it was before full screen
+    assert not errors
+    page.context.close()
+
+
+def test_after_a_server_restart_the_big_screen_claims_its_same_code_back(browser, site):  # noqa: F811
+    """A restart loses the rooms (in memory): the relay answers 4404 for the code on screen. The
+    big screen asks for that code back (POST /api/pair with it), so its phones rejoin unscanned."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    posts: list[dict] = []
+    laptops: list = []
+
+    def pair(route):
+        posts.append(json.loads(route.request.post_data or "{}"))
+        route.fulfill(status=201, content_type="application/json",
+                      body=json.dumps({"code": "K7MP3Q", "clip": "seed42", "expires_in": 7200}))
+
+    def relay(ws):  # closed from the test, not here: a close inside the handler never returns
+        if "role=laptop" in ws.url:
+            laptops.append(ws)
+
+    ctx.route(re.compile(r".*/api/pair$"), pair)
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), relay)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_function("document.querySelector('#companion-code').textContent === 'K7M P3Q'")
+    page.wait_for_timeout(300)
+    assert len(laptops) == 1 and "code" not in posts[0]
+    laptops[0].close(code=4404)  # the server restarted: it does not know the code
+    page.wait_for_timeout(1000)
+    assert {"clip": "seed42", "code": "K7MP3Q"} in posts[1:]  # the same code, claimed back
+    assert len(laptops) == 2  # and the relay joined again
+    assert "code=K7MP3Q" in page.get_attribute("#companion-frame", "src")
+    ctx.close()

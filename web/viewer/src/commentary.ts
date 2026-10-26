@@ -1,7 +1,14 @@
+import { speakAloud } from "./speech";
+
 // The big screen's audio tracks, as a streaming app's audio menu offers them: "Stadium" (the crowd
-// and whistles bed alone) or "Commentary" (the bundle's pre-rendered commentary lines over it, the
-// bed ducked under each line), and optional captions for the commentary. Off by default: the
-// picture starts with the stadium only. Format: commentary.json, agreed with the commentary's
+// and whistles bed alone) or "Commentary" (the bundle's commentary lines over it, the bed ducked
+// under each line), and optional captions for the commentary. Commentary is on by default when the
+// bundle has it (Kian, Oct 26: "no stadium noise and no commentary"). A line with no recorded audio
+// is said by the browser's voice (src/speech.ts), once, as it starts.
+//
+// The bed is the footage's own sound track when the render has one, else the bundle's `stadium`
+// file, else a placeholder crowd murmur made here (filtered noise, no data in it) until the
+// re-render with crowd sound lands. Format: commentary.json, agreed with the commentary's
 // producer (R4 shape agents): lines in match seconds, oldest first, never overlapping.
 
 export interface CommentaryLine {
@@ -25,6 +32,9 @@ export interface Commentary {
 export type Track = "stadium" | "commentary" | "described";
 const DUCK = 0.3; // design: the crowd under a line, as a broadcast mix sits it
 const DRIFT_S = 0.3; // re-align an audio element further than this from the picture
+const LATE_S = 0.6; // design: a line reached later than this into it (a seek) is captioned, not said
+const MURMUR_GAIN = 0.16; // design: the placeholder crowd, well under a voice
+const DESCRIBED_BED = 0.5; // design: the bed under the audio description's lines
 
 /** The line on air at video time `v` (match time `t` for a line without video times), if any. */
 export function lineAt(lines: CommentaryLine[], t: number, v: number): CommentaryLine | null {
@@ -52,18 +62,24 @@ export class AudioTracks {
   captions = false;
   muted = false;
   private line: CommentaryLine | null = null;
+  private said = ""; // the line the browser's voice is saying
   private voice = new Audio();
   private bed: HTMLAudioElement | null;
+  private murmur: Murmur | null = null;
+  private own = false; // the footage has its own sound track: it is the bed
 
   constructor(
     private base: string,
     private commentary: Commentary | null,
     stadium: string | null,
     private captionEl: HTMLElement,
+    private video: HTMLVideoElement | null = null,
   ) {
     this.bed = stadium ? new Audio(new URL(stadium, new URL(base, location.href)).href) : null;
     if (this.bed) this.bed.loop = false;
     this.voice.preload = "auto";
+    if (!this.bed) this.murmur = new Murmur();
+    if (commentary?.lines.length) this.track = "commentary";
   }
 
   get hasCommentary(): boolean {
@@ -71,8 +87,13 @@ export class AudioTracks {
   }
   /** Whether this bundle offers anything to choose: commentary, or an audio description. */
   described = false;
+  /** There is always a bed on the big screen: the footage's, the bundle's or the murmur. */
   get hasSound(): boolean {
-    return !!this.bed || this.hasCommentary;
+    return true;
+  }
+  /** Where the bed comes from, for the tests and the pipeline note. */
+  get bedSource(): "footage" | "stadium" | "murmur" {
+    return this.own ? "footage" : this.bed ? "stadium" : "murmur";
   }
 
   /** Each frame: `v` video seconds, `t` match seconds, whether the picture plays. */
@@ -82,7 +103,14 @@ export class AudioTracks {
       this.line = on;
       this.voice.pause();
       if (on?.audio) this.voice.src = new URL(on.audio, new URL(this.base, location.href)).href;
+      this.hush();
+      // Not recorded: the browser says it, once, from its start; a seek into its middle only captions it.
+      if (on && !on.audio && playing && !this.muted && into(on, t, v) < LATE_S) {
+        this.said = on.id;
+        speakAloud(on.text, { lang: "en-GB", rate: 1.05 });
+      }
     }
+    if (this.said && (!playing || this.muted)) this.hush();
     const shown = this.captions && on ? on.text : "";
     if (this.captionEl.textContent !== shown) this.captionEl.textContent = shown;
     this.captionEl.hidden = !shown;
@@ -97,10 +125,101 @@ export class AudioTracks {
       if (Math.abs(el.currentTime - at) > DRIFT_S && el.readyState > 0) el.currentTime = Math.max(0, at);
       if (el.paused) void el.play().catch(() => undefined); // a browser may refuse before a tap
     }
-    if (this.bed) {
-      this.bed.volume = on ? DUCK : 1;
-      document.body.dataset.bed = on ? "ducked" : "full";
+    const level = on ? DUCK : this.track === "described" ? DESCRIBED_BED : 1;
+    // The footage's own track, once it has decoded any sound: it replaces the placeholder for good.
+    if (this.video && !this.own && playing && hasAudio(this.video)) {
+      this.own = true;
+      this.murmur?.stop();
+      this.murmur = null;
+    }
+    if (this.video) {
+      this.video.muted = this.muted;
+      this.video.volume = level;
+    }
+    if (this.bed) this.bed.volume = level;
+    this.murmur?.set(playing && !this.muted, level);
+    document.body.dataset.bed = on ? "ducked" : "full";
+    document.body.dataset.bedSource = this.bedSource;
+  }
+
+  private hush() {
+    if (!this.said) return;
+    this.said = "";
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+  }
+}
+
+/** Whether a <video> has decoded any sound (Chrome, Safari) or says it has a track (Firefox). */
+export function hasAudio(v: HTMLVideoElement): boolean {
+  const m = v as HTMLVideoElement & { audioTracks?: { length: number }; mozHasAudio?: boolean; webkitAudioDecodedByteCount?: number };
+  return (m.audioTracks?.length ?? 0) > 0 || !!m.mozHasAudio || (m.webkitAudioDecodedByteCount ?? 0) > 0;
+}
+
+/** The placeholder crowd: pink noise through a band a crowd's murmur sits in, swelling slowly.
+ * Made only after a tap has started play (browsers start an AudioContext then) and never in an
+ * automated browser (src/speech.ts): tests read `data-bed-source`, nobody hears them. */
+class Murmur {
+  private ctx: AudioContext | null = null;
+  private gain: GainNode | null = null;
+  private on = false;
+
+  set(on: boolean, level: number) {
+    if (on && !this.ctx) this.start();
+    if (!this.ctx || !this.gain) return;
+    if (on && this.ctx.state === "suspended") void this.ctx.resume();
+    const want = on ? MURMUR_GAIN * level : 0;
+    if (on !== this.on || Math.abs(this.gain.gain.value - want) > 0.01) {
+      this.gain.gain.setTargetAtTime(want, this.ctx.currentTime, 0.25);
+      this.on = on;
     }
   }
 
+  stop() {
+    void this.ctx?.close();
+    this.ctx = null;
+    this.gain = null;
+  }
+
+  private start() {
+    if (typeof navigator !== "undefined" && navigator.webdriver) return;
+    if (typeof AudioContext === "undefined") return;
+    const ctx = new AudioContext();
+    const seconds = 6;
+    const buffer = ctx.createBuffer(2, ctx.sampleRate * seconds, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      // Paul Kellet's pink-noise filter, one channel at a time so the two sides differ.
+      const d = buffer.getChannelData(c);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < d.length; i++) {
+        const w = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + w * 0.0555179;
+        b1 = 0.99332 * b1 + w * 0.0750759;
+        b2 = 0.969 * b2 + w * 0.153852;
+        b3 = 0.8665 * b3 + w * 0.3104856;
+        b4 = 0.55 * b4 + w * 0.5329522;
+        b5 = -0.7616 * b5 - w * 0.016898;
+        d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+        b6 = w * 0.115926;
+      }
+      // Cross-fade the loop's ends so it never clicks.
+      const fade = ctx.sampleRate / 2;
+      for (let i = 0; i < fade; i++) {
+        const k = i / fade;
+        d[i] = d[i] * k + d[d.length - fade + i] * (1 - k);
+      }
+    }
+    const src = new AudioBufferSourceNode(ctx, { buffer, loop: true, loopStart: 0, loopEnd: seconds - 0.5 });
+    const low = new BiquadFilterNode(ctx, { type: "highpass", frequency: 180 });
+    const high = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 1600 });
+    const swell = new GainNode(ctx, { gain: 0.8 });
+    const lfo = new OscillatorNode(ctx, { frequency: 0.09 });
+    const depth = new GainNode(ctx, { gain: 0.2 });
+    lfo.connect(depth).connect(swell.gain);
+    const gain = new GainNode(ctx, { gain: 0 });
+    src.connect(low).connect(high).connect(swell).connect(gain).connect(ctx.destination);
+    src.start();
+    lfo.start();
+    this.ctx = ctx;
+    this.gain = gain;
+  }
 }

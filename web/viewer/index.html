@@ -44,6 +44,8 @@
             </div>
           </div>
           <p class="captions" id="captions" hidden></p>
+          <!-- First run only: one pill under the scorebug, pointing at the companion; gone after first use. -->
+          <button type="button" class="ask-hint" id="ask-hint" hidden>Ask anything about this match <span aria-hidden="true">→</span></button>
           <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->
           <div class="hud" id="hud">
             <div class="hud-scrub" id="hud-scrub"><div class="ticks" id="ticks" aria-hidden="true"></div></div>
@@ -53,6 +55,7 @@
                 <button type="button" class="icon" id="hud-audio" aria-label="Audio and subtitles" aria-expanded="false" aria-controls="audio-menu" hidden></button>
                 <button type="button" class="icon" id="hud-volume" hidden></button>
                 <button type="button" class="icon" id="hud-qr" aria-label="Follow on your phone" aria-expanded="false" aria-controls="pair-card"></button>
+                <button type="button" class="icon" id="hud-companion" aria-label="Show the companion" aria-expanded="false" aria-controls="companion" hidden></button>
                 <button type="button" class="icon" id="hud-full" aria-label="Full screen"></button>
               </div>
             </div>
@@ -94,6 +97,28 @@
         <p class="audio-note" id="audio-note" hidden></p>
       </section>
       <dl class="pipeline" id="pipeline" aria-label="What ran"></dl>
+      <!-- The big screen's companion (src/dock.ts): the phone app itself, paired to this screen, docked
+           right on a computer and a bottom sheet on a narrow one. -->
+      <aside class="companion" id="companion" aria-label="Match companion" hidden>
+        <div class="companion-head">
+          <button type="button" class="companion-grab" id="companion-toggle" aria-expanded="true" aria-controls="companion-body">
+            <span class="companion-title">Companion</span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button type="button" class="companion-phone" id="companion-qr" aria-expanded="false" aria-controls="companion-pair">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+            Take it to your phone
+          </button>
+        </div>
+        <div class="companion-pair" id="companion-pair" hidden>
+          <div class="companion-qr" id="companion-qr-code" role="img" aria-label="QR code that opens the companion on your phone"></div>
+          <p>Scan with your phone's camera, or open <b id="companion-url"></b> and enter <b class="pair-code" id="companion-code"></b></p>
+        </div>
+        <div class="companion-body" id="companion-body">
+          <iframe id="companion-frame" title="Match companion: Live, Stats, Players, Ask and Story" allow="clipboard-write"></iframe>
+          <p class="companion-wait" id="companion-wait">Connecting to this screen…</p>
+        </div>
+      </aside>
 
       <div class="side">
       <section class="radar-panel" id="radar-section" aria-labelledby="radar-title">

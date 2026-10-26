@@ -2,6 +2,7 @@ import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
 import { AudioTracks, readCommentary } from "./commentary";
+import { setupDock } from "./dock";
 import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
@@ -369,8 +370,12 @@ async function start() {
       : null;
     const commentary = readCommentary(body);
     if (commentary) commentary.lines = commentarySpeeds(commentary.lines, m.speed);
-    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"));
+    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null);
     tracks.described = !!b.audio;
+    (window as unknown as { ninetyTracks: AudioTracks }).ninetyTracks = tracks; // read by tests/test_match_mode.py
+    // The companion on the computer (src/dock.ts): the phone app, paired to this screen.
+    const dock = setupDock(store);
+    phone.onCode = (code, url, qr) => dock.setCode(code, url, qr);
   }
   // The QR after kick-off is behind the control bar's button only (Kian, Oct 25: option A).
   const qrState = { open: false, closed: false };
