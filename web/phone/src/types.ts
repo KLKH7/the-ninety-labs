@@ -1,4 +1,4 @@
-import { DEFAULT_TEAMS, type TeamNames, playerLabel } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, type TeamNames, playerLabel, sideUnsure } from "../../viewer/src/teams";
 
 // The shapes the phone reads, mirroring schemas/companion_message.schema.json,
 // schemas/minimap.schema.json, schemas/viewer_question.schema.json and viewer_answer.schema.json.
@@ -177,6 +177,8 @@ export interface InsightCard {
 
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
+  /** The phone's own mark: the demo passcode was refused, so this is the code answer. */
+  model_off?: boolean;
   /** Who wrote the text, copied from the answer message's `source` (main.ts): "model" (the
    * Companion agent, then the code checks and the Judge) or "code" (a template filled from the
    * cited fact, through the code checks only). Missing (an older server) counts as code. */
@@ -205,6 +207,9 @@ export interface AnswerMessage {
   answer: ViewerAnswer;
   /** schemas/companion_message.schema.json: who wrote the answer. */
   source?: "code" | "model";
+  /** Set by the phone, never sent: a passcode was given but the server refused it (401) or has no
+   * model (503), so this is the code answer instead ("Model off" in How we know). */
+  model_off?: boolean;
 }
 
 export const PITCH_X = 105;
@@ -236,12 +241,37 @@ export interface SheetEntry {
   position?: string;
 }
 export const teamSheet: Record<string, SheetEntry> = {};
+/** The same feed's rows for TACTICAL track ids (match.json `lineup_tactical`): the radar's dots, the
+ * player card and answers. Kept apart from `teamSheet`: a string in one id space is another man in the
+ * other (lesson 259). Names come from the player-ID feed, never from vision (`identity`). */
+export const tacticalSheet: Record<string, SheetEntry> = {};
 
-/** How a fan reads a player (viewer/src/teams.ts, `playerLabel`): the name or role a payload
- * gives, else the team sheet's name, else the club and shirt, or the club and the tracker's number. */
+/** A tracked player nothing names: the tracker's number is all we have, and it is not a shirt, so it
+ * is never shown (video-prep, Oct 25: "Player 7240"). `events`: the id is a BROADCAST track (an
+ * event's or a highlight's), the only id space the team sheet's line-up names (names-by-role). */
+export function unnamedTrack(player: string, names?: Record<string, string>, events = false): boolean {
+  return isTrack(player) && !names?.[player] && !(events ? teamSheet : tacticalSheet)[player]?.name;
+}
+
+/** A tracked player nothing names: his club's player, or "A player" on a side not told surely. */
+const unnamed = (player: string) => (sideUnsure(player) ? "A player" : `${teams[team(player)]} player`);
+
+/** How a fan reads a player on the radar, a player card or an answer (TACTICAL track ids): the name
+ * or role a payload gives, else the club and shirt; a tracked player nobody names is his club's
+ * ("London player"), or "A player" on a side not told surely: never the tracker's number. Never the
+ * team sheet's line-up, which names broadcast tracks: the same string can be another man here. */
 export function playerName(player: string, names?: Record<string, string>): string {
+  if (unnamedTrack(player, names)) return unnamed(player);
+  if (isTrack(player) && !names?.[player]) return tacticalSheet[player]!.name!; // the ID feed's name
+  return playerLabel(player, teams, names);
+}
+
+/** A player in a detected event or a highlight (BROADCAST track ids): the team sheet's name where
+ * the line-up names the track, else as playerName says him. */
+export function eventName(player: string): string {
   const sheet = teamSheet[player]?.name;
-  return playerLabel(player, teams, sheet && !names?.[player] ? { ...names, [player]: sheet } : names);
+  if (sheet) return sheet;
+  return isTrack(player) ? unnamed(player) : playerLabel(player, teams); // never the tactical feed's row
 }
 
 /** Match time as m:ss. */

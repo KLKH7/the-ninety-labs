@@ -93,8 +93,9 @@ def page() -> Page:
 
 def fact_checker_metrics(claims: list[dict]) -> dict[str, int]:
     """The counts fact-checker.md states, from the claim list it was generated with."""
-    false = [c for c in claims if not c["true"]]
-    true = [c for c in claims if c["true"]]
+    false = [c for c in claims if c["true"] is False]
+    true = [c for c in claims if c["true"] is True]
+    tone = [c for c in claims if c["true"] is None]  # neither true nor false: counted apart
 
     def service(c: dict) -> bool:
         return any("service error" in r for r in c["reasons"])
@@ -112,6 +113,8 @@ def fact_checker_metrics(claims: list[dict]) -> dict[str, int]:
         "true_rejected_with_judge": sum(rejected(c) for c in true),
         "true_claims_excluding_service": len(answered),
         "true_rejected_with_judge_excluding_service": sum(rejected(c) for c in answered),
+        "tone_claims": len(tone),
+        "tone_aired": sum(not rejected(c) for c in tone),
     }
 
 

@@ -23,6 +23,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from ninety.match import detected
+
 # A number standing on its own: not part of an id like "e00042" or a player like "h7". A
 # sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
 # 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
@@ -245,6 +247,34 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+
+# The plausibility gate: a ball speed a claim states must be one the ball can reach in this world:
+# GROUNDING P3's bound, the one the live path already drops a faster detection's speed at
+# (ninety/match/detected.py, MAX_BALL_KMH; a design bound for our engine, not a population limit).
+# A faster reading is vision's, not the ball's (a ground projection of a ball in the air, or a
+# misread frame), and is refused, never rounded down. No bound below it is sourced for a pass
+# (docs/LESSONS.md, lesson 262).
+MAX_BALL_KMH = detected.MAX_BALL_KMH
+# Vision's ball speed, measured once on the frozen test set (#331, docs/eval/speed-report-freeze.md):
+# for a pass along the ground, n = 35, median error 3.5 km/h, p90 7.7 (vision reads 4.1 slow on
+# average). A lofted pass is not measured (one, read at 229.7 for a true 93.5: its ground track is not
+# its flight) and no shot was matched. So a detected speed may be said only for a pass along the ground,
+# with that band and never above MAX_BALL_KMH; any other detected speed is held, as a claim on an unsure
+# detection is.
+# - The band, SPEED_ERROR_KMH, is design: the p90 rounded up, so about 9 in 10 of the measured passes
+#   were within it (in-sample, n = 35). The speed is said as vision read it, the bias not corrected:
+#   shifting it would say a number no event holds.
+# - Which pass is along the ground: #331 split its pairs by the TRUE ball height, which the live path
+#   never has. Vision does not mark it yet (planned: an event's `lofted`, from its flight fit), and a
+#   band measured by true height does not hold for vision's own flag until it is measured by that flag
+#   (LOFTED_FLAG_MEASURED). Until then every detected speed is held (fail closed); a missing `lofted` is
+#   held too.
+SPEED_MEASURED = True
+SPEED_ERROR_KMH = 8
+# A speed as the screens find it to band (web/viewer/src/speed.ts, ninety/agents/onair.SPEED_TEXT).
+SHOWN_SPEED = re.compile(r"\d+(?:\.\d+)?\s*(?:km/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)\b", re.I)
+LOFTED_FLAG_MEASURED = False
+WITHOUT_SPEED = "state it without the speed"  # how a speed reason ends: what the writer is asked to do
 # Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
 # confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
 # ones 0.447 to 0.985. A claim that names a team is held unless every detected event it cites had
@@ -261,6 +291,10 @@ TEAM_NAMED = re.compile(
     r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
 
 
+# A goal's side read from which of the broadcast scorebug's digits changed (condensed.scorebug_sides).
+SCOREBUG_SIDE = "scorebug"
+
+
 def side_known(event: Mapping) -> bool:
     """Whether a team may be named from this event: a ground-truth event (no detection confidence),
     or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
@@ -271,6 +305,8 @@ def side_known(event: Mapping) -> bool:
         side = event.get("team_confidence")
         return side is not None and side > MIN_TEAM_CONFIDENCE
     if event.get("confidence") is None:
+        return True
+    if event.get("team_source") == SCOREBUG_SIDE:  # a goal sided by its score change (condensed.py)
         return True
     side = event.get("team_confidence")
     return side is not None and side > MIN_TEAM_CONFIDENCE
@@ -292,6 +328,38 @@ class Verdict:
 def _normalize_clock(clock: str) -> str:
     minute, second = clock.split(":")
     return f"{minute.zfill(2)}:{second.zfill(2)}"
+
+
+def measured_speed(event: dict) -> bool:
+    """Whether a detection's ball speed is one vision's measured error covers (SPEED_MEASURED): a pass
+    vision marks as along the ground, once the band is measured by that mark (LOFTED_FLAG_MEASURED)."""
+    return (SPEED_MEASURED and LOFTED_FLAG_MEASURED and event.get("type") == "pass"
+            and event.get("lofted") is False)
+
+
+def sayable_speed(event: dict) -> bool:
+    """Whether a graphic or line may state the event's ball speed: one the ball can reach, and either
+    the simulator's or a detection's that vision's measured error covers (measured_speed). A screen
+    says it with its band (manifest.speed, web/viewer/src/speed.ts)."""
+    return plausible_speed(event) and (event.get("confidence") is None or measured_speed(event))
+
+
+def plausible_speed(event: dict) -> bool:
+    """Whether the event's ball speed is one the ball can reach (MAX_BALL_KMH): a graphic or a line
+    states the speed only then, and says the rest without it."""
+    speed = event.get("ball_speed_kmh")
+    return speed is not None and float(speed) <= MAX_BALL_KMH
+
+
+def _implausible_speed(value: float, evidence: list[dict]) -> str | None:
+    """Why a stated ball speed no ball can reach is refused: every cited event with that speed is
+    beyond MAX_BALL_KMH. None when one of them is possible."""
+    with_it = [e for e in evidence
+               if e.get("ball_speed_kmh") is not None and float(e["ball_speed_kmh"]) == value]
+    if not with_it or any(plausible_speed(e) for e in with_it):
+        return None
+    return (f"implausible speed: {value:g} km/h is faster than the ball can travel (at most "
+            f"{MAX_BALL_KMH:g} km/h): {WITHOUT_SPEED}")
 
 
 def _number_field(text: str, start: int) -> str | None:
@@ -610,6 +678,7 @@ def check(
     claim: Claim,
     known: dict[str, dict],
     roster: Iterable[Mapping | str] | None = None,
+    play: bool = True,
 ) -> Verdict:
     reasons = []
     if not claim.evidence:
@@ -662,6 +731,8 @@ def check(
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
+            elif expected_field == "ball_speed_kmh" and (why := _implausible_speed(value, evidence)):
+                reasons.append(why)
             elif (player := bound.get(match.start())) and expected_field in FIELD_UNITS and (
                 value not in _player_values(evidence, player, expected_field)
             ):
@@ -701,8 +772,91 @@ def check(
         if not any(r == name and (not passer or s == passer) for s, r in found):
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
     reasons += shape_reasons(text, evidence)
+    if play:  # off only to replay a recording made before these checks (ninety/agents/workflow.py)
+        reasons += play_reasons(claim.text, evidence)
 
     return Verdict(ok=not reasons, reasons=reasons)
+
+
+# Words about play that a cited fact must show (Kian's blind labels, docs/eval/factcheck-human-labels.md).
+# A long ball is a pass of 32 m or more: Opta's 35 yards (GROUNDING I11, *verify*).
+LONG_BALL_M = 32
+LONG_BALL = re.compile(r"\blong\s+(?:balls?|pass(?:es)?)\b", re.I)
+# Play under pressure: said only with a cited pressure event (an opponent closing the ball down).
+UNDER_PRESSURE = re.compile(
+    r"\b(?:despite|under|amid)\s+(?:the\s+|heavy\s+|intense\s+|their\s+|sustained\s+)?pressure\b"
+    r"|\bpressured\b", re.I,
+)
+# A connective that orders two moments in time. Joining an interception to the very pass it cut out
+# makes one act two: the events record a cut-out pass twice, as the pass (its `interceptor`) and as
+# the interception where the ball arrives.
+# "then" is not one: "cut out by a8, then a8 passes" orders two acts, and reading it would reject that
+# true form, so a claim that says the same act twice joined by "then" is not caught (a known gap).
+BEFORE_AFTER = re.compile(
+    r"\b(?:after|before|following|follow(?:s|ed)(?:\s+by)?|precede(?:s|d)(?:\s+by)?)\b", re.I
+)
+WINS_IT = re.compile(
+    r"intercept|\bcut(?:s|ting)?\s+(?:it\s+)?out\b|\b(?:wins?|won|winning)\s+(?:it|the\s+ball)\b", re.I
+)
+A_PASS = re.compile(r"\bpass(?:es|ed)?\b", re.I)
+
+
+def _same_act(evidence: list[dict]) -> list[tuple[dict, dict]]:
+    """(pass, interception) pairs that are one act: a cited pass cut out by a player, and his cited
+    interception as the next cited event after it."""
+    order = sorted((e for e in evidence if e.get("type")),
+                   key=lambda e: (e.get("minute") or 0, e.get("clock") or ""))
+    pairs = []
+    for n, p in enumerate(order[:-1]):
+        nxt = order[n + 1]
+        if (p.get("type") == "pass" and p.get("outcome") == "fail" and p.get("interceptor")
+                and nxt.get("type") == "interception" and nxt.get("player") == p["interceptor"]):
+            pairs.append((p, nxt))
+    return pairs
+
+
+def play_reasons(text: str, evidence: list[dict]) -> list[str]:
+    """What a claim says of the play that its cited facts must show."""
+    reasons = []
+    if LONG_BALL.search(text) and not any(
+        e.get("type") == "pass" and (e.get("distance_m") or 0) >= LONG_BALL_M for e in evidence
+    ):
+        reasons.append(f"a long ball is a pass of {LONG_BALL_M} m or more: no cited pass is")
+    if UNDER_PRESSURE.search(text) and not any(e.get("type") == "pressure" for e in evidence):
+        reasons.append("play under pressure is said, but no cited event is a pressure event")
+    for p, i in _same_act(evidence):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            for m in BEFORE_AFTER.finditer(sentence):
+                one, other = _ordered(sentence, m)
+                if ((_names_cut(one, p) and _names_pass(other, p))
+                        or (_names_pass(one, p) and _names_cut(other, p))):
+                    word = m.group().lower()
+                    reasons.append(f"{i['id']} is {p['id']} being cut out: one act, not one {word} the other")
+                    return reasons
+    return reasons
+
+
+def _ordered(sentence: str, m: re.Match) -> tuple[str, str]:
+    """The two things a connective orders: either side of it, or, when it opens the sentence ("After
+    h7's pass, a8 intercepts"), its own clause and the rest."""
+    left, right = sentence[: m.start()], sentence[m.end():]
+    if left.strip():
+        return left, right
+    head, _, rest = right.partition(",")
+    return head, rest
+
+
+def _names_pass(part: str, p: dict) -> bool:
+    """This part speaks of the cut-out pass itself, as a thing ("h7's pass", "the pass from h7"), not of
+    its passer passing again ("h7 passes to h9" is another act)."""
+    who = re.escape(p["player"])
+    return re.search(rf"(?<!\w){who}['’]s\b[^,;.]*?\bpass\b|\bpass\s+(?:by|from)\s+{who}(?!\w)", part,
+                     re.I) is not None
+
+
+def _names_cut(part: str, p: dict) -> bool:
+    """This part is the interception alone: a word for it, and not the pass it cut out by its passer."""
+    return bool(WINS_IT.search(part)) and re.search(rf"(?<!\w){re.escape(p['player'])}(?!\w)", part) is None
 
 
 # The highlights reel's fan words (ninety/highlights.py, LABELS) and the labels each may be said
@@ -727,6 +881,32 @@ def label_reasons(text: str, label: str) -> list[str]:
     a measured number (ninety/highlights.py), never the writer's taste."""
     return [f"'{m.group()}' is not said of a {label}: the code gave this moment no such label"
             for pattern, labels in LABEL_WORDS if label not in labels
+            for m in [pattern.search(text)] if m]
+
+
+# How the attack started (ninety/highlights.py, `origin`; the plan's Amendment 2). A caption may name
+# a restart only of a moment whose origin is that restart. Counter-attacks are never given (the rule
+# does not try them), so their words are always refused.
+SET_PIECES = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off")
+ORIGIN_WORDS = tuple((re.compile(p, re.I), frozenset(origins)) for p, origins in (
+    # "corner" the restart, not a part of the goal ("top corner", "far corner of the net")
+    (r"(?<!top )(?<!far )(?<!near )(?<!upper )(?<!lower )(?<!bottom )\bcorners?(?:[\s-]kicks?)?\b"
+     r"(?!\s+of\s+the)", ("corner",)),
+    (r"\bthrow[\s-]?ins?\b", ("throw_in",)),
+    (r"\bgoal[\s-]?kicks?\b", ("goal_kick",)),
+    (r"\bkick[\s-]?offs?\b", ("kick_off",)),
+    (r"\bset[\s-]?pieces?\b|\bdead[\s-]ball\b|\brestarts?\b", SET_PIECES),
+    (r"\bfree[\s-]?kicks?\b", ("free_kick",)),
+    (r"\bpenalt(?:y|ies)\b|\bspot[\s-]kicks?\b|\bfrom\s+the\s+spot\b", ("penalty_kick",)),
+    (r"\bcounter(?:[\s-]?attack(?:s|ing)?)?\b|\bon\s+the\s+break\b", ()),
+))
+
+
+def origin_reasons(text: str, origin: str | None) -> list[str]:
+    """A caption may say how the attack started only as the code found it (ninety/highlights.py)."""
+    said = origin.replace("_", " ") if origin else "not seen"
+    return [f"'{m.group()}' does not fit how this attack started ({said})"
+            for pattern, origins in ORIGIN_WORDS if origin not in origins
             for m in [pattern.search(text)] if m]
 
 
@@ -756,6 +936,24 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
+    if any(True for _ in SPEED_NUMBER.finditer(spelled_as_digits(claim.text))):
+        for i in claim.evidence:
+            event = known.get(i, {})
+            if (event.get("confidence") is not None and event.get("ball_speed_kmh") is not None
+                    and not measured_speed(event)):
+                why = ("it is not a pass" if event.get("type") != "pass" else
+                       "this pass was in the air" if event.get("lofted")
+                       else "this pass is not marked on the ground" if event.get("lofted") is None
+                       else "vision's ground mark is not measured yet")
+                reasons.append(f"event {i}'s ball speed is vision's, whose error is measured only for a pass "
+                               f"along the ground ({why}): {WITHOUT_SPEED}")
+        measured = any(measured_speed(known.get(i, {})) for i in claim.evidence)
+        stated = len(SPEED_NUMBER.findall(spelled_as_digits(claim.text)))
+        if measured and len(SHOWN_SPEED.findall(claim.text)) < stated:
+            # A screen bands only a speed in digits with one of its units (web/viewer/src/speed.ts): any
+            # other form ("sixty-one km/h", "61 kmh") would air with no band.
+            reasons.append(f"a measured speed is said in digits with km/h (\"61 km/h\"), so the screens can "
+                           f"give its band; else {WITHOUT_SPEED}")
     if TEAM_NAMED.search(claim.text) or team_view:
         for i in claim.evidence:
             event = known.get(i, {})

@@ -70,12 +70,12 @@ export function setupHud(opts: {
   // The sound is the footage's own when it has a track, else the bundle's (stadium, commentary).
   const own = () => !!v && hasSound();
   const showMuted = () => {
-    const muted = own() ? v!.muted : !!tracks?.muted;
+    const muted = tracks ? tracks.muted : own() && v!.muted;
     volume.innerHTML = muted ? ICONS.muted : ICONS.sound;
     volume.setAttribute("aria-label", muted ? "Sound on" : "Mute");
   };
   volume.addEventListener("click", () => {
-    const muted = !(own() ? v!.muted : tracks?.muted);
+    const muted = !(tracks ? tracks.muted : own() && v!.muted);
     if (own()) v!.muted = muted;
     if (tracks) tracks.muted = muted;
     showMuted();
@@ -94,6 +94,9 @@ export function setupHud(opts: {
   $("track-described").hidden = !tracks?.described;
   // Subtitles are the commentary's: offered with it only.
   (menu.querySelectorAll("fieldset")[1] as HTMLElement).hidden = !tracks?.hasCommentary;
+  // The menu opens on the track that plays (commentary, when the bundle has it).
+  const chosen = menu.querySelector<HTMLInputElement>(`input[name=track][value=${tracks?.track ?? "stadium"}]`);
+  if (chosen) chosen.checked = true;
   // Opening moves focus into the menu (to the chosen track), closing returns it to the button, so a
   // keyboard or screen-reader user lands where the menu is (WAI-ARIA disclosure pattern).
   const setMenu = (open: boolean, refocus = false) => {
@@ -116,12 +119,17 @@ export function setupHud(opts: {
 
   const showFull = () => {
     const on = !!document.fullscreenElement;
+    document.body.dataset.full = on ? "on" : "off";
     full.innerHTML = on ? ICONS.exit : ICONS.full;
     full.setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
   };
+  // Real full screen on the player and its companion (the page's layout), not the whole document:
+  // the browser's chrome goes, the companion becomes an overlay behind the control bar's button,
+  // and the controls fade as they do while it plays.
+  const screen = document.querySelector<HTMLElement>(".layout") ?? document.documentElement;
   const toggleFull = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    else void screen.requestFullscreen?.({ navigationUI: "hide" }).catch(() => undefined);
   };
   full.addEventListener("click", toggleFull);
   document.addEventListener("fullscreenchange", showFull);

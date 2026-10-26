@@ -9,6 +9,7 @@
 // z up. Pixel coordinates have their origin at the top-left corner of the image.
 
 import * as THREE from 'three';
+import { applyBroadcastLook, GRADE_GLSL } from './look.js';
 
 const PX_PER_M = 35; // pitch texture resolution
 const GROUND = { x0: -6, x1: 111, y0: -6, y1: 74 }; // pitch plus apron covered by the texture
@@ -381,7 +382,7 @@ function boardTexture(p, rand) {
 const BROADCAST_BRANDS = [
   ['VANTIRO', 'MOBILE'], ['QELMORA', 'BANKING'], ['BRISKEL', 'SPORTS DRINK'], ['OSTRAVEN', 'AIRWAYS'],
   ['PALMIRU', 'TYRES'], ['ZENTHA', 'ENERGY'], ['THE NINETY LABS', 'MATCH INSIGHTS'], ['QUIVRANT', 'INSURANCE'],
-  ['ZOLBEK', 'BEER'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
+  ['ZOLBEK', 'SPORTSWEAR'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
   ['KESTRIX', 'BETTING-FREE ZONE'], ['OLVENSTA', 'FREIGHT'], ['DRAVELLO', 'COFFEE'], ['BRAXITO', 'BOOTS'],
 ];
 // One advert is this many metres of board (design: a pitch-side LED advert is a few metres long).
@@ -733,6 +734,9 @@ function netTexture() {
 // Capsule UVs do not carry a shirt graphic (a sphere samples one texel of it). The pattern is
 // computed from world position in the material, so every piece of the shirt agrees.
 const PATTERN_ID = { solid: 0, stripes: 1, hoops: 2, sash: 3, halves: 4, bands: 5 };
+// How much wider the scorebug's clock panel is while it carries the period card (design: fits
+// "FULL-TIME" (about 75px in the 14px bold face) with the clock's own 12px inset).
+const PERIOD_EXTRA = 34;  // 96 (GOAL panel) + 270 + 34 = the 400px canvas, so the two never overflow it
 
 function numberTexture(n) {
   const c = document.createElement('canvas');
@@ -1282,6 +1286,11 @@ function upperAngles(player, pose, heading, height) {
   if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
     // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
     for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, lean * share, 0, 0);
+  }
+  const roll = pose.roll || 0;
+  if (roll && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
+    // Into a turn the trunk tips the same way, across (scene.pace, meshpose._upper).
+    for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, 0, -roll * share, 0);
   }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
@@ -2020,11 +2029,12 @@ class BroadcastRenderer {
 
     // post: motion blur along the pan, sensor noise
     this.post = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: this.beautyRT.texture }, blur: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(this.W, this.H) }, noise: { value: p.noise }, frame: { value: 0 }, rain: { value: p.weather === 'rain' ? 1 : 0 } },
+      uniforms: { tex: { value: this.beautyRT.texture }, blur: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(this.W, this.H) }, noise: { value: p.noise }, frame: { value: 0 }, rain: { value: p.weather === 'rain' ? 1 : 0 }, sharpen: { value: 0.4 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
-        uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain;
+        uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain; uniform float sharpen;
         varying vec2 vUv;
+        ${GRADE_GLSL}
         float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19 + fract(frame * 0.6180339)); return fract((p.x + p.y) * p.x); }
         // The exposure: the picture smeared along the pan over the shutter.
         vec3 smear(vec2 uv, vec2 d){
@@ -2041,7 +2051,7 @@ class BroadcastRenderer {
           // either end of its smear (the critic of 0.5.1's first clips: "two ghost copies").
           vec3 nbor = smear(vUv + vec2(px.x, 0.0), d) + smear(vUv - vec2(px.x, 0.0), d)
             + smear(vUv + vec2(0.0, px.y), d) + smear(vUv - vec2(0.0, px.y), d);
-          c += (c - nbor * 0.25) * 0.4;
+          c += (c - nbor * 0.25) * sharpen;
           if (rain > 0.0) {
             c *= 0.9;
             float col = floor(vUv.x * 150.0);
@@ -2052,13 +2062,18 @@ class BroadcastRenderer {
             float gate = step(0.78, hash(vec2(col, 4.2)));
             c += vec3(0.72, 0.76, 0.8) * line * thin * gate * 0.55;
           }
+          #ifdef BROADCAST_LOOK
+          c = broadcastGrade(c);
+          #else
           c = clamp((c - vec3(0.04)) * 1.22, 0.0, 1.0);
           float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(luma), c, 1.1);
+          #endif
           vec2 vig = vUv - 0.5;
           c *= 1.0 - dot(vig, vig) * 0.16;
           c += (hash(gl_FragCoord.xy) - 0.5) * 2.0 * noise;
           gl_FragColor = vec4(max(c, 0.0), 1.0);
+          #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
       depthTest: false, depthWrite: false,
@@ -2092,7 +2107,9 @@ class BroadcastRenderer {
       this.bugRect = [0, 0, 0, 0];
       this.bug.visible = false;
     }
-    return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
+    // The broadcast look (look.js): the stream a viewer watches of a broadcast stadium only.
+    this.look = this.graphics && p.stadium === 'broadcast' ? applyBroadcastLook(this) : null;
+    return { bugRect: this.bugRect, look: this.look, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
   setupLights(p) {
@@ -2196,7 +2213,8 @@ class BroadcastRenderer {
   layoutBug(spec) {
     const open = this.goalOpen(spec.goal_age);
     const s = this.bugScale;
-    const canvasW = Math.round(96 * open) + 270;
+    // The clock panel widens to carry HALF-TIME or FULL-TIME (the period card) in place of the time.
+    const canvasW = Math.round(96 * open) + 270 + (spec.period ? PERIOD_EXTRA : 0);
     const x0 = Math.round(28 * s), y0 = Math.round(24 * s);
     const w = Math.round(canvasW * s), h = Math.round(40 * s);
     this.bugRect = [x0, y0, x0 + w, y0 + h];
@@ -2211,7 +2229,7 @@ class BroadcastRenderer {
     g.clearRect(0, 0, 400, 40);
     const goalW = Math.round(96 * open);
     const plateW = 196;
-    const clockW = 74;
+    const clockW = 74 + (spec.period ? PERIOD_EXTRA : 0);
     if (goalW > 1) {
       g.fillStyle = '#f4f4f2';
       g.fillRect(0, 0, goalW, 40);
@@ -2255,7 +2273,8 @@ class BroadcastRenderer {
     g.fillRect(clockX, 0, clockW, 40);
     g.fillStyle = '#141414';
     g.font = '600 15px sans-serif';
-    g.fillText(spec.clock, clockX + 12, 20);
+    if (spec.period) g.font = '700 14px sans-serif';
+    g.fillText(spec.period || spec.clock, clockX + 12, 20);
     // The painted bar is canvasW wide. The mesh shows the whole 400px canvas, left aligned.
     if (canvasW < 400) g.clearRect(canvasW, 0, 400 - canvasW, 40);
     this.bugTex.needsUpdate = true;

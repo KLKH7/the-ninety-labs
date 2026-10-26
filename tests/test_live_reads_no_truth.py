@@ -22,7 +22,9 @@ from pathlib import Path
 from ninety.match import tracking
 
 ROOT = Path(__file__).resolve().parents[1]
-TRUTH_FILES = {"events.jsonl", "frames.jsonl"}
+# The player-ID feed too: the agents, the MCP server and the Companion never open it; only the
+# line-up step does (ninety/intel/identity.py, AGENTS.md, lesson 269).
+TRUTH_FILES = {"events.jsonl", "frames.jsonl", "identity_feed.jsonl"}
 TRUTH_DIRS = {"truth", "truth-test"}
 # Our modules that write, read or fetch the answer key: none may load on the live path.
 FORBIDDEN = (
@@ -117,6 +119,37 @@ _shots = [{"id": "g", "t": 10.0, "frame": 250, "type": "shot", "team": "home", "
            "confidence": 0.9}]
 _body = condensed.build(_meta, _shots, highlights.Verdict(save_filter=True, margins={"T_s": 0.02}))
 assert [m["event"] for m in _body["highlights"]["moments"]] == ["g", "s"]
+
+# The score from the broadcast's scorebug (ninety/vision/scorebug.py): pixels of a staged clip only
+# (index.jsonl and images, drawn here as the renderer draws the bug), never the renderer's score.
+import tempfile
+import numpy as _np
+from pathlib import Path as _Path
+from PIL import Image as _Image
+from ninety.vision import scorebug
+_glyphs = scorebug.load_glyphs()
+
+def _bug_frame(home, away):  # the plate, its underline and two digits, as render.js draws them
+    g = _np.full((720, 1280), 120.0)
+    top, x0 = scorebug.BUG_TOP, 28
+    g[top:top + scorebug.BUG_H, x0:x0 + scorebug.PLATE_W] = 14.0
+    g[top + scorebug.UNDERLINE:top + scorebug.BUG_H, x0:x0 + scorebug.PLATE_W] = 255.0
+    g[top:top + scorebug.BUG_H, x0 + scorebug.PLATE_W:x0 + scorebug.PLATE_W + 74] = 236.0
+    for value, side in ((home, "home"), (away, "away")):
+        y, x = top + 20 - scorebug.CELL_H // 2, x0 + scorebug.DIGIT_X[side] - 2
+        g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W] = _np.maximum(
+            g[y:y + scorebug.CELL_H, x:x + scorebug.CELL_W], next(iter(_glyphs.values()))[value])
+    return g
+_staged = _Path(tempfile.mkdtemp()) / "staged"
+(_staged / "images").mkdir(parents=True)
+_rows = []
+for _f in range(80):  # 0-0, then 1-0 from frame 30
+    _picture = _bug_frame(0 if _f < 30 else 1, 0).astype(_np.uint8)
+    _Image.fromarray(_picture).save(_staged / f"images/{_f:05d}.jpg")
+    _rows.append({"clip": "c", "frame": _f, "t": _f / 25, "image": f"images/{_f:05d}.jpg"})
+(_staged / "index.jsonl").write_text("".join(json.dumps(r) + chr(10) for r in _rows))
+_score, _ = scorebug.read_clip(_staged)
+assert [e["type"] for e in _score] == ["score_read", "score_change"]
 """
 
 

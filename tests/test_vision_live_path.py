@@ -24,8 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LIVE = ["ninety/vision/flight.py",
         "ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
         "ninety/vision/events.py", "ninety/vision/tracked_frames.py", "ninety/vision/live_job.py",
-        "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/join.py",
-        "ninety/vision/restarts.py"]
+        "ninety/vision/tiles.py", "ninety/vision/fuse.py", "ninety/vision/outcomes.py",
+        "ninety/vision/join.py", "ninety/vision/restarts.py", "ninety/vision/sides.py",
+        "ninety/vision/scorebug.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 
@@ -120,6 +121,32 @@ def test_restarts_from_the_committed_observations_open_no_truth():
     run = run_audited(RESTART_STAGE)
     assert run["out"]["ball_sightings"] > 0  # it read the ball's path, so the guard is not passing on nothing
     assert any(o.endswith("observations-seed900001.jsonl") for o in run["opened"])
+    assert truth_reads(run) == []
+
+
+def test_the_scorebug_reads_a_staged_clip_and_opens_no_truth(tmp_path):
+    clip = tmp_path / "clip"
+    (clip / "images").mkdir(parents=True)
+    for name in TRUTH_FILES:  # traps beside the frames: opening any fails the test
+        (clip / name).write_text("{}")
+    import numpy as np
+    from PIL import Image
+
+    from tests.test_vision_scorebug import frame
+    rows = []
+    for f in range(110):  # 1-0, then 2-0 for long enough to be held (scorebug.STABLE samples)
+        name = f"images/{f:05d}.jpg"
+        Image.fromarray(frame(1 if f < 30 else 2, 0).astype(np.uint8)).save(clip / name)
+        rows.append({"clip": "c", "frame": f, "t": f / 25, "image": name})
+    (clip / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import scorebug
+        found, summary = scorebug.read_clip(Path({str(clip)!r}))
+        OUT = {{"types": [e["type"] for e in found], "samples": summary["samples"]}}
+    """)
+    assert run["out"]["types"] == ["score_read", "score_change"]  # it did the work
+    assert run["out"]["samples"] > 0
     assert truth_reads(run) == []
 
 

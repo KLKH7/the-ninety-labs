@@ -1,0 +1,958 @@
+{
+ "seeds": [
+  940001,
+  940002
+ ],
+ "minutes": 5,
+ "arms": {
+  "one agent": {
+   "minutes": 10,
+   "aired": 10,
+   "false_aired": 5,
+   "false_by_code": 0,
+   "false_by_judge": 5,
+   "true_aired": 5,
+   "minutes_with_an_insight": 10,
+   "minutes_read_the_tools": 0,
+   "model_calls": 10,
+   "seconds": 69.0,
+   "held": 0,
+   "rejected": 0,
+   "rewritten": 0
+  },
+  "one agent + fact-checker": {
+   "minutes": 10,
+   "aired": 9,
+   "false_aired": 0,
+   "false_by_code": 0,
+   "false_by_judge": 0,
+   "true_aired": 9,
+   "minutes_with_an_insight": 9,
+   "minutes_read_the_tools": 0,
+   "model_calls": 32,
+   "seconds": 61.1,
+   "held": 0,
+   "rejected": 1,
+   "rewritten": 3
+  },
+  "graph": {
+   "minutes": 10,
+   "aired": 18,
+   "false_aired": 2,
+   "false_by_code": 0,
+   "false_by_judge": 2,
+   "true_aired": 16,
+   "minutes_with_an_insight": 9,
+   "minutes_read_the_tools": 0,
+   "model_calls": 83,
+   "seconds": 154.8,
+   "held": 0,
+   "rejected": 1,
+   "rewritten": 5
+  }
+ },
+ "minutes_by_arm": {
+  "one agent": [
+   {
+    "seed": 940001,
+    "minute": 1,
+    "aired": [
+     {
+      "text": "In minute 1, a key defensive moment was a successful tackle by a10 on h8 at 00:08, interrupting an early home team attack and setting the tone for intense competition.",
+      "evidence": [
+       "e00005"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported interpretation: 'interrupting an early home team attack' (The evidence does not specify that the tackle interrupted an early home team attack or describe the context of the attack.)",
+       "unsupported interpretation: 'setting the tone for intense competition' (The evidence does not provide information about the overall tone or intensity of the competition.)"
+      ]
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 53.55,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940001,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "In minute 2, h8's successful tackle against a10 at 01:23 shifted possession for home, initiating a chain of accurate passes leading to sustained home team pressure.",
+      "evidence": [
+       "e00052"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported fact: 'initiating a chain of accurate passes leading to sustained home team pressure' (The evidence only includes the tackle event and does not provide any information about subsequent passes or sustained pressure by the home team.)"
+      ]
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.55,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940001,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "In minute 3, home player h11 intercepted a failed pass from away player a9 at 02:02, leading to a 14-pass sequence with consistent success, highlighting home team's strong ball control under pressure.",
+      "evidence": [
+       "e00081",
+       "e00083",
+       "e00084",
+       "e00085",
+       "e00086",
+       "e00087",
+       "e00088",
+       "e00089",
+       "e00090",
+       "e00091",
+       "e00092",
+       "e00093",
+       "e00094",
+       "e00095",
+       "e00096",
+       "e00097",
+       "e00098"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.84,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940001,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "In minute 4, home player h5 delivered a strong 83 km/h pass over 31 meters to h11 at 03:22, showcasing precise long passing in their buildup before away team a1's failed pass an attempt at 03:32.",
+      "evidence": [
+       "e00105",
+       "e00108"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.73,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940001,
+    "minute": 5,
+    "aired": [
+     {
+      "text": "In minute 5, h5's failed pass back to h11 at 04:12 disrupted the home team's build-up, highlighting a rare error in their possession game.",
+      "evidence": [
+       "e00113"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported fact: 'In minute 5, h5's failed pass back to h11 at 04:12 disrupted the home team's build-up' (The evidence shows h5 made a failed pass to h11 at 04:12 in minute 5, but it does not state or imply that this disrupted the home team's build-up.)",
+       "unsupported interpretation: 'This was a rare error in their possession game' (The evidence does not provide any information about the frequency or rarity of errors in the home team's possession game.)"
+      ]
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.77,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940002,
+    "minute": 1,
+    "aired": [
+     {
+      "text": "In minute 1, h3's tackle attempt at 00:43 failed, but the high-pressure challenge demonstrated the home team's defensive resilience early in the match.",
+      "evidence": [
+       "e00019",
+       "e00020"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.84,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940002,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "In minute 2, h9 intercepted a 17-meter pass from a7 at 01:31, stopping the away team's attack and showing effective defensive anticipation.",
+      "evidence": [
+       "e00027"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported interpretation: 'stopping the away team's attack' (The evidence does not provide information about the consequence of the interception or whether it stopped the attack.)",
+       "unsupported interpretation: 'showing effective defensive anticipation' (The evidence does not indicate the quality or effectiveness of the defensive action, only that an interception occurred.)"
+      ]
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.42,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940002,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "In minute 3, h3 made a standout pass to h9 covering 37 meters at 92 km/h, showcasing impressive precision and pace that helped maintain home team\u2019s offensive momentum.",
+      "evidence": [
+       "e00035"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported interpretation: 'that helped maintain home team\u2019s offensive momentum' (The evidence does not provide information about the effect of the pass on the team's offensive momentum.)"
+      ]
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.49,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940002,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "At 03:18 in minute 4, a8 intercepted a failed pass by h11 intended for h6, starting a strong away team counter with multiple successful passes over the next 20 seconds.",
+      "evidence": [
+       "e00051",
+       "e00052",
+       "e00054",
+       "e00056",
+       "e00057",
+       "e00058",
+       "e00059",
+       "e00060",
+       "e00061"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 2.06,
+    "why_none": "",
+    "checker": {}
+   },
+   {
+    "seed": 940002,
+    "minute": 5,
+    "aired": [
+     {
+      "text": "In minute 5, h2 was successfully tackled by a11 at 04:49, quickly followed by an immediate pressure by h2 on a11, showing intense contest for possession at that moment.",
+      "evidence": [
+       "e00075",
+       "e00077"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 1,
+    "seconds": 1.75,
+    "why_none": "",
+    "checker": {}
+   }
+  ],
+  "one agent + fact-checker": [
+   {
+    "seed": 940001,
+    "minute": 1,
+    "aired": [
+     {
+      "text": "In the first minute, a10's successful tackle on h8 at 00:08 was crucial in disrupting the home team's attack early on.",
+      "evidence": [
+       "e00005"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 3.75,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "In minute 2, h8 successfully tackled a10 at 01:23, regaining possession and enabling a successful home team passing sequence of four consecutive passes up to 01:38, demonstrating home\u2019s defensive strength and control in this phase.",
+      "evidence": [
+       "e00052",
+       "e00056",
+       "e00064",
+       "e00066",
+       "e00067"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 3,
+    "seconds": 6.06,
+    "why_none": "",
+    "checker": {
+     "drafts": 2,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "In minute 3, home player h11 intercepted a pass from away a9 at 02:02, leading to a sustained successful passing sequence for the home team, showing early dominance in possession.",
+      "evidence": [
+       "e00081",
+       "e00084",
+       "e00085",
+       "e00086",
+       "e00087",
+       "e00088",
+       "e00089",
+       "e00090",
+       "e00091",
+       "e00092",
+       "e00093",
+       "e00094",
+       "e00095",
+       "e00097"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 4.15,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "In minute 4, home player h5 completed a high-speed 83 km/h pass covering 31 meters to h11 at 03:22, showcasing effective team coordination.",
+      "evidence": [
+       "e00105"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 3.76,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 5,
+    "aired": [],
+    "model_calls": 5,
+    "seconds": 9.64,
+    "why_none": "rejected after 3 draft(s)",
+    "checker": {
+     "drafts": 3,
+     "held": 0,
+     "rejected": 1,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 1,
+    "aired": [
+     {
+      "text": "In minute 1, home player h3's pressure and tackle attempt on away player a8 at 00:43 stood out as a committed defensive effort despite the tackle failing, signaling early intensity in the match.",
+      "evidence": [
+       "e00019",
+       "e00020"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 4.92,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "In minute 2 at 01:31, h9 intercepted a 47 km/h pass intended for a8 from a7, showing effective defensive action.",
+      "evidence": [
+       "e00027"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 6,
+    "seconds": 10.11,
+    "why_none": "",
+    "checker": {
+     "drafts": 3,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "In minute 3, h3 made an impressive 37-meter pass to h9 at 02:19, accelerating the play with a ball speed of 92 km/h, highlighting home team's quick build-up.",
+      "evidence": [
+       "e00035"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 3.87,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "In minute 4, player a8 made a crucial interception at 03:20 that stopped home team progress and led to a successful away team counterattack with a 33 km/h pass to a2.",
+      "evidence": [
+       "e00051",
+       "e00052",
+       "e00054"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 2,
+    "seconds": 3.95,
+    "why_none": "",
+    "checker": {
+     "drafts": 1,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 5,
+    "aired": [
+     {
+      "text": "At 04:02, player h11 successfully passed the ball 16 meters to h8, initiating a series of precise passes by the home team in minute 5.",
+      "evidence": [
+       "e00066",
+       "e00067",
+       "e00068",
+       "e00069",
+       "e00070"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 6,
+    "seconds": 10.94,
+    "why_none": "",
+    "checker": {
+     "drafts": 3,
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   }
+  ],
+  "graph": [
+   {
+    "seed": 940001,
+    "minute": 1,
+    "aired": [],
+    "model_calls": 1,
+    "seconds": 4.88,
+    "why_none": "0 moment(s): 0 held, 0 rejected",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "At 01:26, h8 capitalized on his earlier successful tackle and pressure on a10 by delivering a precise 26m pass to h2, showing strong control and quick transition under pressure.",
+      "evidence": [
+       "e00056",
+       "e00051",
+       "e00052",
+       "e00055"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported interpretation: 'h8 showed strong control and quick transition under pressure' (The evidence does not provide information about h8's control or the speed of transition, nor does it describe the quality of the pass beyond success and distance.)"
+      ]
+     },
+     {
+      "text": "The home team's successful passes at 01:34, 01:36, and 01:38 show effective ball control and buildup in minute 2.",
+      "evidence": [
+       "e00064",
+       "e00066",
+       "e00067"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "The away team demonstrates precise short passing under pressure in the 2nd minute, maintaining possession and control through multiple successful exchanges involving player a2.",
+      "evidence": [
+       "e00073",
+       "e00074",
+       "e00075",
+       "e00076",
+       "e00077",
+       "e00078",
+       "e00079"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 12,
+    "seconds": 21.71,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "This successful 26-meter pass by h8 to h3 at 02:08 shows home team's ability to maintain possession under pressure from a2 at 02:06.",
+      "evidence": [
+       "e00086",
+       "e00083"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "By completing three quick, accurate passes within 3 minutes, including the 54 km/h pass from h4 to h3 at 02:22, the home team shows effective control and build-up play.",
+      "evidence": [
+       "e00089",
+       "e00090",
+       "e00091"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "At 02:31, h8 successfully passed a fast, long ball to h11 despite pressure from a9, showing the home team's ability to maintain possession under pressure early in the match.",
+      "evidence": [
+       "e00097",
+       "e00096"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 10,
+    "seconds": 16.01,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "This series of quick, precise passes culminating in a 31-meter ball from h5 to h11 at 03:22 highlights the home team's effective buildup and intent to advance rapidly downfield.",
+      "evidence": [
+       "e00105",
+       "e00102",
+       "e00103",
+       "e00104"
+      ],
+      "code_ok": true,
+      "judge_ok": false,
+      "true": false,
+      "reasons": [
+       "unsupported interpretation: 'and intent to advance rapidly downfield' (The evidence shows passes but does not explicitly indicate the team's intent or rapid advancement downfield; intent is not directly observable from the passes alone.)"
+      ]
+     }
+    ],
+    "model_calls": 4,
+    "seconds": 7.29,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940001,
+    "minute": 5,
+    "aired": [
+     {
+      "text": "The successful pass from h11 to h5 at 04:10 followed by a failed return pass from h5 at 04:12 shows early struggles in completing consecutive passes.",
+      "evidence": [
+       "e00112",
+       "e00113"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "The successful passes between a3 and a1 at 04:54 and 04:57 reflect effective short passing between these players early in the 5th minute.",
+      "evidence": [
+       "e00117",
+       "e00118"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 11,
+    "seconds": 18.5,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 2
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 1,
+    "aired": [
+     {
+      "text": "The home team\u2019s early successful passes between h10, h8, and h11 at 00:02 and 00:04 set up possession before away player a6 made a successful tackle against h11 at 00:08.",
+      "evidence": [
+       "e00002",
+       "e00003",
+       "e00004"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "The away team is demonstrating precise short and medium passing early on to build play from the back.",
+      "evidence": [
+       "e00007",
+       "e00008"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "The away team's quick, precise passing in the first minute, involving three successful passes before the failed long pass, shows their intent to control possession early.",
+      "evidence": [
+       "e00015",
+       "e00014",
+       "e00016",
+       "e00017"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 12,
+    "seconds": 20.19,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 2,
+    "aired": [
+     {
+      "text": "The failed pass from a7 to a8 at 01:31 shows effective home team pressure disrupting the away team's build-up early in the match.",
+      "evidence": [
+       "e00027",
+       "e00025"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 4,
+    "seconds": 10.44,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 3,
+    "aired": [
+     {
+      "text": "At 02:19, h3's 37-meter successful pass to h9 shows the home team\u2019s ability to execute precise long-range distribution under pressure from a11 at 02:14, highlighting their composure and control early in the game.",
+      "evidence": [
+       "e00035",
+       "e00033"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 4,
+    "seconds": 10.74,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 0
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 4,
+    "aired": [
+     {
+      "text": "At 03:04, home player h8's interception of away player a5's failed 21-meter pass shows effective defensive pressure from home players h8 and h9 early in the game.",
+      "evidence": [
+       "e00043",
+       "e00041",
+       "e00042"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "At 03:18, the away team's a8 intercepted a pressured pass from home h11, showing effective defense that quickly turned possession in favor of the away team as confirmed by a successful away pass at 03:20.",
+      "evidence": [
+       "e00051",
+       "e00050",
+       "e00052",
+       "e00054"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     },
+     {
+      "text": "In minute 4, the away team maintained ball possession through short passes among a3, a4, a6, and a7 without clear evidence of controlled build-up before a3's failed long pass.",
+      "evidence": [
+       "e00057",
+       "e00058",
+       "e00059",
+       "e00060",
+       "e00061",
+       "e00062"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 13,
+    "seconds": 24.84,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 0,
+     "rewritten": 1
+    }
+   },
+   {
+    "seed": 940002,
+    "minute": 5,
+    "aired": [
+     {
+      "text": "This sequence shows the home team\u2019s ability to maintain quick and accurate short passes under pressure from a10 by minute 5.",
+      "evidence": [
+       "e00066",
+       "e00067",
+       "e00068",
+       "e00069",
+       "e00070"
+      ],
+      "code_ok": true,
+      "judge_ok": true,
+      "true": true,
+      "reasons": []
+     }
+    ],
+    "model_calls": 12,
+    "seconds": 20.25,
+    "why_none": "",
+    "checker": {
+     "held": 0,
+     "rejected": 1,
+     "rewritten": 0
+    }
+   }
+  ]
+ },
+ "grader_calls": 37,
+ "estimated_usd": 0.2333,
+ "stopped": "",
+ "ran": "ninety-analyst:5, ninety-challenger:2, ninety-judge:4, ninety-moment-analyst:1, ninety-tactician:2 on gpt-4.1-mini",
+ "agent_definitions": {
+  "ninety-analyst": {
+   "version": "5",
+   "definition_sha": "c94c92bba7d0d03d"
+  },
+  "ninety-challenger": {
+   "version": "2",
+   "definition_sha": "84ddee6b377e8210"
+  },
+  "ninety-judge": {
+   "version": "4",
+   "definition_sha": "2b04c8ad1ac3c950"
+  },
+  "ninety-moment-analyst": {
+   "version": "1",
+   "definition_sha": "45c34e6301b3ae52"
+  },
+  "ninety-tactician": {
+   "version": "2",
+   "definition_sha": "59ffc39047d2afce"
+  }
+ },
+ "commit": "f6dc9b01d6a9d7cec9bf309f994d0e74640d7840",
+ "name": "ablation-third-arm"
+}

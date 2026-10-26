@@ -15,6 +15,15 @@ code; everything else is here. The phone pairs with the big screen, then has thr
   `visual` draws its picture (`src/visual.ts`): an overload, a line-breaking pass, pass options,
   a team's shape or the wind map, from the visual's own positions and numbers, or nothing when one
   is missing;
+  The first visit opens Ask on three one-tap choices (`src/fan.ts`, `src/onboarding.ts`): a
+  favourite club (London Athletic or Lisbon Esportes), a mode (casual fan or analyst, the brief's
+  two personas) and what matters most (goals and big moments, tactics, or players). They order
+  Ask's suggested questions (the fan's club and focus first; every one reaches a Companion tool,
+  `tests/test_phone_onboarding.py`) and set Story's starting filter (Key plays for a casual fan,
+  All plays for an analyst). They stay in this browser (guarded localStorage, `ninety.fan`), and
+  the settings sheet's Personalise row changes them. The empty state and the choices sit low, near
+  the thumb, above one pill composer (send inside it, dimmed until there is text; it grows to five
+  lines; Return sends);
 - **Insights**: the Insight Scout's hidden-stat cards (`cards.json` in the bundle, written by
   `ninety-e2e --cards`; schemas/insight_card.schema.json) up to the big screen's clock, newest first,
   each with its picture. "Why?" opens the card's precomputed, fact-checked answer in place: no

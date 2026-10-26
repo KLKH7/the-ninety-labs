@@ -80,3 +80,69 @@ def test_the_kickoffs_are_the_restarts_a_track_carries():
     frames = [frame(i, source="truth", pid="h7") for i in range(3)]
     run = type("Run", (), {"frames": frames, "events": events})
     assert tracking.from_match("seed7", run).restarts == (0, 125)
+
+
+def test_the_served_clips_come_from_the_deployments_packages(tmp_path):
+    # Config, not code (NINETY_SERVED_DIR): a folder per clip with its tracked positions, detected events
+    # and clip.json is served by name, beside the M1 clip; an incomplete one is not. Read at import, so
+    # checked in a fresh interpreter, as the deployed server starts.
+    import os
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    fixtures = Path(__file__).resolve().parent / "fixtures"
+    full = tmp_path / "seedtest-match"
+    full.mkdir()
+    shutil.copy(fixtures / "tracked-seed900001.json", full / "tracked.json")
+    shutil.copy(fixtures / "detected-seed900001.jsonl", full / "detected.jsonl")
+    shutil.copy(fixtures / "fixture-seed900001.json", full / "clip.json")
+    half = tmp_path / "seedhalf-match"
+    half.mkdir()
+    shutil.copy(fixtures / "tracked-seed900001.json", half / "tracked.json")  # no events, no clip.json
+    probe = (
+        "from ninety.match import tracking; from ninety.mcp import match_server as m;"
+        "from ninety.api import companion as c;"
+        "assert tracking.TRACKED_CLIPS == ('seed900001', 'seedtest-match'), tracking.TRACKED_CLIPS;"
+        "assert len(tracking.tracked('seedtest-match').frames) > 1;"
+        "assert m.insights_of('seedtest-match') is not None;"
+        "assert 'seedtest-match' in c.CLIPS and 'seedhalf-match' not in c.CLIPS;"
+        "print('ok')"
+    )
+    env = {**os.environ, "NINETY_SERVED_DIR": str(tmp_path)}
+    done = subprocess.run([sys.executable, "-c", probe], env=env, capture_output=True, text=True,
+                          timeout=300)
+    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-2000:]
+    # Unset, only the M1 clip is served, as before.
+    plain = {k: v for k, v in env.items() if k != "NINETY_SERVED_DIR"}
+    listed = "from ninety.match import tracking; print(tracking.TRACKED_CLIPS)"
+    done = subprocess.run([sys.executable, "-c", listed], env=plain, capture_output=True, text=True,
+                          timeout=120)
+    assert done.stdout.strip() == "('seed900001',)", done.stderr[-1000:]
+
+
+def test_a_served_clip_name_never_leaves_the_served_dir_or_shadows_a_simulator_match(tmp_path, monkeypatch):
+    import shutil
+    from pathlib import Path
+
+    fixtures = Path(__file__).resolve().parent / "fixtures"
+
+    def package(folder):
+        folder.mkdir(parents=True)
+        for src, name in (("tracked-seed900001.json", "tracked.json"),
+                          ("detected-seed900001.jsonl", "detected.jsonl"),
+                          ("fixture-seed900001.json", "clip.json")):
+            shutil.copy(fixtures / src, folder / name)
+
+    served = tmp_path / "served"
+    package(served / "match-a")
+    package(served / "seed7")  # named like a simulator match: ignored
+    package(tmp_path / "outside")
+    (served / "linked").symlink_to(tmp_path / "outside", target_is_directory=True)  # points out: ignored
+    monkeypatch.setattr(tracking, "SERVED_DIR", str(served))
+    assert tracking.served_clips(str(served)) == ("match-a",)
+    assert tracking.package("match-a") == served / "match-a"
+    outside = str(tmp_path / "outside")
+    for hostile in ("../outside", outside, "match-a/..", "match-a/../..", "seed7", "linked", "."):
+        assert tracking.package(hostile) is None, hostile

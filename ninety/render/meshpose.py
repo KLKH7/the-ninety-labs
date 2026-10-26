@@ -493,6 +493,11 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
         # Speeding up the trunk leans into it, slowing it comes up (scene.pace).
         for bone, share in TRUNK_SHARE:
             _add(angles, bone, lean * share)
+    roll = pose.get("roll") or 0.0
+    if roll and not (action in poses and action in _CONTACT and action not in _FEET):
+        # Into a turn the trunk tips the same way, across (scene.pace): -dz tips him to his left.
+        for bone, share in TRUNK_SHARE:
+            _add(angles, bone, 0.0, -roll * share)
     if lead:
         # The hips lead a turn and the chest follows: Root turns the hips and legs, the lower
         # spine turns the chest back to where the engine has it face.

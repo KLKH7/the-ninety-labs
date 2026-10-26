@@ -6,8 +6,9 @@ shot outcomes (ninety/vision/events.py, ninety/vision/outcomes.py; #271): nothin
   attacks one end all match (home toward x = PITCH_X, the engine's convention; it does not change
   ends). A goal whose detected side disagrees with its end, or whose detection confidence is under
   the fact-checker's event gate (factcheck.MIN_CONFIDENCE), is in doubt (an own goal, or a misread),
-  so the score has bounds and is said only when no goal is in doubt: a wrong score on screen is the
-  one mistake a fan never forgives.
+  so the score has bounds. It is never said (Kian, Oct 26, option B): vision finds some goals and
+  misses others, so a count of them would contradict the broadcast's scorebug; a score question
+  names each goal it spotted instead.
 - The **scorer** is the goal's shooter (`player`), named as the role gate allows (I6), else by his
   position or club.
 - An **assist** is the final pass to the scorer before he scored (Opta's assist, I24): the detected
@@ -98,8 +99,8 @@ def saves(events: Iterable[Mapping]) -> list[dict]:
 
 
 def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]) -> dict:
-    """The score after `minute_to`: each club's goals, with bounds from goals of unknown side; said
-    only when no goal is in doubt."""
+    """The score after `minute_to`: each club's goals, with bounds from goals of unknown side, for
+    code's bookkeeping only: never said, never confident (option B)."""
     window = [g for g in goal_rows if g["minute"] <= minute_to]
     unknown = sum(not g["side_known"] for g in window)
     n = {t: sum(g["side_known"] and g["team"] == t for g in window) for t in TEAMS}
@@ -117,8 +118,44 @@ def score(goal_rows: Sequence[Mapping], minute_to: int, clubs: Mapping[str, str]
         "away": n["away"],
         "lo": dict(n),
         "hi": {t: n[t] + unknown for t in TEAMS},
-        "confident": unknown == 0,
+        # Never said (Kian, Oct 26): vision finds some goals and misses others, so a count of them
+        # would contradict the broadcast's scorebug. The goals it did spot are said one by one.
+        "confident": False,
+        "in_doubt": unknown > 0,
     }
+
+
+# The score as the broadcast's scorebug shows it, read from the graphic's pixels (ninety/vision/
+# scorebug.py, #356), never counted from goals: `score_read` (a reading held, the first one so a clip
+# that starts at 2-1 has a score) and `score_change` (a change, with the side that scored). Measured
+# on the validation clips against a bar stated first (docs/eval/scorebug-plan.md, "Validation,
+# current reader"): no false change (16 of 16 match a true goal of their side), 880 of 880 digits
+# right, 16 of 16 goals found, on our renderer's fixed scorebug only (scores of 10 or more, an
+# absent or occluded bug and replay graphics are unmeasured). So a score is said as the bug shows it.
+SCOREBUG_MEASURED = True
+SCORE_TYPES = ("score_read", "score_change")
+
+
+def scorebug(events: Iterable[Mapping]) -> list[dict]:
+    """Each score the scorebug was read to show, oldest first: the first reading, then each one that
+    differs from the last (a reading held again says nothing new)."""
+    out = []
+    last = None
+    for e in sorted((e for e in events if e.get("type") in SCORE_TYPES and e.get("score")),
+                    key=lambda e: (e["t"], e["id"])):
+        held = (int(e["score"]["home"]), int(e["score"]["away"]))
+        if held == last:
+            continue
+        last = held
+        conf = e.get("confidence")
+        out.append({
+            "id": f"scorebug:{e['id']}", "kind": "scorebug", "metric": "scorebug", "team": None,
+            "minute": minute_of(float(e["t"])), "t": round(float(e["t"]), 2), "event": e["id"],
+            "home": int(e["score"]["home"]), "away": int(e["score"]["away"]), "source": "scorebug",
+            "event_confidence": conf,
+            "confident": SCOREBUG_MEASURED and (conf is None or float(conf) >= MIN_CONFIDENCE),
+        })
+    return out
 
 
 def save_counts(save_rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
@@ -143,4 +180,4 @@ def save_counts(save_rows: Sequence[Mapping], minute_from: int, minute_to: int) 
     return out
 
 
-__all__ = ["goals", "save_counts", "saves", "score"]
+__all__ = ["SCOREBUG_MEASURED", "goals", "save_counts", "saves", "score", "scorebug"]

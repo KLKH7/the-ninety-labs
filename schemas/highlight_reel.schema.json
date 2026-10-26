@@ -5,10 +5,11 @@
   "description": "The highlights reel in a bundle's match.json (`highlights`), written by ninety-e2e --match: every confident detected goal and the saves that made the cut (ninety/highlights.py, docs/eval/highlights-plan.md), each with the fan's label code gave it, a caption (ninety/agents/captioner.py) and its recording from the footage. Times are match seconds; files are relative to the bundle. Reads detected events only, never the answer key. A UI shows a moment once the match clock has passed `clip[1]`, so it never shows a goal before the broadcast does.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["save_filter", "labels", "moments", "saves_by_pace", "saves_left_out"],
+  "required": ["save_filter", "labels", "origins", "moments", "saves_by_pace", "saves_left_out"],
   "properties": {
     "save_filter": { "type": "boolean", "description": "True once the measurement passed its gates: only saves that beat a keeper's dive are in. False: every save is in." },
     "labels": { "type": "boolean", "description": "True once vision's errors are measured; until then every label is GOAL or SAVE." },
+    "origins": { "type": "boolean", "description": "True once how an attack began (origin) has been graded against the answer key; until then every moment's origin is null and no caption or screen says how an attack began." },
     "moments": { "type": "array", "items": { "$ref": "#/$defs/moment" }, "description": "In match time." },
     "saves_by_pace": { "type": "array", "items": { "type": "string" }, "description": "The saves' event ids, fastest flight first." },
     "saves_left_out": { "type": "integer", "minimum": 0 },
@@ -40,14 +41,15 @@
     "moment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event", "t", "team", "player", "kind", "why", "label", "label_detail", "d_m", "v_kmh", "T_s", "clip"],
+      "required": ["event", "t", "team", "player", "kind", "why", "origin", "label", "label_detail", "d_m", "v_kmh", "T_s", "clip"],
       "properties": {
         "event": { "type": "string", "description": "The detected shot's id." },
         "t": { "type": "number", "minimum": 0, "description": "When the shot was struck." },
-        "team": { "enum": ["home", "away", null] },
-        "player": { "type": ["string", "null"] },
+        "team": { "enum": ["home", "away", null], "description": "Null unless the shot's side was told surely (factcheck.side_known): a UI says 'a player'." },
+        "player": { "type": ["string", "null"], "description": "The shooter's track (h-t12); null unless the side was told surely, since a track names its side." },
         "kind": { "enum": ["goal", "save"] },
         "why": { "enum": ["goal", "beat_the_dive", "filter_off"] },
+        "origin": { "enum": ["corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play", null], "description": "How the shooting side's possession began (docs/eval/highlights-plan.md, Amendment 2): the restart the detector saw (ninety/vision/restarts.py), else the one inferred from the ball going out, or open_play when the ball was won back. Null when its start was not seen. `kick_off` is the reel's word for a `kickoff` event (Law 8)." },
         "label": { "enum": ["THUNDERBOLT", "SCREAMER", "LONG-RANGE", "ROCKET", "REFLEX SAVE", "TAP-IN", "GOAL", "SAVE"] },
         "label_detail": { "type": ["string", "null"], "description": "The number that earned the label, as shown (\"112 km/h\"); null for GOAL and SAVE." },
         "d_m": { "type": "number", "minimum": 0, "description": "From the strike to the centre of the goal attacked." },
@@ -66,7 +68,7 @@
             "video_t": { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 2, "maxItems": 2, "description": "The same, in the bundle footage's own seconds." },
             "shot_image": { "type": "integer", "minimum": 0 },
             "poster": { "type": "string", "pattern": "^highlights/[A-Za-z0-9_-]+\\.jpg$", "description": "A still at the strike." },
-            "clip": { "type": ["string", "null"], "pattern": "^highlights/[A-Za-z0-9_-]+\\.webm$", "description": "The window as VP9 video; null when the bundle ships frames, not video." }
+            "clip": { "type": ["string", "null"], "pattern": "^highlights/[A-Za-z0-9_-]+\\.mp4$", "description": "The window as H.264 MP4 (ninety/footage.py); null when the bundle ships frames, not video." }
           }
         }
       }

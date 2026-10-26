@@ -8,7 +8,8 @@ What the Container Apps job runs on the demo clip (docs/TEAM.md, Thu Oct 22; doc
 owns it, nothing re-implemented here:
 
     detect (RF-DETR) -> observe (camera from the markings, boxes on the pitch)
-    -> events (tracks, teams, possession, passes, shots, out of play) -> tracked_frames (minimap)
+    -> [flight (the ball's height), with --flight] -> events (tracks, teams, possession, passes,
+    shots, out of play) -> tracked_frames (minimap)
 
 The input folder may hold only `index.jsonl` (ninety.vision.frame_index: clip id, frame, time and
 image path per frame) and `images/`, or, for the fixed tactical camera, only `views/<name>/`, each
@@ -23,10 +24,17 @@ observations are merged on the pitch (ninety.vision.fuse) before events; `views/
 `--out` holds each view's detections and observations, and observations.jsonl is the merged one.
 `--tiles` detects each frame as a 2 x 2 grid of tiles (ninety.vision.tiles).
 
+`--flight` fits the ball's flight (ninety.vision.flight) between observe and events: a ball in the
+air is moved to its fitted centre and gets `z`, `se` and `z_se`, which the events, the restarts and
+the minimap then read. It is off by default until the test set is scored once with it on the live
+path. It needs each frame's camera matrix, which only a single view's observations carry; the
+views' merged rows have none, so there it changes nothing.
+
 Writes to `--out`:
 
     detections.jsonl    one line per frame (ninety/vision/detections.py)
     observations.jsonl  one line per frame (ninety.vision.observe)
+    observations-flight.jsonl  the same with the ball's fitted flight (only with --flight)
     detected.jsonl      match_event lines, `source: "vision"`, as ninety/match/detected.py loads them;
                         not named after the answer key's event file, so the two are never confused
     tracked.json        the phone companion's tracked frames (ninety.vision.tracked_frames)
@@ -61,7 +69,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import fuse, observe, track, tracked_frames
+from ninety.vision import flight, fuse, observe, restarts, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX, VIEWS
@@ -129,10 +137,12 @@ def _jsonl(path: Path, rows: list[dict]) -> None:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
-def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None) -> dict:
+def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None,
+        fit_flight: bool = False) -> dict:
     """Run the live path on `clip` into `out` and return run.json's contents. `load_detector()`
     loads the model and returns a function from frame rows to detections; it is passed in so the
-    tests run the real stages after it without rfdetr installed."""
+    tests run the real stages after it without rfdetr installed. `fit_flight` runs the flight fit
+    before events (`--flight`)."""
     views = check_views(clip)
     out.mkdir(parents=True, exist_ok=True)
     seconds: dict[str, float] = {}
@@ -163,7 +173,15 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         lap("fuse")
     # Read back as the events stage always reads its input, so this run and the CLIs agree.
     obs = track.read_observations(out / "observations.jsonl")
+    if fit_flight:
+        _jsonl(out / "observations-flight.jsonl", flight.heights(obs))
+        obs = track.read_observations(out / "observations-flight.jsonl")
+        lap("flight")
     found, summary = ev.detect(obs)
+    # Restarts from the same observations (ninety/vision/restarts.py): kick-offs and set pieces with
+    # their kind, merged in time; a possession change while the ball lies set is the restart's set-up.
+    set_balls, restarted = restarts.detect(obs)
+    found = restarts.merge(found, set_balls, restarted["dead_balls"])
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     lap("events")
     rows = next(iter(views.values()))
@@ -176,9 +194,11 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         "clip": clip_id,
         "frames": len(rows),
         "views": sorted(n for n in views if n),
+        "flight": fit_flight,
         "camera_ok": summary["frames_camera_ok"],
         "detections": n_dets,
         "events": summary["events"],
+        "restarts": restarted["events"],
         "named": summary["named"],
         "seconds": seconds | {"total": round(sum(seconds.values()), 3)},
         "detect_seconds_per_frame": round(seconds["detect"] / len(rows), 4),
@@ -225,6 +245,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--resolution", type=int, default=None, help="default: the trained size")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
+    ap.add_argument("--flight", action="store_true",
+                    help="fit the ball's flight before events (off until scored on the test set)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--echo", action="store_true",
                     help="also print run.json and each detected event, one JSON line each (the job's log)")
@@ -252,7 +274,7 @@ def main(argv: list[str] | None = None) -> None:
         "tiles": a.tiles,
         "commit": os.environ.get("NINETY_COMMIT", "unknown"),
     }
-    report = run(a.clip, a.out, load_detector, about)
+    report = run(a.clip, a.out, load_detector, about, fit_flight=a.flight)
     print(json.dumps({k: report[k] for k in ("clip", "frames", "events", "seconds")}))
     if a.echo:  # the Container Apps job holds no storage role, so its log carries the result
         print(json.dumps({"run": report}, separators=(",", ":")))

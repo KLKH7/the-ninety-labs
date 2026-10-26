@@ -17,6 +17,7 @@
     "vite": "6.4.4"
   },
   "dependencies": {
+    "hls.js": "1.5.20",
     "qrcode-generator": "2.0.4"
   }
 }

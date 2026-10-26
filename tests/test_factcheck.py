@@ -603,3 +603,120 @@ def test_a_number_bound_to_a_player_may_be_a_fact_scoped_to_him():
     other = {**RUN, "id": "a7run", "scope": "player:a7:window:0.00-95.20", "value": 90.0}
     verdict = check(Claim("h7's 90 m so far.", [RUN["id"], "a7run"]), {**FACTS, "a7run": other})
     assert verdict.reasons == ["number 90 is not a cited distance_m of h7"]
+
+
+# Kian's blind labels (docs/eval/factcheck-human-labels.md): words about play a cited fact must show.
+def _play(eid, clock, type_, team, player, **more):
+    minute, second = 2 if clock < "02:00" else 3, int(clock[-2:])
+    return {"id": eid, "minute": minute, "second": second, "clock": clock, "type": type_, "team": team,
+            "player": player, **more}
+
+
+PLAY = {e["id"]: e for e in (
+    _play("p1", "01:33", "pass", "home", "h7", intended="h9", interceptor="a8", outcome="fail",
+          distance_m=21, ball_speed_kmh=51),
+    _play("i1", "01:35", "interception", "away", "a8"),
+    _play("p2", "01:37", "pass", "away", "a8", receiver="a10", intended="a10", outcome="success",
+          distance_m=12, ball_speed_kmh=40),
+    _play("lb", "02:05", "pass", "home", "h4", receiver="h9", intended="h9", outcome="success",
+          distance_m=32, ball_speed_kmh=80),
+    _play("pr", "02:04", "pressure", "away", "a6", receiver="h4"),
+    # another player's interception after a pass cut out by a8: a second act
+    _play("i2", "01:36", "interception", "home", "h3"),
+    # h7's earlier pass, completed: a different act from the one a8 cut out
+    _play("p0", "01:20", "pass", "home", "h7", receiver="h9", intended="h9", outcome="success",
+          distance_m=10, ball_speed_kmh=35),
+)}
+
+
+@pytest.mark.parametrize("text, evidence, reason", [
+    # L19: the interception is that very pass being cut out, and 21 m is no long ball
+    ("The interception by a8 at 01:35 came immediately after h7's failed pass at 01:33.", ["p1", "i1"],
+     "one act, not one after the other"),
+    ("h7's pass at 01:33 came before a8's interception at 01:35.", ["p1", "i1"], "one act, not one before"),
+    # the connective opening the sentence, and every form of it (review of #353)
+    ("After h7's failed pass, a8 intercepts the ball.", ["p1", "i1"], "one act, not one after"),
+    ("Following h7's pass, a8 cuts it out.", ["p1", "i1"], "one act, not one following"),
+    ("h7's pass was followed by a8's interception.", ["p1", "i1"], "one act, not one followed by"),
+    ("a8's interception was preceded by h7's pass.", ["p1", "i1"], "one act, not one preceded by"),
+    ("The interception came after a8 cut out h7's pass.", ["p1", "i1"], "one act, not one after"),
+    ("a8's interception followed h7's pass.", ["p1", "i1"], "one act, not one followed"),
+    ("h7's pass preceded a8's interception.", ["p1", "i1"], "one act, not one preceded"),
+    ("a8 cut out the pass from h7 after the interception.", ["p1", "i1"], "one act, not one after"),
+    ("h7's failed long pass at 01:33 is cut out by a8.", ["p1"], "a long ball is a pass of 32 m or more"),
+    # L16: pressure said with no cited pressure event
+    ("h4 plays a 32 m pass to h9 despite pressure.", ["lb"], "no cited event is a pressure event"),
+    ("h4, under heavy pressure, finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+    ("h4 is pressured but finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+    ("Amid pressure, h4 finds h9 with a 32 m pass.", ["lb"], "no cited event is a pressure event"),
+])
+def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence, reason):
+    verdict = check(Claim(text, evidence), PLAY)
+    assert not verdict.ok and any(reason in r for r in verdict.reasons), verdict.reasons
+
+
+@pytest.mark.parametrize("text, evidence", [
+    ("h7's pass at 01:33 is cut out by a8, who then finds a10.", ["p1", "i1", "p2"]),  # "then": a new act
+    ("After the interception, a8 finds a10.", ["i1", "p2"]),  # two acts, in order
+    ("h4 plays a long ball to h9.", ["lb"]),  # 32 m is a long ball
+    ("h4 finds h9 with a 32 m pass despite pressure from a6.", ["lb", "pr"]),  # the pressure is cited
+    ("a8 finds a10 with a 12 m pass.", ["p2"]),
+    ("h7's pass is cut out by a8, then a8 passes to a10.", ["p1", "i1", "p2"]),  # "then" orders two acts
+    ("h3's interception came after h7's failed pass.", ["p1", "i2"]),  # another player's: a second act
+    # the interceptor's own next pass is a second act, whatever comes first in the sentence
+    ("a8 passes to a10 after intercepting h7's pass.", ["p1", "i1", "p2"]),
+    ("After winning the ball, a8 passes to a10.", ["i1", "p2"]),
+    ("After h7's pass to h9, a8 intercepts h7's next pass.", ["p0", "p1", "i1"]),  # two passes by h7
+    ("After the interception, a8 passes to a10.", ["p1", "i1", "p2"]),  # the pass after is a8's own
+    ("After a8's interception, h7 passes to h9.", ["p1", "i1", "p0"]),  # h7 passing again: another act
+    ("After h7's shot, a8 intercepts the ball.", ["p1", "i1"]),  # not his pass
+    # A known gap, stated: "then" is not read, so the same act said twice with "then" is not caught;
+    # reading it would reject the true "cut out by a8, then a8 passes to a10" above.
+    ("a8 intercepts h7's pass, then a8 cuts out h7's pass.", ["p1", "i1"]),
+])
+def test_play_words_with_their_fact_cited_still_pass(text, evidence):
+    assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons
+
+
+# -- The plausibility gate: a stated speed must be one the ball can reach (GROUNDING P3) ----------
+
+
+def _kicked(kind: str, speed: float, i: str = "v1") -> dict:
+    return {"id": i, "type": kind, "minute": 2, "second": 5, "clock": "01:05", "team": "home",
+            "player": "h4", "receiver": "h8", "outcome": "success", "ball_speed_kmh": speed, "distance_m": 19}
+
+
+@pytest.mark.parametrize("kind, speed, ok", [
+    ("pass", 144, True),     # at the bound: P3's 40 m/s, the live path's own cap (detected.MAX_BALL_KMH)
+    ("pass", 145, False),    # beyond it: vision's misreading, refused
+    ("pass", 251, False),
+    ("shot", 144, True),
+    ("shot", 145, False),
+])
+def test_a_stated_ball_speed_the_ball_cannot_reach_is_rejected(kind, speed, ok):
+    from ninety.agents.contracts import status_for
+    from ninety.agents.factcheck import MAX_BALL_KMH
+    from ninety.match import detected
+
+    assert MAX_BALL_KMH is detected.MAX_BALL_KMH and MAX_BALL_KMH == 144.0
+    event = _kicked(kind, speed)
+    verdict = check(Claim(f"h4 strikes it at {speed} km/h.", ["v1"]), {"v1": event})
+    assert verdict.ok is ok, verdict.reasons
+    if not ok:
+        assert status_for(verdict) == "rejected" and verdict.reasons[0].startswith("implausible speed")
+
+
+def test_the_gate_reads_only_the_speed_a_claim_states():
+    fast = _kicked("pass", 200)
+    assert check(Claim("h4 plays it 19 m to h8.", ["v1"]), {"v1": fast}).ok  # the pass happened
+    # Two cited events with the stated speed: one the ball can reach is enough.
+    both = {"v1": fast, "v2": _kicked("shot", 200, "v2") | {"ball_speed_kmh": 140}}
+    assert not check(Claim("A ball at 200 km/h.", ["v1"]), both).ok
+    assert check(Claim("A ball at 140 km/h.", ["v2"]), both).ok
+
+
+def test_plausible_speed():
+    from ninety.agents.factcheck import plausible_speed
+
+    assert plausible_speed(_kicked("pass", 144.0)) and not plausible_speed(_kicked("pass", 144.1))
+    assert not plausible_speed({"type": "pass"})

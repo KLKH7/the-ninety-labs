@@ -157,3 +157,55 @@ def test_the_command_line_refuses_a_test_clip(tmp_path):
     c = clip(tmp_path, seed=TEST_SEEDS[0])
     with pytest.raises(SystemExit, match="refused"):
         rsc.main([str(c), str(found(tmp_path, {"t": 2.4, "team": "home"}))])
+
+
+def set_piece_clip(tmp_path):
+    """A foul then a free kick (kicked at 60), an offside then a free kick (130), the ball out over
+    the touchline then a throw-in (190): the ball still at each spot from its event to its kick."""
+    d = tmp_path / "sp"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"seed": VALIDATION_SEED}))
+    spots = [(30, 60, (40.0, 20.0)), (100, 130, (60.0, 30.0)), (170, 190, (70.0, 0.5))]
+    rows = []
+    for f in range(230):
+        x, y = 10.0, 10.0
+        for start, kick, (sx, sy) in spots:
+            if start <= f <= kick + 20:
+                x, y = (sx, sy) if f <= kick else (sx + 0.4 * (f - kick), sy)
+        rows.append({"frame": f, "t": round(f / FPS, 2), "ball": {"x": x, "y": y, "z": 0.0}})
+    (d / "frames.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+    def ev(i, f, kind, team, x, y):
+        return {"id": f"e{i}", "t": f / FPS, "frame": f, "type": kind, "team": team, "x": x, "y": y,
+                "source": "truth"}
+    evs = [ev(1, 10, "foul", "home", 40.0, 20.0), ev(2, 30, "set_piece", "away", 40.0, 20.0),
+           ev(3, 80, "offside", "home", 60.0, 30.0), ev(4, 100, "set_piece", "away", 60.0, 30.0),
+           ev(5, 150, "out_of_play", "home", 70.0, 0.0), ev(6, 170, "set_piece", "away", 70.0, 0.5)]
+    (d / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in evs))
+    return d
+
+
+def test_set_pieces_are_graded_by_kind_and_free_kick_causes_tabled(tmp_path):
+    c = set_piece_clip(tmp_path)
+    assert [(t["kind"], t["frame"], t["cause"]) for t in rsc.truth_restarts(c)] == [
+        ("free_kick", 60, "foul"), ("free_kick", 130, "offside"), ("throw_in", 190, None)]
+    sp = {"type": "set_piece", "team": "away"}
+    r = rsc.score([(c, found(tmp_path, sp | {"t": 2.4, "restart": "free_kick", "cause": "foul_likely"},
+                             sp | {"t": 5.2, "restart": "free_kick", "cause": "foul_likely"},
+                             sp | {"t": 7.6, "restart": "throw_in"},
+                             sp | {"t": 7.6, "restart": "corner"}))])
+    k = r["by_kind"]
+    assert k["free_kick"]["recall"]["k"] == 2 and k["throw_in"]["recall"]["k"] == 1
+    assert k["corner"]["precision"] == {"k": 0, "n": 1, "rate": 0.0, "wilson95": rsc.wilson(0, 1)}
+    assert r["cause"]["table"] == {"foul->foul_likely": 1, "offside->foul_likely": 1}
+    assert r["cause"]["right"]["k"] == 1 and r["cause"]["right"]["n"] == 2
+    assert r["all_clips"][0]["corner"]["false"] == ["r3"]
+
+
+def test_a_cause_left_unknown_is_counted_apart_not_judged(tmp_path):
+    c = set_piece_clip(tmp_path)
+    sp = {"type": "set_piece", "team": "away", "restart": "free_kick"}
+    det = found(tmp_path, sp | {"t": 2.4, "cause": "unknown"}, sp | {"t": 5.2, "cause": "offside"})
+    r = rsc.score([(c, det)])
+    assert r["cause"]["unknown"] == 1 and r["cause"]["right"] == {"k": 1, "n": 1, "rate": 1.0,
+                                                                  "wilson95": rsc.wilson(1, 1)}

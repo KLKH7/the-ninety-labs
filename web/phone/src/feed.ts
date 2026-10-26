@@ -30,7 +30,8 @@ export interface Feed {
   minimap(clip: string): Promise<Minimap>;
   card(clip: string, player: string, tTo: number): Promise<PlayerCard>;
   flow(clip: string, team: Team, tFrom: number, tTo: number): Promise<Flow>;
-  ask(question: Question): Promise<AnswerMessage>;
+  /** With the demo passcode, the server's agents answer (ninety/api/companion.py, x-ninety-passcode). */
+  ask(question: Question, passcode?: string | null): Promise<AnswerMessage>;
   /** The hidden-stat cards pushed so far, up to match time `tTo`. */
   insights(clip: string, tTo: number): Promise<InsightCard[]>;
 }
@@ -73,7 +74,7 @@ export function guarded(feed: Feed, seen: (payload: unknown) => void = () => {})
     flow: async (clip, team, tFrom, tTo) => onlyTracked("The wind map", record(await feed.flow(clip, team, tFrom, tTo))),
     // An answer carries no source of its own: the UI asks only once the clip's minimap passed the
     // guard (main.ts), and the API refuses questions about ground-truth clips when deployed (503).
-    ask: async (q) => record(await feed.ask(q)),
+    ask: async (q, pass) => record(await feed.ask(q, pass)),
     // A card carries no positions' source of its own (its `source` is its author, code or model):
     // the Scout builds cards only from tracked facts, and the fact-checker passed each one.
     insights: async (clip, tTo) => (await feed.insights(clip, tTo)).map((c) => record(c)),
@@ -143,14 +144,19 @@ export class HttpFeed implements Feed {
     return json(await fetch(this.url(`api/flow/${encodeURIComponent(clip)}/${team}`, { t_from: tFrom, t_to: tTo })));
   }
 
-  async ask(question: Question): Promise<AnswerMessage> {
-    // Replay mode: no passcode header, so the API answers in code (SECURITY.md). The question is
-    // sent as JSON data; the server validates it against viewer_question.schema.json.
-    const response = await fetch(this.url("api/ask"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(question),
-    });
+  async ask(question: Question, passcode?: string | null): Promise<AnswerMessage> {
+    // Without a passcode the API answers in code (Replay mode, SECURITY.md); with the demo's, its
+    // agents draft and the fact-checker gates. The question is sent as JSON data; the server
+    // validates it against viewer_question.schema.json.
+    const post = (pass?: string | null) =>
+      fetch(this.url("api/ask"), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(pass ? { "x-ninety-passcode": pass } : {}) },
+        body: JSON.stringify(question),
+      });
+    const response = await post(passcode);
+    // A wrong passcode (401) or a server with no model (503): the code answer, quietly, marked.
+    if (passcode && (response.status === 401 || response.status === 503)) return { ...(await json<AnswerMessage>(await post(null))), model_off: true };
     return json(response);
   }
 

@@ -46,11 +46,10 @@ export function chapterLabel(c: Pick<Chapter, "label">, teams: TeamNames): strin
 export const PAIR_CARD_S = 20;
 
 /** Where the big screen's pairing card is at video time `v`: "up" over the picture for the first
- * PAIR_CARD_S seconds (until a fan closes it) or while the QR button has it open; "docked" small at
- * the side otherwise, when the screen docks it (Kian's open choice, `?qr=dock`); else "hidden". */
-export function pairCardAt(v: number, s: { open: boolean; closed: boolean; dock: boolean }): "up" | "docked" | "hidden" {
-  if (s.open || (v < PAIR_CARD_S && !s.closed)) return "up";
-  return s.dock ? "docked" : "hidden";
+ * PAIR_CARD_S seconds (until a fan closes it) or while the QR button has it open; else "hidden".
+ * Never docked on screen (Kian, Oct 25: option A). */
+export function pairCardAt(v: number, s: { open: boolean; closed: boolean }): "up" | "hidden" {
+  return s.open || (v < PAIR_CARD_S && !s.closed) ? "up" : "hidden";
 }
 
 /** The big screen's lower thirds, as a broadcaster runs them: only moments that matter (a shot, a
@@ -181,7 +180,6 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
   const announce = $("match-live");
   const table = $("stats-table");
   const rows: [string, (s: TeamStats) => string][] = [
-    ["Goals", (s) => String(s.goals)],
     ["Shots (on target)", (s) => `${s.shots} (${s.shots_on_target})`],
     ["Passes completed", (s) => `${s.passes_completed} of ${s.passes_attempted}`],
   ];
@@ -191,9 +189,10 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
 
   const tick = (v: number, t: number, reduceMotion: boolean) => {
     const c = chapterAt(m.chapters, fps, v);
-    const s = scoreAt(m, t);
-    score.textContent = `${teams.home} ${s.home} – ${s.away} ${teams.away}`;
-    score.setAttribute("aria-label", `Score from detected goals: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
+    // The clubs, never a score counted from detected goals: the broadcast's scorebug carries it, and
+    // vision can miss a goal (Kian, Oct 25).
+    const fixture = `${teams.home} v ${teams.away}`;
+    if (score.textContent !== fixture) score.textContent = fixture;
     head.style.left = `${Math.min(100, (100 * v * fps) / total)}%`;
     if (c && c.n !== lastChapter) {
       lastChapter = c.n;
@@ -229,7 +228,6 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
       );
     }
     root.dataset.chapter = c ? String(c.n) : "";
-    root.dataset.score = `${s.home}-${s.away}`;
   };
 
   /** To the start of the next (+1) or previous (-1) chapter; back to this one's start when more
@@ -251,7 +249,7 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     scoreAt: (t: number) => scoreAt(m, t),
     statsAt: (t: number) => statsAt(m, t),
     skipAt: (v: number) => skipAt(m.chapters, fps, v),
-    pairCardAt: (v: number, st: { open: boolean; closed: boolean; dock: boolean }) => pairCardAt(v, st),
+    pairCardAt: (v: number, st: { open: boolean; closed: boolean }) => pairCardAt(v, st),
     broadcastSchedule: (cues: Cue[]) => broadcastSchedule(cues),
   };
   return { tick, step };

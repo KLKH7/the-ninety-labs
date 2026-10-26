@@ -14,18 +14,22 @@ from ninety.highlights import Verdict as Measured
 from ninety.highlights import reel
 
 MEASURED = Measured(save_filter=True, margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
+# Origin graded against the answer key (plan, Amendment 2): only then does a moment carry one.
+GRADED = Measured(save_filter=True, origins=True,
+                  margins={"v_kmh": 1.0, "d_m": 0.5, "x_m": 0.2, "y_m": 0.2, "T_s": 0.02})
 
 
-def ev(eid, t, kind="pass", team="home", player="h4", x=60.0, y=34.0, confidence=0.9, **more):
+def ev(eid, t, kind="pass", team="home", player="h4", x=60.0, y=34.0, confidence=0.9, side=0.99, **more):
+    """A detected event; `side` is how surely its side was told (0.99: past factcheck's 0.96 gate)."""
     return {"id": eid, "t": t, "frame": round(t * 25), "type": kind, "team": team, "player": player,
-            "x": x, "y": y, "source": "vision", "confidence": confidence, **more}
+            "x": x, "y": y, "source": "vision", "confidence": confidence, "team_confidence": side, **more}
 
 
-def scene(x=105 - 26.0, kmh=112.4, outcome="goal", around_confidence=0.9):
+def scene(x=105 - 26.0, kmh=112.4, outcome="goal", around_confidence=0.9, side=0.99):
     """A pass from h4 to h9, then h9's shot 26 m out at 112.4 km/h: a THUNDERBOLT when it scores."""
     events = [ev("p1", 60.0, receiver="h9", outcome="success", end_x=x, end_y=34.0, ball_speed_kmh=50.0,
-                 confidence=around_confidence),
-              ev("s1", 61.0, "shot", player="h9", x=x, outcome=outcome, ball_speed_kmh=kmh)]
+                 confidence=around_confidence, side=side),
+              ev("s1", 61.0, "shot", player="h9", x=x, outcome=outcome, ball_speed_kmh=kmh, side=side)]
     return events, reel(events, MEASURED)
 
 
@@ -55,15 +59,17 @@ def run(text_or_model, judge=PASSES, events_reel=None, **kw):
 
 
 def test_a_caption_the_fact_checker_passes_airs():
-    out = run("A thunderbolt from h9, 26 m out at 112 km/h!")
+    # No speed in the words: vision's stated speeds are held until measured (#375), so a caption that
+    # states one is sent back (tested in tests/test_factcheck.py); this one states what is checked.
+    out = run("A thunderbolt from h9, 26 m out!")
     assert (out["source"], out["text"], out["call"]["problem"]) == (
-        "model", "A thunderbolt from h9, 26 m out at 112 km/h!", None)
+        "model", "A thunderbolt from h9, 26 m out!", None)
 
 
 def test_the_model_is_given_the_label_the_shot_its_build_up_and_the_distance():
     run("h9 scores.")
     body = says.prompt
-    assert body["moment"] == {"kind": "goal", "label": "THUNDERBOLT", "team": "home"}
+    assert body["moment"] == {"kind": "goal", "label": "THUNDERBOLT", "team": "home", "origin": None}
     assert body["shot"]["id"] == "s1" and [e["id"] for e in body["around"]] == ["p1"]
     assert (body["distance"]["value"], body["distance"]["unit"]) == (26, "m")
 
@@ -114,13 +120,20 @@ def test_an_unsure_detection_in_the_build_up_holds_the_caption():
 def test_without_a_model_every_caption_is_code_written_and_no_call_is_made():
     events, r = scene()
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out == [{"event": "s1", "text": "h9 scores from 26 m at 112 km/h.", "source": "code"}]
+    assert out == [{"event": "s1", "text": "h9 scores from 26 m.", "source": "code"}]
 
 
 def test_the_code_caption_follows_the_moment():
     events, r = scene(x=105 - 6.0, kmh=56.0, outcome="on_target")
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out[0]["text"] == "h9 is denied from 6 m at 56 km/h."
+    assert out[0]["text"] == "h9 is denied from 6 m."
+
+
+def test_a_goal_whose_strike_was_not_seen_keeps_a_code_caption_with_no_distance_and_no_model_call():
+    events = [ev("g1", 61.0, "goal", player=None, x=105.0)]  # lesson 270: a goal with no shot
+    r = reel(events, MEASURED)
+    out = asyncio.run(captioner.captions(r["moments"], events, says("h9 scores from 26 m."), PASSES))
+    assert out == [{"event": "g1", "text": "A home player scores.", "source": "code"}]
 
 
 def test_the_build_up_is_the_clip_before_the_shot_and_at_most_six_events():
@@ -183,6 +196,52 @@ def test_a_fan_word_is_said_only_of_the_label_that_earns_it(text, label, ok):
 # In the bundle
 
 
+def test_the_code_caption_says_no_speed_for_a_shot_even_when_ground_pass_speeds_are_measured(monkeypatch):
+    # Only a pass vision marks along the ground has a measured error (#381: LOFTED_FLAG_MEASURED, the
+    # band 8 km/h); a shot's speed is not measured at all (2 true shots in the 30 test clips), so its
+    # caption never states one, whatever the flags say.
+    from ninety.agents import factcheck
+
+    events, r = scene()
+    held = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
+    monkeypatch.setattr(factcheck, "SPEED_MEASURED", True)
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
+    said = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
+    assert (held, said) == ("h9 scores from 26 m.", "h9 scores from 26 m.")
+
+
+CLUBS = {"home": "London", "away": "Lisbon"}
+TENDELL = [{"id": "h-t9", "name": "Isaac Tendell", "number": 9, "position": "striker", "confident": True,
+            "source": "id_feed"}]
+
+
+def tracked_scene(side=0.99):
+    events, _ = scene(side=side)
+    for e in events:
+        e["player"] = "h-t9"  # a tracker's id, as vision writes it
+    events[0]["receiver"] = "h-t9"
+    return events, reel(events, MEASURED)
+
+
+@pytest.mark.parametrize("side, lineup, said", [
+    (0.99, TENDELL, "Tendell scores from 26 m."),  # the player-ID feed's name, by surname
+    (0.99, [{**TENDELL[0], "confident": False}], "A London player scores from 26 m."),  # no sure name
+    (0.99, None, "A London player scores from 26 m."),  # no feed: his club
+    (0.5, TENDELL, "A player scores from 26 m."),  # his side not told surely: neither name nor club
+])
+def test_a_highlight_names_the_id_feed_s_player_then_his_club_then_a_player(side, lineup, said):
+    events, r = tracked_scene(side)
+    asyncio.run(e2e.caption_reel(r, events, "code", [], CLUBS, e2e.names_of(lineup)))
+    assert r["moments"][0]["caption"] == said
+
+
+def test_a_side_is_said_by_its_club_s_name_never_home_or_away():
+    events = [ev("g1", 61.0, "goal", player=None, x=105.0)]
+    out = asyncio.run(captioner.captions(reel(events, MEASURED)["moments"], events, None, None,
+                                         clubs={"home": "London", "away": "Lisbon"}))
+    assert out[0]["text"] == "A London player scores."
+
+
 def test_the_bundle_captions_every_highlight_with_code_by_default():
     events, r = scene()
     record = asyncio.run(e2e.caption_reel(r, events, "code"))
@@ -209,6 +268,65 @@ def test_an_unpublished_captioner_refuses_to_run(monkeypatch):
     events, r = scene()
     with pytest.raises(RegistryDrift):
         asyncio.run(e2e.caption_reel(r, events, "foundry"))
+
+
+# How the attack started, in the captions
+
+
+def corner_scene():
+    """The scene, with a corner before it: the ball out over home's attacking line off away."""
+    events, _ = scene()
+    events = [ev("o1", 59.0, "out_of_play", team="away", player=None, x=105.3, y=60.0), *events]
+    return events, reel(events, GRADED)
+
+
+def test_a_caption_may_name_the_restart_the_attack_came_from():
+    events, r = corner_scene()
+    assert r["moments"][0]["origin"] == "corner"
+    assert run("From the corner, h9 smashes a thunderbolt in!", events_reel=(events, r))["source"] == "model"
+
+
+def test_a_restart_the_code_did_not_find_keeps_the_code_caption():
+    out = run("From the corner, h9 smashes a thunderbolt in!")  # this attack's start was not seen
+    assert out["source"] == "code" and "corner" in out["call"]["problem"]
+    events, r = corner_scene()
+    out = run("A free kick, and h9 smashes a thunderbolt in!", events_reel=(events, r))
+    assert out["source"] == "code" and "free kick" in out["call"]["problem"]
+
+
+def test_the_code_caption_says_where_the_attack_started():
+    events, r = corner_scene()
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"] == "h9 scores from 26 m, from a corner."
+
+
+@pytest.mark.parametrize("text,origin,ok", [
+    ("from a corner", "corner", True),
+    ("from a corner", "open_play", False),
+    ("a corner kick", None, False),
+    ("into the top corner", "open_play", True),  # a part of the goal, not the restart
+    ("the far corner of the net", "open_play", True),
+    ("tucked into the corner of the net", "open_play", True),
+    ("a penalty", None, False),
+    ("a penalty", "penalty_kick", True),
+    ("from the spot", "penalty_kick", True),
+    ("from the spot", "corner", False),
+    ("a free kick", "free_kick", True),
+    ("a set piece", "free_kick", True),
+    ("from the spot kick", "corner", False),
+    ("a long throw-in", "throw_in", True),
+    ("a long throw-in", "corner", False),
+    ("from the goal kick", "goal_kick", True),
+    ("straight from the kick-off", "kick_off", True),
+    ("a set piece", "throw_in", True),
+    ("a set piece", "open_play", False),
+    ("a free kick", "corner", False),
+    ("on the counter", "open_play", False),
+    ("won back and finished", "open_play", True),
+])
+def test_a_restart_is_named_only_as_the_code_found_it(text, origin, ok):
+    from ninety.agents.factcheck import origin_reasons
+    assert (origin_reasons(text, origin) == []) is ok
 
 
 # The kind check (captioner.kind_reasons): a save is never a goal and a goal never a save
@@ -258,3 +376,49 @@ def test_a_save_captioned_as_a_goal_keeps_the_code_caption_even_when_the_judge_p
 def test_a_goal_captioned_as_a_save_keeps_the_code_caption():
     out = run("A thunderbolt from h9 and the keeper makes the save!")
     assert out["source"] == "code" and "save" in out["call"]["problem"]
+
+
+# A side told unsurely (factcheck.side_known): no team, no player
+
+
+def test_an_unsure_side_names_no_team_and_no_player():
+    events, r = scene(side=0.5)
+    m = r["moments"][0]
+    assert (m["team"], m["player"]) == (None, None)
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"] == "A player scores from 26 m."
+
+
+def test_a_caption_naming_a_player_on_an_unsure_side_keeps_the_code_caption():
+    out = run("A thunderbolt from h9!", events_reel=scene(side=0.5))
+    assert out["source"] == "code" and "h9" in out["call"]["problem"]
+    out = run("A thunderbolt, 26 m out!", events_reel=scene(side=0.5))  # no one named: it airs
+    assert out["source"] == "model"
+
+
+def test_a_caption_naming_a_team_on_an_unsure_side_is_held():
+    out = run("A thunderbolt for home!", events_reel=scene(side=0.5))
+    assert out["source"] == "code" and out["call"]["problem"].startswith("held")
+
+
+def test_a_sure_side_is_named():
+    events, r = scene(side=0.97)  # past the 0.96 gate
+    assert (r["moments"][0]["team"], r["moments"][0]["player"]) == ("home", "h9")
+
+
+def test_the_code_caption_names_a_penalty():
+    events, _ = scene()
+    events = [{**ev("r1", 61.0, "set_piece", player=None), "restart": "penalty_kick"}, *events[1:]]
+    r = reel(events, GRADED)
+    assert r["moments"][0]["origin"] == "penalty_kick"
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert out[0]["text"].endswith(", from the penalty spot.")
+
+
+def test_until_origin_is_graded_no_moment_carries_one_and_no_caption_says_how_the_attack_began():
+    events, _ = corner_scene()
+    r = reel(events, MEASURED)  # measured shots, but origin not graded
+    assert r["origins"] is False and r["moments"][0]["origin"] is None
+    out = asyncio.run(captioner.captions(r["moments"], events, None, None))
+    assert "corner" not in out[0]["text"] and ", from" not in out[0]["text"]
+    assert reel(events, GRADED)["moments"][0]["origin"] == "corner"

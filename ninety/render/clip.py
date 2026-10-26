@@ -47,6 +47,7 @@ from ninety.render.scene import (
     advance_gaits,
     ball_parts,
     body_parts,
+    carry_at,
     contacts,
     crowded_start,
     drawn_ball,
@@ -61,9 +62,11 @@ from ninety.render.scene import (
     throw_at,
     throws,
     touch_at,
+    watch_ball,
 )
 from ninety.render.splits import split_of
 from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
+from ninety.sim.pacing import MATCH_S
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
@@ -204,6 +207,29 @@ def _on_pitch(b: dict) -> bool:
     return 0.0 <= b["x"] <= PITCH_X and 0.0 <= b["y"] <= PITCH_Y
 
 
+# The final whistle (Law 7: the engine plays two halves of 45 minutes and no added time) is blown
+# FT_LEAD_S before the last frame, so a clip ending at full time is heard ending (*design*).
+FT_LEAD_S = 1.2
+
+
+def periods(events: list[dict]) -> tuple[tuple[float, float] | None, float]:
+    """The half-time interval on the match clock (from the engine's half_time event to the next
+    kick-off, or None when the match has none), and when the final whistle goes."""
+    ht = next((e["t"] for e in events if e["type"] == "half_time"), None)
+    if ht is None:
+        return None, MATCH_S - FT_LEAD_S
+    second = next((e["t"] for e in events if e["type"] == "kickoff" and e["t"] > ht), MATCH_S)
+    return (ht, second), MATCH_S - FT_LEAD_S
+
+
+def period_card(t: float, half: tuple[float, float] | None, final: float) -> str | None:
+    """The scorebug's card at match time t: HALF-TIME through the interval, FULL-TIME from the
+    final whistle on."""
+    if half and half[0] <= t < half[1]:
+        return "HALF-TIME"
+    return "FULL-TIME" if t >= final else None
+
+
 def render_clip(
     seed: int,
     out: Path,
@@ -271,7 +297,10 @@ def render_clip(
             celebrating.update(dict.fromkeys(range(g["frame"], until), g["player"]))
     # The stinger over each edit cut: picture index -> its progress (edit.stingers).
     stinger_at = edit.stingers(show, FPS) if made else {}
+    if p.edge_stingers:  # clips joined back to back (the demo's segments): one stinger at each join
+        stinger_at = {**edit.edge_stingers(n, FPS), **stinger_at}
     corners = corner_waits(match.events)  # a corner waiting to be taken, framed for it (camera.py)
+    half, final_t = periods(match.events)  # the half-time and full-time cards and whistles
     t0, t1 = frames[show[0]]["t"], frames[show[-1]]["t"]
     clip = {
         "clip_id": f"seed{seed}",
@@ -307,6 +336,8 @@ def render_clip(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
+        if info.get("look"):  # the broadcast look (web/render/look.js): stadium=broadcast only
+            clip["renderer"]["look"] = info["look"]
         # Each tactical lens films the same scene in a page of its own: the same seed, looks and
         # per-frame spec as the broadcast, its own camera and picture size, and no graphics.
         vpages = {}
@@ -353,10 +384,12 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
                 fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
+                watch_ball(g, pl["x"], pl["y"], ball)  # his head turned to the ball
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
@@ -439,6 +472,7 @@ def render_clip(
                 "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
                 "net": director.net_view(),
                 "stinger": stinger_at.get(index),
+                "period": period_card(fr["t"], half, final_t),
                 "want_image": write_images,
             }
             res = pg.evaluate("s => window.ninety.frame(s)", spec)
@@ -481,6 +515,17 @@ def render_clip(
     shown = {f: i for i, f in enumerate(show)}
     fouled = (e["frame"] for e in events if e["type"] == "foul")
     clip["whistles"] = sorted(shown[f] for f in fouled if f in shown)
+    # Every call the picture shows, and the crowd's swells (audio.py): picture index and kind.
+    calls = [(shown[e["frame"]], e["type"]) for e in events
+             if e["type"] in ("foul", "kickoff", "half_time") and e["frame"] in shown]
+    final_f = round(final_t * FPS)
+    if final_f in shown:
+        calls.append((shown[final_f], "full_time"))
+    clip["calls"] = sorted([i, k] for i, k in calls)
+    clip["crowd"] = {
+        "goals": sorted(shown[e["frame"]] for e in events if e["type"] == "goal" and e["frame"] in shown),
+        "shots": sorted(shown[e["frame"]] for e in events if e["type"] == "shot" and e["frame"] in shown),
+    }
     clip["ball_visibility_lt_0_5"] = round(
         sum(1 for r in rows if r["ball"]["visibility"] < 0.5 and r["ball"]["bbox"])
         / max(1, sum(1 for r in rows if r["ball"]["bbox"])),
@@ -491,7 +536,7 @@ def render_clip(
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
     write_meta(out)
     if mp4:
-        _encode_mp4(out, p.fps, [i / p.fps for i in clip["whistles"]], n / p.fps)
+        _encode_mp4(out, p.fps, n / p.fps, clip)
         for name in view_cams:
             _encode_mp4(out / "views" / name, p.fps)
     return clip
@@ -654,17 +699,20 @@ def _frame_row(
     }
 
 
-def _encode_mp4(out: Path, fps: int, whistles: list[float] | None = None,
-                seconds: float | None = None) -> None:
-    """clip.mp4 from the JPEGs, with a sound track carrying a whistle at each time in `whistles`
-    (audio.py) when there is one."""
+def _encode_mp4(out: Path, fps: int, seconds: float | None = None, clip: dict | None = None) -> None:
+    """clip.mp4 from the JPEGs; a broadcast clip's has the sound track (audio.py): its calls and its
+    crowd. A view's has none (its picture is the analysts' and carries no graphics)."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RenderUnavailable("--mp4 needs ffmpeg on PATH; the JPEG frames are already written")
     cmd = [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(out / "images" / "%05d.jpg")]
     wav = out / "sound.wav"
-    if whistles and seconds:
-        audio.write_wav(wav, audio.track(seconds, whistles))
+    if clip is not None and seconds:
+        calls = [(i / fps, kind) for i, kind in clip.get("calls", [])]
+        crowd = clip.get("crowd", {})
+        sound = audio.mix(seconds, calls, [i / fps for i in crowd.get("goals", [])],
+                          [i / fps for i in crowd.get("shots", [])])
+        audio.write_wav(wav, sound)
         cmd += ["-i", str(wav), "-c:a", "aac", "-b:a", "96k", "-shortest"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(out / "clip.mp4")]
     try:

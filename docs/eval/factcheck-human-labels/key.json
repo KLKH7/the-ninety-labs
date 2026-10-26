@@ -1,0 +1,209 @@
+{
+ "L01": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "false: invented importance",
+  "truth": false,
+  "pool": 122
+ },
+ "L02": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "true: interception",
+  "truth": true,
+  "pool": 115
+ },
+ "L03": {
+  "stratum": "rewritten",
+  "verdict": "passed after a rewrite",
+  "source": "live workflow replay (seed 7, 2026-10-20)",
+  "seed": 7,
+  "kind": "challenger rewrite",
+  "truth": null,
+  "pool": 3
+ },
+ "L04": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "meaning: completed pass called cut out",
+  "truth": false,
+  "pool": 122
+ },
+ "L05": {
+  "stratum": "rejected by code",
+  "verdict": "rejected (code)",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "false: old ordinal clock",
+  "truth": false,
+  "pool": 56
+ },
+ "L06": {
+  "stratum": "held",
+  "verdict": "held (confidence gate)",
+  "source": "8080 dry run seed8080-t018803",
+  "seed": 8080,
+  "kind": "pass",
+  "truth": null,
+  "pool": 1
+ },
+ "L07": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: interpreted shot",
+  "truth": true,
+  "pool": 115
+ },
+ "L08": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: held-out tone, long ball",
+  "truth": true,
+  "pool": 115
+ },
+ "L09": {
+  "stratum": "rejected by code",
+  "verdict": "rejected (code)",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "false: wrong player",
+  "truth": false,
+  "pool": 56
+ },
+ "L10": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: neutral interpretation",
+  "truth": true,
+  "pool": 122
+ },
+ "L11": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "false: invented quality",
+  "truth": false,
+  "pool": 122
+ },
+ "L12": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "true: interpreted pass",
+  "truth": true,
+  "pool": 115
+ },
+ "L13": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "true: shot",
+  "truth": true,
+  "pool": 115
+ },
+ "L14": {
+  "stratum": "rejected by code",
+  "verdict": "rejected (code)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "meaning: intercepted pass called completed",
+  "truth": false,
+  "pool": 56
+ },
+ "L15": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: held-out tone, patient pass",
+  "truth": true,
+  "pool": 122
+ },
+ "L16": {
+  "stratum": "rewritten",
+  "verdict": "passed after a rewrite",
+  "source": "live workflow replay (seed 7, 2026-10-20)",
+  "seed": 7,
+  "kind": "tactician rewrite",
+  "truth": null,
+  "pool": 3
+ },
+ "L17": {
+  "stratum": "rejected by code",
+  "verdict": "rejected (code)",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "false: failed pass called found by its intended",
+  "truth": false,
+  "pool": 56
+ },
+ "L18": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: cited clock",
+  "truth": true,
+  "pool": 115
+ },
+ "L19": {
+  "stratum": "rewritten",
+  "verdict": "passed after a rewrite",
+  "source": "live workflow replay (seed 7, 2026-10-20)",
+  "seed": 7,
+  "kind": "tactician rewrite",
+  "truth": null,
+  "pool": 3
+ },
+ "L20": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: interpreted pass",
+  "truth": true,
+  "pool": 115
+ },
+ "L21": {
+  "stratum": "passed",
+  "verdict": "passed",
+  "source": "factcheck_eval judge:4",
+  "seed": 33,
+  "kind": "true: negative interpretation",
+  "truth": true,
+  "pool": 115
+ },
+ "L22": {
+  "stratum": "rejected by code",
+  "verdict": "rejected (code)",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "meaning: intercepted pass called completed",
+  "truth": false,
+  "pool": 56
+ },
+ "L23": {
+  "stratum": "rejected by the Judge",
+  "verdict": "rejected (Judge: unsupported_claim)",
+  "source": "factcheck_eval judge:4",
+  "seed": 21,
+  "kind": "false: invented intent",
+  "truth": false,
+  "pool": 122
+ }
+}
