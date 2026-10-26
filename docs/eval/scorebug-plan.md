@@ -195,3 +195,29 @@ If it passes:
 
 If it fails, the result is reported as it is. Nothing is tuned on these clips; a fix would be
 measured on clips not yet seen.
+
+## Validation, current reader: passes the bar (2026-10-26)
+
+**What ran.** A new short pod (Kian approved; RTX PRO 4500 at $0.72/h, created 00:01:53Z, deleted
+01:09:04Z after the copy-back, so 67 minutes, about $0.81) did the following:
+- re-rendered the shot-outcome set's 80 validation clips (seeds 910001 to 910008) from A's
+  manifest at the same render commit, eb6bd41d;
+- rendered the linux face (`scorebug_templates`, training seed 3's smoke clip, Linux x86_64,
+  Chromium 141);
+- ran the reader at 13521666 on every clip.
+
+Graded once, on the Mac, against each match's whole events (`docs/eval/scorebug-validation.json`):
+
+| Measure | Bar | Result |
+|---|---|---|
+| False score changes | none | 0: 16 of 16 changes match a true goal of their side (95% 0.81 to 1.00) |
+| Digits right, of samples read | at least 99% | 880 of 880 |
+| Goals found | at least 12 of 16 | 16 of 16 (95% 0.81 to 1.00) |
+| Timing error | (reported) | 0.0 s on all 16: each change is the goal's own frame |
+| Samples unread | (reported) | 1 of 881 |
+| Reads refused | (reported) | 0 |
+
+**It passes.** The linux face is committed (`scorebug_glyphs.json`, `sources.linux`).
+
+**The demo, re-read with both faces as a held-out check:** 5 of 5 goals, none false, each on the
+goal's own frame; digits right in 1,020 of 1,020 samples read; 3 of 1,023 unread.
