@@ -111,6 +111,121 @@ def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
     return [round(float(v), 1) for v in np.median(patch, axis=0)]
 
 
+# Reading a kit (docs/eval/kit-colour-plan.md). Each reader takes the shirt patch kit_rgb samples.
+# The live path reads both of the shirt's colours (R4): a patterned shirt is two colours, and the
+# second can fill most of the patch (hoops and a yoke, halves), which made one median read a blue
+# kit as white (validation seed 120). Adopted on validation by the plan's rule.
+KIT_READER = "R4"
+GRASS_STEP_PX = 8  # the pitch is sampled on this grid to measure its grass (design: thousands of pixels)
+
+
+def shirt_patch(rgb: np.ndarray, bbox) -> np.ndarray:
+    """The box's upper-middle part (20 to 50% down, the middle 60% across), as (N, 3) floats."""
+    x0, y0, x1, y1 = bbox
+    w, h = x1 - x0, y1 - y0
+    H, W = rgb.shape[:2]
+    xa, xb = int(max(0, x0 + 0.2 * w)), int(min(W, x1 - 0.2 * w))
+    ya, yb = int(max(0, y0 + 0.2 * h)), int(min(H, y0 + 0.5 * h))
+    return rgb[ya:yb, xa:xb].reshape(-1, 3).astype(np.float32)
+
+
+def _chroma(px: np.ndarray) -> np.ndarray:
+    return px / (px.sum(axis=1, keepdims=True) + 1e-6)
+
+
+def grass(rgb: np.ndarray, P: np.ndarray | None, boxes) -> tuple[np.ndarray, float] | None:
+    """The frame's grass: the median colour of pixels that the camera places on the pitch, outside
+    every box, sampled every GRASS_STEP_PX, and its spread (the 90th percentile of their chromaticity
+    distance to that median). None without a camera or such pixels."""
+    if P is None:
+        return None
+    H, W = rgb.shape[:2]
+    us, vs = np.meshgrid(np.arange(0, W, GRASS_STEP_PX), np.arange(0, H, GRASS_STEP_PX))
+    us, vs = us.ravel().astype(float), vs.ravel().astype(float)
+    keep = np.ones(len(us), bool)
+    for x0, y0, x1, y1 in boxes:
+        keep &= ~((us >= x0) & (us <= x1) & (vs >= y0) & (vs <= y1))
+    Hm = np.c_[P[:, 0], P[:, 1], P[:, 3]]
+    g = np.c_[us, vs, np.ones(len(us))] @ np.linalg.inv(Hm).T
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gx, gy = g[:, 0] / g[:, 2], g[:, 1] / g[:, 2]
+    keep &= (g[:, 2] != 0) & (gx >= 0) & (gx <= 105) & (gy >= 0) & (gy <= 68)
+    if keep.sum() < 50:
+        return None
+    px = rgb[vs[keep].astype(int), us[keep].astype(int)].astype(np.float32)
+    med = np.median(px, axis=0)
+    spread = float(np.percentile(np.linalg.norm(_chroma(px) - _chroma(med[None])[0], axis=1), 90))
+    return med, spread
+
+
+def _not_grass(patch: np.ndarray, turf) -> np.ndarray:
+    """R1: drop the pixels within the measured grass's own spread, not by a fixed green rule; without
+    a measured grass, R0's rule."""
+    if turf is None:
+        r, g, b = patch[:, 0], patch[:, 1], patch[:, 2]
+        return patch[~((g > r + 10) & (g > b + 10))]
+    med, spread = turf
+    return patch[np.linalg.norm(_chroma(patch) - _chroma(med[None])[0], axis=1) > spread]
+
+
+def _two_means(px: np.ndarray, feats: np.ndarray, iters: int = 10) -> tuple[np.ndarray, np.ndarray]:
+    """Split pixels into two groups on `feats`, started from the two ends of the brightness order."""
+    order = np.argsort(px.sum(axis=1))
+    a, b = feats[order[len(order) // 4]], feats[order[3 * len(order) // 4]]
+    lab = np.zeros(len(px), bool)
+    for _ in range(iters):
+        lab = np.linalg.norm(feats - b, axis=1) < np.linalg.norm(feats - a, axis=1)
+        if lab.all() or not lab.any():
+            break
+        a, b = feats[~lab].mean(axis=0), feats[lab].mean(axis=0)
+    return px[~lab], px[lab]
+
+
+def skin(px: np.ndarray) -> np.ndarray:
+    """Which pixels are skin by the published daylight RGB rule (Kovac, Peer and Solina 2003, Human
+    skin colour clustering for face detection): R > 95, G > 40, B > 20, max - min > 15, |R - G| > 15,
+    R > G and R > B (docs/eval/kit-colour-plan.md, R5)."""
+    r, g, b = px[:, 0], px[:, 1], px[:, 2]
+    return ((r > 95) & (g > 40) & (b > 20) & (px.max(axis=1) - px.min(axis=1) > 15)
+            & (np.abs(r - g) > 15) & (r > g) & (r > b))
+
+
+def read_kit(rgb: np.ndarray, bbox, reader: str = "R0", turf=None) -> list[float] | None:
+    """The kit as the reader named sees it (docs/eval/kit-colour-plan.md): R0 today's median; R1 with
+    the measured grass dropped; R2 the larger of two colours; R3 the same with brightness divided
+    by the patch's; R4 both colours, darker first; R5 R4 with skin-coloured pixels dropped first.
+    None when nothing is left."""
+    patch = shirt_patch(rgb, bbox)
+    if not len(patch):
+        return None
+    if reader == "R0":
+        return kit_rgb(rgb, bbox)
+    patch = _not_grass(patch, turf)
+    if len(patch) < 4:
+        return None
+    if reader == "R5":  # R4 without skin; R4's reading stands when too little is left
+        kept = patch[~skin(patch)]
+        patch = kept if len(kept) >= 4 else patch
+        reader = "R4"
+    if reader == "R1":
+        return [round(float(v), 1) for v in np.median(patch, axis=0)]
+    if reader == "R3":
+        bright = patch.sum(axis=1, keepdims=True) / (np.median(patch.sum(axis=1)) + 1e-6)
+        feats = np.c_[_chroma(patch), bright]
+    else:
+        feats = patch
+    lo, hi = _two_means(patch, feats)
+    if reader in ("R2", "R3"):
+        big = lo if len(lo) >= len(hi) else hi
+        return [round(float(v), 1) for v in np.median(big if len(big) else patch, axis=0)]
+    lo_b = lo.sum(axis=1).mean() if len(lo) else np.inf
+    hi_b = hi.sum(axis=1).mean() if len(hi) else np.inf
+    dark, light = (lo, hi) if lo_b <= hi_b else (hi, lo)
+    dark = dark if len(dark) else light
+    light = light if len(light) else dark
+    return [round(float(v), 1) for v in np.r_[np.median(dark, axis=0), np.median(light, axis=0)]]
+
+
 def _ground(P: np.ndarray, uv: tuple[float, float], z: float = 0.0) -> tuple[float, float] | None:
     """The pixel back on the horizontal plane at height z through camera P."""
     H = np.c_[P[:, 0], P[:, 1], P[:, 2] * z + P[:, 3]]
@@ -198,6 +313,20 @@ def place(row: dict, band: tuple[float, float] = HEIGHT_BAND, markings: bool = T
     return row
 
 
+def recolour(rows: list[dict], images: list[Path], load) -> list[dict]:
+    """Read every player's kit again from the clip's images (KIT_READER), keeping each frame's
+    camera and boxes: for observations made before the reader changed. Images and lines pair in order."""
+    if len(images) != len(rows):
+        raise ValueError(f"{len(images)} images but {len(rows)} observation lines: they pair one to one")
+    for r, img in zip(rows, images, strict=True):
+        rgb = load(img)
+        P = np.array(r["camera"]["P"]) if r["camera"].get("P") is not None else None
+        turf = grass(rgb, P, [d["bbox"] for d in r["players"] + r["ball"]])
+        for d in r["players"]:
+            d["rgb"] = read_kit(rgb, d["bbox"], KIT_READER, turf) if d["score"] >= SCORE_MIN else None
+    return rows
+
+
 def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: bool = False) -> list[dict]:
     """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
     `fixed` for a lens that never moves (the tactical camera), else the broadcast camera; `cuts`
@@ -229,10 +358,13 @@ def observe(images: list[Path], dets: list, load, fixed: bool = False, cuts: boo
     rows = []
     for k, (rgb, fd, fit) in enumerate(zip(rgbs, dets, fits, strict=True)):
         players, balls = [], []
+        P = fit.view.P() if fit.view else None
+        turf = grass(rgb, P, [d.bbox for d in fd.detections])
         for d in fd.detections:
             if d.cls == "player":
                 players.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None,
-                                "rgb": kit_rgb(rgb, d.bbox) if d.score >= SCORE_MIN else None})
+                                "rgb": (read_kit(rgb, d.bbox, KIT_READER, turf)
+                                        if d.score >= SCORE_MIN else None)})
             else:
                 balls.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None})
         rows.append(place({
@@ -272,7 +404,8 @@ def main(argv: list[str] | None = None) -> None:
                          "(off by default)")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
-                         "without the camera fit (its cameras are kept)")
+                         "without the camera fit (its cameras are kept); with the clip's folder too, "
+                         "its kits are read again from the images")
     a = ap.parse_args(argv)
     if a.regate is not None:
         rows = []
@@ -281,6 +414,9 @@ def main(argv: list[str] | None = None) -> None:
         band = FIXED_HEIGHT_BAND if fixed else HEIGHT_BAND
         for x in lines:
             rows.append(place(x, band, markings=not fixed))
+        if a.clip is not None:  # with the clip's folder, its kits are read again too
+            rows = recolour(rows, sorted((a.clip / "images").glob("*.jpg")),
+                            lambda p: np.asarray(Image.open(p).convert("RGB")))
         rows = agree(rows)
     else:
         if a.clip is None or a.detections is None:

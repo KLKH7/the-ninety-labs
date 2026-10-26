@@ -1,0 +1,1206 @@
+{
+  "command": "uv run --group vision python -m ninety.eval.kit_colour --clips <render run v1>/train --observations <validation observations> --seeds <the validation seeds> --work <scratch> --out docs/eval/kit-colour",
+  "commit": "6d915728ac465590439ebb6b2011db6946c73c1c",
+  "date": "2026-10-21",
+  "seeds": [
+    108,
+    109,
+    114,
+    115,
+    116,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    3041,
+    3042
+  ],
+  "readers": {
+    "R0": {
+      "sound_clips": 4,
+      "confidence_ordering": 0.5454545454545454,
+      "accuracy": 0.8153,
+      "passes_right": 11,
+      "passes": 16,
+      "colour_error": 0.1128,
+      "per_clip": [
+        {
+          "seed": 108,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 781,
+          "frames": 832,
+          "passes_right": 2,
+          "passes": 2,
+          "colour_error": 0.08,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.904,
+              true
+            ],
+            [
+              0.904,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 109,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 114,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 115,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.1899,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.431,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 116,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2777,
+          "frames": 2777,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.091,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.807,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 120,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.0207,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.974,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 121,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1426,
+          "frames": 1426,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.048,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.978,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 122,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 2041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1804,
+          "frames": 2048,
+          "passes_right": 3,
+          "passes": 3,
+          "colour_error": 0.1346,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.731,
+              true
+            ],
+            [
+              0.731,
+              true
+            ],
+            [
+              0.731,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 2042,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.2987,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.881,
+              true
+            ],
+            [
+              0.881,
+              true
+            ],
+            [
+              0.881,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 2043,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 2161,
+          "frames": 2759,
+          "passes_right": 2,
+          "passes": 4,
+          "colour_error": 0.181,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.775,
+              false
+            ],
+            [
+              0.775,
+              true
+            ],
+            [
+              0.775,
+              false
+            ],
+            [
+              0.775,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 3041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 3042,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        }
+      ]
+    },
+    "R1": {
+      "sound_clips": 4,
+      "confidence_ordering": 0.5333333333333333,
+      "accuracy": 0.7442,
+      "passes_right": 10,
+      "passes": 16,
+      "colour_error": 0.1182,
+      "per_clip": [
+        {
+          "seed": 108,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 812,
+          "frames": 812,
+          "passes_right": 2,
+          "passes": 2,
+          "colour_error": 0.1419,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.952,
+              true
+            ],
+            [
+              0.952,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 109,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 114,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 115,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 897,
+          "frames": 1911,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.1666,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.838,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 116,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2777,
+          "frames": 2777,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.0928,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.795,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 120,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.0196,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.972,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 121,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1433,
+          "frames": 1433,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1137,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.971,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 122,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 2041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1281,
+          "frames": 2326,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.0817,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.616,
+              false
+            ],
+            [
+              0.616,
+              true
+            ],
+            [
+              0.616,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 2042,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.1464,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.934,
+              true
+            ],
+            [
+              0.934,
+              true
+            ],
+            [
+              0.934,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 2043,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 2287,
+          "frames": 2799,
+          "passes_right": 2,
+          "passes": 4,
+          "colour_error": 0.1228,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.87,
+              false
+            ],
+            [
+              0.87,
+              true
+            ],
+            [
+              0.87,
+              false
+            ],
+            [
+              0.87,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 3041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 3042,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        }
+      ]
+    },
+    "R2": {
+      "sound_clips": 4,
+      "confidence_ordering": 0.52,
+      "accuracy": 0.7158,
+      "passes_right": 10,
+      "passes": 15,
+      "colour_error": 0.1419,
+      "per_clip": [
+        {
+          "seed": 108,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 812,
+          "frames": 812,
+          "passes_right": 2,
+          "passes": 2,
+          "colour_error": 0.1693,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.959,
+              true
+            ],
+            [
+              0.959,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 109,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 114,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 115,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 591,
+          "frames": 1911,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.295,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.129,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 116,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2718,
+          "frames": 2718,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1193,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.819,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 120,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 250,
+          "frames": 1628,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.0167,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.974,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 121,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1493,
+          "frames": 1493,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1633,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.977,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 122,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 2041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 849,
+          "frames": 1582,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.1716,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.953,
+              false
+            ],
+            [
+              0.953,
+              true
+            ],
+            [
+              0.953,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 2042,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1753,
+          "frames": 1753,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.0924,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.967,
+              true
+            ],
+            [
+              0.967,
+              true
+            ],
+            [
+              0.967,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 2043,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1911,
+          "frames": 2600,
+          "passes_right": 1,
+          "passes": 3,
+          "colour_error": 0.1204,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.184,
+              false
+            ],
+            [
+              0.184,
+              false
+            ],
+            [
+              0.184,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 3041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 3042,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        }
+      ]
+    },
+    "R3": {
+      "sound_clips": 4,
+      "confidence_ordering": 0.6136363636363636,
+      "accuracy": 0.7973,
+      "passes_right": 11,
+      "passes": 15,
+      "colour_error": 0.1417,
+      "per_clip": [
+        {
+          "seed": 108,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 812,
+          "frames": 812,
+          "passes_right": 2,
+          "passes": 2,
+          "colour_error": 0.1693,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.958,
+              true
+            ],
+            [
+              0.958,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 109,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 114,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 115,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 577,
+          "frames": 1911,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.2794,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.129,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 116,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2625,
+          "frames": 2639,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1119,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.832,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 120,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1464,
+          "frames": 1636,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.0164,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.0,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 121,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1493,
+          "frames": 1493,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1633,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.977,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 122,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 2041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1050,
+          "frames": 1851,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.1716,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.924,
+              false
+            ],
+            [
+              0.924,
+              true
+            ],
+            [
+              0.924,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 2042,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1817,
+          "frames": 1817,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.0978,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.904,
+              true
+            ],
+            [
+              0.904,
+              true
+            ],
+            [
+              0.904,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 2043,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1911,
+          "frames": 2577,
+          "passes_right": 1,
+          "passes": 3,
+          "colour_error": 0.1202,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.171,
+              false
+            ],
+            [
+              0.171,
+              false
+            ],
+            [
+              0.171,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 3041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 3042,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        }
+      ]
+    },
+    "R4": {
+      "sound_clips": 6,
+      "confidence_ordering": 0.8125,
+      "accuracy": 0.8943,
+      "passes_right": 12,
+      "passes": 16,
+      "colour_error": 0.058,
+      "per_clip": [
+        {
+          "seed": 108,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 812,
+          "frames": 812,
+          "passes_right": 2,
+          "passes": 2,
+          "colour_error": 0.0143,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.959,
+              true
+            ],
+            [
+              0.959,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 109,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 114,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 115,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 1217,
+          "frames": 1911,
+          "passes_right": 0,
+          "passes": 1,
+          "colour_error": 0.0509,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.06,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 116,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2684,
+          "frames": 2698,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.1006,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.798,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 120,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1522,
+          "frames": 1522,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.0155,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.979,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 121,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1493,
+          "frames": 1493,
+          "passes_right": 1,
+          "passes": 1,
+          "colour_error": 0.0191,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.978,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 122,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 2041,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 2088,
+          "frames": 2299,
+          "passes_right": 3,
+          "passes": 3,
+          "colour_error": 0.0883,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.68,
+              true
+            ],
+            [
+              0.68,
+              true
+            ],
+            [
+              0.68,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 2042,
+          "sound": true,
+          "named_right": true,
+          "right_frames": 1643,
+          "frames": 1643,
+          "passes_right": 2,
+          "passes": 3,
+          "colour_error": 0.0652,
+          "feature": "chromaticity",
+          "confidence": [
+            [
+              0.8,
+              true
+            ],
+            [
+              0.8,
+              true
+            ],
+            [
+              0.8,
+              false
+            ]
+          ]
+        },
+        {
+          "seed": 2043,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 2153,
+          "frames": 2842,
+          "passes_right": 2,
+          "passes": 4,
+          "colour_error": 0.0828,
+          "feature": "brightness",
+          "confidence": [
+            [
+              0.213,
+              false
+            ],
+            [
+              0.213,
+              true
+            ],
+            [
+              0.213,
+              false
+            ],
+            [
+              0.213,
+              true
+            ]
+          ]
+        },
+        {
+          "seed": 3041,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        },
+        {
+          "seed": 3042,
+          "sound": false,
+          "named_right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "passes_right": 0,
+          "passes": 0,
+          "colour_error": null,
+          "feature": null,
+          "confidence": []
+        }
+      ]
+    }
+  },
+  "adopted": "R4",
+  "predictive": true
+}
