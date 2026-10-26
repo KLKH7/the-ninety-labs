@@ -303,8 +303,16 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
 
 # The recording's VP9 settings: the bundle's own video.webm's (ninety/e2e.py, write_footage), so a
 # clip plays wherever the footage does. Never H.264: its usual encoder, x264, is GPL (AGENTS.md).
-VP9 = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-deadline", "realtime", "-cpu-used", "8",
-       "-row-mt", "1", "-pix_fmt", "yuv420p"]
+# Standard web VP9 (Oct 26: the all-keyframe, full-range file this replaced, 15 Mbps, broke real Chrome's
+# hardware decoder intermittently, black at 0.34 s with media error 3): a keyframe every 2 s at 25 fps
+# (-g 50) for seeking, about 4 Mbps, and the renderer's full-range BT.601 JPEGs converted to TV-range
+# BT.709 and tagged so, as browsers expect of web video.
+# setparams tags the frames: libvpx writes no primaries or transfer from the output options alone.
+VP9 = ["-vf", "scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709,"
+       "setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709",
+       "-c:v", "libvpx-vp9", "-b:v", "4M", "-g", "50", "-deadline", "good", "-cpu-used", "4",
+       "-row-mt", "1", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709",
+       "-color_primaries", "bt709", "-color_trc", "bt709"]
 DIR = "highlights"
 
 

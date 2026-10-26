@@ -684,9 +684,11 @@ def load_views(views: Path):
 # ---------------------------------------------------------------- footage
 
 
-def write_footage(clip: Clip, out: Path, encode: bool) -> dict:
-    """The clip as video.webm (VP9: plays in every browser, Playwright's Chromium included) when
-    ffmpeg is there, else the JPEG frames themselves. The viewer plays either."""
+def write_footage(clip: Clip, out: Path, encode: bool, audio: Path | None = None) -> dict:
+    """The clip as video.webm (standard web VP9, highlights.VP9: plays in every browser, Playwright's
+    Chromium included) when ffmpeg is there, else the JPEG frames themselves. The viewer plays either.
+    `audio` (any file ffmpeg reads with a sound track, such as the render's crowd bed) is muxed in as
+    Opus, cut to the picture's length so the frames and the duration are the images' own."""
     images = clip.images
     if not images:
         raise SystemExit(f"{clip.dir}/images has no frames")
@@ -694,10 +696,12 @@ def write_footage(clip: Clip, out: Path, encode: bool) -> dict:
     if encode and shutil.which("ffmpeg"):
         video = out / "video.webm"
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i",
-               str(clip.dir / "images" / "%05d.jpg"), "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32",
-               "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1", "-pix_fmt", "yuv420p", str(video)]
+               str(clip.dir / "images" / "%05d.jpg")]
+        if audio is not None:
+            cmd += ["-i", str(audio), "-map", "0:v", "-map", "1:a", "-c:a", "libopus", "-b:a", "96k"]
+        cmd += [*highlights.VP9, "-frames:v", str(len(images)), "-t", f"{len(images) / fps:.3f}", str(video)]
         subprocess.run(cmd, check=True)
-        return {"kind": "video", "src": video.name, "frames": len(images)}
+        return {"kind": "video", "src": video.name, "frames": len(images), "audio": audio is not None}
     frames = out / "frames"
     frames.mkdir(exist_ok=True)
     for image in images:
@@ -781,7 +785,7 @@ async def run(args: argparse.Namespace) -> dict:
     audio = describe.write_track(track, refused, out, clip.meta["t_start"], timeline=timeline)
     audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
                           "unavailable": unavailable}
-    footage = write_footage(clip, out, encode=not args.frames)
+    footage = write_footage(clip, out, encode=not args.frames, audio=args.footage_audio)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
     radar_body = None
@@ -968,6 +972,8 @@ def parser() -> argparse.ArgumentParser:
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
+    ap.add_argument("--footage-audio", type=Path, default=None,
+                    help="a sound track for video.webm (e.g. the render's crowd bed), muxed in as Opus")
     return ap
 
 
