@@ -453,8 +453,9 @@ def detect(rows: list[dict], join_breaks: bool = True,
                                     restart_stop=min((f for f in strikes if f > a.last), default=None),
                                     end_point=end)
         is_goal = result is not None and result.outcome == "goal"
-        if not is_goal:
-            # Amendment 7: the ball held in the keeper's box after the strike is a save.
+        if not is_goal and saves:
+            # Amendment 7: the ball held in the keeper's box after the strike is a save. Off with the
+            # saves (SAVES_AIR): a pass it would make a shot stays a pass, so the live path is unchanged.
             held = held_save(path, i, a.track, sp, cut_at, tracks, rows_by_frame)
             if held is not None and (not shot or held.attacker == shooter):
                 shot, shooter = True, held.attacker

@@ -467,9 +467,48 @@ def test_a_ball_held_in_the_keepers_box_after_a_shot_is_a_save_though_it_lands_b
     assert [(s["team"], s["outcome"], s["frame"]) for s in shots] == [("home", "on_target", strike)]
 
 
-def test_the_live_path_writes_the_held_save_as_a_shot_with_no_outcome_while_saves_are_off():
-    shots, _, _, _ = run(caught(), saves=False)
-    assert [(s["team"], s["outcome"]) for s in shots] == [("home", None)]
+def test_while_saves_are_off_the_hold_changes_nothing_the_live_path_writes():
+    # The rule missed its bar (saves-pixel-result.md): off, a caught cross or back-pass it would make
+    # a shot stays what the rules before it wrote.
+    rows = caught()
+    off, _ = ev.detect(rows, saves=False)
+    oc_holds, oc.holds = oc.holds, lambda *a, **k: []  # the rule taken out
+    try:
+        before, _ = ev.detect(rows, saves=False)
+    finally:
+        oc.holds = oc_holds
+    assert off == before
+
+
+def test_hold_frames_is_the_event_rules_count_for_a_sustained_condition():
+    assert oc.HOLD_FRAMES == ev.OUT_FRAMES == 3
+
+
+def test_a_hold_needs_its_frames_running_and_a_goal_stays_a_goal():
+    rows = caught(held=oc.HOLD_FRAMES + 1)
+    first = next(i for i, r in enumerate(rows) if r["ball"] and r["ball"][0]["bbox"] == KEEPER_BOX)
+    rows[first + 1]["ball"] = []  # one frame of the hold unseen
+    assert [s["outcome"] for s in run(rows)[0]] != ["on_target"]
+    goal = shot_scene(into_net(), keeper=(104.0, 34.0))
+    for r in goal[-8:]:  # in the net, then drawn over the keeper for the clip's last frames
+        r["ball"] = [{"bbox": list(KEEPER_BOX), "score": 0.8, "x": 106.0, "y": 35.0}]
+    shots, goals, _, _ = run(goal)
+    assert goals != [] and [s["outcome"] for s in shots] == ["goal"]
+
+
+def test_someone_else_on_the_ball_first_ends_the_move_before_the_hold():
+    # The strike stops at a red defender's feet (97, 34) for 0.4 s, then flies on into the keeper's
+    # hands: the hold is after the defender's strike, not the first one.
+    fly, lands = keeper_catch(), (108.0, 36.0)
+
+    def path(k):
+        return fly(k) if k < 6 else (97.3, 34.0) if k < 16 else fly(k - 10) if k < 25 else lands
+    rows = shot_scene(path, keeper=(103.0, 34.0), others=[(97.0, 34.0)])
+    for r in rows:
+        if r["ball"] and (r["ball"][0]["x"], r["ball"][0]["y"]) == lands:
+            r["ball"][0]["bbox"] = list(KEEPER_BOX)
+    first = run(shot_scene(keeper_catch(), keeper=(103.0, 34.0)))[0][0]["frame"]
+    assert [s["frame"] for s in run(rows)[0] if s["outcome"] == "on_target" and s["frame"] <= first] == []
 
 
 def test_a_ball_over_his_box_for_fewer_than_hold_frames_is_no_hold():

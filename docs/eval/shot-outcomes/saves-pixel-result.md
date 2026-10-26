@@ -30,3 +30,16 @@ him only as a third kit inside a penalty area), or the ball is not drawn in his 
 running (a parry, or the ball hidden in his hands). A fix there is a change to keeper tracking, and it
 would need a split that no rule has been read on: validation now has been, and the test split was
 scored once already.
+
+## Independent audit (hard-coding, AGENTS.md)
+
+A reviewer with no knowledge of the intent listed every new constant: `HOLD_FRAMES` (design, the
+rules' `OUT_FRAMES`, now held equal by a test), Law 1's posts and penalty area, and the shot rule's
+`SHOT_MAX_M` and `SHOT_MARGIN_M`, reused; none fitted, no id special-cased. It found one real defect,
+fixed after the read and before this PR: with saves off, a pass the hold made a shot (a caught cross,
+a back-pass) still reached the live path as a shot with no outcome. The whole rule now runs only with
+saves on, so the live path is byte-for-byte what it was (a test checks it). This changes no number
+above: they were read with saves on. Of its 18 mutants, the ones that survived are now killed
+(`HOLD_FRAMES`, the frames running, the move ending at another player, the goal guard, the `saves`
+gate); still untested by a planted scene: the 35 m reach, the post margin's edge and a cut before the
+hold, each the shot rule's own and tested there.
