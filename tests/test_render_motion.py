@@ -1654,7 +1654,36 @@ def test_a_soft_touch_on_the_move_is_taken_in_stride():
     other = {"l": "r", "r": "l"}
     up = max(m["foot_" + other[p["touch"]["side"]]][2] for p, m in touched)
     assert up > LOW_STEP_M, up  # the other foot left the grass on its stride, not a low step after him
-    assert 3.5 >= STRIDE_FROM_MPS
+
+
+def test_a_soft_touch_below_stride_speed_keeps_its_support_foot():
+    """Below STRIDE_FROM_MPS the feet step after the body: the touch stands on its other foot."""
+    g = Gait(action="foot", speed=STRIDE_FROM_MPS * 0.5)
+    g.touch = {"part": "foot", "side": "l", "at": [30.3, 30.05, 0.04], "w": 1.0, "soft": True}
+    body_parts(30.0, 30.0, LOOK, g)
+    assert g.supporting
+    g = Gait(action="walk", speed=3.5)
+    g.touch = {"part": "foot", "side": "l", "at": [30.3, 30.05, 0.04], "w": 1.0, "soft": True}
+    body_parts(30.0, 30.0, LOOK, g)
+    assert not g.supporting
+
+
+@pytest.mark.parametrize("lateral, side", [(0.12, "l"), (-0.12, "r")])
+def test_a_carried_ball_is_played_by_the_foot_on_its_side_late_in_its_swing(lateral, side):
+    """The foot on the ball's side plays it, and only late in that foot's swing (TAP_AT)."""
+    frames = _carry(ahead=0.18)
+    for fr in frames:
+        fr["ball"]["y"] += lateral
+    drawn = _draw(frames)["h1"]
+    touched = [p for p, *_ in drawn if p["touch"]]
+    assert touched and all(p["touch"]["side"] == side for p in touched)
+    for p in touched:
+        if p["touch"]["w"] > 0.5:
+            # its stance is centred on STANCE_CENTRE: a foot about to land is a quarter of the swing
+            # short of it, so late in the swing is just before the stance, never in it
+            from ninety.render.scene import STANCE_CENTRE, _duty
+            half = _duty(3.5) * math.pi
+            assert abs(_wrap(p["phase"] - STANCE_CENTRE[side])) > half * 0.5, p["phase"]
 
 
 def test_a_carried_ball_that_jumps_round_him_is_rolled_by_a_foot():
@@ -1666,6 +1695,11 @@ def test_a_carried_ball_that_jumps_round_him_is_rolled_by_a_foot():
     assert big[0]["dv"][1] > 0  # rolled to his left, where it went
     small = contacts(_carry(n=40, v=2.0, jump_at=20, jump_m=SETTLE_M * 0.5))
     assert "h1" not in small
+    # Sprinting with it, the roll is still a touch, never drawn as a kick's swing.
+    fast = _carry(n=40, v=7.0, jump_at=20, jump_m=0.4)
+    g = Gait(action="run", speed=7.0)
+    touch_at(g, contacts(fast)["h1"], 20, 1.84, FPS, fast[20]["players"][0]["x"], 30.0)
+    assert g.touch and g.touch["soft"]
 
 
 def test_a_catch_above_his_reach_is_made_in_a_jump():

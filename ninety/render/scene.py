@@ -566,6 +566,8 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
             "out": math.hypot(bo.get("vx", 0.0), bo.get("vy", 0.0)),
             "heading": h,
             "at": (who["x"], who["y"]),
+            # A settle is the ball rolled at his feet, never a kick, however fast he runs with it.
+            "settle": (pid, at, part, v_in, v_out) in settled,
         })
     return out
 
@@ -588,6 +590,8 @@ def _settles(frames: list[dict], found: list[tuple]) -> list[tuple[str, int, str
         p = next((q for q in fr["players"] if q["id"] == who), None)
         q = next((q for q in pr["players"] if q["id"] == who), None)
         b, c = fr["ball"], pr["ball"]
+        # Only a ball he runs or stands with: in any other pose the engine is drawing a touch, a
+        # strike's turn or a hold of its own.
         if p is None or q is None or p.get("action") not in ("walk", "run", "stand"):
             continue
         if max(b["z"], c["z"]) > CARRY_GROUND_M:
@@ -613,7 +617,7 @@ def _closest(a: dict, b: dict, x: float, y: float) -> dict:
 
 
 def _kick(c: dict) -> bool:
-    return c["part"] == "strike" or (c["part"] == "foot" and c["out"] >= KICK_OUT_MIN)
+    return c["part"] == "strike" or (c["part"] == "foot" and c["out"] >= KICK_OUT_MIN and not c.get("settle"))
 
 
 def _touch_window(c: dict) -> tuple[float, float]:
