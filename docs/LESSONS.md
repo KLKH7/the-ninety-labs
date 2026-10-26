@@ -3084,6 +3084,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
 
+### 256. A measured feature is merged after its measurement, and a fix is checked against the rule it narrows
+- **What happened:** the goal and save detector (#271) was marked ready and auto-merged into main
+  while its validation re-score and its test score were still waiting on a pod, so main carried an
+  unmeasured claim for an evening. Separately, its amendment 3 asked for a keeper marked by his kit,
+  narrower than the plan's own rule 5 (also the player nearest his goal line in his area); the
+  validation re-score found it, and the fix still found no save, because the true cause was the
+  ball's height (a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him).
+- **Rule:** a PR whose description promises a measurement is not marked ready or set to auto-merge
+  until the measurement is in it; whoever merges it checks. An amendment that restates a rule is
+  checked against the rule's own wording, and a fix that a re-score shows does nothing is not merged.
+- **Check:** [docs/eval/shot-outcomes/RESULT.md](eval/shot-outcomes/RESULT.md) states the order
+  (merged 22:28Z before the score); #363 (amendment 6) closed with its validation numbers.
+
+### 257. A test split is scored only after its copy-back is confirmed complete
+- **What happened:** the shot-outcome test clips were copied back from the pod as each finished. The
+  test was scored at 23:47Z on the 42 then on the Mac, read as a pod that had stopped at its cap; it was
+  still running, and all 79 arrived minutes later. The rule for a partly run split covers clips that
+  never come back, not clips still on their way, so the 42-clip score was an early look, not the
+  result. The code was already frozen, so it changed nothing, but it is disclosed
+  (docs/eval/shot-outcomes/RESULT.md).
+- **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
+  complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
+- **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
 ### 258. A detection that does not work is not shown as fact, even where its measurement says so
 - **What happened:** saves from video were measured not to work (2 of 49 on the shot-outcome set's
   test split; a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him), and the
@@ -3093,6 +3117,10 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** when a measurement says a detection does not work, the live path stops emitting it at the
   source, so no screen or sentence can show it; the rule stays reachable for measuring only, behind
   an explicit switch.
+  Then each consumer's branch for the missing value is read: the phone's last branch said "shoots
+  wide" for any other outcome, so the first fix turned every former save into a new false miss (the
+  merge queue's review found it); a missing outcome now reads "X shoots." and is drawn neutral.
 - **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
-  (`events.SAVES_AIR` is False; the same scene with saves on is a save).
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save);
+  `tests/test_phone_shot_words.py` (a null outcome is a plain shot, never a miss).
 
