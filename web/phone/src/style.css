@@ -1032,3 +1032,7 @@ body[data-focus="players"] #players-strip:not([hidden]) { display: block; }
    controls for a sound it never makes (the big screen plays it), no install or status-bar room. */
 body[data-embed] #pair, body[data-embed] .speak, body[data-embed] .listening, body[data-embed] .install, body[data-embed] #caption { display: none !important; }
 body[data-embed] { background: #000; }
+
+/* The demo passcode: a plain field at the row's end. */
+.setting-row .passcode { width: 50%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: rgba(118, 118, 128, 0.24); color: var(--text); font-size: 17px; text-align: right; }
+.model-off { color: var(--text-3); }
