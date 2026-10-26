@@ -233,7 +233,7 @@ for i, e in enumerate(ev):
         f = e["frame"]
         seg = act[f : f + 75, gi]
         hands = np.where(seg == HANDS)[0]
-        dives = int(np.isin(seg, SAVE_ACTIONS).sum()) + int((dive_amt[f : f + 75, gi] > 0.3).sum())
+        dives = int(np.isin(seg, SAVE_ACTIONS).sum()) + int((np.abs(dive_amt[f : f + 75, gi]) > 0.3).sum())
         kind = "none"
         if dives and e["outcome"] != "goal":  # a dive or a parry, whatever the shot's outcome is named
             v += 8.0
