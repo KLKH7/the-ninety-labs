@@ -209,15 +209,16 @@ class Fit:
     residuals: object  # the fitted function: (B, n) parameters -> (B, m) residuals, noise units
 
 
-def centre_se(f: Fit, noise_px: float) -> np.ndarray:
-    """(N,) standard error (m) of the fitted centre's place on the pitch (x and y) at each frame:
-    the parameters' covariance noise^2 (J^T J)^-1, carried to each centre by its own Jacobian."""
+def centre_se(f: Fit, noise_px: float, dims: tuple[int, ...] = (0, 1)) -> np.ndarray:
+    """(N,) standard error (m) of the fitted centre at each frame, over the coordinates `dims`: its
+    place on the pitch (x and y, the default) or its height ((2,)). The parameters' covariance
+    noise^2 (J^T J)^-1, carried to each centre by its own Jacobian."""
     n = len(f.p)
     batch = np.vstack([f.p, f.p + FD_STEP * np.eye(n)])
     rs = f.residuals(batch)
     J = (rs[1:] - rs[0]).T / FD_STEP
     cov = noise_px**2 * np.linalg.pinv(J.T @ J)
-    paths = _paths(f.kind, batch, f.times, f.k)[:, :, :2]
+    paths = _paths(f.kind, batch, f.times, f.k)[:, :, list(dims)]
     G = (paths[1:] - paths[0]).transpose(1, 2, 0) / FD_STEP  # (N, 2, n)
     return np.sqrt(np.einsum("nij,jk,nik->n", G, cov, G))
 
@@ -428,7 +429,9 @@ def _grow(tr: Track, piece: Piece, hi: int, k: float) -> Piece | None:
 def heights(rows: list[dict], k: float = DRAG_K, noise_px: float | None = None) -> list[dict]:
     """A copy of the observation rows in which the chosen ball of every frame of a flight piece is
     placed at its fitted centre, where that place's standard error is at most MAX_SE_M: `x`, `y`,
-    `z` (centre height, m), `se` (m) and `flight` (the piece's number). Every other chosen ball
+    `z` (centre height, m), `se` (the place's standard error on the pitch, m), `z_se` (the height's,
+    m: a test of the height, such as under the crossbar, reads this one) and `flight` (the piece's
+    number). Every other chosen ball
     gets `z` one radius up and `flight` null. Frames left out of a piece's fit as stray detections
     are not moved."""
     sigma = NOISE_PX if noise_px is None else noise_px
@@ -441,11 +444,12 @@ def heights(rows: list[dict], k: float = DRAG_K, noise_px: float | None = None) 
         if not piece.in_flight:
             continue
         se = centre_se(piece.flight, sigma)
+        z_se = centre_se(piece.flight, sigma, dims=(2,))
         for w in np.flatnonzero(piece.use & (se <= MAX_SE_M)):
             n = piece.lo + w
             b = out[tr.rows[n]]["ball"][tr.balls[n]]
             b["x"], b["y"], b["z"] = (round(float(v), 3) for v in piece.flight.centres[w])
-            b["se"], b["flight"] = round(float(se[w]), 3), num
+            b["se"], b["z_se"], b["flight"] = round(float(se[w]), 3), round(float(z_se[w]), 3), num
     return out
 
 

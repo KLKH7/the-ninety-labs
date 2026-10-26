@@ -49,7 +49,7 @@ def test_territory_is_the_ball_by_third_along_each_teams_attack():
     ]
 
 
-SHOWN = "of the footage shown from minute 1 to minute 1."
+SHOWN = "of the footage shown in minute 1."  # one minute is "in minute 1", never "from minute 1 to minute 1"
 XS = [80, 90, 100, 75, 72, 95, 10, 20, 35.5, None]
 
 

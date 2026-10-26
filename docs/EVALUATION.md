@@ -25,7 +25,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 46 tests; 18 of 18 mutants of the rules killed, and 16 of 17 of the live path and its evaluation (the survivor is equivalent: an unanswered request never airs); not yet deployed |
 | Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | stale: the committed run measured `ninety-personalizer:1` (2026-10-21, `6ffcd9a`; casual airs 12 of 20 in each language), and version 2 (the casual persona keeps the claim's clock, #191) is published but not yet measured live, so `ninety/agents/evidence.py` lists the report as stale. The first live run (agents-live 39346085408, 2026-10-20) measured nothing: its sign-in had expired before the first model call, so all 20 requests fell back to the verified text. The evaluation now signs in before it simulates and refuses to write a report when the model never answered. **The committed report counts two requests as one and its p95 is its maximum** (audit row 9: "19 true claims" above tables of 20, and "p95 4604 ms, max 4604 ms"); the report code is fixed (#253) and the next live run's report reads 20 requests and shows no p95 below 20. |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 162 cues for seed 7, five minutes (160 for its 80 passes, 14 of them failed, 2 for its 1 shot, no goal) |
-| Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured. **The confidence gate's limit (audit row 2):** its phantom detections are planted at 0.15 to 0.45, so 16/16 held shows only that the gate holds what is below 0.5. It does not show the detector's confidence is calibrated, and that was never measured. On the M1 clip the two false detections are its two most confident events (v00004 out of play at 0.874, v00003 the shot read as a pass at 0.849), so the gate cannot hold them. Measuring calibration needs detected events with confidences on scored clips (only the M1 clip's are committed): R3's data. |
+| Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 11/121 true claims stopped: 7 by the recorded Judge, and 4 held by the confidence gate because they state a detected shot's speed: vision's speed error is measured only for a pass along the ground (#331: n = 35, p90 7.7 km/h, split by the true ball height; no shot was matched), and no detected speed airs until vision marks a pass as along the ground and that mark is measured (planned; `factcheck.measured_speed`, `LOFTED_FLAG_MEASURED`). They are held, not wrong. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured. **The confidence gate's limit (audit row 2):** its phantom detections are planted at 0.15 to 0.45, so 16/16 held shows only that the gate holds what is below 0.5. It does not show the detector's confidence is calibrated, and that was never measured. On the M1 clip the two false detections are its two most confident events (v00004 out of play at 0.874, v00003 the shot read as a pass at 0.849), so the gate cannot hold them. Measuring calibration needs detected events with confidences on scored clips (only the M1 clip's are committed): R3's data. |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md`; nightly archives `docs/eval/nightly/<date>/` | running: held-out seeds 21,33, `ninety-judge:4` (definition `2b04c8ad`) on the frozen engine, 2026-10-25: 170/170 false claims kept off air (code alone 56/170), of which 6 were held by a Judge service error rather than judged: 164/164 caught where a check decided; 0 of the 54 true factual claims the Judge answered were wrongly rejected (2 more held by a service error). That is the tone claims reclassified, not fixed, after one change in what "true" means: the run before it (same day, same Judge) counted 14/129 true claims wrongly rejected, and every one was a tone word no cited fact states ("cautious", "patient", "bold", "risky"). A human's blind labels doubted those labels too (83% agreement over 18 decisions, [factcheck-human-labels.md](eval/factcheck-human-labels.md)), so tone words are now counted apart, neither true nor false: the Judge let 57 of 72 air. "Forward" left the confident-pass template (no cited fact gives a direction), and a long ball is 32 m or more (GROUNDING I11; the evaluation's own rule was 30 m, design). On `ninety-judge:1` the rate was 7/105, on a different planted set: none of these runs is like for like with another. 8 of the run's Judge calls failed and were held back (fail closed). The code checks also now hold three things the labels found aired: "long ball" with no cited pass of 32 m, play "under pressure" with no cited pressure event, and an interception said to come "after" the pass it cut out (one act, recorded twice). Those rules were derived from the same 23 labelled decisions, so that they catch L19 and L16 is in-sample, not a measured improvement; a fresh labelled sample would measure it |
 | Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | **invalid, no number published:** the evaluation asks the Analyst about the deployed match, which it reads through the match tools (the deployed image's simulation), while it grades the drafts against the matches this commit simulates (lesson 90), so a draft can be graded against events it never read. The committed run (`ninety-analyst:3`, `ninety-judge:1`, `d911c0b`, 5/10) is kept as history only. Planned: the events given inline under an unserved match id, as the ablation does, then a re-run |
 | Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base d38ce9b): thigh, chest or head touches 3,693 then 706 (passers now judge them by the engine's own rule), kept 59% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 89.5% then 86.1% first contact by a team-mate (Stone 2021: 83%), 67.3% then 58.3% held 5 s later (54%); completion 82.1% then 88.2% (R3: 75 to 88%). With a surface for each height (same seeds and base): thigh, chest or head touches 690, kept 62.5%; throw-ins 87.3% first contact by a team-mate, 67.6% held 5 s later; completion 87.4%. With what makes a touch worse: thigh, chest or head kept 46.4%; throw-ins 87.5% first contact by a team-mate, 54.1% held 5 s later (Stone 2021: 54%); completion 87.2%; goals 1.44 a team over seeds 40 to 63 (1.0 on the eight seeds alone, within noise; lesson 89). With the foot-reach touch, on main b319f21: thigh, chest or head touches 457, kept 46.4%; throw-ins 82.2% first contact by a team-mate, 58.4% held 5 s later; completion 88.8%; goals 1.08 a team against 1.52 on main over seeds 40 to 63 (difference -0.44, standard error 0.28: not settled; 0.75 against 1.75 on the eight seeds alone) |
@@ -670,6 +670,76 @@ phrasing means were written into `ninety/agents/companion_eval.py` before its fi
 
 A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
 fact); the injection count checks that the text agrees with it.
+
+### Player names from the ID feed
+
+**Names come from a simulated tracking-provider ID feed; vision does not identify players.** We
+simulate that feed, including occasional identity swaps that get corrected
+([FEED_SPEC.md](FEED_SPEC.md)). The phone's names, and the side of each event whose player is
+named, are not a vision result, and no vision number in this file depends on them. The demo's
+side-dependent statistics (possession share, team claims the fact-checker airs) do: a named
+event's side is sure because the feed says so.
+
+`uv run python -m ninety.sim.identity_feed --run <the seed's ninety-sim run> --home-code LON
+--away-code LIS --out identity_feed.jsonl` exports the feed: 25 Hz, pitch-centred metres, each
+player's provider id, side and shirt, with a certified provider's 0.08 m position error, occlusion
+dropouts, a 15 s delivery delay and seeded identity swaps between close team-mates, each followed
+a few seconds later by an `id_correction` row (GROUNDING ID1 to ID9). `ninety/intel/identity.py`
+aligns vision's tactical frames to it by capture time, applies the corrections, skips
+low-confidence entries, and matches tracks to the feed's players: per side and per 10 s window of
+a segment, Hungarian keeping the most shared frames among pairs whose mean distance is within
+GATE_M = 1.26 m (vision's measured 90th-percentile position error, RIVAL_M above); a track is the
+player it was matched to for a strict majority of its frames, and of overlapping tracks given one
+player the heaviest non-overlapping set keeps him. Broadcast tracks (the ids events name) take a
+name, and their events the player's side, only through the camera join's association (lesson 259).
+
+`uv run python -m ninety.eval.identity_eval --clip runs/demo-8080-match --vision
+runs/demo-8080-vision-v2 --truth <the run> --feed identity_feed.jsonl` grades it as
+`naming_eval` grades role names: each track's true player is the one nearest it on average, and a
+name is right when that is the engine player behind the feed id given (matched by side and
+position through the team sheet). The feed is the engine's own players, so this measures vision's
+side of the match (a track that switches players, a wrong side, a wrong join pairing) and the
+feed's own swaps. The association gate was chosen on the even segments from naming_eval's
+pre-registered grid (0.75, 0.9, 1.0) at its 0.95 target, then the odd segments scored once
+([identity.json](eval/identity.json); the feed as shipped: seed 8080, 15 swaps, all corrected):
+
+| Demo seed 8080 | Tracks named, right | Event actors named, right | Event actors named |
+|---|---|---|---|
+| Held-out (odd segments), association 0.75 | 468 / 471 (0.994, 95% 0.98 to 1.00) | 58 / 58 (1.000, 0.94 to 1.00) | 58 of 122 |
+| Whole match | 871 / 878 (0.992) | 112 / 113 (0.991) | 113 of 253 |
+
+878 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
+club. 113 of the match's 345 detected events take their player's side from the feed (1 of them a
+different side from vision's), so 115 have a side sure enough to air (5 without the feed); the
+others have no join pairing at the gate and keep vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
+(no change to `ninety/sim/engine.py` or its modules since `1d0390be`).
+
+**The broadcast camera, matched directly** (pre-registered in
+[identity-direct-plan.md](eval/identity-direct-plan.md) before it ran). As broadcasts match a
+provider's feed to their own calibrated camera, the broadcast's tracks (pitch metres, only in
+frames that passed the camera trust test) are matched to the feed too, with both sides' players
+as candidates, and combined with the join (the more confident name wins). The plan's gate,
+event-actor precision at least 0.95 on the held-out half, was met, so it ships on:
+
+| Demo seed 8080, join and direct combined | Event actors named, right | Events named |
+|---|---|---|
+| Held-out (odd segments) | 106 / 106 (1.000, 95% 0.97 to 1.00) | 106 of 122 with an actor |
+| Whole match | 222 / 224 (0.991) | 224 of 345 (113 through the join alone) |
+
+The direct path's own 1,161 broadcast tracks are 1,146 right (0.987). The 121 events left
+unnamed: 92 have no player (vision attributed nobody), 27 have a track that was no one feed
+player for most of its frames, and 2 lost the name to another track at the same time. None was
+withheld by calibration, but that holds by construction: the tracker skips frames whose camera
+fit failed, so every broadcast track has a calibrated frame (1 event's own frame failed the trust
+test). 226 events now have a side sure enough to air (115 through the join alone, 5 without the
+feed). Of the 2 wrong event names, one came through the direct path, a track named as an
+opponent at a share of 0.511, so that event carries a sure, wrong side.
+
+**What these numbers do and do not show.** The feed is the engine's players plus a provider's
+error, and the answer key is the engine player nearest each track, so a name and its grade are
+close to the same computation. These precisions measure how well a track's windowed majority
+agrees with its whole-track nearest player, through fragments, switches and swaps. They are not
+a hard test of identification; a real provider's feed against real tracks would be.
 
 ### Tracked positions for the phone
 

@@ -3176,6 +3176,35 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
   `docs/eval/ablation-third-arm-plan.md`.
 
+### 261. A goal is said by its own line, and a shot is skipped only for its own goal
+- **What happened:** the Describer says a verified claim in the place of the event it is about, but at
+  a claim's priority. On the demo, the claims about two goals ("a player scores.") were at a lower
+  priority than the shot line just before each, so the shot's line pushed them out and a blind fan
+  heard "A player shoots from the right." and never that it went in (67:08, 70:36). The commentary
+  called the goal first by priority, then the shot two seconds later ("Goal!", then "A shot.").
+- **Rule:** a goal is said by its own line ("Goal! ..."), never replaced by a claim about it. A shot
+  that went in is not said as well only when its own goal event follows (the next goal, with no play
+  between) and is confident enough to be said; otherwise the shot is said as the goal. An
+  independent review found the first version of this rule could leave a goal unsaid (a goal event
+  under the gate) or say it twice (a goal more than 2 s after its shot): both are tested now.
+- **Check:** `tests/test_spoken_variety.py::test_a_goal_with_a_verified_claim_is_said_as_a_goal_and_not_crowded_out_by_its_shot`,
+  `::test_a_shot_its_goal_follows_is_not_said_before_the_goal`.
+
+### 262. A bound from a study is the population's limit, not its sample's maximum
+- **What happened:** the fact-checker's pass-speed bound was derived twice, wrongly both times.
+  First it was 85% of the fastest kick in a seven-player laboratory study (34.48 m/s, so 105.5 km/h): a
+  sample's maximum, not the fastest a ball is kicked. That bound rejected a true 112 km/h pass in our
+  own engine's seed 7. It was set again at 85% of GROUNDING P3 (122.4 km/h), just above the demo's
+  fastest claimed pass, but P3 is a design bound for our engine (real kicks reach about 58 m/s), so 85%
+  of it bounds no population either. An independent review found both.
+- **Rule:** a bound taken from a study states which population it bounds; a sample's largest value
+  is not that population's limit, and a fraction of a design bound is a design bound. With no sourced
+  pass bound for our world, the gate keeps one bound, P3's, the same constant the live path drops a
+  detection's speed at (`detected.MAX_BALL_KMH`). A bound changed after a test result is disclosed
+  with its reason, and the change must be to the derivation, never to fit the result.
+- **Check:** `ninety/agents/factcheck.py` `MAX_BALL_KMH is detected.MAX_BALL_KMH`;
+  `tests/test_factcheck.py::test_a_stated_ball_speed_the_ball_cannot_reach_is_rejected`.
+
 ### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
 - **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
   a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
@@ -3189,7 +3218,146 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
 
-### 264. A stage that keeps every frame it reads only works on short clips
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
+### 268. Two pull requests green separately can be red together
+- **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
+  #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
+  other, two phone tests that assumed a bundle without sheets (the no-sheet roster and the Live teaser's
+  shirts) failed on `main` and on every open branch that took `main` (#380).
+- **Rule:** when two pull requests overlap in what they read or write (a shared bundle field, fixture
+  or helper), the second is merged only after CI has run on its head with the first already in `main`,
+  not on a green that predates the first. A test of the no-sheet path removes the sheets it does not want
+  rather than relying on what a fixture happens to hold.
+- **Check:** `tests/test_phone_companion.py::test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track`
+  and `::test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s_numbers` drop the
+  bundle's `sheets` first and still assert the no-sheet results (0 rows; the line-up's 4 shirts).
+
+### 269. When vision cannot do a job the product needs, take a disclosed input; never a hidden one
+- **What happened:** the demo had to name players, and vision cannot: shirt numbers are a few
+  pixels tall on our renders, and naming by role missed its 0.95 gate (held-out 0.884, #374).
+  The tempting shortcut was to read the simulator's ids where vision's tracks are, quietly, and
+  call the names vision's. Kian decided (Oct 26) to name players openly the way broadcasts do,
+  from a licensed tracking provider's player-ID feed.
+- **Rule:** an input the live path takes from the engine is a separate, named artifact
+  (`identity_feed.jsonl`) carrying only what that job needs (here identity: who, and where to
+  match him), read by one module, for one purpose (identity, and the side it implies), allowed by name in AGENTS.md's hard rules, and
+  disclosed wherever its output is shown ("Player ID feed"; README, EVALUATION, CHALLENGE_MAP).
+  Everything else the pipeline computes must be the same with it and without it, and its matching
+  is graded like any vision result, without claiming it as vision's.
+- **Check:** `uv run pytest tests/test_identity_feed.py`:
+  `::test_only_the_identity_path_touches_the_feed` fails if any other module imports the feed's
+  reader (any import form) or reads a field made from it;
+  `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
+  fact, event or match.json field other than the line-up changes;
+  `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 270. A goal is the goal event, not the shot that went in
+- **What happened:** match mode (`ninety/condensed.py`), the highlight reel and the team goal
+  count (`ninety/intel/stats.py`) counted a goal only as a shot whose outcome was a goal. GROUNDING
+  I24 already said a goal is a detected `goal` event (Law 10). On the demo match (seed 8080) vision
+  logged 5 goal events. Two had no shot before them, so match.json, its chapters (the scrubber's
+  ticks) and the reel showed 3 goals. Those 3 took their side from the shot, whose side confidence
+  (0.16 to 0.65) is under the fact-checker's gate, so all 3 showed no club. The goal events' own
+  side confidence was 0.94 to 1.0. The demo audit found it, not a test: every test built goals as
+  shots.
+- **Rule:** one function says what a goal is (`stats.goal_moments`), and every screen and fact
+  reads it. A `goal` event is the goal. The shot just before it, if that shot went in, is the same
+  goal (the pairing `scoring.goals` already uses, so no new time window). The goal event's side and
+  confidence decide the goal's club and whether it counts; the shot gives where it was struck and
+  how fast. A shot that went in with no goal event after it still counts. A goal with no shot has no
+  distance, so no distance is said.
+- **Check:** `uv run pytest tests/test_match_mode.py -k goal tests/test_captioner.py -k strike`.
+  `test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts`
+  fails if a goal event without a shot is dropped, if a pair counts twice, or if the club comes from
+  the shot. On a bundle, match.json's `goals` and its goal chapters each match the goal events.
+
+### 271. A name that reaches events through one bridge is capped by that bridge
+- **What happened:** #389 named the broadcast's tracks, which events name, only through the camera
+  join to the tactical tracks. Its precision was high, but 232 of 345 events stayed unnamed and
+  side-unsure, because most broadcast tracks have no join pairing at the gate. The broadcast
+  camera is calibrated and its tracks are already in pitch metres, so they could be matched to the
+  feed directly, as real broadcasts do. Doing that named 224 events (106 of 106 held-out right).
+- **Rule:** before shipping a coverage number, count what stops the rest and check that the limit
+  is the data, not the route: every unnamed event gets one reason, and a fix is pre-registered with
+  its precision gate before it runs.
+- **Check:** `docs/eval/identity.json` `direct.reasons` covers all 345 events;
+  `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
+  fails if the direct path is on without its gate met.
+
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:**
+  - **The footage** is the codec every browser and phone decodes in hardware: H.264/AAC MP4 with
+    +faststart (`ninety/footage.py`), plus an HLS ladder. The ladder is so that a slow connection drops
+    a rung instead of freezing; that is *planned*: nothing plays it until the viewer's hls.js player
+    lands.
+  - **The encoder** is the producer's system ffmpeg, run as an external tool on their Mac and never
+    shipped, with Apple's VideoToolbox H.264 encoder (libx264 is GPL, AGENTS.md) and ffmpeg's own AAC
+    encoder (THIRD_PARTY_NOTICES.md).
+  - **Macs only:** Linux CI and the Azure image ship JPEG frames.
+  - **H.264/AAC patents:** whether they need anything for our distribution is Kian's question.
+  - **Every encode is checked** by probing the file it writes: codec and profile, frame count,
+    duration, the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and
+    the sound.
+  - **A browser test** seeks a real encoded file, served with byte ranges as the API serves it.
+  - **What CI skips:** these tests need a Mac and, for the browser one, a built viewer (`npm run
+    build --prefix web/viewer`). CI's Linux runner skips them, and a pull request that relies on them
+    says so and gives the local run.
+  - **A playback claim** about real browsers needs a run in one (live-preview), and the result is
+    stated.
+- **Check:** on a Mac, after building the viewer, run
+  `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  (none skipped). On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes
+  50 frames apart, and `hls/master.m3u8` lists every rung.
+
+### 273. Watch the frames before naming the cause
+- **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
+  frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
+  at P16's rate and the stride already follows distance. Crops of seed 8080's carriers showed the
+  real causes: a first touch on the move stood the other foot on the grass for 0.76 s while the body
+  ran on at 3.5 m/s (he skated stiff-legged), a ball in close control rode at his shins with no foot
+  ever playing it, and a carried ball jumped 0.4 m round him in a frame with no foot on it. The first
+  fix tried (taps in close control) changed no box in the test window: every carry there sat inside
+  the engine's own touch windows, so the stance was the glitch.
+- **Rule:** diagnose a look problem from per-frame engine data and crops of the drawn frames, and
+  check that a fix changes the frames it is meant to (diff the labels before and after) before
+  building on it.
+- **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
+  or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 280. A stage that keeps every frame it reads only works on short clips
 - **What happened:** `ninety.vision.observe` decoded every image of a clip and kept them all until
   its second pass, which only needed each frame's shirt colours. At 1280 x 720 that is 2.8 MB a
   frame, about 4 GB a minute of footage: the live detection job, sized at 4 GiB, would have run out

@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from ninety import condensed, highlights
+from ninety import condensed, footage
 from ninety.highlights import (
     Verdict,
     distance_m,
@@ -244,25 +244,25 @@ def test_a_file_name_keeps_letters_digits_dashes_and_underscores_only(tmp_path):
     assert reel["moments"][0]["recording"]["poster"] == "highlights/___e_7.jpg"
 
 
-def test_with_ffmpeg_the_window_is_encoded_as_vp9(tmp_path, monkeypatch):
+def test_with_the_h264_encoder_the_window_is_encoded_as_the_footage_is(tmp_path, monkeypatch):
     images = images_in(tmp_path / "images", 50)
     calls = []
-    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(highlights.subprocess, "run", lambda cmd, check: calls.append(cmd))
+    monkeypatch.setattr(footage, "can_encode", lambda: True)
+    monkeypatch.setattr(footage.subprocess, "run", lambda cmd, check: calls.append(cmd))
     reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
     record(reel, CUT, images, tmp_path / "out", encode=True)
-    assert reel["moments"][0]["recording"]["clip"] == "highlights/v2.webm"
+    assert reel["moments"][0]["recording"]["clip"] == "highlights/v2.mp4"
     (cmd,) = calls
     assert cmd[cmd.index("-start_number") + 1] == "10" and cmd[cmd.index("-frames:v") + 1] == "25"
     assert cmd[cmd.index("-framerate") + 1] == "25"
-    assert cmd[cmd.index("-c:v") + 1] == "libvpx-vp9" and "libx264" not in cmd
-    assert cmd[-1] == str(tmp_path / "out" / "highlights" / "v2.webm")
+    assert cmd[cmd.index("-c:v") + 1] == footage.ENCODER and "libx264" not in cmd  # x264 is GPL
+    assert cmd[-1] == str(tmp_path / "out" / "highlights" / "v2.mp4")
 
 
 def test_without_ffmpeg_or_when_shipping_frames_no_clip_is_encoded(tmp_path, monkeypatch):
     images = images_in(tmp_path / "images", 50)
-    monkeypatch.setattr(highlights.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
-    monkeypatch.setattr(highlights.shutil, "which", lambda name: None)
+    monkeypatch.setattr(footage.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
+    monkeypatch.setattr(footage, "can_encode", lambda: False)
     reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
     record(reel, CUT, images, tmp_path / "out", encode=True)
     assert reel["moments"][0]["recording"]["clip"] is None
@@ -286,8 +286,8 @@ def test_the_bundle_records_every_highlight_and_matches_the_schema(tmp_path):
 
 def test_shipping_frames_encodes_no_clip_even_with_ffmpeg(tmp_path, monkeypatch):
     images = images_in(tmp_path / "images", 50)
-    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(highlights.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
+    monkeypatch.setattr(footage, "can_encode", lambda: True)
+    monkeypatch.setattr(footage.subprocess, "run", lambda *a, **k: pytest.fail("encoded"))
     reel = {"moments": [moment("v2", 61.0, [60.4, 61.4])]}
     record(reel, CUT, images, tmp_path / "out", encode=False)
     assert reel["moments"][0]["recording"]["clip"] is None

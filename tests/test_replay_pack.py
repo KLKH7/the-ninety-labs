@@ -107,23 +107,43 @@ def test_every_file_a_manifest_can_list_is_one_the_pack_publishes():
 
 
 def test_a_bundle_with_every_highlight_recording_packs_and_another_suffix_does_not(tmp_path, monkeypatch):
-    # #312: highlights.record writes <event>.jpg and <event>.webm under highlights/; the pack refused the
+    # #312: highlights.record writes <event>.jpg and <event>.mp4 under highlights/; the pack refused the
     # folder (the failure #328 hit with commentary.json), so a --match bundle with recordings never shipped.
-    from ninety import highlights
+    from ninety import footage, highlights
     from ninety.match.timeline import Timeline
 
     images = tmp_path / "images"
     images.mkdir()
     for i in range(50):
         (images / f"{i:05d}.jpg").write_bytes(b"\xff\xd8")
-    monkeypatch.setattr(highlights.shutil, "which", lambda name: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(highlights.subprocess, "run", lambda cmd, check: Path(cmd[-1]).write_bytes(b"webm"))
+    monkeypatch.setattr(footage, "can_encode", lambda: True)
+    monkeypatch.setattr(footage.subprocess, "run", lambda cmd, check: Path(cmd[-1]).write_bytes(b"mp4"))
     timeline = Timeline([{"index": 0, "frame": 1500, "frames": 50}], 25)
     reel = {"moments": [{"event": "v2", "t": 61.0, "clip": [60.4, 61.4]}]}
     b = bundle(tmp_path / "b")
     highlights.record(reel, timeline, sorted(images.glob("*.jpg")), b, encode=True)
     names = [p.relative_to(b).as_posix() for p in replay.members(b)]
-    assert "highlights/v2.jpg" in names and "highlights/v2.webm" in names
-    (b / "highlights" / "v2.mp4").write_bytes(b"x")  # a suffix the viewer does not read
+    assert "highlights/v2.jpg" in names and "highlights/v2.mp4" in names
+    (b / "highlights" / "v2.webm").write_bytes(b"x")  # a suffix the viewer does not read
+    with pytest.raises(SystemExit, match="not a viewer file"):
+        replay.members(b)
+
+
+def test_a_bundle_with_the_mp4_the_hls_ladder_and_the_poster_packs_and_a_stray_file_does_not(tmp_path):
+    # ninety/footage.py writes video.mp4, poster.jpg and hls/: the master, each rung's playlist, init.mp4
+    # and its fMP4 segments. Without hls/ in infra/replay.py the pack refuses the bundle; video.webm
+    # stays accepted for a bundle encoded before the change.
+    b = bundle(tmp_path / "b")
+    (b / "video.mp4").write_bytes(b"mp4")
+    (b / "video.webm").write_bytes(b"webm")
+    (b / "poster.jpg").write_bytes(b"\xff\xd8")
+    (b / "hls" / "720p").mkdir(parents=True)
+    (b / "hls" / "master.m3u8").write_text("#EXTM3U\n")
+    for name in ("init.mp4", "index.m3u8", "seg0000.m4s"):
+        (b / "hls" / "720p" / name).write_bytes(b"x")
+    names = {p.relative_to(b).as_posix() for p in replay.members(b)}
+    assert {"video.mp4", "video.webm", "poster.jpg", "hls/master.m3u8", "hls/720p/init.mp4",
+            "hls/720p/index.m3u8", "hls/720p/seg0000.m4s"} <= names
+    (b / "hls" / "720p" / "notes.txt").write_text("x")  # a suffix the player does not read
     with pytest.raises(SystemExit, match="not a viewer file"):
         replay.members(b)

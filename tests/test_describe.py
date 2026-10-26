@@ -36,8 +36,10 @@ def event(i: int, t: float, kind: str = "pass", x: float = 50.0, **extra) -> dic
     return base | extra
 
 
-# A passage faster than any voice: a pass every 0.6 s for 15 s, then a shot right after a pass.
-BUSY = [event(i, round(0.6 * i, 2), x=10 + 3 * i) for i in range(25)]
+# A passage faster than any voice: a pass every 0.6 s for 15 s, then a shot right after a pass. Each
+# pass is a different player's, so no two lines are in the same words (which schedule does not repeat).
+BUSY = [event(i, round(0.6 * i, 2), x=10 + 3 * i, player=f"h{2 + i % 9}", receiver="h11", intended="h11")
+        for i in range(25)]
 BUSY_THEN_SHOT = [event(1, 20.0), event(2, 20.5, "shot", x=90.0)]
 
 

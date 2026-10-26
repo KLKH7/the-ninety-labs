@@ -23,6 +23,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from ninety.match import detected
+
 # A number standing on its own: not part of an id like "e00042" or a player like "h7". A
 # sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
 # 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
@@ -245,6 +247,34 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+
+# The plausibility gate: a ball speed a claim states must be one the ball can reach in this world:
+# GROUNDING P3's bound, the one the live path already drops a faster detection's speed at
+# (ninety/match/detected.py, MAX_BALL_KMH; a design bound for our engine, not a population limit).
+# A faster reading is vision's, not the ball's (a ground projection of a ball in the air, or a
+# misread frame), and is refused, never rounded down. No bound below it is sourced for a pass
+# (docs/LESSONS.md, lesson 262).
+MAX_BALL_KMH = detected.MAX_BALL_KMH
+# Vision's ball speed, measured once on the frozen test set (#331, docs/eval/speed-report-freeze.md):
+# for a pass along the ground, n = 35, median error 3.5 km/h, p90 7.7 (vision reads 4.1 slow on
+# average). A lofted pass is not measured (one, read at 229.7 for a true 93.5: its ground track is not
+# its flight) and no shot was matched. So a detected speed may be said only for a pass along the ground,
+# with that band and never above MAX_BALL_KMH; any other detected speed is held, as a claim on an unsure
+# detection is.
+# - The band, SPEED_ERROR_KMH, is design: the p90 rounded up, so about 9 in 10 of the measured passes
+#   were within it (in-sample, n = 35). The speed is said as vision read it, the bias not corrected:
+#   shifting it would say a number no event holds.
+# - Which pass is along the ground: #331 split its pairs by the TRUE ball height, which the live path
+#   never has. Vision does not mark it yet (planned: an event's `lofted`, from its flight fit), and a
+#   band measured by true height does not hold for vision's own flag until it is measured by that flag
+#   (LOFTED_FLAG_MEASURED). Until then every detected speed is held (fail closed); a missing `lofted` is
+#   held too.
+SPEED_MEASURED = True
+SPEED_ERROR_KMH = 8
+# A speed as the screens find it to band (web/viewer/src/speed.ts, ninety/agents/onair.SPEED_TEXT).
+SHOWN_SPEED = re.compile(r"\d+(?:\.\d+)?\s*(?:km/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)\b", re.I)
+LOFTED_FLAG_MEASURED = False
+WITHOUT_SPEED = "state it without the speed"  # how a speed reason ends: what the writer is asked to do
 # Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
 # confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
 # ones 0.447 to 0.985. A claim that names a team is held unless every detected event it cites had
@@ -261,6 +291,10 @@ TEAM_NAMED = re.compile(
     r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
 
 
+# A goal's side read from which of the broadcast scorebug's digits changed (condensed.scorebug_sides).
+SCOREBUG_SIDE = "scorebug"
+
+
 def side_known(event: Mapping) -> bool:
     """Whether a team may be named from this event: a ground-truth event (no detection confidence),
     or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
@@ -271,6 +305,8 @@ def side_known(event: Mapping) -> bool:
         side = event.get("team_confidence")
         return side is not None and side > MIN_TEAM_CONFIDENCE
     if event.get("confidence") is None:
+        return True
+    if event.get("team_source") == SCOREBUG_SIDE:  # a goal sided by its score change (condensed.py)
         return True
     side = event.get("team_confidence")
     return side is not None and side > MIN_TEAM_CONFIDENCE
@@ -292,6 +328,38 @@ class Verdict:
 def _normalize_clock(clock: str) -> str:
     minute, second = clock.split(":")
     return f"{minute.zfill(2)}:{second.zfill(2)}"
+
+
+def measured_speed(event: dict) -> bool:
+    """Whether a detection's ball speed is one vision's measured error covers (SPEED_MEASURED): a pass
+    vision marks as along the ground, once the band is measured by that mark (LOFTED_FLAG_MEASURED)."""
+    return (SPEED_MEASURED and LOFTED_FLAG_MEASURED and event.get("type") == "pass"
+            and event.get("lofted") is False)
+
+
+def sayable_speed(event: dict) -> bool:
+    """Whether a graphic or line may state the event's ball speed: one the ball can reach, and either
+    the simulator's or a detection's that vision's measured error covers (measured_speed). A screen
+    says it with its band (manifest.speed, web/viewer/src/speed.ts)."""
+    return plausible_speed(event) and (event.get("confidence") is None or measured_speed(event))
+
+
+def plausible_speed(event: dict) -> bool:
+    """Whether the event's ball speed is one the ball can reach (MAX_BALL_KMH): a graphic or a line
+    states the speed only then, and says the rest without it."""
+    speed = event.get("ball_speed_kmh")
+    return speed is not None and float(speed) <= MAX_BALL_KMH
+
+
+def _implausible_speed(value: float, evidence: list[dict]) -> str | None:
+    """Why a stated ball speed no ball can reach is refused: every cited event with that speed is
+    beyond MAX_BALL_KMH. None when one of them is possible."""
+    with_it = [e for e in evidence
+               if e.get("ball_speed_kmh") is not None and float(e["ball_speed_kmh"]) == value]
+    if not with_it or any(plausible_speed(e) for e in with_it):
+        return None
+    return (f"implausible speed: {value:g} km/h is faster than the ball can travel (at most "
+            f"{MAX_BALL_KMH:g} km/h): {WITHOUT_SPEED}")
 
 
 def _number_field(text: str, start: int) -> str | None:
@@ -663,6 +731,8 @@ def check(
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
+            elif expected_field == "ball_speed_kmh" and (why := _implausible_speed(value, evidence)):
+                reasons.append(why)
             elif (player := bound.get(match.start())) and expected_field in FIELD_UNITS and (
                 value not in _player_values(evidence, player, expected_field)
             ):
@@ -866,6 +936,24 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
+    if any(True for _ in SPEED_NUMBER.finditer(spelled_as_digits(claim.text))):
+        for i in claim.evidence:
+            event = known.get(i, {})
+            if (event.get("confidence") is not None and event.get("ball_speed_kmh") is not None
+                    and not measured_speed(event)):
+                why = ("it is not a pass" if event.get("type") != "pass" else
+                       "this pass was in the air" if event.get("lofted")
+                       else "this pass is not marked on the ground" if event.get("lofted") is None
+                       else "vision's ground mark is not measured yet")
+                reasons.append(f"event {i}'s ball speed is vision's, whose error is measured only for a pass "
+                               f"along the ground ({why}): {WITHOUT_SPEED}")
+        measured = any(measured_speed(known.get(i, {})) for i in claim.evidence)
+        stated = len(SPEED_NUMBER.findall(spelled_as_digits(claim.text)))
+        if measured and len(SHOWN_SPEED.findall(claim.text)) < stated:
+            # A screen bands only a speed in digits with one of its units (web/viewer/src/speed.ts): any
+            # other form ("sixty-one km/h", "61 kmh") would air with no band.
+            reasons.append(f"a measured speed is said in digits with km/h (\"61 km/h\"), so the screens can "
+                           f"give its band; else {WITHOUT_SPEED}")
     if TEAM_NAMED.search(claim.text) or team_view:
         for i in claim.evidence:
             event = known.get(i, {})
