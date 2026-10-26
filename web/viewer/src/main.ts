@@ -2,9 +2,11 @@ import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
 import { AudioTracks, readCommentary } from "./commentary";
+import { setupDock } from "./dock";
 import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
+import { attachPlayer } from "./player";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 import { airSpeed, airSpeeds, claimSpeeds, commentarySpeeds, spokenSpeeds } from "./speed";
@@ -57,13 +59,14 @@ interface Footage {
 const POSTER_S = 0.6 / 2 + 1 / 25;
 
 function videoFootage(b: Bundle): Footage {
-  video.src = b.base + b.manifest.footage.src;
+  // HLS, else MP4, else the legacy file, recovering from errors and stalls (src/player.ts).
+  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"));
   return {
     time: () => video.currentTime,
     duration: b.manifest.footage.frames / b.manifest.fps,
     paused: () => video.paused,
-    play: () => void video.play(),
-    pause: () => video.pause(),
+    play: () => player.want(true),
+    pause: () => player.want(false),
     seek: (s) => (video.currentTime = s),
   };
 }
@@ -255,8 +258,8 @@ async function start() {
     // Open on a clean picture (demo audit 2, row 5): the match's first frames carry the stinger that
     // joins the broadcast's segments, mid-wipe. It clears within half of the renderer's STINGER_S
     // (ninety/render/edit.py, edge_stingers), so the first frame shown is the one just after it.
-    if (m.footage.kind === "video")
-      video.addEventListener("loadedmetadata", () => { if (video.currentTime === 0) footage.seek(POSTER_S); }, { once: true });
+    // A media fragment, not a seek on load: a seek made before the metadata arrives then still wins.
+    if (m.footage.kind === "video") video.src = `${b.base}${m.footage.src}#t=${POSTER_S}`;
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);
@@ -369,8 +372,13 @@ async function start() {
       : null;
     const commentary = readCommentary(body);
     if (commentary) commentary.lines = commentarySpeeds(commentary.lines, m.speed);
-    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"));
+    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null,
+      m.footage.audio === "muxed");
     tracks.described = !!b.audio;
+    (window as unknown as { ninetyTracks: AudioTracks }).ninetyTracks = tracks; // read by tests/test_match_mode.py
+    // The companion on the computer (src/dock.ts): the phone app, paired to this screen.
+    const dock = setupDock(store);
+    phone.onCode = (code, url, qr) => dock.setCode(code, url, qr);
   }
   // The QR after kick-off is behind the control bar's button only (Kian, Oct 25: option A).
   const qrState = { open: false, closed: false };
