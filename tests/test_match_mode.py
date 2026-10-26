@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import re
 import shutil
 import threading
@@ -114,6 +115,31 @@ def test_a_clip_without_segments_is_one_chapter():
 # ---------------------------------------------------------------- in the browser
 
 
+class RangeHandler(SimpleHTTPRequestHandler):
+    """Static files with HTTP Range, as the deployed API serves the bundle (tests/test_api_site.py):
+    a browser seeks a <video> only on a server that answers byte ranges."""
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):  # noqa: N802
+        m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+        path = self.translate_path(self.path)
+        if m is None or not os.path.isfile(path):
+            return super().do_GET()
+        size = os.path.getsize(path)
+        start, end = int(m[1]), min(int(m[2]) if m[2] else size - 1, size - 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start)
+            self.wfile.write(f.read(end - start + 1))
+
+
 def silent_wav(path, seconds: float, rate: int = 8000):
     import wave
 
@@ -144,9 +170,13 @@ def site(browser, tmp_path_factory):  # noqa: F811
     shutil.copyfile(events, standin)
     www = root / "www"
     shutil.copytree(DIST, www)
-    for out, path, match in (("match", events, True), ("standin", standin, True), ("plain", events, False)):
-        args = [str(clip), "--out", str(www / out), "--detections", str(detections), "--frames",
+    runs = (("match", events, True, True), ("standin", standin, True, True), ("plain", events, False, True))
+    if shutil.which("ffmpeg"):  # the same match as a real video.webm (e2e.write_footage's VP9)
+        runs += (("video", events, True, False),)
+    for out, path, match, frames in runs:
+        args = [str(clip), "--out", str(www / out), "--detections", str(detections),
                 "--events-file", str(path)] + (["--match"] if match else [])
+        args += ["--frames"] if frames else []
         worker = threading.Thread(target=e2e.main, args=(args,))
         worker.start()
         worker.join()
@@ -162,8 +192,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     manifest = json.loads((www / "commentary" / "manifest.json").read_text())
     (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
                                                                   "stadium": "stadium.wav"}))
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
-    handler.log_message = lambda *a: None
+    handler = functools.partial(RangeHandler, directory=str(www))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}/"
@@ -411,6 +440,33 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     page.wait_for_timeout(400)
     last = [m for m in sent if m["type"] == "clock"][-1]
     assert last["t"] == pytest.approx((1550 + 0.5) / FPS, abs=0.03)  # mutation: t_start + video time -> 61.62
+    ctx.close()
+
+
+def test_on_the_encoded_video_the_phone_gets_match_time_after_every_seek_across_the_cut(browser, site):  # noqa: F811
+    """video.webm (standard VP9, a keyframe every 2 s): seeking back and forth across the cut, the
+    picture lands on the image asked for and the clock sent to the phone is that image's match time."""
+    if not shutil.which("ffmpeg"):
+        pytest.skip("needs ffmpeg to encode video.webm")
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    sent: list[dict] = []
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"),
+                         lambda ws: ws.on_message(lambda m: sent.append(json.loads(m))))
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    page = ctx.new_page()
+    page.goto(site + "?bundle=video/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert page.evaluate("document.querySelector('video').src").endswith("video.webm")
+    # Image k is match frame 1500 + k before the cut (40 images), 1550 + (k - 40) after it.
+    for image in (60, 10, 45, 30, 70, 0):
+        seek(page, image)
+        at = (image + 0.5) / FPS
+        page.wait_for_function(f"Math.abs(document.querySelector('video').currentTime - {at}) < 0.05")
+        page.wait_for_timeout(300)
+        frame = 1500 + image if image < 40 else 1550 + image - 40
+        last = [m for m in sent if m["type"] == "clock"][-1]
+        assert last["t"] == pytest.approx((frame + 0.5) / FPS, abs=0.03), image
     ctx.close()
 
 
