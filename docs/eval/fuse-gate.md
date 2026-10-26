@@ -59,3 +59,48 @@ the camera stay two, and 1.2 m apart in depth at the far side stay two (tests/te
 - **The camera fit's residual stands in for its error.** A fit that is wrong in a way its residual
   does not show (lesson 148) moves both views' points apart and splits a pair; that shows up as a
   player counted twice in the band, which the zone scoring of the zero-shot baseline counts.
+
+## Re-measured on the tactical renders (pre-registered Oct 26, before any number below)
+
+On the 8080 demo each player in the seam band (x 45 to 60 m) is two tracks about 0.29 m apart:
+tac-l places him +0.29 m in x from tac-r, across 3,128 cross-view pairs, so `same_place` reads 1.2
+to 1.4 and the pair stays split (11.5 home tracks a frame, Law 3 trips, nothing team-named airs).
+A fixed offset between the lenses is the second limit above. This section re-measures the gate's
+inputs on the tactical renders and scores the result once. Nothing is read from the 8080 demo.
+
+**Clips.** The 23 validation clips of dataset tactical (run tactical1; 118 excluded, as in its
+scoring), split in two before anything is measured:
+- *derive* (15): 117 119 120 121 122 2041 2042 2043 2044 2045 3041 3042 3043 3044 3045, with the
+  ours-tactical detections of the pre-registered scoring (every 5th frame, both views);
+- *score* (8): 108 109 110 112 113 114 115 116, the clips with each view's live observations
+  (`runs/tactical1/join`, ours-tactical, tiled, at 716014c). Re-fused from those observations, so
+  no detection is re-run.
+No test clip (900001 to 900030, 910009 to 910016) is read.
+
+**Step 1, measure (derive clips only).** `ninety.eval.foot_precision`, per lens, as above, plus
+the *signed* error. The correction's form is fixed now: per lens and class, the signed error
+(across and down, as a share of the box) is fitted by least squares as `a + b*c`, where `c` is the
+box's bottom-centre column relative to the image centre, as a share of half the width (-1 at the
+left edge, +1 at the right). That is the shape the suspected cause has: a standing body leans away
+from the image centre in perspective, more the nearer the edge. Then:
+- observe's ground point is moved by minus the fitted bias (the box's own size times `a + b*c`);
+- `PRECISION` for the tactical views becomes the 99th percentile of the absolute error *left after*
+  that correction, on the same clips;
+- the broadcast camera keeps its constants: it is not measured here.
+
+**Step 2, score (score clips, once).** Two arms on the same observations: *baseline* (fuse as on
+main) and *candidate* (the correction and the re-measured precision). Each is tracked by the live
+path (`ninety.vision.tracked_frames`), and graded offline against the union of both views'
+`frames.jsonl` players (the answer key, read only here):
+- **tracks per side per frame**: the mean, and the mean absolute difference from the side's true
+  number on the pitch;
+- **over 11**: the share of side-frames with more than 11 tracks (Law 3);
+- **ID switches**: each true player's matched track changes between consecutive matched frames;
+- **player recall**: true player-frames with a track within 1.0 m (track.GATE_M, the tracker's own
+  gate), matched one to one per frame, nearest first;
+- **side accuracy**: of those matches, the share whose track's side is the player's.
+
+**Adoption rule.** The candidate is adopted if, against the baseline, the over-11 share is lower,
+the mean absolute count difference is lower, ID switches are no more, and player recall and side
+accuracy are each no lower than the baseline's Wilson 95% lower bound. Otherwise main keeps the
+current gate, and this section reports the numbers either way.
