@@ -1202,7 +1202,7 @@ def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(b
     assert not errors
 
 
-def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # noqa: F811
+def scorebug_phone(browser, site, readings, goals, measured=True, at="61", more=None):  # noqa: F811
     """The cut clip's bundle with the scorebug's readings (#356's scorebug.jsonl, behind the
     manifest's gate, as ninety-e2e --scorebug writes it) and these detected goals."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
@@ -1215,6 +1215,7 @@ def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # n
     def match(route):
         body = route.fetch().json()
         body["goals"] = goals
+        body.update(more or {})
         route.fulfill(json=body)
 
     ctx.route("**/bundle/manifest.json", manifest)
@@ -1273,7 +1274,7 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
     assert page.text_content("#score-home") == "0"
     page.wait_for_selector("#goals-away .side-goal")
-    assert page.inner_text("#goals-away .side-goal") == "2′"  # the minute the away count rose
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"  # the club, the minute it rose
     assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
     assert not errors
     ctx.close()
@@ -1288,8 +1289,8 @@ def test_the_band_lists_every_goal_the_scorebug_counted_so_the_lines_agree_with_
     ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="63")
     page.wait_for_function("document.querySelector('#score-home').textContent === '3'")
     page.wait_for_selector("#goals-away .side-goal")
-    assert page.inner_text("#goals-home .side-goal") == "2′ 2′ 2′"  # 61.9 s, and two at 62.5 s
-    assert page.inner_text("#goals-away .side-goal") == "2′"
+    assert page.inner_text("#goals-home .side-goal") == "Crowmere 2′ 2′ 2′"  # 61.9 s, and two at 62.5 s
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"
     assert not errors
     ctx.close()
 
@@ -1658,7 +1659,7 @@ def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_ever
     assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
     assert top(page, "#key-moments") < top(page, ".pitch-card")  # moments first, the pitch at the foot
     assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
-    assert "Your goal" in page.inner_text("#key-rows")  # Lisbon's goal, to a Lisbon fan
+    assert "Lisbon goal" in page.inner_text("#key-rows")  # the club, in the third person (Kian, Oct 26)
     sides = page.locator(".band .fixture > .side")
     assert sides.nth(1).bounding_box()["x"] < sides.nth(0).bounding_box()["x"]  # your club on the left
     assert not errors
@@ -1668,7 +1669,7 @@ def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_ever
     page.wait_for_selector("#live-summary:not([hidden])")
     assert top(page, ".pitch-card") < min(top(page, "#live-summary"), top(page, "#key-moments"))
     assert page.locator("#summary-rows .stat-row").count() == page.locator("#stat-rows .stat-row").count() > 4
-    assert "Your goal" not in page.inner_text("#key-rows")  # a London fan: Lisbon's goal
+    assert "Lisbon goal" in page.inner_text("#key-rows") and "You" not in page.inner_text("#key-rows")
     sides = page.locator(".band .fixture > .side")
     assert sides.nth(0).bounding_box()["x"] < sides.nth(1).bounding_box()["x"]
     assert not errors
@@ -1689,33 +1690,15 @@ def test_the_persona_switches_in_one_tap_from_the_more_sheet(browser, site):  # 
     ctx.close()
 
 
-@pytest.mark.parametrize(("club", "said", "ours"), [
-    ("LON", "London Athletic have the extra man", "You have the extra man"),
-    ("LON", "In minute 43, London Athletic had 7 players against 1 player around the ball.",
-     "In minute 43, you had 7 players against 1 player around the ball."),
-    ("LON", "London Athletic has the ball.", "You have the ball."),
-    ("LIS", "A London Athletic player played a pass that took 7 Lisbon Esportes players out of the game.",
-     "A London Athletic player played a pass that took 7 of your players out of the game."),
-    ("LIS", "In minute 63, a Lisbon Esportes player broke London Athletic's lines.",
-     "In minute 63, one of your players broke London Athletic's lines."),
-    ("LON", "Lisbon broke London's lines.", "Lisbon broke your lines."),
-])
-def test_a_moment_is_said_from_the_fan_s_side_and_never_changes_a_number(browser, site, club, said, ours):  # noqa: F811
-    ctx, page, errors = persona_phone(browser, site, {"club": club, "mode": "casual", "focus": "moments"})
-    assert page.evaluate("t => window.ninetyPhone.ours(t)", said) == ours
-    assert not errors
-    ctx.close()
-
-
 def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_cards(browser, site):  # noqa: F811
     """Coordinator, Oct 26: two analysts must not look alike. Tactics: the latest overload, line break
     and shape as large cards above the pitch. Players: the players most in the game, named by the ID
     feed, above the pitch; a tap opens his card."""
     ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "tactics"})
-    page.wait_for_selector("#tactics-strip .focus-card")
+    page.wait_for_selector("#tactics-strip .focus-row")
     assert page.is_hidden("#players-strip")
     assert top(page, "#tactics-strip") < top(page, ".pitch-card")
-    kinds = page.locator("#tactics-strip .focus-kind").all_inner_texts()
+    kinds = page.locator("#tactics-strip .focus-label").all_inner_texts()
     assert len({k.split(" · ")[0] for k in kinds}) == len(kinds) <= 3, kinds  # one card a kind
     assert not errors
     ctx.close()
@@ -1724,13 +1707,18 @@ def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_ca
             "player_stats": [{"id": "a-t3", "involvements": 12}, {"id": "h-t4", "involvements": 7}]}
     fan = {"club": "LON", "mode": "analyst", "focus": "players"}
     ctx, page, errors = persona_phone(browser, site, fan, more=more)
-    page.wait_for_selector("#players-strip .player-card")
+    page.wait_for_selector("#players-strip .player-row")
     assert page.is_hidden("#tactics-strip")
     assert top(page, "#players-strip") < top(page, ".pitch-card")
-    first = page.locator("#players-strip .player-card").first
-    assert first.locator("h3").inner_text() == "Tac Named"
-    assert first.locator(".focus-kind").inner_text() == "#9 · Striker"
-    assert first.locator(".focus-num").inner_text() == "12 involvements"
+    first = page.locator("#players-strip .player-row").first
+    assert first.locator(".focus-text").inner_text() == "Tac Named"
+    assert first.locator(".shirt-dot").inner_text() == "9"
+    assert first.locator(".focus-label").inner_text() == "Striker · 12 involvements"
+    # Apple Sports' restraint (Kian, Oct 26): 17 pt regular rows, 13 pt labels, no coloured borders.
+    style = first.evaluate("""(b) => { const t = getComputedStyle(b.querySelector('.focus-text'));
+      const l = getComputedStyle(b.querySelector('.focus-label'));
+      return [t.fontSize, t.fontWeight, l.fontSize]; }""")
+    assert style == ["17px", "400", "13px"], style
     first.click()
     page.wait_for_selector("#player:not([hidden])")
     assert page.inner_text("#player-title").startswith("Tac Named, #9 · Striker")
@@ -1754,5 +1742,21 @@ def test_a_team_stats_row_on_fewer_than_ten_events_is_not_drawn(browser, site): 
     rows = "[...document.querySelectorAll('#stat-rows .stat-row')]"
     labels = page.evaluate(f"{rows}.map((l) => l.getAttribute('aria-label'))")
     assert not [x for x in labels if x.startswith(("Shots", "Passes", "Pass accuracy"))], labels
+    assert not errors
+    ctx.close()
+
+
+def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser, site):  # noqa: F811
+    """Kian, Oct 26: "Rondell 38′" where the player-ID feed names the scorer (#389's line-up of
+    broadcast tracks), the club otherwise; never a label made from the tracker's id."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 2, 0, team="home")]
+    goals = [{"t": 61.2, "team": "home", "event": "e2"}]
+    more = {"lineup": [{"id": "h8", "name": "Zane Rondell", "number": 2, "position": "Right-back",
+                        "confident": True, "source": "id_feed"}]}
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, goals, at="63", more=more)
+    page.wait_for_function("document.querySelector('#score-home').textContent === '2'")
+    lines = page.locator("#goals-home .side-goal").all_inner_texts()
+    assert lines == ["Rondell 2′", "Crowmere 2′"], lines  # e2's scorer h8 by name; the other by club
     assert not errors
     ctx.close()
