@@ -64,8 +64,9 @@ def into_net(rest=(106.0, 35.0), speed=25.0):
     return at
 
 
-def run(rows, context=None):
-    events, summary = ev.detect(rows, context_rows=context)
+def run(rows, context=None, saves=True):
+    # The rules are tested with saves written; the live path does not write them (lesson 258).
+    events, summary = ev.detect(rows, context_rows=context, saves=saves)
     shots = [e for e in events if e["type"] == "shot"]
     goals = [e for e in events if e["type"] == "goal"]
     return shots, goals, [e["type"] for e in events], summary
@@ -417,3 +418,22 @@ def test_a_kick_off_by_the_scorers_side_adds_no_evidence_to_a_goal_seen_in_the_n
     assert goals[0]["confidence"] == round(1 - (1 - 0.8) * (1 - 0.8), 3)
     _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=True, taker=BLUE))
     assert goals[0]["confidence"] == 0.8  # the line alone
+
+
+# Lesson 258: saves do not work from video yet, so the live path never says a shot was saved.
+
+
+def test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome():
+    assert ev.SAVES_AIR is False
+    scene = shot_scene(keeper_catch(), keeper=(103.0, 34.0))
+    assert [s["outcome"] for s in run(scene)[0]] == ["on_target"]  # the premise: the rule sees a save
+    shots, goals, _, summary = run(scene, saves=False)
+    assert goals == [] and [s["outcome"] for s in shots] == [None]
+    assert summary["shot_outcomes"]["on_target"] == 0
+
+
+def test_goals_and_the_other_outcomes_are_written_as_before():
+    assert [g["type"] for g in run(shot_scene(into_net()), saves=False)[1]] == ["goal"]
+    shots = run(shot_scene(keeper_catch((97.0, 34.0)), keeper=(103.0, 34.0), others=[(97.0, 34.0)]),
+                saves=False)[0]
+    assert [s["outcome"] for s in shots] == ["blocked"]

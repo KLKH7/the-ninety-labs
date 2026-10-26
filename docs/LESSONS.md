@@ -3083,3 +3083,16 @@ short and actionable. This file is public: no research sources, product names or
   everything" is noticed.
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 258. A detection that does not work is not shown as fact, even where its measurement says so
+- **What happened:** saves from video were measured not to work (2 of 49 on the shot-outcome set's
+  test split; a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him), and the
+  docs said so. But the live path still wrote a detected save as `outcome: on_target`, and the
+  highlights reel (a save moment), the scoring facts (a save credited to a club), the shot map and the
+  phone ("Shot saved, from ...") showed it as fact.
+- **Rule:** when a measurement says a detection does not work, the live path stops emitting it at the
+  source, so no screen or sentence can show it; the rule stays reachable for measuring only, behind
+  an explicit switch.
+- **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save).
+
