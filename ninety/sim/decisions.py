@@ -110,6 +110,7 @@ CLEAR_IN_FROM_LINE_M = 20.0
 # (MAX_PASS_M, the end of the LOFT table).
 CLEAR_MATE_FROM_M = 20.0
 MAX_CLEAR_M = MAX_PASS_M
+CLEAR_MATES = 3  # design: and only at the furthest up of them (each aim is a race to weigh)
 
 
 # D7: what having the ball is worth by area, measured from the engine's own matches
@@ -619,9 +620,10 @@ def _reach(bx: float, by: float, bz: float, t: float, react: float, box_x: float
     high he reaches at all, by the engine's own rules (offball.may_handle, offball.reach_for): a
     foot, or, for the opposing keeper (his box at `box_x`), his hands in his box, his save begun
     when he reacted (rising from then, or UP_AFTER_CONTACT_S if later). The pass is not his
-    release, nor a pass from his own side, so only his box decides."""
+    release, nor a pass from his own side, so only his box decides. Demo engine v2 (V3): he dives
+    only at shots, so at a pass his hands have his standing reach, as the engine gives him."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, t - react, bz, t - max(react, offball.UP_AFTER_CONTACT_S))
+    return offball.reach_for(hands, 0.0, bz, t - max(react, offball.UP_AFTER_CONTACT_S))
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
@@ -1036,7 +1038,7 @@ def clear_value(scene: Scene, tx: float, ty: float, contest: float | None = None
         # keeps it as often as the pass estimate's race says (softened by LANE_MARGIN_S), and it is
         # worth what having it, or losing it, there is worth. Once every clearance was an even
         # contest wherever it landed, so he aimed at an empty spot 45 m up the pitch.
-        if ours[0] == math.inf and theirs[0] == math.inf:  # nobody before it stops: a loose ball
+        if ours[0] == math.inf and theirs[0] == math.inf:  # nobody before it stops: loose (design: even)
             p, at = 0.5, len(points) - 1
         else:
             p = sigmoid((theirs[0] - ours[0]) / LANE_MARGIN_S) if theirs[0] < math.inf else 1.0
@@ -1126,10 +1128,9 @@ def options(scene: Scene) -> list[Option]:
         # team-mate he sees well up the pitch (within kicking range, MAX_CLEAR_M): each valued by the
         # race where it comes down (clear_value), so he aims where his side can win it.
         aims = [(tx, ty)]
-        for _, mx, my, *_ in scene.mates:
-            ahead = (mx - scene.x) * attack(scene.goal_x)
-            if CLEAR_MATE_FROM_M <= ahead and math.hypot(mx - scene.x, my - scene.y) <= MAX_CLEAR_M:
-                aims.append((mx, my))
+        up = sorted(((mx - scene.x) * attack(scene.goal_x), mx, my) for _, mx, my, *_ in scene.mates
+                    if math.hypot(mx - scene.x, my - scene.y) <= MAX_CLEAR_M)
+        aims += [(mx, my) for ahead, mx, my in up[-CLEAR_MATES:] if ahead >= CLEAR_MATE_FROM_M]
         best = max(((clear_value(scene, ax, ay), ax, ay) for ax, ay in aims), key=lambda c: c[0])
         out.append(Option("clear", best[0], (best[1], best[2]), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less

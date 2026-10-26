@@ -909,9 +909,10 @@ class Engine:
 
     def reach(self, p: Player, x: float, y: float, z: float, at: float | None = None) -> tuple[float, float]:
         """How far (across the ground) this player can reach a ball at (x, y), height z, at time
-        `at`, and how high he can reach at all (offball.reach_for). His arms stretch from the moment
-        he reacts to the last touch, whether or not his body launches; a deflection does not
-        un-stretch a dive already under way, nor pull him back out of his jump (rise_from)."""
+        `at`, and how high he can reach at all (offball.reach_for). Demo engine v2 (V3): on his feet
+        a keeper's hands reach KEEPER_STAND_REACH_M; only a dive stretches them, from when it began
+        to be prepared (stretch_from); a deflection does not un-stretch a dive already under way, nor
+        pull him back out of his jump (rise_from)."""
         hands = self.hands(p, x, y)
         if not hands:
             return offball.reach_for(False, 0.0)
@@ -1621,13 +1622,7 @@ class Engine:
             worse = self.touch_worse(p, rel, foot)
             absorb /= worse
         if kind == "touch" and hands:  # a keeper holds what his hands can, or it beats them
-            # Demo engine v2 (A4, P11; *design*): both hands get behind a ball within his standing
-            # reach; beyond it, stretched out in a dive, less and less of them does, and at the
-            # dive's full stretch (fingertips) he holds nothing: it comes off his hands (a parry).
-            off = math.hypot(cx - px, cy - py) - offball.KEEPER_STAND_REACH_M
-            if off > 0:
-                absorb *= max(0.0, 1.0 - off / offball.KEEPER_DIVE_EXTRA_M)
-            controls = rel <= absorb
+            controls = rel <= self.hold_mps(absorb, math.hypot(cx - px, cy - py))
         elif kind == "touch" and not firsttouch.beaten(rel, absorb, foot):
             sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb), cz if aerial else 0.0, worse)
             controls = firsttouch.at_feet(math.hypot(sent[0] - p.vx, sent[1] - p.vy))
@@ -1677,6 +1672,15 @@ class Engine:
         if self.went_out(start) or self.ball != flown or depth >= 2:
             return
         self.contact(start, DT - left, depth + 1, p.id)
+
+    @staticmethod
+    def hold_mps(hands: float, across: float) -> float:
+        """Demo engine v2 (V4, A4, P11; *design*): the fastest ball a keeper holds when his hands meet
+        it `across` metres from his body's centre: both hands get behind a ball within his standing
+        reach (his hands' full hold); beyond it, stretched out in a dive, less and less of them does,
+        and at the dive's full stretch (fingertips) he holds nothing: it comes off his palms."""
+        off = across - offball.KEEPER_STAND_REACH_M
+        return hands if off <= 0 else hands * max(0.0, 1.0 - off / offball.KEEPER_DIVE_EXTRA_M)
 
     def touch_aim(self, p: Player, bx: float, by: float) -> float:
         """Where a player sends a cushioned touch (A4): toward the goal he attacks, the way he wants
@@ -3107,9 +3111,7 @@ class Engine:
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
             if arrival:
                 when, cross, height = arrival
-                # only as far as his body must go beyond what his hands will reach, at that height,
-                # by then (P11 envelope: his arms began to stretch when he reacted, whenever the dive
-                # itself starts); no dive at one going over the top of it
+                # No dive at one going over the top of his reach.
                 # Demo engine v2 (P11, P15): on his feet his hands reach KEEPER_STAND_REACH_M; only a
                 # dive stretches them further. Beyond that reach, his body goes as far as the ball is
                 # beyond it (at most KEEPER_DIVE_TRAVEL_M), and the dive's stretch takes his hands on.

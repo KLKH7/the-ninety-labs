@@ -101,3 +101,50 @@ def test_a_clearance_is_aimed_where_his_side_can_win_it():
     assert math.hypot(clear.target[0] - 45.0, clear.target[1] - 50.0) < 1e-6
     default = D.clear_value(s, s.x + D.CLEAR_AHEAD_M, D.CLEAR_IN_FROM_LINE_M)
     assert clear.value > default
+
+
+def test_the_with_ball_share_is_the_cited_figure():
+    # V1: Preissler et al. 2023, 20.37 against 22.39 km/h over 20 m.
+    assert D.WITH_BALL_SHARE == 20.37 / 22.39
+    assert 6.0 < D.carry_speed() < 6.5  # derived, about 6.2 m/s for an average fresh body
+
+
+def test_the_engine_tells_the_carrier_his_own_carrying_pace_and_velocity():
+    # V1: the carrier judges a carry by his own body now (P10) and the speed he has, as he executes it.
+    e = Engine(1)
+    p = e.by_id["h7"]
+    p.vx, p.vy = 3.0, -1.0
+    e.possessor = p.id
+    e.ball = (p.x + 0.3, p.y, 0.0, 0.0, 0.0, 0.0)
+    s = e.scene_for(p)
+    assert s.carry_mps == D.carry_speed(p.physique.top_speed())
+    assert s.velocity == (3.0, -1.0)
+
+
+def test_a_keeper_holds_with_both_hands_within_his_standing_reach_and_less_at_full_stretch():
+    # V4: his hands' full hold within standing reach; half of it halfway into the dive's extra
+    # stretch; nothing at full stretch.
+    full, stand, extra = 25.0, offball.KEEPER_STAND_REACH_M, offball.KEEPER_DIVE_EXTRA_M
+    assert Engine.hold_mps(full, 0.3) == full and Engine.hold_mps(full, stand) == full
+    assert abs(Engine.hold_mps(full, stand + extra / 2) - full / 2) < 1e-9
+    assert Engine.hold_mps(full, stand + extra) == 0.0
+
+
+def test_one_look_holds_one_misjudgement_per_carry_direction():
+    # V2: carries 0.4 rad apart are told apart by his held misjudgement (D4), not drawn as one.
+    s = scene(x=70.0, y=34.0)
+    keys = {D.taste_key(s, o) for o in D.options(s) if o.kind == "dribble"}
+    assert len(keys) == 7
+
+
+def test_a_shot_too_fast_to_hold_comes_back_off_his_palms_in_play():
+    # V4 through the contact rule: a 35 m/s shot from 19 m crossing 0.9 m to his side at waist height (his
+    # hands, within standing reach, hold at most 28 m/s) comes back off his palms, away from goal.
+    e = Engine(1)
+    k = _shot(e, (85.0, 34.9, 1.3, 35.0, 0.0, 2.0))
+    for _ in range(int(1.0 / DT)):
+        e.step()
+        if e.last_touch == k.id:
+            break
+    assert e.last_touch == k.id and e.held_by != k.id
+    assert e.ball[3] < 0  # back up the pitch, not on toward his goal

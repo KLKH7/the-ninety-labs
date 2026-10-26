@@ -1120,7 +1120,7 @@ def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == stretched
 
 
-def test_a_late_dive_counts_the_stretch_his_arms_already_have():
+def test_a_late_dive_still_stretches_his_arms_from_his_reaction_and_goes_as_far_as_beyond_standing_reach():
     from ninety.sim import offball
     e = Engine(1)
     k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: his arms are still stretching
@@ -1381,13 +1381,15 @@ def test_the_engine_the_dive_and_the_shooter_share_one_envelope():
     e.kicked = {"type": "shot", "team": "home"}
     e.kicked_at = e.t
     e.reaction = lambda p: react
-    # demo engine v2: a dive stretches him (on his feet he has his standing reach); diving, the
-    # engine's reach is the envelope the passer and the shooter judge by
-    e.dive = (k.id, e.t, k.y, 0.0, e.kicked_at + react, 0.0)
+    # demo engine v2 (V3): he dives only at shots. At a pass he is on his feet, as the passer judges
+    # him; at a shot the shooter judges his dive, as the engine has it once he dives.
     for at, z in ((0.5, 0.2), (0.6, 1.0), (0.7, 2.3), (1.2, 2.6)):
-        engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
+        e.dive = None
+        standing = e.reach(k, 104.0, 34.0, z, at=e.t + at)
         passer = decisions._reach(104.0, 34.0, z, at, react, 105.0)
-        assert engine == pytest.approx(passer)
+        assert standing == pytest.approx(passer)
+        e.dive = (k.id, e.t, k.y, 0.0, e.kicked_at + react, 0.0)
+        engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
         shooter = offball.keeper_reach_m(at, react, z)
         across = engine[0] if z <= engine[1] else 0.0
         launched = offball.KEEPER_DIVE_TRAVEL_M * offball.dive_progress(at - react)
