@@ -165,3 +165,71 @@ def test_the_offline_writer_sent_back_for_a_speed_says_it_again_without_it():
     again = json.loads(asyncio.run(models.tactician(json.dumps(
         moment | {"rejected": {"reasons": [f"implausible speed: 100 km/h ...: {WITHOUT_SPEED}"]}}))))["text"]
     assert "km/h" in first and "km/h" not in again
+
+
+# ---------------------------------------------------------------- the independent review's cases
+
+
+def test_a_shot_is_not_skipped_for_a_goal_that_will_not_be_said():
+    # The goal event is under the confidence gate: the shot that went in is said as the goal instead.
+    events = [ev("s1", 100.0, "shot", "h-t9", outcome="goal", x=95.0),
+              ev("g1", 100.4, "goal", x=95.0, conf=0.3)]
+    assert [w for _, w in said(events)][0].startswith("Goal! ")
+    assert called(events) == ["Goal! London score!"]
+
+
+def test_a_goal_long_after_its_shot_is_said_once_and_a_goal_after_more_play_is_not_the_shots():
+    late = [ev("s1", 100.0, "shot", "h-t9", outcome="goal", x=95.0), ev("g1", 103.5, "goal", x=95.0)]
+    assert [e for e, _ in said(late)] == ["g1"] and called(late) == ["Goal! London score!"]
+    between = [late[0], ev("p1", 101.0, "pass", "h-t2", "h-t3", "success"), late[1]]
+    assert "s1" in describe.scored_by(late) and describe.scored_by(between) == set()
+
+
+def test_a_spell_ends_at_any_other_event_or_a_long_gap():
+    passes = chain(6)
+    shot = ev("x1", passes[2]["t"] + 0.5, "shot", "h-t3", outcome="off_target")
+    assert spells.spells([*passes, shot]) == []  # 3 passes, then 3: neither is a spell
+    gap = [p | {"t": p["t"] + (spells.MAX_GAP_S + 1 if i >= 3 else 0)} for i, p in enumerate(passes)]
+    assert spells.spells(gap) == []
+
+
+def test_a_spell_names_a_side_only_when_every_pass_is_that_sides():
+    mixed = chain(5)
+    mixed[2] = mixed[2] | {"team": "away"}
+    assert spells.versions(mixed, "in the middle")[0] == "5 passes in a row, in the middle."
+    assert spells.versions(chain(5), "in the middle")[0] == "5 passes in a row for home, in the middle."
+
+
+def test_two_interceptions_or_two_corners_in_half_a_minute_are_both_said():
+    wins = [ev("i1", 10.0, "interception", "h-t1", side=0.5),
+            ev("i2", 25.0, "interception", "h-t7", side=0.5)]
+    assert len(said(wins)) == 2
+    corners = [ev("c1", 10.0, "set_piece", restart="corner"),
+               ev("c2", 30.0, "set_piece", restart="corner")]
+    assert len(said(corners)) == 2 and called(corners) == ["Corner to London.", "Corner to London."]
+
+
+def test_an_out_of_play_that_is_not_called_does_not_silence_the_next_one():
+    events = [ev("o1", 10.0, "out_of_play", source="truth"), ev("o2", 20.0, "out_of_play")]
+    assert called(events) == [commentary.OUT_SAID[0]]
+    # Given out of order, the calls are still made in time order.
+    backwards = [ev("o2", 50.0, "out_of_play"), ev("o1", 10.0, "out_of_play")]
+    assert called(backwards) == list(commentary.OUT_SAID[:2])
+
+
+def test_the_voice_says_an_before_every_number_said_with_a_vowel():
+    for n, art in [("8", "an"), ("8.5", "an"), ("11", "an"), ("18", "an"), ("80", "an"), ("85", "an"),
+                   ("800", "an"), ("8000", "an"), ("11000", "an"), ("18000", "an"), ("12", "a"),
+                   ("1", "a"), ("100", "a"), ("110", "a"), ("1800", "a"), ("90", "a")]:
+        assert describe._article(n) == art, n
+
+
+def test_a_shot_that_went_in_is_placed_as_a_goal():
+    lines, _ = describe.candidates([ev("s1", 100.0, "shot", "h-t9", outcome="goal", x=95.0)], [])
+    assert [line.priority for line in lines] == [describe.PRIORITY["goal"]]
+
+
+def test_a_shot_graphic_never_shows_visions_speed_until_it_is_measured():
+    shot = ev("s1", 100.0, "shot", "h-t9", outcome="on_target", ball_speed_kmh=100.0)
+    assert "km/h" not in cues._text(shot, "analyst")
+    assert "100.0 km/h" in cues._text(shot | {"confidence": None}, "analyst")

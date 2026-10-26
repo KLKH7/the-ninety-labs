@@ -49,9 +49,10 @@ PRIORITY = {"goal": 0, "shot": 1, "restart": 2, "insight": 3, "spell": 4}
 MAX_LAG_S = describe.MAX_LAG_S  # the Describer's limit: a line said late is about the wrong play
 GAP_S = 1.0  # design: the silence a commentator leaves between calls, so the crowd is heard
 SHOT_SAID = {"on_target": "on target", "off_target": "wide", "blocked": "blocked"}
-# Design: the same restart call is not made twice within this long (two out-of-play detections of one
-# stoppage, a few seconds apart), and the ball going out is said in turn in these plain words, all
-# stating only that it went out, so the track does not repeat one sentence.
+# Design: the ball going out is not called twice within this long (two out-of-play detections a few
+# seconds apart: 8 of the demo's 24, misreads of one stoppage), and is said in turn in these
+# plain words, all stating only that it went out, so the track does not repeat one sentence. Other
+# restarts are each called: two corners are two facts.
 REPEAT_S = 30.0
 OUT_SAID = ("It's gone out of play.", "Out of play.", "That's out.", "Out it goes.")
 # A detected set piece's restart (schemas/match_event.schema.json `restart`), with its taker's side
@@ -152,29 +153,29 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
 
     out: list[Call] = []
     scored = describe.scored_by(events)  # a shot whose goal event follows: the goal is the call
-    last_said: dict[str, float] = {}
+    last_out = float("-inf")  # when the ball was last called out
     outs = 0
     for event in sorted(events, key=lambda e: (e["t"], e["id"])):
         written = None if event["id"] in scored else event_versions(event)
         if written is None:
             continue
-        if written[0] == "restart":
-            if event["t"] - last_said.get(event["type"] + written[1][0], float("-inf")) < REPEAT_S:
-                refused.append({"evidence": [event["id"]], "text": written[1][0],
-                                "reason": f"the same call within {REPEAT_S:g} s"})
-                continue
-            last_said[event["type"] + written[1][0]] = event["t"]
-            if event["type"] == "out_of_play":
-                written = ("restart", [OUT_SAID[outs % len(OUT_SAID)]])
-                outs += 1
         if event.get("source") != "vision" or event.get("confidence") is None:
             reason = "not a vision detection with a confidence: the commentary calls only those"
             refused.append({"evidence": [event["id"]], "text": None, "reason": reason})
             continue
+        if event["type"] == "out_of_play" and event["t"] - last_out < REPEAT_S:
+            # Two out-of-play detections within half a minute: the ball going out is called once.
+            refused.append({"evidence": [event["id"]], "text": written[1][0],
+                            "reason": f"the ball was called out within {REPEAT_S:g} s"})
+            continue
+        if event["type"] == "out_of_play":
+            written = ("restart", [OUT_SAID[outs % len(OUT_SAID)]])
         kind, versions = written
         versions = checked(versions, [event["id"]])
         if versions:
             out.append(Call(event["id"], event["t"], kind, [event["id"]], versions, _side(event) is not None))
+            if event["type"] == "out_of_play":  # counted only when called
+                last_out, outs = event["t"], outs + 1
     for spell in spells.spells(events):
         ids = [e["id"] for e in spell]
         last = spell[-1]

@@ -16,7 +16,7 @@ import re
 from collections.abc import Iterable
 
 TRACK_ID = re.compile(r"\b([ha])-t(\d+)\b")
-SENTENCE_START = re.compile(r"(^|[.!?]\s+)([a-z])")
+SENTENCE_START = re.compile(r"(^['\"]?|[.!?]\s+['\"]?)([a-z])")  # a quoted draft starts a sentence too
 
 
 def render(text: str, sure: Iterable[str], clubs: dict[str, str] | None = None) -> str:

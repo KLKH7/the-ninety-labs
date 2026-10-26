@@ -23,6 +23,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from ninety.match import detected
+
 # A number standing on its own: not part of an id like "e00042" or a player like "h7". A
 # sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
 # 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
@@ -246,13 +248,13 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
 
-# The plausibility gate: a ball speed a claim states must be one a kick can give. A shot (or any
-# strike) is held to P3's 40 m/s, the fastest recorded shots; a pass to the fastest aimed kick: a
-# demand for accuracy brings a kick's ball speed to about 85% of its maximum (Andersen and Dørge
-# 2011, GROUNDING P19), so 85% of P3. A faster reading is vision's, not the ball's (a ground
-# projection of a ball in the air, or a misread frame), and is refused, never rounded down.
-MAX_STRIKE_KMH = 40.0 * 3.6
-MAX_PASS_KMH = round(0.85 * MAX_STRIKE_KMH, 1)
+# The plausibility gate: a ball speed a claim states must be one the ball can reach in this world:
+# GROUNDING P3's bound, the one the live path already drops a faster detection's speed at
+# (ninety/match/detected.py, MAX_BALL_KMH; a design bound for our engine, not a population limit).
+# A faster reading is vision's, not the ball's (a ground projection of a ball in the air, or a
+# misread frame), and is refused, never rounded down. No bound below it is sourced for a pass
+# (docs/LESSONS.md, lesson 262).
+MAX_BALL_KMH = detected.MAX_BALL_KMH
 # Vision's ball speed has no measured error yet (docs/EVALUATION.md: speed error planned; R3's
 # measurement is #331). Until it is on main, a claim stating a detected event's speed is held, as a
 # claim on an unsure detection is: the speed may be right, but nothing vouches for it. The flag
@@ -315,31 +317,21 @@ def sayable_speed(event: dict) -> bool:
 
 
 def plausible_speed(event: dict) -> bool:
-    """Whether the event's ball speed is one a kick of its kind can give (MAX_PASS_KMH, MAX_STRIKE_KMH):
-    a graphic or a line states the speed only then, and says the rest without it."""
+    """Whether the event's ball speed is one the ball can reach (MAX_BALL_KMH): a graphic or a line
+    states the speed only then, and says the rest without it."""
     speed = event.get("ball_speed_kmh")
-    if speed is None:
-        return False
-    return float(speed) <= (MAX_PASS_KMH if event.get("type") == "pass" else MAX_STRIKE_KMH)
+    return speed is not None and float(speed) <= MAX_BALL_KMH
 
 
 def _implausible_speed(value: float, evidence: list[dict]) -> str | None:
-    """Why a stated ball speed no kick could give is refused: every cited event with that speed is
-    beyond its kind's bound (a pass's, else a strike's). None when one of them is possible."""
-    beyond = []
-    for event in evidence:
-        speed = event.get("ball_speed_kmh")
-        if speed is None or float(speed) != value:
-            continue
-        bound = MAX_PASS_KMH if event.get("type") == "pass" else MAX_STRIKE_KMH
-        if float(speed) <= bound:
-            return None
-        beyond.append((event.get("type") or "event", bound))
-    if not beyond:
+    """Why a stated ball speed no ball can reach is refused: every cited event with that speed is
+    beyond MAX_BALL_KMH. None when one of them is possible."""
+    with_it = [e for e in evidence
+               if e.get("ball_speed_kmh") is not None and float(e["ball_speed_kmh"]) == value]
+    if not with_it or any(plausible_speed(e) for e in with_it):
         return None
-    kind, bound = beyond[0]
-    return (f"implausible speed: {value:g} km/h for a {kind} is faster than any {kind} can be kicked "
-            f"(at most {bound:g} km/h): {WITHOUT_SPEED}")
+    return (f"implausible speed: {value:g} km/h is faster than the ball can travel (at most "
+            f"{MAX_BALL_KMH:g} km/h): {WITHOUT_SPEED}")
 
 
 def _number_field(text: str, start: int) -> str | None:
