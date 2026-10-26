@@ -120,3 +120,29 @@ def test_the_served_clips_come_from_the_deployments_packages(tmp_path):
     done = subprocess.run([sys.executable, "-c", listed], env=plain, capture_output=True, text=True,
                           timeout=120)
     assert done.stdout.strip() == "('seed900001',)", done.stderr[-1000:]
+
+
+def test_a_served_clip_name_never_leaves_the_served_dir_or_shadows_a_simulator_match(tmp_path, monkeypatch):
+    import shutil
+    from pathlib import Path
+
+    fixtures = Path(__file__).resolve().parent / "fixtures"
+
+    def package(folder):
+        folder.mkdir(parents=True)
+        for src, name in (("tracked-seed900001.json", "tracked.json"),
+                          ("detected-seed900001.jsonl", "detected.jsonl"),
+                          ("fixture-seed900001.json", "clip.json")):
+            shutil.copy(fixtures / src, folder / name)
+
+    served = tmp_path / "served"
+    package(served / "match-a")
+    package(served / "seed7")  # named like a simulator match: ignored
+    package(tmp_path / "outside")
+    (served / "linked").symlink_to(tmp_path / "outside", target_is_directory=True)  # points out: ignored
+    monkeypatch.setattr(tracking, "SERVED_DIR", str(served))
+    assert tracking.served_clips(str(served)) == ("match-a",)
+    assert tracking.package("match-a") == served / "match-a"
+    outside = str(tmp_path / "outside")
+    for hostile in ("../outside", outside, "match-a/..", "match-a/../..", "seed7", "linked", "."):
+        assert tracking.package(hostile) is None, hostile

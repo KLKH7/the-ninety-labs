@@ -39,17 +39,23 @@ PACKAGE = ("tracked.json", "detected.jsonl", "clip.json")  # what a served clip 
 
 
 def served_clips(root: str = SERVED_DIR) -> tuple[str, ...]:
-    """The clips with a complete package under `root`, by folder name; none when it is not set."""
+    """The clips with a complete package under `root`, by folder name; none when it is not set.
+    A folder named like a simulator match (seed7, seed900001) is not served: it would shadow it."""
     if not root or not Path(root).is_dir():
         return ()
+    base = Path(root).resolve()
     return tuple(sorted(d.name for d in Path(root).iterdir()
-                        if d.is_dir() and all((d / name).is_file() for name in PACKAGE)))
+                        if d.is_dir() and not re.fullmatch(r"seed\d+", d.name)
+                        and d.resolve().parent == base  # a symlink out of the served dir is not served
+                        and all((d / name).is_file() for name in PACKAGE)))
 
 
 def package(clip: str) -> Path | None:
-    """A served clip's package folder, or None for a clip not served from one."""
-    folder = Path(SERVED_DIR) / clip if SERVED_DIR else None
-    return folder if folder is not None and all((folder / n).is_file() for n in PACKAGE) else None
+    """A served clip's package folder, or None for a clip not served from one: only a plain folder
+    name that `served_clips` lists, so '..', a path or an absolute name never leaves the served dir."""
+    if not SERVED_DIR or clip not in served_clips(SERVED_DIR):
+        return None
+    return Path(SERVED_DIR) / clip
 
 
 # Clips the companion serves from tracked positions: the M1 clip the laptop plays
