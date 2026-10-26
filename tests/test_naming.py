@@ -160,7 +160,10 @@ def test_a_slot_needs_a_strict_majority_of_a_window():
 def test_the_extra_track_dropped_is_the_one_furthest_from_any_slot():
     fr = frames(extra=True)
     for f in fr:
-        next(p for p in f["players"] if p["id"] == "h-t99")["x"] = 104.0  # a stray far upfield
+        stray = next(p for p in f["players"] if p["id"] == "h-t99")
+        stray["x"] = 104.0  # a stray far upfield, listed first so it is not dropped for its place
+        f["players"].remove(stray)
+        f["players"].insert(0, stray)
     voted = naming.votes(fr, "home", naming.roles.places(frames(), "home"))
     assert all("h-t99" not in got for _, _, got in voted)
 
@@ -176,3 +179,17 @@ def test_events_cross_the_join_only_on_the_same_side_and_surely_without_a_gate()
 def test_keep_apart_treats_touching_spans_as_overlapping_and_ties_keep_the_first():
     assert naming.keep_apart([("a", 0.0, 10.0, 5), ("b", 10.0, 20.0, 5)]) in ({"a"}, {"b"})
     assert naming.keep_apart([("a", 0.0, 10.0, 5), ("b", 5.0, 20.0, 5)]) == {"a"}
+
+
+def test_of_two_overlapping_tracks_that_won_one_slot_the_heavier_keeps_the_name():
+    fr = frames(seconds=30.0)
+    for i, f in enumerate(fr):
+        p = next(p for p in f["players"] if p["id"] == "h-t10")
+        if i >= 350:  # the striker's second track, h-t40, from 14 s; it starts at 9 s as a duplicate
+            p["id"] = "h-t40"
+        elif i >= 225:
+            f["players"].append({**p, "id": "h-t40", "x": p["x"] - 0.2})
+    people = naming.people(fr, FX, OPEN)
+    striker = next(s.name for s in FX.sheet("home") if s.role == "ST")
+    assert people["h-t40"]["name"] == striker  # it won windows 1 and 2, for 21 s
+    assert people["h-t10"]["name"] is None  # it won window 0, and overlaps h-t40 from 9 s to 14 s
