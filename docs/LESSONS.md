@@ -3188,3 +3188,17 @@ short and actionable. This file is public: no research sources, product names or
   frames in the shape the real files have.
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 265. A rule that tests a held ball by its place on the ground can never fire for a ball in the hands
+- **What happened:** the save rule read a catch as the ball's path turning within `CONTROL_M` of the
+  keeper, or as his spell. A ball in his hands is off the grass; projected onto it through the camera
+  it lands 2 to 7 m behind him, so neither test could fire on a real catch, and saves were 0 of 50 on
+  validation and 2 of 49 on test. The planted scenes passed because they put the caught ball at his
+  feet, where no real catch is drawn.
+- **Rule:** a planted scene for a rule about a ball off the ground places it where the camera would:
+  its ground point displaced by its height times the camera's slope, and its box drawn where the
+  picture has it. A rule about who holds the ball in the air is tested in pixels (the ball's box in
+  the player's), which needs no height.
+- **Check:** `uv run pytest tests/test_vision_outcomes.py -k "held_in_the_keepers_box"`: the caught
+  ball lands 5 m behind the keeper and is drawn inside his box; the rule finds the save, and with
+  `HOLD_FRAMES` raised past the hold it does not.

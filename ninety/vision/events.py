@@ -378,10 +378,12 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
-# Saves do not work from video yet: on the shot-outcome set's test split 2 of 49 were found
-# (docs/eval/shot-outcomes/RESULT.md; a ball in the keeper's hands, placed on the ground, lands 2 to
-# 7 m from him). So the live path does not say a shot was saved: a detected save is written as a
-# shot with no outcome (lesson 258). `saves=True` keeps it, for measuring the rule only.
+# Saves do not work well enough from video yet: on the shot-outcome set's test split 2 of 49 were
+# found (docs/eval/shot-outcomes/RESULT.md; a ball in the keeper's hands, placed on the ground, lands
+# 2 to 7 m from him). The ball held in his box (amendment 7, `held_save`) finds 19 of 50 on validation
+# with 7 false, under its 0.60 bar (docs/eval/shot-outcomes/saves-pixel-result.md). So the live path
+# does not say a shot was saved: a detected save is written as a shot with no outcome (lesson 258).
+# `saves=True` keeps it, for measuring the rule only.
 SAVES_AIR = False
 
 

@@ -51,7 +51,8 @@ A save is not seen. The ball in the keeper's hands is above the grass, and place
 through the camera it lands 2 to 7 m from his feet, behind and away from the camera. So the catch
 is not a turn of the ball at the keeper, and about 25 of the 50 validation saves read as the ball
 going out behind the line. The fix needs the ball's height (its flight, open work) or a test in
-pixels (the ball drawn over the keeper's box); neither is in this commit.
+pixels (the ball drawn over the keeper's box); neither is in this commit. The pixel test was built and read once on validation afterwards
+(amendment 7): 19 of 50, 7 false, under its bar; saves stay off ([saves-pixel-result.md](saves-pixel-result.md)).
 
 ## Known limits
 
