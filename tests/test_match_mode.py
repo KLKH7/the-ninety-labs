@@ -716,6 +716,14 @@ def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site)
     ctx.route(re.compile(r".*/phone/\?.*"), lambda route: route.fulfill(content_type="text/html", body=(
         "<script>window.got=[];addEventListener('message',e=>{if(e.origin===location.origin)"
         "window.got.push(e.data)})</script>")))
+    # Every postMessage the big screen sends into a frame, with its target origin.
+    ctx.add_init_script("""(() => { if (window !== window.top) return;
+      const get = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get;
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', { get() {
+        const w = get.call(this);
+        return w && { postMessage(m, t) {
+          (window.__sent ||= []).push([m, typeof t === 'string' ? t : t && t.targetOrigin]);
+          return w.postMessage(m, t); } }; } }); })()""")
     page = ctx.new_page()
     page.goto(site + "?bundle=match/&pass=s3cret-pass")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
@@ -740,4 +748,11 @@ def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site)
     assert page.input_value("#passcode") == ""  # not left in the field
     html = page.content()
     assert "s3cret-pass" not in html and "other-pass" not in html  # never written into the page
+    assert "pass" not in page.get_attribute("#companion-frame", "src")  # nor into the panel's address
+    page.click("#passcode-save")  # an empty Save keeps it: only Clear wipes it
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == "other-pass"
+    # Posted to this origin only: never '*', which any page the frame held could read.
+    sent = [s for s in page.evaluate("window.__sent || []") if s[0].get("type") == "ninety-passcode"]
+    origin = page.evaluate("location.origin")
+    assert len(sent) >= 3 and all(target == origin for _, target in sent), sent
     ctx.close()

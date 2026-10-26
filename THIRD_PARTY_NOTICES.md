@@ -35,7 +35,7 @@ reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-
 | Package | Used for | Licence |
 |---|---|---|
 | qrcode-generator 2.0.4 (viewer, in the page) | the QR code of the phone's address | MIT |
-| hls.js 1.5.20 (viewer, in the page) | plays the footage's HLS ladder where the browser has no native HLS | Apache-2.0 |
+| hls.js 1.5.20 (viewer, in the page) | plays the footage's HLS ladder wherever Media Source Extensions run (native HLS only where they do not) | Apache-2.0 |
 | @ionic/core 9.0.6 (phone, in the page) | tabs, headers, segments, lists, sheets: the phone's view layer | MIT |
 | ionicons 8.1.0 (through @ionic/core, in the page) | the icon component Ionic loads | MIT |
 | @stencil/core 4.45.2 (through @ionic/core, its runtime in the page) | the runtime of Ionic's web components | MIT |

@@ -66,7 +66,7 @@
           <form class="audio-menu more-menu" id="more-menu" hidden>
             <fieldset>
               <legend>Demo passcode</legend>
-              <input type="password" id="passcode" autocomplete="off" spellcheck="false" aria-describedby="passcode-state" />
+              <input type="password" id="passcode" aria-label="Demo passcode" autocomplete="new-password" spellcheck="false" aria-describedby="passcode-state" />
               <div class="more-row">
                 <button type="submit" id="passcode-save">Save</button>
                 <button type="button" id="passcode-clear">Clear</button>
@@ -129,7 +129,7 @@
           <p>Scan with your phone's camera, or open <b id="companion-url"></b> and enter <b class="pair-code" id="companion-code"></b></p>
         </div>
         <div class="companion-body" id="companion-body">
-          <iframe id="companion-frame" title="Match companion: Live, Stats, Players, Ask and Story" allow="clipboard-write"></iframe>
+          <iframe id="companion-frame" title="Match companion: Live, Stats, Players, Ask and Story" allow="clipboard-write" referrerpolicy="no-referrer"></iframe>
           <p class="companion-wait" id="companion-wait">Connecting to this screen…</p>
         </div>
       </aside>

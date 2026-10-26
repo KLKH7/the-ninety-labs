@@ -139,6 +139,7 @@ export function setupDock(store: Store) {
   });
   menu.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (!input.value.trim()) return input.focus(); // an empty Save never wipes it: Clear does that
     store.set(passKey, input.value.trim());
     input.value = ""; // never left in the page
     sendPass();
