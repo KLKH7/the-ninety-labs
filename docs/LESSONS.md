@@ -3188,3 +3188,23 @@ short and actionable. This file is public: no research sources, product names or
   frames in the shape the real files have.
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 270. A goal is the goal event, not the shot that went in
+- **What happened:** match mode (`ninety/condensed.py`), the highlight reel and the team goal
+  count (`ninety/intel/stats.py`) counted a goal only as a shot whose outcome was a goal. GROUNDING
+  I24 already said a goal is a detected `goal` event (Law 10). On the demo match (seed 8080) vision
+  logged 5 goal events. Two had no shot before them, so match.json, its chapters (the scrubber's
+  ticks) and the reel showed 3 goals. Those 3 took their side from the shot, whose side confidence
+  (0.16 to 0.65) is under the fact-checker's gate, so all 3 showed no club. The goal events' own
+  side confidence was 0.94 to 1.0. The demo audit found it, not a test: every test built goals as
+  shots.
+- **Rule:** one function says what a goal is (`stats.goal_moments`), and every screen and fact
+  reads it. A `goal` event is the goal. The shot just before it, if that shot went in, is the same
+  goal (the pairing `scoring.goals` already uses, so no new time window). The goal event's side and
+  confidence decide the goal's club and whether it counts; the shot gives where it was struck and
+  how fast. A shot that went in with no goal event after it still counts. A goal with no shot has no
+  distance, so no distance is said.
+- **Check:** `uv run pytest tests/test_match_mode.py -k goal tests/test_captioner.py -k strike`.
+  `test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts`
+  fails if a goal event without a shot is dropped, if a pair counts twice, or if the club comes from
+  the shot. On a bundle, match.json's `goals` and its goal chapters each match the goal events.

@@ -127,6 +127,13 @@ def test_the_code_caption_follows_the_moment():
     assert out[0]["text"] == "h9 is denied from 6 m at 56 km/h."
 
 
+def test_a_goal_whose_strike_was_not_seen_keeps_a_code_caption_with_no_distance_and_no_model_call():
+    events = [ev("g1", 61.0, "goal", player=None, x=105.0)]  # lesson 270: a goal with no shot
+    r = reel(events, MEASURED)
+    out = asyncio.run(captioner.captions(r["moments"], events, says("h9 scores from 26 m."), PASSES))
+    assert out == [{"event": "g1", "text": "home scores.", "source": "code"}]
+
+
 def test_the_build_up_is_the_clip_before_the_shot_and_at_most_six_events():
     before = [ev(f"p{i}", 50.0 + i, receiver="h9", outcome="success") for i in range(10)]  # 50 to 59 s
     events = [ev("old", 40.0), *before, ev("s1", 61.0, "shot", player="h9", x=94.0, outcome="goal",
