@@ -228,7 +228,8 @@ def test_back_skip_and_send_have_a_44_point_hit_area_and_the_arrow_keys_move_bet
         return page.evaluate(
             """(sel) => { const el = document.querySelector(sel), r = el.getBoundingClientRect();
               const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-              const hit = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+              const hit = (x, y) => { const t = document.elementFromPoint(x, y);
+                return !!t && (t === el || el.contains(t)); };
               const grow = (dx, dy) => { let n = 0; while (n < 40 && hit(cx + dx * (n + 1), cy + dy * (n + 1))) n++; return n; };
               return { up: grow(0, -1), down: grow(0, 1), left: grow(-1, 0), right: grow(1, 0) }; }""",
             selector)
@@ -251,13 +252,15 @@ def test_back_skip_and_send_have_a_44_point_hit_area_and_the_arrow_keys_move_bet
 
 
 def test_the_send_button_has_a_44_point_hit_area(browser, site):  # noqa: F811
-    ctx, page, errors = open_phone(browser, site, init="localStorage.setItem('ninety.fan', '{\"skipped\":true}')")
+    skipped = "localStorage.setItem('ninety.fan', '{\"skipped\":true}')"
+    ctx, page, errors = open_phone(browser, site, init=skipped)
     page.click("#tab-button-ask")
     page.wait_for_selector("#ask-form:visible")
     miss = page.evaluate(
         """() => { const el = document.querySelector('#ask-button'), r = el.getBoundingClientRect();
           const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          const hit = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t)); };
+          const hit = (x, y) => { const t = document.elementFromPoint(x, y);
+            return !!t && (t === el || el.contains(t)); };
           return [hit(cx, cy - 21), hit(cx, cy + 21), hit(cx - 21, cy), hit(cx + 21, cy)]; }""")
     assert all(miss), miss
     assert not errors
