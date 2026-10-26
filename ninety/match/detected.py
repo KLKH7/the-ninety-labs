@@ -29,7 +29,8 @@ FIXTURES = ROOT / "tests" / "fixtures"
 M1_CLIP = "seed900001"
 # The answer key's file names (docs/DATA_CONTRACT.md): never a detected-events file.
 TRUTH_NAMES = frozenset({"events.jsonl", "frames.jsonl"})
-# No ball is struck faster than 40 m/s, the fastest shots on record (GROUNDING P3, *verify*). A detected
+# The engine never moves a ball faster than 40 m/s (GROUNDING P3, a design bound: real recorded kicks go
+# faster, about 58 m/s, but not in this engine's matches, which is all the live path sees). A detected
 # speed above it is a misread, not a measurement: the live path keeps the event and drops the speed,
 # so no graphic, line or claim says it (vision's speed estimate is its own to fix).
 MAX_BALL_KMH = 40.0 * 3.6
