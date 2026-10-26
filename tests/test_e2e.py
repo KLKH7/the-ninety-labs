@@ -476,3 +476,39 @@ def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
     out, _ = run(tmp_path, events=[fast])
     said = "".join((out / f).read_text() for f in ("cues.jsonl", "audio.json", "commentary.json"))
     assert "251" not in said
+
+
+def _tracked(events: list[dict]) -> list[dict]:
+    """The clip's events with every player as a tracked one ("h8" -> "h-t8"), as vision names them."""
+    import re
+
+    def track(v):
+        return re.sub(r"^([ha])(\d+)$", r"\1-t\2", v) if isinstance(v, str) else v
+
+    people = ("player", "receiver", "intended", "interceptor", "deflected_by")
+    return [{**e, **{k: track(e[k]) for k in people if e.get(k)}} for e in events]
+
+
+@pytest.mark.parametrize("sure", [0.99, 0.5])  # each side told surely, and not
+def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
+    # A track id is the tracker's label: checked, never shown or said (ninety/agents/onair.py). Every
+    # aired text in the bundle: the graphics and insights, the claim trace, the commentary, the audio
+    # description and its captions.
+    from ninety.agents.onair import TRACK_ID
+
+    events = [{**e, "team_confidence": sure} for e in _tracked(EVENTS)]
+    out, _ = run(tmp_path, events=events)
+    raw = json.loads((out / "events.jsonl").read_text().splitlines()[0])
+    assert TRACK_ID.search(json.dumps(raw)), "the events must carry track ids, or this proves nothing"
+    aired = [c["text"] for c in cues(out)]
+    for claim in json.loads((out / "trace.json").read_text())["claims"]:
+        aired += [claim["text"], *(s["detail"] for s in claim["steps"])]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    aired.append((out / "description.vtt").read_text())
+    assert aired and not [t for t in aired if TRACK_ID.search(t)]
+    import re
+
+    shown = " ".join(c["text"] for c in cues(out))
+    club = re.compile(r"\b[Aa] [A-Z]\w+ player\b")  # "a Crowmere player": a side named
+    assert "player" in shown and bool(club.search(shown)) is (sure > 0.96)

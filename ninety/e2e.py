@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety import condensed, highlights, radar
-from ninety.agents import live, telemetry
+from ninety.agents import live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import (
@@ -699,6 +699,10 @@ async def run(args: argparse.Namespace) -> dict:
         cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant,
                                                                         perceiver=perceiver)
         agents_mode = "graph offline"
+    # What the screens show: a tracked player as "a London player", never his raw track id
+    # (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
+    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta))
+    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
