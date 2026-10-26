@@ -1177,3 +1177,38 @@ def test_the_score_shows_only_as_read_off_the_broadcast_scorebug_never_from_goal
     page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('graphic')")
     assert not errors
     ctx.close()
+
+
+def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_rose(browser, site):  # noqa: F811
+    """Demo audit row 3: every detected goal had team null and sat under neither club. The scorebug
+    (the broadcast's own graphic, read from pixels) changed for one side 0.2 to 1.6 s after each:
+    the goal goes under that club, and the numerals follow the scorebug, from its 0-0 start reading."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def match(route):
+        body = route.fetch().json()
+        body["goals"] = [{"t": 61.2, "team": None, "event": "e6"}]
+        route.fulfill(json=body)
+
+    base = {"player": None, "x": 52.5, "y": 34.0, "source": "vision", "confidence": 0.95}
+    sb = [{**base, "id": "s00001", "t": 60.0, "frame": 1500, "type": "score_read", "team": None,
+           "score": {"home": 0, "away": 0}},
+          {**base, "id": "s00001", "t": 61.9, "frame": 1547, "type": "score_change", "team": "away",
+           "score": {"home": 0, "away": 1}}]
+    ctx.route("**/bundle/match.json", match)
+    ctx.route("**/bundle/scorebug.jsonl", lambda r: r.fulfill(body="".join(json.dumps(e) + "\n" for e in sb)))
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "61.6")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow goal 2′"
+    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
+    assert page.text_content("#score-home") == "0" and page.text_content("#score-away") == "0"  # 0-0 read
+    laptop.fill("#seek", "63")
+    page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
+    assert page.text_content("#score-home") == "0"
+    assert not errors
+    ctx.close()
