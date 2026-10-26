@@ -23,7 +23,8 @@ hls.js player is desktop-companion's, in progress); today the viewer and phone p
   fMP4 segments start at time 0: HLS's currentTime is the MP4's, the video time the viewer maps to
   match time (ninety/match/timeline.py).
 - **Sound:** any track ffmpeg reads (the render's crowd bed) is muxed into the MP4 and every rung as
-  AAC (ffmpeg's own `aac` encoder, not a third-party library), cut to the picture. The frame count and duration are the images' own.
+  AAC (ffmpeg's own `aac` encoder, not a third-party library), cut to the picture. The frame count
+  and duration are the images' own.
 """
 
 from __future__ import annotations
