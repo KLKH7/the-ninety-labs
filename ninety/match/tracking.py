@@ -15,6 +15,7 @@ never starts a simulation.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -30,9 +31,37 @@ SOURCE = "truth"  # the simulator's positions (see the module docstring)
 TRACKED = "tracked"  # positions from tracking the video (ninety/vision/track.py)
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures"
+# A deployment's match packages (config, not code): NINETY_SERVED_DIR/<clip>/ with the clip's tracked
+# positions (tracked.json), detected events (detected.jsonl), clip.json (its seed and club codes) and,
+# when the scorebug was read, scorebug.jsonl: the files the e2e run made (runs/<match>/).
+SERVED_DIR = os.environ.get("NINETY_SERVED_DIR", "")
+PACKAGE = ("tracked.json", "detected.jsonl", "clip.json")  # what a served clip must have
+
+
+def served_clips(root: str = SERVED_DIR) -> tuple[str, ...]:
+    """The clips with a complete package under `root`, by folder name; none when it is not set.
+    A folder named like a simulator match (seed7, seed900001) is not served: it would shadow it."""
+    if not root or not Path(root).is_dir():
+        return ()
+    base = Path(root).resolve()
+    return tuple(sorted(d.name for d in Path(root).iterdir()
+                        if d.is_dir() and not re.fullmatch(r"seed\d+", d.name)
+                        and d.resolve().parent == base  # a symlink out of the served dir is not served
+                        and all((d / name).is_file() for name in PACKAGE)))
+
+
+def package(clip: str) -> Path | None:
+    """A served clip's package folder, or None for a clip not served from one: only a plain folder
+    name that `served_clips` lists, so '..', a path or an absolute name never leaves the served dir."""
+    if not SERVED_DIR or clip not in served_clips(SERVED_DIR):
+        return None
+    return Path(SERVED_DIR) / clip
+
+
 # Clips the companion serves from tracked positions: the M1 clip the laptop plays
-# (ninety/match/detected.M1_CLIP), once its tracked frames file exists.
-TRACKED_CLIPS = ("seed900001",)
+# (ninety/match/detected.M1_CLIP), once its tracked frames file exists, and every clip the deployment
+# packages (NINETY_SERVED_DIR), so the deployed demo serves its own match.
+TRACKED_CLIPS = ("seed900001", *(c for c in served_clips() if c != "seed900001"))
 # A tracked player's id: team plus track id (h-t12), as the companion schemas' tracked pattern. The
 # tracker reads no shirt numbers, so a track is never given a squad id (h7).
 TRACK_ID = re.compile(r"^(?P<team>[ha])-t\d+$")
@@ -115,6 +144,9 @@ class NotTracked(ValueError):
 
 
 def tracked_path(clip: str) -> Path:
+    served = package(clip)
+    if served is not None:
+        return served / "tracked.json"
     return FIXTURES / f"tracked-{clip}.json"  # written by ninety/vision/tracked_frames.py
 
 
@@ -157,7 +189,9 @@ def tracked(clip: str, path: str | None = None) -> Track:
         frames.append(slim(frame, TRACKED))
     if len(frames) < 2:
         raise NotTracked(f"{file.name}: fewer than two frames")
-    events = detected.load(detected.m1_path(clip)) if clip == detected.M1_CLIP else []
+    served = package(clip)
+    events = (detected.load(detected.m1_path(clip)) if clip == detected.M1_CLIP
+              else detected.load(served / "detected.jsonl") if served is not None else [])
     detected_kickoffs = kickoffs([e for e in events if "frame" in e])
     return Track(clip, tuple(frames), tuple(sorted({*restarts, *detected_kickoffs})))
 

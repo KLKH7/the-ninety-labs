@@ -81,11 +81,13 @@ class MatchInsights:
         association: Mapping[str, Mapping] | None = None,
         score_reads: Sequence[Mapping] = (),
         feed: identity_mod.Feed | None = None,
+        broadcast_frames: Sequence[Mapping] | None = None,
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
             raise ValueError(f"{clip}: frames must be source 'tracked', got {bad}")
         f = Frames(frames)
+        detected_events = list(events)  # as vision detected them, before any person is moved
         broadcast: dict[str, dict] = {}
         if association is not None:
             # A joined match: the players are the tactical camera's tracks and the events name the
@@ -173,7 +175,8 @@ class MatchInsights:
                                  f"{feed.meta.get('seed')}, {feed.meta['teams']})")
             mi.identity = identity_mod.tactical(f.frames, feed)
             if association is not None:
-                mi.identity_broadcast = identity_mod.broadcast(association, mi.identity, identity_mod.gate())
+                mi.identity_broadcast = identity_mod.named_broadcast(
+                    association, mi.identity, feed, detected_events, broadcast_frames)
             mi.identity_source = identity_mod.disclosure(feed)
         return mi
 
@@ -666,6 +669,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--identity-feed", type=Path, default=None,
                     help="the simulated tracking provider's player-ID feed (ninety/sim/identity_feed.py): "
                          "names for the line-up only, never a fact or a stat")
+    ap.add_argument("--broadcast-vision", type=Path, default=None,
+                    help="with --identity-feed: the segments' vision runs, to name the broadcast's tracks "
+                         "directly from the feed too (ninety/intel/identity.py, step 6)")
     ap.add_argument("--scorebug", type=Path, default=None,
                     help="the clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score")
     args = ap.parse_args(argv)
@@ -675,12 +681,14 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
     association = json.loads(args.association.read_text())["tracks"] if args.association else None
     reads = score_reads(args.scorebug) if args.scorebug is not None else []
-    feed = None
+    feed, b_frames = None, None
     if args.identity_feed:  # the player-ID feed: names (and nothing else) for the line-up
-        feed = identity_mod.load_for(args.identity_feed, frames, load_fixture(args.fixture))
+        b_frames = (identity_mod.broadcast_frames(args.broadcast_vision, args.fixture.parent)
+                    if args.broadcast_vision else [])
+        feed = identity_mod.load_for(args.identity_feed, [*frames, *b_frames], load_fixture(args.fixture))
     mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
                              association=association, score_reads=reads,
-                             feed=feed)
+                             feed=feed, broadcast_frames=b_frames)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 
