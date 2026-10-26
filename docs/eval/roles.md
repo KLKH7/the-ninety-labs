@@ -24,3 +24,35 @@ row is under the name target, it is a fragmentation the gates were not set at (t
 30 s). The engine's players mostly hold their formation places; that is not proof that role
 inference is this good on football with fluid positions. Before the demo, the same grading runs on
 the demo match's own tracked output against its ground truth.
+
+## Names on the demo match's own tracks (pre-registered Oct 25, before any grading)
+
+The grading above uses the engine's frames spoilt by a model of the tracker. This section grades
+the live path's real output instead: the demo match (`runs/demo-8080-match`, 34 segments, the
+tactical camera's tracks joined to the broadcast's), named by `ninety/intel/naming.py`, against
+the answer key of seed 8080 re-simulated from the demo's own code snapshot (grading only).
+
+**What is named.** Each whole-pitch tactical track gets its role from per-frame matching to the
+team's fitted 4-3-3 places (I6, every frame, with the eleven roles matched to the tracks where the
+tracker holds more than eleven), then a one-to-one Hungarian matching of the team's tracks to the
+team sheet's eleven slots in each 10 s window of a segment, a track's gain being its net votes
+(an empty slot gains nothing). A broadcast track, the id an event names, is given its tactical
+track's name across the camera join when the association's confidence is at least its gate and
+both cameras read the same side. Everyone else is said by club, never by track id.
+
+**Right.** Each track of each camera is given its true player, the one nearest it on average over
+its frames (`ninety/eval/association.true_players`). A name is right when that player is on the
+named side and has the named role in the simulator's roster. Two units: tactical tracks, and
+detected events by their actor's broadcast track.
+
+**Split, fixed now.** Even segments of the edit (0, 2, ..., 32) are development; odd segments
+(1, 3, ..., 33) are held out, scored once with the chosen gates. Both halves are of one match, so
+the held-out score is a check against over-fitting the gates, not a second match.
+
+**Target and selection.** Precision of names at least **0.95** on development, for both units,
+each over at least 30 names (the name target above). Grid: share in {0.5, 0.6, 0.7, 0.8, 0.9},
+least seconds seen in {2, 5, 10}, least association confidence in {0.75, 0.9, 1.0}. Among the
+settings that meet the target on development, the one that names the most events is chosen (ties
+to the stricter). If none meets it, nothing is named. Reported: precision with its Wilson 95%
+interval and coverage (named over all) for each unit, on development, held out and the whole
+match, and the naming in use before this change on the same data.
