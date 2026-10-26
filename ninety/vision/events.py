@@ -263,6 +263,35 @@ def shot_side(path: list[BallPoint], i: int, team: str, end: BallPoint | None,
     return None
 
 
+def held_save(path: list[BallPoint], i: int, striker: Track, sp: list[Spell], cut_at: list[int],
+              tracks: list[Track], rows_by_frame: dict[int, dict]) -> outcomes.Hold | None:
+    """Amendment 7, rule 2 (docs/eval/shot-outcomes/saves-pixel-plan.md): the first hold after the
+    strike at path[i], before the next spell of anyone but that keeper and before the next cut, by a
+    keeper who is not the striker, when the line from the strike to the keeper's foot point (on the
+    ground, so not bent by the ball's height) meets his goal line between the widened posts from
+    within SHOT_MAX_M. None otherwise."""
+    p = path[i]
+    if not 0.0 <= p.x <= PITCH_X:
+        return None
+    cut = next((c for c in cut_at if c >= p.frame), None)
+    end = outcomes._index(path, cut + 1) if cut is not None else len(path)
+    later = [s for s in sp if s.first > p.frame]
+    for h in outcomes.holds(path, i + 1, end, tracks, rows_by_frame):
+        f = path[h.k].frame
+        if any(s.first <= f and s.track is not h.keeper for s in later):
+            return None  # someone else had the ball first: the move ended before the hold
+        if h.keeper is striker:
+            continue
+        x, y = h.keeper.at(f)
+        gx = outcomes.goal_line(h.attacker)
+        if abs(gx - p.x) > SHOT_MAX_M:
+            continue
+        gy = outcomes.line_y(p, BallPoint(f, x, y, 0.0), h.attacker)
+        if gy is not None and POST_Y[0] - SHOT_MARGIN_M <= gy <= POST_Y[1] + SHOT_MARGIN_M:
+            return h
+    return None
+
+
 def out_of_play(path: list[BallPoint]) -> list[int]:
     """Indices into path where the ball has gone over a line: the first of OUT_FRAMES frames in a
     row with its centre beyond a line by more than BALL_R. A ball drawn over a player is not
@@ -388,6 +417,7 @@ def detect(rows: list[dict], join_breaks: bool = True,
     cut_at = [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
     heights = outcomes.heights_by_frame(rows, path)
     others = outcomes.context_tracks(context_rows)
+    rows_by_frame = {r["frame"]: r for r in rows}
     strikes = [s.last for s in sp if s.track.team
                and any(heads_for_goal(path, index[s.last], side) for side in ("home", "away"))]
     goals: list[tuple[int, int, str]] = []  # (strike frame, last frame searched, team): no out of play there
@@ -421,9 +451,16 @@ def detect(rows: list[dict], join_breaks: bool = True,
                                     restart_stop=min((f for f in strikes if f > a.last), default=None),
                                     end_point=end)
         is_goal = result is not None and result.outcome == "goal"
+        if not is_goal:
+            # Amendment 7: the ball held in the keeper's box after the strike is a save.
+            held = held_save(path, i, a.track, sp, cut_at, tracks, rows_by_frame)
+            if held is not None and (not shot or held.attacker == shooter):
+                shot, shooter = True, held.attacker
+                side_conf = a.track.side_confidence if shooter == team else None
+                result = outcomes.Outcome("on_target", how="hold")
         # A restart seen later (a kick-off, goal kick or corner) says where his ball went, even when
         # the picture lost it or cut away first (outcomes.first_restart).
-        decided = is_goal or (result is not None and result.how.startswith("restart"))
+        decided = is_goal or (result is not None and result.how.startswith(("restart", "hold")))
         if b is None and gone is None and not decided:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
         if cut is not None and (gone is None or gone > cut) and not decided:

@@ -438,3 +438,47 @@ def test_goals_and_the_other_outcomes_are_written_as_before():
     shots = run(shot_scene(keeper_catch((97.0, 34.0)), keeper=(103.0, 34.0), others=[(97.0, 34.0)]),
                 saves=False)[0]
     assert [s["outcome"] for s in shots] == ["blocked"]
+
+
+# Amendment 7 (docs/eval/shot-outcomes/saves-pixel-plan.md): the ball held in the keeper's box.
+
+KEEPER_BOX = [182, 10, 188, 16]  # inside the keeper's [180, 0, 190, 30] (the 10th player)
+
+
+def caught(keeper=(103.0, 34.0), held=12, lands=(108.0, 36.0)):
+    """The strike flies at the keeper for 0.6 s; then the ball is in his hands for `held` frames: placed
+    on the ground it lands at `lands`, behind him, and it is drawn inside his box. Then it is lost."""
+    fly = keeper_catch(keeper)
+
+    def scene():
+        rows = shot_scene(lambda k: fly(k) if k <= 15 else lands if k <= 15 + held else None,
+                          keeper=keeper)
+        for r in rows:
+            if r["ball"] and tuple(r["ball"][0][c] for c in ("x", "y")) == lands:
+                r["ball"][0]["bbox"] = list(KEEPER_BOX)
+        return rows
+    return scene()
+
+
+def test_a_ball_held_in_the_keepers_box_after_a_shot_is_a_save_though_it_lands_behind_him():
+    shots, goals, types, _ = run(caught())
+    assert goals == [] and "out_of_play" not in types
+    strike = run(shot_scene(keeper_catch(), keeper=(103.0, 34.0)))[0][0]["frame"]  # the strike, as a catch has it
+    assert [(s["team"], s["outcome"], s["frame"]) for s in shots] == [("home", "on_target", strike)]
+
+
+def test_the_live_path_writes_the_held_save_as_a_shot_with_no_outcome_while_saves_are_off():
+    shots, _, _, _ = run(caught(), saves=False)
+    assert [(s["team"], s["outcome"]) for s in shots] == [("home", None)]
+
+
+def test_a_ball_over_his_box_for_fewer_than_hold_frames_is_no_hold():
+    assert [s["outcome"] for s in run(caught(held=oc.HOLD_FRAMES))[0]] == ["on_target"]
+    assert [s["outcome"] for s in run(caught(held=oc.HOLD_FRAMES - 1))[0]] != ["on_target"]
+
+
+def test_no_save_when_the_line_to_the_keeper_misses_the_goal_or_he_stands_outside_his_area():
+    wide = (103.0, ev.POST_Y[1] + ev.SHOT_MARGIN_M + 2.0)  # the line to him meets x = 105 wider still
+    assert [s["outcome"] for s in run(caught(keeper=wide))[0]] != ["on_target"]
+    out = (105.0 - oc.PENALTY_AREA_X - 1.0, 34.0)  # a keeper-coloured player beyond his area
+    assert [s["outcome"] for s in run(caught(keeper=out, lands=(out[0] + 5.0, 36.0)))[0]] != ["on_target"]
