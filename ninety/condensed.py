@@ -91,10 +91,13 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
                 best = (rank, k, e)
         kind, event = best[1:] if best else ("build_up", None)
         label = LABEL[kind]
-        if event is not None and event.get("team") in TEAMS:
+        # A chapter names a side only when it was told surely (factcheck.side_known, lesson 245), as
+        # match.json's goals do: the scrubber never says a club the goal list leaves out.
+        sided = event is not None and event.get("team") in TEAMS and side_known(event)
+        if sided:
             label += f", {event['team']}"
         if event is not None and event["type"] == "kickoff":
-            label = f"Kick-off, {event['team']}" if event.get("team") in TEAMS else "Kick-off"
+            label = f"Kick-off, {event['team']}" if sided else "Kick-off"
         out.append({
             "n": n + 1,
             "index": seg.index,  # the clip image it starts on

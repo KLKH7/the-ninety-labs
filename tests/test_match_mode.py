@@ -43,7 +43,7 @@ EVENTS = [
     event("v2", 61.0, "shot", "home", "goal", team_confidence=0.99),
     event("v3", 62.2, "pass", "away", "success"),
     event("v4", 62.5, "shot", "home", "goal", confidence=MIN_CONFIDENCE - 0.2),  # unsure: never counts
-    event("v5", 62.8, "shot", "away", "on_target"),  # the clip's last frame is 62.96 s
+    event("v5", 62.8, "shot", "away", "on_target", team_confidence=0.99),  # the clip's last frame is 62.96 s
 ]
 
 
@@ -98,6 +98,14 @@ def test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot
     assert [(m["event"], m["kind"], m["team"], m["d_m"] is None) for m in moments] == [
         ("s1", "goal", "home", False), ("g2", "goal", "away", True)]
     assert body["stats"][-1]["home"]["goals"] == 1 and body["stats"][-1]["away"]["goals"] == 1
+
+
+def test_a_chapter_names_no_club_its_side_was_not_told_surely():
+    unsure = [event("g1", 61.0, "goal", "home", team_confidence=0.94),
+              event("k1", 62.1, "kickoff", "away", team_confidence=0.5)]
+    body = condensed.build(META, unsure)
+    assert [c["label"] for c in body["chapters"]] == ["Goal", "Kick-off"]
+    assert body["goals"] == [{"t": 61.0, "team": None, "event": "g1"}]
 
 
 def test_a_shot_that_went_in_with_no_goal_event_is_still_a_goal():
