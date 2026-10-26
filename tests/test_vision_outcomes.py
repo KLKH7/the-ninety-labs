@@ -433,7 +433,8 @@ def test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome():
 
 
 def test_goals_and_the_other_outcomes_are_written_as_before():
-    assert [g["type"] for g in run(shot_scene(into_net()), saves=False)[1]] == ["goal"]
+    shots, goals, _, _ = run(shot_scene(into_net()), saves=False)
+    assert [g["type"] for g in goals] == ["goal"] and [s["outcome"] for s in shots] == ["goal"]
     shots = run(shot_scene(keeper_catch((97.0, 34.0)), keeper=(103.0, 34.0), others=[(97.0, 34.0)]),
                 saves=False)[0]
     assert [s["outcome"] for s in shots] == ["blocked"]

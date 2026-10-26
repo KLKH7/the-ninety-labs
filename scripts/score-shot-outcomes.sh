@@ -26,8 +26,14 @@ one() {  # one clip: $1 = its folder
 }
 export -f one; export OUT CKPT NAME
 ls -d "$SPLIT"/*/ | xargs -P "$JOBS" -I{} bash -c 'one "$@"' _ {}
-# The live path does not write saves (events.SAVES_AIR, lesson 258): to measure the save rule, re-run
-# `python -m ninety.vision.events <observations> --keep-saves` on <out>/observations before scoring.
+# The live path does not write saves (events.SAVES_AIR, lesson 258), so before scoring, each clip's
+# events are re-run from its kept observations with the save rule on (--keep-saves); detected/ holds
+# those, the measured ones, and live/<clip>/detected.jsonl keeps what the live path wrote.
 # NO_SCORE=1 runs the live path only and never reads the answer key (the test split before its freeze:
 # it is scored once, later, from <out>/observations at the frozen commit).
+for f in "$OUT"/observations/observations-*.jsonl; do
+  [ -e "$f" ] || continue
+  c=$(basename "$f" .jsonl); c=${c#observations-}
+  uv run python -m ninety.vision.events "$f" --keep-saves --out "$OUT/detected/detected-$c.jsonl" >/dev/null
+done
 [ -n "${NO_SCORE:-}" ] || uv run python -m ninety.eval.shot_outcomes score --clips "$SPLIT"/*/ --detected "$OUT/detected" --out "$OUT/report.json"
