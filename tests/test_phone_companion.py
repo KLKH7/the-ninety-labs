@@ -1593,3 +1593,95 @@ def test_the_shot_map_is_no_card_while_it_draws_no_shot(browser, site):  # noqa:
     assert page.is_hidden("#shot-map") and page.is_hidden("#live-shots")
     assert not errors
     ctx.close()
+
+
+def persona_phone(browser, site, fan, goals=None):  # noqa: F811
+    """The cut clip's phone as London v Lisbon, with #362's stored choices (`fan`) set before it loads."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    ctx.add_init_script(f"localStorage.setItem('ninety.fan', {json.dumps(json.dumps(fan))})")
+
+    def manifest(route):
+        body = route.fetch().json()
+        body["teams"] = {"home": "LON", "away": "LIS"}
+        route.fulfill(json=body)
+
+    def match(route):
+        body = route.fetch().json()
+        if goals is not None:
+            body["goals"] = goals
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", manifest)
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_selector("#summary-rows .stat-row", state="attached")
+    return ctx, page, errors
+
+
+def top(page, sel):
+    return page.locator(sel).bounding_box()["y"]
+
+
+def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_every_number(browser, site):  # noqa: F811
+    """Kian, Oct 26 ("make personalisation more visible"): the same moment, two layouts at a glance."""
+    goals = [{"t": 61.3, "team": "away", "event": "e2"}]
+    fan = {"club": "LIS", "mode": "casual", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#key-moments:not([hidden])")
+    assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
+    assert top(page, "#key-moments") < top(page, ".pitch-card")  # moments first, the pitch at the foot
+    assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
+    assert "Your goal" in page.inner_text("#key-rows")  # Lisbon's goal, to a Lisbon fan
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(1).bounding_box()["x"] < sides.nth(0).bounding_box()["x"]  # your club on the left
+    assert not errors
+    ctx.close()
+    fan = {"club": "LON", "mode": "analyst", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#live-summary:not([hidden])")
+    assert top(page, ".pitch-card") < min(top(page, "#live-summary"), top(page, "#key-moments"))
+    assert page.locator("#summary-rows .stat-row").count() == page.locator("#stat-rows .stat-row").count() > 4
+    assert "Your goal" not in page.inner_text("#key-rows")  # a London fan: Lisbon's goal
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(0).bounding_box()["x"] < sides.nth(1).bounding_box()["x"]
+    assert not errors
+    ctx.close()
+
+
+def test_the_persona_switches_in_one_tap_from_the_more_sheet(browser, site):  # noqa: F811
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "casual", "focus": "tactics"})
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#persona-mode")
+    page.click("#persona-mode ion-segment-button[value=analyst]")
+    page.wait_for_function("document.body.dataset.mode === 'analyst'")
+    page.click("#persona-club ion-segment-button[value=LIS]")
+    page.wait_for_function("document.body.dataset.us === 'away'")
+    saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))
+    assert saved == {"club": "LIS", "mode": "analyst", "focus": "tactics"}  # #362's choices, kept
+    assert not errors
+    ctx.close()
+
+
+@pytest.mark.parametrize(("club", "said", "ours"), [
+    ("LON", "London Athletic have the extra man", "You have the extra man"),
+    ("LON", "In minute 43, London Athletic had 7 players against 1 player around the ball.",
+     "In minute 43, you had 7 players against 1 player around the ball."),
+    ("LON", "London Athletic has the ball.", "You have the ball."),
+    ("LIS", "A London Athletic player played a pass that took 7 Lisbon Esportes players out of the game.",
+     "A London Athletic player played a pass that took 7 of your players out of the game."),
+    ("LIS", "In minute 63, a Lisbon Esportes player broke London Athletic's lines.",
+     "In minute 63, one of your players broke London Athletic's lines."),
+    ("LON", "Lisbon broke London's lines.", "Lisbon broke your lines."),
+])
+def test_a_moment_is_said_from_the_fan_s_side_and_never_changes_a_number(browser, site, club, said, ours):  # noqa: F811
+    ctx, page, errors = persona_phone(browser, site, {"club": club, "mode": "casual", "focus": "moments"})
+    assert page.evaluate("t => window.ninetyPhone.ours(t)", said) == ours
+    assert not errors
+    ctx.close()

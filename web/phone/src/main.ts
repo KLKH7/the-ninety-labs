@@ -18,7 +18,7 @@ import * as fans from "./fan";
 import { mountOnboarding } from "./onboarding";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { CLUBS, DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, short, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -124,6 +124,7 @@ function screenOf(x: number, y: number): [number, number] {
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
   name: playerName,
+  ours: (text: string) => ours(text), // a moment's words from the fan's side
   // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
   drawable: (sv: ScoutVisual, t: number | null = null) => {
     const v = fromScout(sv, t);
@@ -1319,6 +1320,16 @@ const onboard = mountOnboarding($("onboard"), (picked, editing) => {
 function applyFan(rerender = false) {
   const f = chosen();
   $("fan-value").textContent = f ? fans.summary(f) : "";
+  // The persona (Kian, Oct 26: "make personalisation more visible"): the fan's club, mode and focus
+  // lay Live out (style.css, body[data-mode], [data-focus], [data-us]); no number changes.
+  const us = usSide();
+  document.body.dataset.mode = f?.mode ?? "";
+  document.body.dataset.focus = f?.focus ?? "";
+  document.body.dataset.us = us ?? "";
+  document.body.dataset.club = f?.club ?? "";
+  for (const [id, v] of [["persona-mode", f?.mode], ["persona-club", f?.club]] as const)
+    ($(id) as HTMLElement & { value: string }).value = v ?? "";
+  if (rerender) { statsKey = ""; spottedKey = ""; if (state.match) showMatch(viewTime()); renderJustNow(); }
   $("ask-start").dataset.focus = f?.focus ?? "";
   if (f && !storyTouched) {
     const mode = fans.storyMode(f);
@@ -1329,6 +1340,51 @@ function applyFan(rerender = false) {
   syncAsk();
   if (rerender) renderChips();
 }
+
+/** The side of this match the fan supports, when it is one of its two clubs. */
+function usSide(): "home" | "away" | null {
+  const f = chosen();
+  if (!f) return null;
+  const us = short(CLUBS[f.club]);
+  return teams.home === us ? "home" : teams.away === us ? "away" : null;
+}
+
+/** A moment's words from the fan's side ("You're overloading the left", "Lisbon broke your lines"):
+ * the same sentence, the club's name turned to you and your; never a number changed. */
+function ours(text: string): string {
+  const side = usSide();
+  if (!side) return text;
+  let out = text;
+  for (const n of [fullName(teams[side]), teams[side]]) {
+    const e = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out
+      .replace(new RegExp(`\\b[Aa] ${e} player\\b`, "g"), "one of your players")
+      .replace(new RegExp(`\\b(\\d+) ${e} players\\b`, "g"), "$1 of your players")
+      .replace(new RegExp(`\\b${e} players\\b`, "g"), "your players")
+      .replace(new RegExp(`\\b${e}'s\\b`, "g"), "your")
+      .replace(new RegExp(`\\b${e} (have|are|were|had)\\b`, "g"), "you $1")
+      .replace(new RegExp(`\\b${e} (has|is|was)\\b`, "g"), (_m, v: string) => `you ${({ has: "have", is: "are", was: "were" } as Record<string, string>)[v]}`)
+      .replace(new RegExp(`\\b${e}\\b`, "g"), "you");
+  }
+  return out === text ? text : out.replace(/(^|[.!?]\s+)(you|your|one)\b/g, (_m, a: string, b: string) => a + b[0].toUpperCase() + b.slice(1));
+}
+
+/** The one-tap persona switch in the ••• sheet: the mode and the club, kept as #362's choices. */
+function setPersona(change: Partial<fans.Fan>) {
+  const base: fans.Fan = chosen() ?? { club: "LON", mode: "casual", focus: "moments" };
+  fan = { ...base, ...change };
+  fans.save(fan);
+  storyTouched = false;
+  applyFan(true);
+}
+$("persona-mode").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "casual" || v === "analyst") && v !== chosen()?.mode) setPersona({ mode: v });
+});
+$("persona-club").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "LON" || v === "LIS") && v !== chosen()?.club) setPersona({ club: v });
+});
 
 $("fan-edit").addEventListener("click", () => {
   void settingsSheet.dismiss();
@@ -2036,7 +2092,7 @@ function renderJustNow() {
   if (!c) return;
   const text = document.createElement("p");
   text.className = "just-text";
-  text.textContent = named(c.text, c.names);
+  text.textContent = ours(named(c.text, c.names));
   text.append(
     " ",
     howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }),
@@ -2111,12 +2167,12 @@ function renderKeyMoments(plays: DetectedEvent[]) {
   // The match's goals (reconciled with the scorebug), then any detected goal none of them tells.
   const now = viewTime();
   const goals: Moment[] = [
-    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? `${teams[side]} goal` : "Goal", goal: true }; }),
+    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? (side === usSide() ? "Your goal" : `${teams[side]} goal`) : "Goal", goal: true }; }),
     ...plays
       .filter((e) => e.type === "shot" && e.outcome === "goal" && !toldByGoal(e, now))
       .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })), // a club's colour only on a side told surely
   ];
-  const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
+  const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: ours(named(c.headline || c.text, c.names)), goal: false }));
   const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
   $("key-moments").hidden = moments.length === 0;
   $("key-rows").replaceChildren(
@@ -2149,7 +2205,7 @@ function renderInsights() {
   const key = list.dataset.mode === "key";
   type Row = { t: number; el: HTMLLIElement };
   const rows: Row[] = state.insights.map((c) => {
-    const { li, body } = storyItem(c.team, named(c.text, c.names), c.t);
+    const { li, body } = storyItem(c.team, ours(named(c.text, c.names)), c.t);
     li.classList.add("moment");
     li.dataset.id = c.id;
     const head = document.createElement("h3");
@@ -2172,11 +2228,12 @@ function renderInsights() {
     const scorer = who && !unnamedTrack(who, undefined, true) ? eventName(who) : "";
     const { li, body } = storyItem(side, scorer ? `${goalLine(g)} · ${scorer}` : goalLine(g), g.t);
     li.classList.add("goal-card");
+    if (side && side === usSide()) li.classList.add("ours");
     li.dataset.goal = g.event;
     const head = document.createElement("h3");
     head.className = "goal-head";
     head.innerHTML = side ? `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>` : "";
-    head.append("Goal");
+    head.append(side && side === usSide() ? "Your goal" : "Goal");
     body.prepend(head);
     rows.push({ t: g.t, el: li });
   }
@@ -2212,7 +2269,10 @@ function renderInsights() {
     list.replaceChildren(li);
     return;
   }
-  list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
+  // In Key plays the fan's club's moments come first (newest first within each), then the rest.
+  const us = key ? usSide() : null;
+  const mine = (r: Row) => (us && r.el.classList.contains(us) ? 1 : 0);
+  list.replaceChildren(...rows.sort((a, b) => mine(b) - mine(a) || b.t - a.t).map((r) => r.el));
 }
 
 $("story-mode").addEventListener("ionChange", (e) => {
@@ -2495,7 +2555,8 @@ function renderStats(st: MatchData["stats"][number]) {
   } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
-  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
+  // An analyst's Live carries every row (a dense strip); everyone else the first four.
+  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, chosen()?.mode === "analyst" ? undefined : 4).map((li) => li.cloneNode(true) as HTMLLIElement);
   $("summary-rows").replaceChildren(...summary);
   $("live-summary").hidden = summary.length === 0;
 }

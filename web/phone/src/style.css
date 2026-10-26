@@ -964,3 +964,52 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 .side-score[hidden] { display: none; }
 .side-score { cursor: pointer; }
 body[data-scorebug="read"] .band .side .crest { width: 38px; height: 44px; }
+
+/* ===== The persona (Kian, Oct 26: "make personalisation more visible"): #362's choices lay Live out.
+   Club: its crest and name on the left of the band and its colour as a quiet accent. Mode: a casual
+   fan's Live leads with moments in words, the pitch small at the foot; an analyst's with the pitch at
+   full size and every number. Focus: what comes first. Nothing here changes a number. ===== */
+body[data-club="LON"] { --accent: #1B2F5B; --accent-ink: #8FA8E0; }
+body[data-club="LIS"] { --accent: #E63942; --accent-ink: #FF8A90; }
+body[data-us="away"] .band .fixture > .side:first-child { order: 3; }
+body[data-us="away"] .band .fixture > .centre { order: 2; }
+body[data-us="away"] .band .fixture > .side:last-child { order: 1; }
+body[data-club] .live-tabs button[aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--accent-ink); }
+body[data-club] ion-tab-button.tab-selected { --color-selected: var(--accent-ink); }
+.insight.goal-card.ours { box-shadow: inset 0 0 0 2px var(--accent); }
+.insight.goal-card.ours .goal-head { color: var(--accent-ink); }
+
+#pane-pitch:not([hidden]) { display: flex; flex-direction: column; }
+/* Casual: the moments in words first, big; the pitch small at the foot; fewer numbers. */
+body[data-mode="casual"] #pitch-mode,
+body[data-mode="casual"] #momentum,
+body[data-mode="casual"] #live-summary,
+body[data-mode="casual"] #live-shots { display: none; }
+body[data-mode="casual"] #key-moments { order: 2; }
+body[data-mode="casual"] #just-now { order: 3; }
+body[data-mode="casual"] #lineups-teaser { order: 4; }
+body[data-mode="casual"] .pitch-card { order: 9; width: 62%; align-self: center; }
+body[data-mode="casual"] #key-moments .moment-row { font-size: 20px; padding: 10px 0; }
+body[data-mode="casual"] #key-moments .moment-row.goal .text { font-size: 22px; font-weight: 700; }
+body[data-mode="casual"] #just-now .just-text { font-size: 22px; line-height: 1.3; }
+/* Analyst: the pitch at full size first, then the numbers, every row of them. */
+body[data-mode="analyst"] #pitch-mode { order: 0; }
+body[data-mode="analyst"] .pitch-card { order: 1; }
+body[data-mode="analyst"] #live-summary { order: 3; }
+body[data-mode="analyst"] #momentum { order: 4; }
+body[data-mode="analyst"] #just-now { order: 5; }
+body[data-mode="analyst"] #live-shots { order: 6; }
+body[data-mode="analyst"] #key-moments { order: 7; }
+body[data-mode="analyst"] #lineups-teaser { order: 8; }
+body[data-mode="analyst"] #live-summary .stat-row { min-height: 0; padding: 2px 0; }
+body[data-mode="analyst"] #live-summary .stat-row .v { font-size: 22px; }
+/* Focus: what Live leads with (after the analyst's pitch). */
+body[data-focus="moments"] #key-moments { order: 2; }
+body[data-focus="tactics"] #just-now { order: 2; }
+body[data-focus="tactics"][data-mode="casual"] #key-moments { order: 3; }
+body[data-focus="players"] #lineups-teaser { order: 2; }
+body[data-focus="players"][data-mode="casual"] #key-moments { order: 3; }
+/* The persona switch in the ••• sheet: two segments, one tap each. */
+.group.persona { display: grid; gap: 10px; padding: 12px; }
+body[data-us="away"] .mini-score .crest.away { order: -1; }
+body[data-us="away"] .mini-score .crest.home { order: 3; }
