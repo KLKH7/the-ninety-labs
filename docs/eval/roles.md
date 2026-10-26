@@ -86,3 +86,27 @@ actor, and the side check withholds 63 of them (their segments' sides are in dou
 events floor is dropped. Everything else stands: names must be right at least 0.95 of the time
 on both units, with at least 30 named tracks, and the setting that names the most events is
 chosen. The held-out half is scored once with it. If it misses 0.95, nothing is named.
+
+### Result (scored once, Oct 25): the held-out half misses 0.95, so nothing is named
+
+`uv run python -m ninety.eval.naming_eval --clip runs/demo-8080-match --vision runs/demo-8080-vision-v2
+--truth <seed 8080, 90 min, simulated from runs/demo-8080-1d0390be-code>` (`docs/eval/naming.json`).
+The answer key matches the tracked positions to a median of 0.21 m. Chosen on development: share
+0.6, at least 5 s seen, association at least 0.75.
+
+| Naming | Split | Tracks named (right, precision, 95% CI) | Track coverage | Events named (right, precision, 95% CI) | Event coverage |
+|---|---|---|---|---|---|
+| New (naming.py) | dev | 186 (177, 0.952, 0.91-0.97) | 0.208 of 893 | 24 (24, 1.0, 0.86-1.0) | 0.183 of 131 |
+| New (naming.py) | **held out** | **432 (382, 0.884, 0.85-0.91)** | 0.411 of 1052 | **54 (50, 0.926, 0.82-0.97)** | 0.443 of 122 |
+| New (naming.py) | whole match | 618 (559, 0.905, 0.88-0.93) | 0.318 of 1945 | 78 (74, 0.949, 0.88-0.98) | 0.308 of 253 |
+| Before (roles.assign, gate 0.203) | held out | 339 (277, 0.817, 0.77-0.85) | 0.322 | 65 (54, 0.831, 0.72-0.90) | 0.533 |
+| Before (roles.assign, gate 0.203) | whole match | 611 (510, 0.835, 0.80-0.86) | 0.314 | 125 (103, 0.824, 0.75-0.88) | 0.494 |
+
+**Reading.** On the held-out half, a name would be right 88.4% of the time on tracks and 92.6% on
+events. Both are better than the naming in use before (81.7% and 83.1%), and both are under the
+0.95 target, so by the rule the gate stays closed (`ninety/intel/naming_calibration.json`). The
+demo names nobody: every player is said by club, or as "a player" where the side is unsure.
+Before this change the live path named 611 tracks, one in six of them wrong. The side check
+withheld no held-out segment (8 of 17 development segments). The development gates were
+therefore set on a half of the match where the hardest segments were withheld, which is the
+likeliest reason the held-out score is lower; it is not tested here. Both halves are of one match.

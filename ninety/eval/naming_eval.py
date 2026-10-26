@@ -165,9 +165,14 @@ def main(argv: list[str] | None = None) -> None:
     out["before"] = {s: grade(old, old_b, events, owner_v, owner_b, role, f)
                      for s, f in (("dev", dev), ("held_out", held), ("all", lambda t: True))}
     args.out.write_text(json.dumps(out, indent=1) + "\n")
-    if chosen:
-        args.calibration.write_text(json.dumps({**chosen["gate"], "target": TARGET,
-                                                "source": "docs/eval/naming.json"}, indent=1) + "\n")
+    # The gate opens only if the held-out half also meets the target on both units; else it stays
+    # closed (None) and nothing is named.
+    held = out.get("held_out") or {}
+    opens = bool(held) and all((held[u]["precision"] or 0) >= TARGET for u in ("track_names", "event_names"))
+    gate = chosen["gate"] if chosen and opens else {"share": None, "seconds": None, "association": None}
+    body = {**gate, "target": TARGET, "chosen_on_dev": chosen and chosen["gate"], "held_out_met": opens,
+            "source": "docs/eval/naming.json"}
+    args.calibration.write_text(json.dumps(body, indent=1) + "\n")
     print(json.dumps({k: out.get(k) for k in ("chosen", "held_out", "all", "before")}, indent=1))
 
 

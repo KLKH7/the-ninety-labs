@@ -1,5 +1,5 @@
 {
- "commit": "e4255f967df40f623538a2aef00a1088aceb87ac",
+ "commit": "20c4f4187baf4246de2a9e410e4abdff3a8202c7",
  "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-match",
  "truth": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-friendly-satoshi-58a337/f0944a04-a1d3-4240-9c94-7b1fe56ea87e/scratchpad/truth8080",
  "target": 0.95,
@@ -1401,7 +1401,59 @@
    }
   }
  ],
- "chosen": null,
+ "chosen": {
+  "share": 0.6,
+  "seconds": 5.0,
+  "association": 0.75
+ },
+ "held_out": {
+  "tracks": 1052,
+  "track_names": {
+   "named": 432,
+   "right": 382,
+   "precision": 0.884,
+   "ci": [
+    0.85,
+    0.91
+   ]
+  },
+  "track_coverage": 0.411,
+  "events": 122,
+  "event_names": {
+   "named": 54,
+   "right": 50,
+   "precision": 0.926,
+   "ci": [
+    0.82,
+    0.97
+   ]
+  },
+  "event_coverage": 0.443
+ },
+ "all": {
+  "tracks": 1945,
+  "track_names": {
+   "named": 618,
+   "right": 559,
+   "precision": 0.905,
+   "ci": [
+    0.88,
+    0.93
+   ]
+  },
+  "track_coverage": 0.318,
+  "events": 253,
+  "event_names": {
+   "named": 78,
+   "right": 74,
+   "precision": 0.949,
+   "ci": [
+    0.88,
+    0.98
+   ]
+  },
+  "event_coverage": 0.308
+ },
  "before": {
   "dev": {
    "tracks": 893,
