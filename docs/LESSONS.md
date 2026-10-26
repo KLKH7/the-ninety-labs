@@ -3279,3 +3279,16 @@ short and actionable. This file is public: no research sources, product names or
   engine's value by derivation (here a bisection on the body model), not by choosing a number.
 - **Check:** `tests/test_demo_engine_v2.py::test_the_carry_cap_is_derived_from_the_with_ball_sprint`
   and `::test_the_with_ball_share_is_the_cited_figure` (GROUNDING V1).
+
+### 278. An engine A/B on one seed is noise: the match diverges at the first change
+- **What happened:** for Kian's "stop-starting" (demo engine v3), each candidate fix was first
+  compared with v2 on 10 minutes of one seed. Blending an unhurried player's new place over 0.5 s
+  looked like a 14% cut in stop events (1.51 to 1.30), then 10% and 34% on two more seeds. Over 10
+  seeds it was 1.55 against 1.51, within noise. Any engine change sends the match down a different
+  path within seconds, so two runs of one seed are two different matches, and the spread between
+  matches (about ±0.3 here) swamped every effect.
+- **Rule:** an engine A/B is judged over many seeds (here at least 6, more when the effect is small),
+  as a difference of means against the spread between seeds, before it is reported or adopted.
+  A one-seed comparison is a smoke test only.
+- **Check:** `~/ninety-notes/demo-engine-v2/v3-findings.md` (the table, 6 and 4 seeds per variant).
+  No v3 change was adopted.
