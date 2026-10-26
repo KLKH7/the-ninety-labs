@@ -206,16 +206,29 @@ def test_the_code_caption_says_a_detected_speed_only_once_vision_s_speed_is_meas
     assert (held, said) == ("h9 scores from 26 m.", "h9 scores from 26 m at 112 km/h.")
 
 
-def test_the_bundle_says_a_highlight_s_player_by_club_never_by_track_id():
-    events, r = scene()
+CLUBS = {"home": "London", "away": "Lisbon"}
+TENDELL = [{"id": "h-t9", "name": "Isaac Tendell", "number": 9, "position": "striker", "confident": True,
+            "source": "id_feed"}]
+
+
+def tracked_scene(side=0.99):
+    events, _ = scene(side=side)
     for e in events:
         e["player"] = "h-t9"  # a tracker's id, as vision writes it
     events[0]["receiver"] = "h-t9"
-    r = reel(events, MEASURED)
-    asyncio.run(e2e.caption_reel(r, events, "code", ["h-t9"], {"home": "London", "away": "Lisbon"}))
-    assert r["moments"][0]["caption"] == "A London player scores from 26 m."
-    asyncio.run(e2e.caption_reel(r, events, "code", [], {"home": "London", "away": "Lisbon"}))
-    assert r["moments"][0]["caption"] == "A player scores from 26 m."
+    return events, reel(events, MEASURED)
+
+
+@pytest.mark.parametrize("side, lineup, said", [
+    (0.99, TENDELL, "Tendell scores from 26 m."),  # the player-ID feed's name, by surname
+    (0.99, [{**TENDELL[0], "confident": False}], "A London player scores from 26 m."),  # no sure name
+    (0.99, None, "A London player scores from 26 m."),  # no feed: his club
+    (0.5, TENDELL, "A player scores from 26 m."),  # his side not told surely: neither name nor club
+])
+def test_a_highlight_names_the_id_feed_s_player_then_his_club_then_a_player(side, lineup, said):
+    events, r = tracked_scene(side)
+    asyncio.run(e2e.caption_reel(r, events, "code", [], CLUBS, e2e.names_of(lineup)))
+    assert r["moments"][0]["caption"] == said
 
 
 def test_a_side_is_said_by_its_club_s_name_never_home_or_away():

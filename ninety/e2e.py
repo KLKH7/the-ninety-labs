@@ -826,7 +826,8 @@ async def run(args: argparse.Namespace) -> dict:
             body["sheets"] = sheets
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
                                                              args.captioner, sides_known(events),
-                                                             clubs_of(clip.meta))
+                                                             clubs_of(clip.meta),
+                                                             names_of(body.get("lineup")))
         # Each moment recorded from the footage: a still and, unless --frames, its clip.
         highlights.record(body["highlights"], Timeline.of_clip(clip.meta), clip.images, out, not args.frames)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
@@ -902,8 +903,13 @@ async def run(args: argparse.Namespace) -> dict:
 
 
 
+def names_of(lineup: list[dict] | None) -> dict[str, str]:
+    """Each named broadcast track's name, from the line-up's confident rows (the player-ID feed)."""
+    return {r["id"]: r["name"] for r in lineup or [] if r.get("confident") and r.get("name")}
+
+
 async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str] | None = None,
-                       clubs: dict[str, str] | None = None) -> dict:
+                       clubs: dict[str, str] | None = None, names: dict[str, str] | None = None) -> dict:
     """Each highlight's caption (ninety/agents/captioner.py): code-written, or with `foundry` the
     published Captioner's line where the fact-checker passes it, then said as every screen says a
     player (onair.render: by club, never a track id). Returns the run's record."""
@@ -915,13 +921,14 @@ async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str
 
         try:
             async with captioner.foundry_model(tokens) as (model, judge):
-                results = await captioner.captions(reel["moments"], events, model, judge, clubs=clubs)
+                results = await captioner.captions(reel["moments"], events, model, judge, clubs=clubs,
+                                                   names=names)
         except RegistryDrift:
             raise  # a changed or unpublished prompt never runs under an old name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code captions still air
             unavailable = type(e).__name__  # the type only: no endpoint or token
     if results is None:
-        results = await captioner.captions(reel["moments"], events, None, None, clubs=clubs)
+        results = await captioner.captions(reel["moments"], events, None, None, clubs=clubs, names=names)
     results = [{**r, "text": onair.render(r["text"], sure or [], clubs)} for r in results]
     captioner.apply(reel, results)
     return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
