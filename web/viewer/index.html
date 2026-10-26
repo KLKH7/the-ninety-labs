@@ -57,10 +57,23 @@
                 <button type="button" class="icon" id="hud-volume" hidden></button>
                 <button type="button" class="icon" id="hud-qr" aria-label="Follow on your phone" aria-expanded="false" aria-controls="pair-card"></button>
                 <button type="button" class="icon" id="hud-companion" aria-label="Show the companion" aria-expanded="false" aria-controls="companion" hidden></button>
+                <button type="button" class="icon" id="hud-more" aria-label="More" aria-expanded="false" aria-controls="more-menu" hidden></button>
                 <button type="button" class="icon" id="hud-full" aria-label="Full screen"></button>
               </div>
             </div>
           </div>
+          <!-- The ••• menu (src/dock.ts): the demo passcode, forwarded to the companion, never shown. -->
+          <form class="audio-menu more-menu" id="more-menu" hidden>
+            <fieldset>
+              <legend>Demo passcode</legend>
+              <input type="password" id="passcode" autocomplete="off" spellcheck="false" aria-describedby="passcode-state" />
+              <div class="more-row">
+                <button type="submit" id="passcode-save">Save</button>
+                <button type="button" id="passcode-clear">Clear</button>
+              </div>
+              <p class="more-state" id="passcode-state" role="status"></p>
+            </fieldset>
+          </form>
           <!-- The audio menu (src/commentary.ts), as a streaming app's audio and subtitles menu. -->
           <div class="audio-menu" id="audio-menu" role="group" aria-label="Audio and subtitles" hidden>
             <fieldset>

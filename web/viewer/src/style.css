@@ -331,3 +331,12 @@ body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: non
 .spinner[hidden] { display: none; }
 @media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* The ••• menu: the demo passcode, as the audio menu is drawn. */
+.more-menu input[type="password"] { -webkit-appearance: none; appearance: none; width: 15em; height: auto; padding: 8px 12px; border: 0; border-radius: 10px;
+  background: rgba(118, 118, 128, 0.24); color: #fff; font: inherit; }
+.more-row { display: flex; gap: 8px; }
+.more-row button { border: 0; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; background: rgba(118, 118, 128, 0.24); color: #fff; }
+.more-row button[type="submit"] { background: #fff; color: #000; }
+.more-state { margin: 0; font-size: 0.85em; color: rgba(235, 235, 245, 0.6); }
+.hud #hud-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }

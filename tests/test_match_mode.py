@@ -703,3 +703,41 @@ def test_hls_playback_starts_low_and_survives_a_forced_media_error(browser, site
     assert page.is_hidden("#spinner")
     assert not errors
     chrome.close()
+
+
+def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site):  # noqa: F811
+    """?pass= is taken off the address at once and kept on the device; the ••• menu sets or clears
+    it; each value is posted to the embedded companion only, and never written into the page."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), lambda ws: None)
+    # A stand-in companion that keeps what its parent posts.
+    ctx.route(re.compile(r".*/phone/\?.*"), lambda route: route.fulfill(content_type="text/html", body=(
+        "<script>window.got=[];addEventListener('message',e=>{if(e.origin===location.origin)"
+        "window.got.push(e.data)})</script>")))
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/&pass=s3cret-pass")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert "pass=" not in page.url and "bundle=match" in page.url  # stripped, the rest kept
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == "s3cret-pass"
+    page.wait_for_function("document.querySelector('#companion-frame').getAttribute('src')")
+    companion = page.frame_locator("#companion-frame").owner.element_handle().content_frame()
+
+    def last(passcode):  # postMessage is delivered asynchronously
+        companion.wait_for_function(f"(window.got || []).at(-1)?.passcode === {json.dumps(passcode)}")
+        assert companion.evaluate("window.got.at(-1)") == {"type": "ninety-passcode", "passcode": passcode}
+
+    last("s3cret-pass")
+    page.mouse.move(400, 300)
+    page.click("#hud-more")
+    page.click("#passcode-clear")
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == ""
+    last(None)
+    page.fill("#passcode", "other-pass")
+    page.keyboard.press("Enter")
+    last("other-pass")
+    assert page.input_value("#passcode") == ""  # not left in the field
+    html = page.content()
+    assert "s3cret-pass" not in html and "other-pass" not in html  # never written into the page
+    ctx.close()

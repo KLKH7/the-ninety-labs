@@ -17,6 +17,20 @@ export interface Store {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+// The demo passcode (it lets the companion's Ask run the agents): typed in the ••• menu, or given
+// once as ?pass=, which is taken off the address at once, before anything else reads the page's
+// URL. Kept on this device; never logged, never written into the page; only posted to the
+// embedded companion, on this origin.
+const PASS_PARAM = "pass";
+const fromUrl = (() => {
+  const u = new URL(location.href);
+  const pass = u.searchParams.get(PASS_PARAM);
+  if (pass === null) return null;
+  u.searchParams.delete(PASS_PARAM);
+  history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  return pass;
+})();
+
 export function setupDock(store: Store) {
   const panel = $("companion");
   const toggle = $<HTMLButtonElement>("companion-toggle");
@@ -89,7 +103,52 @@ export function setupDock(store: Store) {
   // A click inside the embedded app moves focus into its frame: that is a use too.
   window.addEventListener("blur", () => setTimeout(() => document.activeElement === frame && used(), 0));
 
-  frame.addEventListener("load", () => (wait.hidden = !!frame.getAttribute("src")));
+  // The passcode: forwarded on every load of the companion and on every change.
+  const passKey = "passcode";
+  if (fromUrl !== null) store.set(passKey, fromUrl);
+  const passState = $("passcode-state");
+  const sendPass = () => {
+    const passcode = store.get(passKey) || null;
+    frame.contentWindow?.postMessage({ type: "ninety-passcode", passcode }, location.origin);
+    passState.textContent = passcode ? "Saved on this device. Ask runs the agents." : "Not set. Ask answers from code.";
+  };
+  frame.addEventListener("load", () => {
+    wait.hidden = !!frame.getAttribute("src");
+    sendPass();
+  });
+  const more = $<HTMLButtonElement>("hud-more");
+  const menu = $<HTMLFormElement>("more-menu");
+  const input = $<HTMLInputElement>("passcode");
+  more.hidden = false;
+  more.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>';
+  const setMore = (open: boolean) => {
+    menu.hidden = !open;
+    more.setAttribute("aria-expanded", String(open));
+    if (open) {
+      $("audio-menu").hidden = true; // one menu at a time
+      $("hud-audio").setAttribute("aria-expanded", "false");
+    }
+    if (open) input.focus();
+    else if (menu.contains(document.activeElement)) more.focus();
+  };
+  more.addEventListener("click", () => setMore(menu.hidden));
+  menu.addEventListener("keydown", (e) => {
+    e.stopPropagation(); // typing here is not the player's keys (space, f, [ ])
+    if (e.key === "Escape") setMore(false);
+  });
+  menu.addEventListener("submit", (e) => {
+    e.preventDefault();
+    store.set(passKey, input.value.trim());
+    input.value = ""; // never left in the page
+    sendPass();
+  });
+  $("passcode-clear").addEventListener("click", () => {
+    store.set(passKey, "");
+    input.value = "";
+    sendPass();
+  });
+  sendPass();
 
   return {
     /** A pairing code is up: embed the phone app on it and put its QR code behind the button. */
