@@ -1764,6 +1764,42 @@ def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser
     ctx.close()
 
 
+def test_embedded_beside_the_big_screen_the_phone_opens_on_live_silent_and_answers_its_parent(browser, site):  # noqa: F811
+    """desktop-companion, Oct 26: the big screen docks the phone in an iframe (?embed=1), already
+    paired, the big screen playing every sound. No pairing screen, no sound controls, no first-run
+    choices over Live; tab changes go to the parent page, and the parent can open Ask."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    src = f"phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/&embed=1"
+    host = f"""<!doctype html><body style="margin:0;background:#000">
+      <iframe id="phone" src="{site}{src}" style="width:380px;height:860px;border:0"></iframe>
+      <script>window.got = []; addEventListener("message", (e) => got.push(e.data));</script></body>"""
+    ctx.route("**/embed-host.html", lambda r: r.fulfill(body=host, content_type="text/html"))
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}embed-host.html")
+    phone = page.frame_locator("#phone")
+    frame = page.frame(url=lambda u: "embed=1" in u)
+    frame.wait_for_selector("body[data-state=live][data-embed='1']")
+    assert frame.is_hidden("#pair") and frame.locator(".speak:visible, .listening:visible").count() == 0
+    assert frame.is_hidden("#onboard")  # a first visit, yet Live is not covered by the choices
+    assert frame.evaluate("document.body.dataset.tab") in ("radar", None)
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-open', tab: 'ask'}, location.origin)")
+    frame.wait_for_function("document.body.dataset.tab === 'ask'")
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'ask')")
+    phone.locator("#tab-button-insights").click()
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'insights')")
+    # A message from anywhere but the parent page opens nothing.
+    frame.evaluate("window.postMessage({type: 'ninety-open', tab: 'ask'}, '*')")
+    page.wait_for_timeout(300)
+    assert frame.evaluate("document.body.dataset.tab") == "insights"
+    assert not errors
+    ctx.close()
+
+
 def test_live_never_lists_the_team_sheet_whatever_the_focus(browser, site):  # noqa: F811
     """Kian, Oct 26: line-ups and team sheets only in the Players tab. A players focus with no
     per-player numbers adds nothing under the pitch, never the sheet."""
