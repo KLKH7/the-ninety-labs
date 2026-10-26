@@ -1892,8 +1892,9 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     from ninety.sim import offball
     from ninety.sim.engine import other
     # a corner to home, its kick 30 s off: away defends. A seed with men near goal 6 s in, found again by
-    # the premises below on the combined engine (engine freeze integration): seed 5.
-    e = corner_wait(5)
+    # the premises below on the combined engine (engine freeze integration): seed 5; on demo engine v2,
+    # seed 7 (5 and 6 no longer bring two men near goal).
+    e = corner_wait(7)
     r, brain = e.restart, e.brains["away"]
     for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
         e.step()
