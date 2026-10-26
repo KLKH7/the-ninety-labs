@@ -13,6 +13,7 @@ from ninety.render.scene import (
     ball_live,
     body_parts,
     crowded_start,
+    dive_pose,
     drawn_ball,
     in_penalty_area,
     keeper_busy,
@@ -106,9 +107,13 @@ def test_a_strike_raises_the_labelled_foot_where_the_touch_aims_it():
 
 def test_a_dive_reaches_sideways_and_keeps_the_feet_down():
     standing = body_parts(0, 0, LOOK, Gait())
-    diving = body_parts(0, 0, LOOK, Gait(action="dive", dive=1.0, heading=0.0))
+    g = Gait(action="dive", dive=1.0, dive_drawn=1.0, heading=0.0)
+    for _ in range(30):  # the straight body tipped toward his left over the frames (lesson 280)
+        g.fall = 0.0
+        dive_pose(g, 0, 0, LOOK.height_m)
+    diving = body_parts(0, 0, LOOK, g)
     head = lambda ps: next(p for p in ps if p["n"] == "head")["a"]  # noqa: E731
-    assert head(diving)[1] > head(standing)[1] + 0.3
+    assert head(diving)[1] > head(standing)[1] + 1.2 and head(diving)[2] < 0.6
     lows = [p[k][2] - p["r"] for p in diving for k in ("a", "b") if k in p]
     assert min(lows) >= -0.01
 

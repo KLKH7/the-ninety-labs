@@ -11,6 +11,7 @@ import math
 
 import pytest
 
+from ninety.render import fouls
 from ninety.render.camera import Camera
 from ninety.render.meshpose import (
     ASSET_STATURE_M,
@@ -44,6 +45,7 @@ from ninety.render.scene import (
     body_parts,
     carry_at,
     contacts,
+    dive_pose,
     face,
     hold_at,
     holds,
@@ -1506,6 +1508,8 @@ def _draw_keeper(rows):
     for i, fr in enumerate(frames):
         advance({"a1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
         pl = fr["players"][0]
+        fouls.fall_at(g, [], pl, i, FPS, keeper.height_m)  # as the clip: standing, then the dive drawn
+        dive_pose(g, pl["x"], pl["y"], keeper.height_m)
         body_parts(pl["x"], pl["y"], keeper, g)
         pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
         m = pose_markers(pose, g.heading, keeper.height_m)

@@ -38,6 +38,7 @@ def apply_fall(gait, player: dict) -> None:
     gait.fall, gait.fall_dir = drawn_fall(player)
     gait.brace = None
     gait.crouch = None
+    gait.tip_ahead = 0.0
 
 
 # How a fall is drawn inside the engine's spell down (lesson 280, *design*: chosen by eye on seed
@@ -218,6 +219,7 @@ def fall_at(gait, mine: list[dict], player: dict, i: int, fps: int, height_m: fl
     (gait.brace). Standing when the engine has him standing; x and y are never moved."""
     angle, way = drawn_fall(player)
     gait.brace = gait.crouch = None
+    gait.tip_ahead = 0.0
     plan = next((p for p in mine if p["i0"] <= i <= p["i1"]), None) if angle else None
     if plan is None:
         gait.fall, gait.fall_dir = angle, way
@@ -234,12 +236,14 @@ def fall_at(gait, mine: list[dict], player: dict, i: int, fps: int, height_m: fl
                                                             angle, way, plan["spread"], drop)}
 
 
-def tip(point: tuple[float, float, float], x: float, y: float, angle: float, direction: float):
+def tip(point: tuple[float, float, float], x: float, y: float, angle: float, direction: float,
+        ahead: float = 0.0):
     """`point` (world metres) tipped over by `angle` about the ground under (x, y), toward `direction`:
     the whole body falls over its feet that way."""
     if not angle:
         return point
     ux, uy = math.cos(direction), math.sin(direction)
+    x, y = x + ahead * ux, y + ahead * uy  # over the grass `ahead` metres the way he goes
     along = (point[0] - x) * ux + (point[1] - y) * uy  # ahead of the feet, the way he falls
     side = -(point[0] - x) * uy + (point[1] - y) * ux
     z = point[2]

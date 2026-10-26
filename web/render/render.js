@@ -1271,6 +1271,11 @@ function upperAngles(player, pose, heading, height) {
       angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
   }
+  const up = pose.dive_up || 0;
+  if (up) {
+    // Getting up from a dive, the dive's (standing) arms fade out (meshpose._upper).
+    angles = blendPose(angles, Object.assign({}, angles, copyPose(poses.stand)), Math.min(1, Math.abs(up)));
+  }
   const lean = pose.lean || 0;
   if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
     // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
@@ -1732,9 +1737,11 @@ class Body {
       const axis = new THREE.Vector3(-Math.sin(d), Math.cos(d), 0);
       const tilt = new THREE.Quaternion().setFromAxisAngle(axis, pose.fall);
       this.group.quaternion.premultiply(tilt);
-      // About the grass under his feet, as fouls.tip has it, wherever lift puts the body.
-      const off = new THREE.Vector3(0, 0, (pose.lift || 0) + (pose.bob || 0)).applyQuaternion(tilt);
-      this.group.position.set(x + off.x, y + off.y, off.z);
+      // About the grass under his leading foot, as fouls.tip has it, wherever lift puts the body.
+      const ahead = pose.tip_ahead || 0;
+      const ux = Math.cos(d), uy = Math.sin(d);
+      const off = new THREE.Vector3(-ahead * ux, -ahead * uy, (pose.lift || 0) + (pose.bob || 0)).applyQuaternion(tilt);
+      this.group.position.set(x + ahead * ux + off.x, y + ahead * uy + off.y, off.z);
     }
     const placed = Object.assign({}, pose, { x, y });
     const angles = anglesFor(this.player, placed, face, this.heightM);

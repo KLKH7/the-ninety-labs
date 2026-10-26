@@ -327,15 +327,26 @@ def test_a_head_on_foul_turns_him_smoothly():
         assert abs((b - a + math.pi) % (2 * math.pi) - math.pi) <= math.radians(30)
 
 
-def test_a_keeper_dives_straight_with_his_arms_on_past_his_head():
-    """A dive is the straight body tipped toward his side (DIVE_TIP at full stretch), off the grass
-    while it grows, the arms reaching on past his head; no bent spine (lesson 280)."""
-    from ninety.render.meshpose import pose_angles
-    from ninety.render.scene import DIVE_TIP, dive_pose, mesh_pose
+def _dive(n, side=1.0, heading=0.0):
+    """A keeper n frames into a full dive, drawn as the clip draws it (fall_at, then dive_pose)."""
+    from ninety.render.scene import dive_pose
 
-    g = Gait(heading=0.0)
-    g.action, g.dive, g.dive_drawn = "dive", 1.0, 1.0
-    dive_pose(g, 40.0, 30.0, 1.9)
+    g = Gait(heading=heading)
+    for _ in range(n):
+        g.action, g.dive, g.dive_drawn = "dive", side, 1.0
+        fouls.fall_at(g, [], {"id": "a1", "x": 40.0, "y": 30.0}, 0, FPS, 1.9)
+        dive_pose(g, 40.0, 30.0, 1.9)
+    return g
+
+
+def test_a_keeper_dives_straight_with_his_arms_on_past_his_head():
+    """A dive is the straight body tipped toward his side, over no faster than DIVE_TIP_RATE to
+    DIVE_TIP, the arms reaching on past his head; no bent spine (lesson 280)."""
+    from ninety.render.meshpose import pose_angles
+    from ninety.render.scene import DIVE_TIP, DIVE_TIP_RATE, mesh_pose
+
+    assert abs(_dive(1).fall - DIVE_TIP_RATE) < 1e-9
+    g = _dive(40)
     assert g.fall == DIVE_TIP and abs(g.fall_dir - math.pi / 2) < 1e-9  # his left
     pose = mesh_pose(g, 40.0, 30.0, 0.0)
     angles = pose_angles(pose, 0.0, 1.9)
@@ -343,20 +354,20 @@ def test_a_keeper_dives_straight_with_his_arms_on_past_his_head():
     mk = pose_markers(pose, 0.0, 1.9)
     for side in ("l", "r"):
         assert mk[f"hand_{side}"][1] - 30.0 > mk["head"][1] - 30.0 > 1.2  # out past his head, left
-    mid = Gait(heading=0.0)
-    mid.action, mid.dive, mid.dive_drawn = "dive", -0.5, 0.5
-    dive_pose(mid, 40.0, 30.0, 1.9)
-    assert mid.lift > 0.1 and abs(mid.fall_dir + math.pi / 2) < 1e-9
+    assert abs(_dive(40, side=-1.0).fall_dir + math.pi / 2) < 1e-9
 
 
 def test_a_keeper_gets_up_from_a_dive_through_a_crouch():
-    from ninety.render.scene import dive_pose
+    """Standing still after a full dive he gets up lowered on bent knees (the get-up of a fall), and
+    is up by the end of DIVE_UP_FRAMES."""
+    from ninety.render.scene import DIVE_UP_FRAMES, dive_pose
 
-    lifts = []
-    for k in range(1, 25):
-        g = Gait(heading=0.0)
-        g.action, g.dive_up = "stand", 1.0 - k / 25
+    g = _dive(40)
+    seen = []
+    for k in range(DIVE_UP_FRAMES - 1):
+        g.action, g.speed, g.up_n, g.dive_up = "stand", 0.0, k, 1.0 - (k + 1) / DIVE_UP_FRAMES
+        fouls.fall_at(g, [], {"id": "a1", "x": 40.0, "y": 30.0}, 0, FPS, 1.9)
         dive_pose(g, 40.0, 30.0, 1.9)
-        lifts.append((g.fall, g.lift))
-    assert min(lift for _, lift in lifts) < -0.2
-    assert lifts[-1][0] < math.radians(10) and lifts[0][0] > math.radians(60)
+        seen.append((g.fall, g.lift))
+    assert min(lift for _, lift in seen) < -0.2
+    assert seen[0][0] > math.radians(60) and seen[-1][0] < math.radians(10)

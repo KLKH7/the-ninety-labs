@@ -475,6 +475,11 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             # Setting off and pulling up, the stride grows out of the stance and back into it.
             t = (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
             angles = _blend(dict_angles(poses["stand"]), angles, t)
+    up = pose.get("dive_up") or 0.0
+    if up:
+        # Getting up from a dive, what he does next is drawn with the dive's (standing) arms fading
+        # out of it, so the arms do not jump when the engine's action changes.
+        angles = _blend(angles, {**angles, **dict_angles(poses["stand"])}, min(1.0, abs(up)))
     lean = pose.get("lean") or 0.0
     if lean and not (action in poses and action in _CONTACT and action not in _FEET):
         # Speeding up the trunk leans into it, slowing it comes up (scene.pace).
@@ -721,7 +726,8 @@ def pose_markers(pose: dict, heading: float, height_m: float) -> dict[str, tuple
         # A fouled player down (fouls.py): the body tipped over its feet, as the page tips the mesh.
         from ninety.render.fouls import tip
 
-        out = {name: tip(p, x, y, pose["fall"], pose.get("fall_dir", 0.0)) for name, p in out.items()}
+        ahead = pose.get("tip_ahead") or 0.0
+        out = {name: tip(p, x, y, pose["fall"], pose.get("fall_dir", 0.0), ahead) for name, p in out.items()}
     return out
 
 
