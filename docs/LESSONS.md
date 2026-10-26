@@ -3107,3 +3107,27 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
   complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
 - **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
+### 261. A line said in another's place keeps the more important one's priority
+- **What happened:** the Describer says a verified claim in the place of the event it is about, but at
+  a claim's priority. On the demo, the claims about two goals ("a player scores.") were at a lower
+  priority than the shot line just before each, so the shot's line pushed them out and a blind fan
+  heard "A player shoots from the right." and never that it went in (67:08, 70:36). The commentary
+  called the goal first by priority, then the shot two seconds later ("Goal!", then "A shot.").
+- **Rule:** a line said in an event's place is placed at that event's priority when it is the higher
+  one, and a goal is said as a goal. A shot whose goal follows it is said once, as the goal; a shot
+  that went in with no goal event is said as the goal.
+- **Check:** `tests/test_spoken_variety.py::test_a_goal_with_a_verified_claim_is_said_as_a_goal_and_not_crowded_out_by_its_shot`,
+  `::test_a_shot_its_goal_follows_is_not_said_before_the_goal`.
+
+### 262. A bound from a study is the population's limit, not its sample's maximum
+- **What happened:** the fact-checker's pass-speed bound was first taken as 85% of the fastest kick
+  in a seven-player laboratory study (34.48 m/s), giving 105.5 km/h. That is a sample's maximum, not
+  the fastest a ball is kicked, which GROUNDING already gives (P3, 40 m/s); the bound rejected a
+  112 km/h pass in our own engine's seed 7. It was set again from P3 (122.4 km/h), and on the demo it
+  then rejects none of the audit's 102 to 122 km/h passes: they are fast but possible.
+- **Rule:** a bound taken from a study states which population it bounds; a sample's largest value
+  is not that population's limit. A bound changed after a test result is disclosed with the reason
+  in the pull request, and the change must be to the derivation, not to fit the result.
+- **Check:** `docs/GROUNDING.md` P19 names both sources; `tests/test_factcheck.py::test_a_stated_ball_speed_no_kick_can_give_is_rejected`
+  pins 122.4 and 144 km/h.

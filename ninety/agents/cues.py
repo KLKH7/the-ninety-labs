@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, side_known
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, plausible_speed, side_known
 from ninety.agents.ledger import InMemoryLedger, Ledger, load_match
 from ninety.match.facts import match_events
 
@@ -54,7 +54,7 @@ def _pass_text(event: dict, persona: str) -> str:
         parts[0] += " (in flight)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
-    if event.get("ball_speed_kmh") is not None:
+    if plausible_speed(event):  # a speed no kick gives is vision's misreading: not shown
         parts.append(f"{event['ball_speed_kmh']} km/h")
     return ", ".join(parts)
 
@@ -77,7 +77,7 @@ def _shot_text(event: dict, persona: str) -> str:
     parts = ["a shot" if player == UNNAMED else f"{player} shot"]
     if event.get("outcome") in SHOT_OUTCOME:
         parts.append(SHOT_OUTCOME[event["outcome"]])
-    if event.get("ball_speed_kmh") is not None:
+    if plausible_speed(event):  # a speed no kick gives is vision's misreading: not shown
         parts.append(f"{event['ball_speed_kmh']} km/h")
     return ", ".join(parts)
 

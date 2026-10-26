@@ -48,12 +48,14 @@ from ninety.agents.cues import SCHEMA, UNNAMED, _pass_text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate, side_known
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
+from ninety.speech import spells as spell_lines
 from ninety.speech import voice
 
 PITCH_LENGTH_M = 105.0  # schemas/match_event.schema.json: x 0..105
 PITCH_WIDTH_M = 68.0
 # The brief's requirement for this track: a line is said within 2 s of what it describes.
 MAX_LAG_S = 2.0
+REPEAT_S = 30.0  # design: a pass line in the same words as one said this recently is not said again
 # Design: a breath between lines, so two descriptions do not run into one sentence.
 GAP_S = 0.3
 # Design estimate of a neural voice at its default rate, for offline timing only. Replaced by
@@ -72,8 +74,8 @@ MODEL_MAX_WORDS = 20
 QUOTES = {'"': "&quot;", "'": "&apos;"}
 
 # Lower is more important: what keeps its place when there is no time for everything.
-PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4,
-            "set_piece": 4, "shape": 4}
+PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "spell": 3, "pass": 4,
+            "kickoff": 4, "set_piece": 4, "shape": 4}
 # A detected set piece (ninety/vision/restarts.py) by its kind, and why a free kick or penalty was
 # given as far as tracking can tell (ninety/intel/restart_cause.py). A foul is never said to be
 # anyone's: tracking sees positions, not contact.
@@ -176,7 +178,9 @@ def _who(event: dict) -> str:
 def event_versions(event: dict) -> list[str]:
     """The line for one event, full then short. Numbers come from the event itself."""
     kind, who, place = event["type"], _who(event), where(event["x"], event["y"])
-    if kind == "goal":
+    if kind == "goal" or (kind == "shot" and event.get("outcome") == "goal"):
+        # A shot vision saw go in is a goal, said as one, when no goal event follows it (scored_by).
+        who = "A player" if who == UNNAMED else who
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":
         outcome = {"on_target": "on target", "off_target": "off target", "blocked": "blocked"}.get(
@@ -306,7 +310,14 @@ def spoken(text: str, side_known: bool = True, compact: bool = False,
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
     out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
     out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
+    out = re.sub(r"\ba (\d+)-metre\b", lambda m: f"{_article(m[1])} {m[1]}-metre", out)
+    out = re.sub(r"([.!?] )([a-z])", lambda m: m[1] + m[2].upper(), out)  # "Goal! A player scores"
     return out[0].upper() + out[1:] if out else out
+
+
+def _article(digits: str) -> str:
+    """"an" before a number said with a vowel sound (eight, eleven, eighteen, eighty-...), else "a"."""
+    return "an" if digits in ("8", "11", "18") or (digits.startswith("8") and len(digits) in (2, 3)) else "a"
 
 
 def ssml(text: str, priority: int, voice: str = VOICE) -> str:
@@ -347,6 +358,14 @@ def shape_lines(shape: list[dict]) -> list[tuple[float, str, str]]:
             text = SHAPE_SAID[_said(r)].format(team=who, n=abs(r["change"]))
             out.append((60.0 * minute, text, r["id"]))
     return out
+
+
+def scored_by(events: list[dict]) -> set[str]:
+    """The shots that went in and have their goal event within MAX_LAG_S after them: the goal's line
+    says it. A shot that went in with no goal event after it is said as the goal (event_versions)."""
+    goals = [e["t"] for e in events if e["type"] == "goal"]
+    return {e["id"] for e in events if e["type"] == "shot" and e.get("outcome") == "goal"
+            and any(0 <= t - e["t"] <= MAX_LAG_S for t in goals)}
 
 
 def candidates(
@@ -412,12 +431,45 @@ def candidates(
                                         list(cue["evidence"]), versions, source,
                                         sides_told(cue["evidence"]))
 
+    # A shot that went in, with its goal event just after it: the goal is said, not the shot as well
+    # (else "shoots from the right" can crowd out the goal behind it).
+    scored = scored_by(events)
+    # A spell of possession is said once, at its last pass; its other passes are not said one by one.
+    spell_at: dict[str, list[dict]] = {}
+    in_spell: set[str] = set()
+    for spell in spell_lines.spells(events):
+        spell_at[spell[-1]["id"]] = spell
+        in_spell.update(e["id"] for e in spell[1:-1])
+
     lines: list[Line] = []
     for event in events:
+        is_goal = event["type"] == "goal" or (event["type"] == "shot" and event.get("outcome") == "goal")
+        if event["id"] in insights and is_goal and event["id"] not in scored:
+            # A goal is said as a goal ("Goal! ... scores"): a claim about it waits for no line of
+            # its own, since the listener must hear that it went in.
+            line = insights.pop(event["id"])
+            refused.append({"evidence": line.evidence, "text": line.versions[0],
+                            "reason": "the goal's own line is said in its place"})
         if event["id"] in insights:
-            # The verified claim is said in this event's place, never both.
-            lines.append(insights.pop(event["id"]))
+            # The verified claim is said in this event's place, never both; in a goal's place, at a
+            # goal's priority, so the shot before it cannot crowd it out.
+            line = insights.pop(event["id"])
+            priority = PRIORITY["goal"] if is_goal else line.priority
+            lines.append(Line(line.key, line.t, priority, line.pan, line.evidence, line.versions, line.source,
+                              line.side_known))
             continue
+        if event["id"] in scored or event["id"] in in_spell:
+            continue
+        if event["id"] in spell_at:
+            spell = spell_at[event["id"]]
+            ids = [e["id"] for e in spell]
+            last = spell[-1]
+            versions = checked(spell_lines.versions(spell, where(last.get("end_x", last["x"]),
+                                                                  last.get("end_y", last["y"]))), ids)
+            if versions:
+                lines.append(Line(f"spell-{last['id']}", last["t"], PRIORITY["spell"], pan_for(last["x"]),
+                                  ids, versions, "spell", sides_told(ids)))
+                continue
         if event["type"] not in PRIORITY:
             continue
         confidence = event.get("confidence")
@@ -426,8 +478,9 @@ def candidates(
             refused.append({"evidence": [event["id"]], "text": None, "reason": reason})
             continue
         versions = checked(event_versions(event), [event["id"]])
+        kind = "goal" if event["type"] == "shot" and event.get("outcome") == "goal" else event["type"]
         if versions:
-            lines.append(Line(event["id"], event["t"], PRIORITY[event["type"]], pan_for(event["x"]),
+            lines.append(Line(event["id"], event["t"], PRIORITY[kind], pan_for(event["x"]),
                               [event["id"]], versions, "event", sides_told([event["id"]])))
     lines.extend(insights.values())  # an insight whose last event is not in this list: none today
     for t, text, fact in shape_lines(shape):
@@ -452,7 +505,16 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
     said: list[Said] = []
     dropped: list[dict] = []
     free_at = float("-inf")
+    last_said: dict[str, float] = {}
     for i, line in enumerate(lines):
+        if line.priority >= PRIORITY["spell"]:
+            # A pass or a spell said in the same words as one within REPEAT_S tells the listener
+            # nothing new ("A player finds another player, in the middle", again): not said.
+            words = spoken(line.versions[0], line.side_known, clubs=clubs)
+            if line.t - last_said.get(words, float("-inf")) < REPEAT_S:
+                dropped.append({"id": line.key, "t": line.t,
+                                "reason": f"said in the same words within {REPEAT_S:g} s"})
+                continue
         start = max(line.t, free_at)
         if start - line.t > MAX_LAG_S:
             dropped.append({"id": line.key, "t": line.t, "reason": f"voice busy until {free_at:.2f}"})
@@ -482,6 +544,8 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
             duration_s=seconds, duration_source=how,
         ))
         free_at = end + GAP_S
+        if line.priority >= PRIORITY["spell"]:
+            last_said[spoken(line.versions[0], line.side_known, clubs=clubs)] = line.t
     return Track(said, dropped)
 
 

@@ -245,6 +245,14 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+
+# The plausibility gate: a ball speed a claim states must be one a kick can give. A shot (or any
+# strike) is held to P3's 40 m/s, the fastest recorded shots; a pass to the fastest aimed kick: a
+# demand for accuracy brings a kick's ball speed to about 85% of its maximum (Andersen and Dørge
+# 2011, GROUNDING P19), so 85% of P3. A faster reading is vision's, not the ball's (a ground
+# projection of a ball in the air, or a misread frame), and is refused, never rounded down.
+MAX_STRIKE_KMH = 40.0 * 3.6
+MAX_PASS_KMH = round(0.85 * MAX_STRIKE_KMH, 1)
 # Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
 # confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
 # ones 0.447 to 0.985. A claim that names a team is held unless every detected event it cites had
@@ -292,6 +300,34 @@ class Verdict:
 def _normalize_clock(clock: str) -> str:
     minute, second = clock.split(":")
     return f"{minute.zfill(2)}:{second.zfill(2)}"
+
+
+def plausible_speed(event: dict) -> bool:
+    """Whether the event's ball speed is one a kick of its kind can give (MAX_PASS_KMH, MAX_STRIKE_KMH):
+    a graphic or a line states the speed only then, and says the rest without it."""
+    speed = event.get("ball_speed_kmh")
+    if speed is None:
+        return False
+    return float(speed) <= (MAX_PASS_KMH if event.get("type") == "pass" else MAX_STRIKE_KMH)
+
+
+def _implausible_speed(value: float, evidence: list[dict]) -> str | None:
+    """Why a stated ball speed no kick could give is refused: every cited event with that speed is
+    beyond its kind's bound (a pass's, else a strike's). None when one of them is possible."""
+    beyond = []
+    for event in evidence:
+        speed = event.get("ball_speed_kmh")
+        if speed is None or float(speed) != value:
+            continue
+        bound = MAX_PASS_KMH if event.get("type") == "pass" else MAX_STRIKE_KMH
+        if float(speed) <= bound:
+            return None
+        beyond.append((event.get("type") or "event", bound))
+    if not beyond:
+        return None
+    kind, bound = beyond[0]
+    return (f"implausible speed: {value:g} km/h for a {kind} is faster than any {kind} can be kicked "
+            f"(at most {bound:g} km/h): state it without the speed")
 
 
 def _number_field(text: str, start: int) -> str | None:
@@ -662,6 +698,8 @@ def check(
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
+            elif expected_field == "ball_speed_kmh" and (why := _implausible_speed(value, evidence)):
+                reasons.append(why)
             elif (player := bound.get(match.start())) and expected_field in FIELD_UNITS and (
                 value not in _player_values(evidence, player, expected_field)
             ):

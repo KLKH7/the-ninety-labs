@@ -42,13 +42,18 @@ from pathlib import Path
 from ninety.agents.factcheck import Claim, check, confidence_gate, side_known
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
-from ninety.speech import describe, voice
+from ninety.speech import describe, spells, voice
 
 FORMAT = 1
-PRIORITY = {"goal": 0, "shot": 1, "restart": 2, "insight": 3}
+PRIORITY = {"goal": 0, "shot": 1, "restart": 2, "insight": 3, "spell": 4}
 MAX_LAG_S = describe.MAX_LAG_S  # the Describer's limit: a line said late is about the wrong play
 GAP_S = 1.0  # design: the silence a commentator leaves between calls, so the crowd is heard
 SHOT_SAID = {"on_target": "on target", "off_target": "wide", "blocked": "blocked"}
+# Design: the same restart call is not made twice within this long (two out-of-play detections of one
+# stoppage, a few seconds apart), and the ball going out is said in turn in these plain words, all
+# stating only that it went out, so the track does not repeat one sentence.
+REPEAT_S = 30.0
+OUT_SAID = ("It's gone out of play.", "Out of play.", "That's out.", "Out it goes.")
 # A detected set piece's restart (schemas/match_event.schema.json `restart`), with its taker's side
 # and without it.
 RESTART_SAID = {
@@ -101,7 +106,8 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
     """(kind, versions) for one detected event, in its checked form ("home" and "away" for the
     sides, which the voice says as the clubs); None for an event a commentator does not call."""
     kind, side = event["type"], _side(event)
-    if kind == "goal":
+    if kind == "goal" or (kind == "shot" and event.get("outcome") == "goal"):
+        # A shot vision saw go in is called as the goal when no goal event follows it (calls).
         return "goal", ([f"Goal! {side} score!", "Goal!"] if side else ["Goal!"])
     if kind == "shot":
         said = SHOT_SAID.get(event.get("outcome") or "")
@@ -145,10 +151,22 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
         return ok
 
     out: list[Call] = []
-    for event in events:
-        written = event_versions(event)
+    scored = describe.scored_by(events)  # a shot whose goal event follows: the goal is the call
+    last_said: dict[str, float] = {}
+    outs = 0
+    for event in sorted(events, key=lambda e: (e["t"], e["id"])):
+        written = None if event["id"] in scored else event_versions(event)
         if written is None:
             continue
+        if written[0] == "restart":
+            if event["t"] - last_said.get(event["type"] + written[1][0], float("-inf")) < REPEAT_S:
+                refused.append({"evidence": [event["id"]], "text": written[1][0],
+                                "reason": f"the same call within {REPEAT_S:g} s"})
+                continue
+            last_said[event["type"] + written[1][0]] = event["t"]
+            if event["type"] == "out_of_play":
+                written = ("restart", [OUT_SAID[outs % len(OUT_SAID)]])
+                outs += 1
         if event.get("source") != "vision" or event.get("confidence") is None:
             reason = "not a vision detection with a confidence: the commentary calls only those"
             refused.append({"evidence": [event["id"]], "text": None, "reason": reason})
@@ -157,6 +175,14 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
         versions = checked(versions, [event["id"]])
         if versions:
             out.append(Call(event["id"], event["t"], kind, [event["id"]], versions, _side(event) is not None))
+    for spell in spells.spells(events):
+        ids = [e["id"] for e in spell]
+        last = spell[-1]
+        versions = checked(spells.versions(spell, describe.where(last.get("end_x", last["x"]),
+                                                                  last.get("end_y", last["y"]))), ids)
+        if versions:
+            out.append(Call(f"spell-{last['id']}", last["t"], "spell", ids, versions,
+                            all(side_known(e) for e in spell)))
     for cue in cues:
         # The Producer's insight, in English: the Personalizer's persona and language variants are
         # versions of the same claim, and a commentator calls a moment once.
@@ -207,7 +233,7 @@ def schedule(found: list[Call], clubs: dict[str, str] | None = None,
             if start is not None:
                 start = _up(start)
                 end = _up(start + seconds)
-                event = None if call.kind == "insight" else call.key
+                event = None if call.kind in ("insight", "spell") else call.key  # a spell cites many
                 t = _up(match(start))
                 line = Line(f"cm-{call.key}", t, _up(t + seconds), text, event, call.kind,
                             PRIORITY[call.kind], n > 0, call.t, call.evidence, start, end)

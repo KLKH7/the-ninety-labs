@@ -409,7 +409,12 @@ def offline_models(events: list[dict]) -> Models:
     async def tactician(prompt: str) -> str:
         # A sentence, as a co-commentator would say it, from the event's own fields; not the graphic's
         # compact form ("h11 → h8, 17 m, 53 km/h"), which the template already shows.
-        event = by_id[json.loads(prompt)["moment"]["main_event"]]
+        body = json.loads(prompt)
+        event = by_id[body["moment"]["main_event"]]
+        reasons = (body.get("rejected") or {}).get("reasons", [])
+        if any(r.startswith("implausible speed") for r in reasons):
+            # Sent back for a speed no kick gives: said again without it, as a writer would.
+            event = {k: v for k, v in event.items() if k != "ball_speed_kmh"}
         text = describe.as_sentence(_text(event, "analyst") + ".")
         return json.dumps({"text": text, "evidence": [event["id"]]})
 
