@@ -30,9 +30,11 @@ Reads the detected events and the clip's segments only; nothing here opens the a
 from __future__ import annotations
 
 from ninety import highlights
-from ninety.agents.factcheck import MIN_CONFIDENCE, side_known
+from ninety.agents.factcheck import MIN_CONFIDENCE, SCOREBUG_SIDE, side_known
+from ninety.intel.scoring import SCOREBUG_MEASURED
 from ninety.intel.stats import goal_moments, pass_facts, shot_facts
 from ninety.match.timeline import Timeline
+from ninety.vision.scorebug import W_S  # the reconciler's window: how far a score change may be from its goal
 
 FORMAT = 1
 TEAMS = ("home", "away")
@@ -126,10 +128,37 @@ def cut_between(timeline: Timeline):
     return lambda t0, t1: seg(t0) != seg(t1)
 
 
-def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None) -> dict:
+def scorebug_sides(events: list[dict], readings: list[dict] | None) -> list[dict]:
+    """The events with each goal that a score change confirms sided by the scorebug: the club whose
+    digit changed, `team_source` "scorebug", which factcheck.side_known accepts as told surely.
+
+    Why that is sure: on the scorebug's validation (docs/eval/scorebug-validation.json, #356) the
+    reader found 16 of 16 goals with no false change and every change on the right side: precision
+    16/16, Wilson 95% interval 0.81 to 1.0 (the lower bound is under the tracker's 0.96 side gate;
+    16 goals cannot show more). Only while the reader is measured (scoring.SCOREBUG_MEASURED) and
+    only from a change at or above the fact-checker's confidence gate, as the phone shows the score.
+    Every other event keeps the tracker's side and its 0.96 gate."""
+    if not readings or not SCOREBUG_MEASURED:
+        return events
+    changes = [c for c in readings if c["type"] == "score_change" and c.get("team") in TEAMS
+               and (c.get("confidence") or 0.0) >= MIN_CONFIDENCE]
+    sided, used = {}, set()
+    for goal, _ in goal_moments(events):
+        near = sorted((c for c in changes if c["id"] not in used and abs(c["t"] - goal["t"]) <= W_S),
+                      key=lambda c: abs(c["t"] - goal["t"]))
+        if near:
+            used.add(near[0]["id"])
+            sided[goal["id"]] = {**goal, "team": near[0]["team"], "team_source": SCOREBUG_SIDE}
+    return [sided.get(e["id"], e) for e in events]
+
+
+def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None,
+          scorebug: list[dict] | None = None) -> dict:
     """match.json for a clip (its clip.json) and its detected events; `verdict` is what the
-    highlights measurement decided (ninety/highlights.py), none until it has run."""
+    highlights measurement decided (ninety/highlights.py), none until it has run; `scorebug` the
+    broadcast scorebug's readings (scorebug.jsonl), which side the goals they confirm."""
     timeline = Timeline.of_clip(clip_meta)
+    events = scorebug_sides(events, scorebug)
     sure = confident(events)
     # A goal counts for a side only when that side was told surely (factcheck.side_known, lesson
     # 245); otherwise it is a goal with no team, in no club's score.

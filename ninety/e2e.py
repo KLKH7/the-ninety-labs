@@ -754,7 +754,8 @@ async def run(args: argparse.Namespace) -> dict:
         verdict = None
         if args.highlights_verdict:
             verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
-        body = condensed.build(clip.meta, events, verdict)
+        body = condensed.build(clip.meta, events, verdict,
+                               read_scorebug(args.scorebug) if args.scorebug else None)
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])

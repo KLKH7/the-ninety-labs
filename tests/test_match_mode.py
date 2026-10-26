@@ -108,6 +108,31 @@ def test_a_chapter_names_no_club_its_side_was_not_told_surely():
     assert body["goals"] == [{"t": 61.0, "team": None, "event": "g1"}]
 
 
+def change(cid, t, team, confidence=0.99):
+    return {"id": cid, "t": t, "frame": round(t * FPS), "type": "score_change", "team": team,
+            "score": {"home": 1, "away": 0}, "confidence": confidence}
+
+
+def test_a_goal_its_score_change_confirms_takes_the_scorebug_s_side_and_names_the_club():
+    weak = [event("g1", 61.0, "goal", "away", team_confidence=0.94)]  # the tracker's side: unsure
+    body = condensed.build(META, weak, scorebug=[change("c1", 61.2, "home")])
+    assert body["goals"] == [{"t": 61.0, "team": "home", "event": "g1"}]  # the changed digit's club
+    assert body["chapters"][0]["label"] == "Goal, home"
+    assert body["highlights"]["moments"][0]["team"] == "home"
+
+
+@pytest.mark.parametrize("scorebug", [
+    None,  # no scorebug read
+    [change("c1", 63.0, "home")],  # a change too far from the goal (beyond the reconciler's 1 s)
+    [change("c1", 61.2, "home", confidence=MIN_CONFIDENCE - 0.1)],  # a change under the gate
+])
+def test_a_goal_no_score_change_confirms_keeps_the_tracker_s_gate(scorebug):
+    weak = [event("g1", 61.0, "goal", "away", team_confidence=0.94)]
+    body = condensed.build(META, weak, scorebug=scorebug)
+    assert body["goals"] == [{"t": 61.0, "team": None, "event": "g1"}]
+    assert body["chapters"][0]["label"] == "Goal"
+
+
 def test_a_shot_that_went_in_with_no_goal_event_is_still_a_goal():
     lone_shot = [event("s1", 60.6, "shot", "home", "goal", team_confidence=0.99),
                  event("p1", 61.0, "pass", "away", "success")]
