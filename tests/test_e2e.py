@@ -505,7 +505,8 @@ def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
         aired += [claim["text"], *(s["detail"] for s in claim["steps"])]
     aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
     # audio.json's checked `text` too: never spoken, but the bundle is public (judges open its files).
-    aired += [t for s in json.loads((out / "audio.json").read_text())["said"] for t in (s["spoken"], s["text"])]
+    said = json.loads((out / "audio.json").read_text())["said"]
+    aired += [t for s in said for t in (s["spoken"], s["text"])]
     aired.append((out / "description.vtt").read_text())
     assert aired and not [t for t in aired if TRACK_ID.search(t)]
     import re
