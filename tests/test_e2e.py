@@ -504,7 +504,18 @@ def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
     for claim in json.loads((out / "trace.json").read_text())["claims"]:
         aired += [claim["text"], *(s["detail"] for s in claim["steps"])]
     aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
-    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    # Every text audio.json holds, not only what is said: a screen or a caption may show any of them.
+    def texts(node, key=None):
+        if isinstance(node, dict):
+            skip = ("evidence", "event", "id", "file")
+            return [t for k, v in node.items() if k not in skip for t in texts(v, k)]
+        if isinstance(node, list):
+            return [t for v in node for t in texts(v, key)]
+        return [node] if isinstance(node, str) and " " in node else []
+
+    audio = texts(json.loads((out / "audio.json").read_text()))
+    assert any("player" in t for t in audio), "no line about a player: this would prove nothing"
+    aired += audio
     aired.append((out / "description.vtt").read_text())
     assert aired and not [t for t in aired if TRACK_ID.search(t)]
     import re
