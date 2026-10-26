@@ -398,3 +398,24 @@ def test_a_simulated_match_serves_no_insights():
 
     assert match_server.insights_of("seed7") is None
     assert match_server.line_breaks("seed7", 1, 5)["tracked"] is False
+
+
+def test_the_scorebug_files_readings_give_the_score_before_any_change():
+    # A clip joined at 2-1: the scorebug file's first reading holds it (`score_reads`); the changes come
+    # with the detected events. The score question then says the scorebug's numbers, each by its club.
+    import asyncio
+
+    from ninety.agents import companion_match as cm
+    from ninety.agents.companion import Question
+    from ninety.intel.match_insights import MatchInsights
+
+    frames = [frame(n, parked("home"), parked("away")) for n in range(0, 25 * 120, 25)]
+    read = {"id": "r1", "t": 0.0, "type": "score_read", "score": {"home": 2, "away": 1}, "x": 52.5, "y": 34.0,
+            "source": "vision", "confidence": 0.99}
+    fixture = teamsheet.Fixture(7, "OAK", "FEN")
+    mi = MatchInsights.build("x", frames, [], fixture, {}, score_reads=[read])
+    assert [(r["home"], r["away"], r["confident"]) for r in mi.facts["scorebug"]] == [(2, 1, True)]
+    answer = asyncio.run(cm.answer_match(Question("s1", None, "What's the score?", 90.0), mi)).answer
+    clubs = fixture.clubs
+    assert f"{clubs['home']} 2 goals" in answer.text and f"{clubs['away']} 1 goal" in answer.text
+    assert MatchInsights.build("x", frames, [], fixture, {}).facts["scorebug"] == []
