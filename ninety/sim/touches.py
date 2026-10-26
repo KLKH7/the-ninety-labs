@@ -67,11 +67,11 @@ class Watch(Engine):
         rec["stopped"] = bool(stopped)
         return stopped
 
-    def deflect(self, p, cx, cy, cz, keep, at=None):
+    def deflect(self, p, cx, cy, cz, keep, at=None, palm=False):
         last = self.touch_log[-1] if self.touch_log else None
         if last and last["player"] == p.id and last["kind"] == "body" and last["frame"] == self.frame:
             last["z"] = cz  # the height where the body met it, which touched() is not given
-        return super().deflect(p, cx, cy, cz, keep, at)
+        return super().deflect(p, cx, cy, cz, keep, at, palm)
 
     def pass_to(self, carrier, tx, ty, lofted, throw=False, pace=decisions.ARRIVE_MPS, receiver=None,
                 hands=False):

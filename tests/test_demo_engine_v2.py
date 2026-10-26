@@ -148,3 +148,52 @@ def test_a_shot_too_fast_to_hold_comes_back_off_his_palms_in_play():
             break
     assert e.last_touch == k.id and e.held_by != k.id
     assert e.ball[3] < 0  # back up the pitch, not on toward his goal
+
+
+def test_a_ball_at_his_fingertips_comes_off_his_palms_one_into_his_hands_is_held():
+    # V4 through the contact rule: a 15 m/s pass (his hands hold at least 16 m/s) meets his
+    # stretched hands 1.4 m across: near full stretch he cannot hold it, it comes back off his palms.
+    # The same ball 0.5 m across he holds.
+    from ninety.sim import ball as B
+
+    def meet(across: float) -> tuple[Engine, object]:
+        e = Engine(1)
+        k = e.keeper("away")
+        k.x, k.y, k.vx, k.vy, k.heading = 104.0, 34.0, 0.0, 0.0, math.pi
+        for q in e.players:  # nobody else near
+            if q is not k:
+                q.x, q.y = 20.0, 34.0
+        e.possessor = None
+        e.kicked = {"type": "pass", "team": "home", "player": "h9", "x": 80.0, "y": 34.0 + across}
+        e.last_touch, e.kicked_at = "h9", e.t - 1.2  # he reacted long ago: his arms are stretched
+        before = (103.6, 34.0 + across, 1.0, 15.0, 0.0, 0.0)
+        e.ball = B.step(before, DT)
+        e.contact(before)
+        return e, k
+    e, k = meet(1.4)
+    assert e.last_touch == k.id and e.held_by != k.id and e.ball[3] < 0
+    e, k = meet(0.5)
+    assert e.held_by == k.id
+
+
+def test_the_engine_carries_the_ball_at_the_carrying_pace_he_judged_it_by():
+    # V1: alone with the ball and a carry chosen, he runs it faster than main let anyone carry it at
+    # his feet (4.5 m/s): at his feet at his carrying pace, and between touches onto his push (D6, as
+    # on main) no faster than his own top speed.
+    e = Engine(1)
+    p = e.by_id["h7"]
+    for q in e.players:
+        if q.team == "away":
+            q.x, q.y = 100.0, 5.0
+    p.x, p.y, p.vx, p.vy, p.heading = 30.0, 34.0, 0.0, 0.0, 0.0
+    e.possessor, e.restart, e.set_by = p.id, None, None
+    e.ball = (p.x + 0.3, p.y, 0.0, 0.0, 0.0, 0.0)
+    e.decide = lambda *a, **k: None  # he keeps to the carry he chose
+    e.dribble_to = (90.0, 34.0)
+    top = 0.0
+    for _ in range(int(4.0 / DT)):
+        e.step()
+        if e.dribble_to is None and e.possessor == p.id:
+            e.dribble_to = (90.0, 34.0)
+        top = max(top, math.hypot(p.vx, p.vy))
+    assert D.dribble_speed(1.0) + 0.5 < top <= p.physique.v0
