@@ -3218,6 +3218,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
 
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
 ### 268. Two pull requests green separately can be red together
 - **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
   #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
