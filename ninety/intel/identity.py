@@ -28,7 +28,14 @@ an outcome (tests/test_identity_feed.py).
 5. **Names cross the camera join (lesson 259).** Events name the broadcast's tracks, another id
    space. A broadcast track takes the player of the tactical track its association pairs it with
    (naming.tactical: at least the association gate and the same side), never by its id string.
-6. **Side.** An event whose player is named takes his side from the feed (`team_source`
+6. **The broadcast camera, directly.** As broadcasts match a provider's feed to their own
+   calibrated camera, the broadcast's tracks (in pitch metres, only in frames that passed the
+   camera trust test) are matched to the feed too, by steps 1-4 with one change: both sides'
+   players are candidates, since the broadcast's side is what the feed supplies. Pre-registered
+   in docs/eval/identity-direct-plan.md.
+7. **Combined.** A broadcast track named both through the join and directly takes the more
+   confident: the direct share against the tactical share times the association's confidence.
+8. **Side.** An event whose player is named takes his side from the feed (`team_source`
    id_feed, confidence 1.0); every other field of every event is left as vision detected it.
    Since a track is matched only on its own side, this mostly confirms the side vision's track
    reads, now surely, and corrects an event whose side disagreed with its player's track. A sure
@@ -140,8 +147,9 @@ def load(path: Path, times: Sequence[float] | None = None) -> Feed:
 
 
 def assign(frames: Sequence[Mapping], feed: Feed, window_s: float = WINDOW_S,
-           gate_m: float = GATE_M) -> dict[str, dict]:
-    """Each tactical track the feed names: its feed id, share and span (steps 2-4)."""
+           gate_m: float = GATE_M, any_side: bool = False, one_at_a_time: bool = True) -> dict[str, dict]:
+    """Each track the feed names: its feed id, share and span (steps 2-4). With `any_side`, both
+    sides' feed players are candidates for every track (step 6)."""
     team_of = {i: r["team"] for i, r in feed.roster.items()}
     # (segment, window, side) -> track -> feed id -> [distance sum, frames]
     sums: dict[tuple, dict[str, dict[str, list]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(
@@ -158,9 +166,9 @@ def assign(frames: Sequence[Mapping], feed: Feed, window_s: float = WINDOW_S,
             seen[track] += 1
             t0, t1 = spans.get(track, (t, t))
             spans[track] = (min(t0, t), max(t1, t))
-            cell = sums[(naming.segment(track), int(t // window_s), side)][track]
+            cell = sums[(naming.segment(track), int(t // window_s), "any" if any_side else side)][track]
             for i, (x, y) in pos.items():
-                if team_of.get(i) == side:
+                if any_side or team_of.get(i) == side:
                     d = cell[i]
                     d[0] += ((p["x"] - x) ** 2 + (p["y"] - y) ** 2) ** 0.5
                     d[1] += 1
@@ -193,6 +201,8 @@ def assign(frames: Sequence[Mapping], feed: Feed, window_s: float = WINDOW_S,
             continue  # not that player for most of its frames on the feed
         out[track] = {"id": fid, "share": round(n / seen[track], 3), "frames": n,
                       "span_s": round(spans[track][1] - spans[track][0], 1), "span": spans[track]}
+    if not one_at_a_time:  # step 4 left out: for an evaluation's reasons only
+        return out
     claims: dict[str, list] = defaultdict(list)
     for track, r in out.items():
         claims[r["id"]].append((track, *r["span"], r["frames"]))
@@ -204,10 +214,10 @@ def assign(frames: Sequence[Mapping], feed: Feed, window_s: float = WINDOW_S,
     return out
 
 
-def tactical(frames: Sequence[Mapping], feed: Feed) -> dict[str, dict]:
-    """Each tactical track the feed names: who he is, as a fan is told (the team sheet's label)."""
+def tactical(frames: Sequence[Mapping], feed: Feed, any_side: bool = False) -> dict[str, dict]:
+    """Each track the feed names: who he is, as a fan is told (the team sheet's label)."""
     out = {}
-    for track, r in assign(frames, feed).items():
+    for track, r in assign(frames, feed, any_side=any_side).items():
         who = feed.roster[r["id"]]
         out[track] = {"track": track, "team": who["team"], "player": r["id"], "name": who["name"],
                       "number": who["jersey"], "position": who["position"], "share": r["share"],
@@ -217,12 +227,14 @@ def tactical(frames: Sequence[Mapping], feed: Feed) -> dict[str, dict]:
 
 def gate(path: Path = CALIBRATION) -> dict:
     """The measured association gate (docs/eval/identity.json) a broadcast track's name crosses the
-    camera join at; None (only pairings every paired frame agreed on, naming.tactical) unmeasured."""
+    camera join at; None (only pairings every paired frame agreed on, naming.tactical) unmeasured.
+    `direct`: whether the direct path met its pre-registered gate (docs/eval/identity-direct-plan.md)."""
     try:
         body = json.loads(path.read_text())
     except FileNotFoundError:
-        return {"association": None}
-    return {"association": body.get("association") if body.get("held_out_met") else None}
+        return {"association": None, "direct": False}
+    return {"association": body.get("association") if body.get("held_out_met") else None,
+            "direct": bool(body.get("direct_held_out_met"))}
 
 
 def broadcast(association: Mapping[str, Mapping], named: Mapping[str, Mapping],
@@ -236,8 +248,77 @@ def broadcast(association: Mapping[str, Mapping], named: Mapping[str, Mapping],
     return out
 
 
+def broadcast_frames(vision: Path, clip: Path | None = None) -> list[dict]:
+    """Every segment's broadcast tracked frames (pitch metres, only frames that passed the camera
+    trust test), ids renumbered as the join renumbers them: segments in time order, which is name
+    order (seed<N>-t<start frame, zero-padded>; step 6). With the joined clip's folder, refused
+    unless the segments are exactly the join's: as many as match_join.json says, each starting
+    where one of clip.json's pieces does, so a stray run can never shift another segment's ids."""
+    from ninety.vision.match_join import renumber
+
+    names = sorted(p.name for p in Path(vision).iterdir() if (p / "broadcast" / "tracked.json").is_file())
+    if clip is not None:
+        joined = json.loads((Path(clip) / "match_join.json").read_text())["segments"]
+        starts = {int(s["frame"]) for s in json.loads((Path(clip) / "clip.json").read_text())["segments"]}
+        stray = [n for n in names if int(n.rsplit("-t", 1)[1]) not in starts]
+        if len(names) != joined or stray:
+            raise ValueError(f"{vision}: {len(names)} broadcast runs for the join's {joined} segments"
+                             f"{f'; not the clip`s: {stray}' if stray else ''}")
+    out = []
+    for k, name in enumerate(names):
+        body = json.loads((Path(vision) / name / "broadcast" / "tracked.json").read_text())
+        out += [renumber(f, k) for f in body["frames"]]
+    return out
+
+
+def _number(track: str) -> str:
+    return track.split("-t", 1)[1]
+
+
+def combined(ids: Sequence[str], via_join: Mapping[str, Mapping], direct: Mapping[str, Mapping],
+             association: Mapping[str, Mapping]) -> dict[str, dict]:
+    """Each event-space broadcast id its name (step 7): through the join, directly, or, named
+    both ways, the more confident (direct share against tactical share x association confidence;
+    a tie to the direct path). A track is found by its number, which the tracker gives once for
+    both sides in a segment, since an event's id letter can differ from its track's."""
+    by_num = {_number(t): w for t, w in direct.items()}
+    if len(by_num) != len(direct):  # the tracker numbers a segment's tracks once for both sides
+        raise ValueError("two directly named tracks share a number")
+    out = {}
+    for track in sorted(set(ids)):
+        j, d = via_join.get(track), by_num.get(_number(track))
+        if j is not None:
+            j = {**j, "confidence": round(j["share"] * association[track].get("confidence", 0.0), 3),
+                 "path": "join"}
+        if d is not None:
+            d = {**d, "track": track, "confidence": d["share"], "path": "direct"}
+        # design: the direct path's share against the join's share times the association's
+        # confidence (both a fraction of frames the name held on); a tie to the broadcast's own track
+        pick = d if d is not None and (j is None or d["confidence"] >= j["confidence"]) else j
+        if pick is not None:
+            out[track] = pick
+    return out
+
+
+def event_ids(events: Sequence[Mapping], association: Mapping[str, Mapping]) -> list[str]:
+    """The broadcast ids a line-up must cover: every person an event names, and the join's."""
+    people = ("player", "receiver", "intended", "interceptor", "deflected_by")  # naming.PEOPLE
+    return sorted({e[k] for e in events for k in people if e.get(k)} | set(association))
+
+
+def named_broadcast(association: Mapping[str, Mapping], named_tactical: Mapping[str, Mapping], feed: Feed,
+                    events: Sequence[Mapping], b_frames: Sequence[Mapping] | None = None) -> dict[str, dict]:
+    """The broadcast ids' names: through the join (step 5) and, with the broadcast's frames and the
+    direct path's pre-registered gate met, directly too, combined (steps 6-7)."""
+    g = gate()
+    via = broadcast(association, named_tactical, g)
+    if not b_frames or not g["direct"]:
+        return via
+    return combined(event_ids(events, association), via, tactical(b_frames, feed, any_side=True), association)
+
+
 def sided(events: Sequence[Mapping], named_broadcast: Mapping[str, Mapping]) -> list[dict]:
-    """The events, each whose player the feed names given his side (step 6); nothing else changes."""
+    """The events, each whose player the feed names given his side (step 8); nothing else changes."""
     out = []
     for e in events:
         w = named_broadcast.get(e.get("player") or "")
@@ -267,7 +348,7 @@ def load_for(path: Path, frames: Sequence[Mapping], fixture: Fixture) -> Feed:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Write the detected events with the feed's sides (step 6), for match_insights and ninety-e2e."""
+    """Write the detected events with the feed's sides (step 8), for match_insights and ninety-e2e."""
     from ninety.intel.match_insights import load_fixture
 
     ap = argparse.ArgumentParser(description="Give detected events their player's side from the ID feed.")
@@ -276,13 +357,17 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--detected", type=Path, required=True)
     ap.add_argument("--fixture", type=Path, required=True, help="the clip's clip.json")
     ap.add_argument("--feed", type=Path, required=True)
+    ap.add_argument("--broadcast-vision", type=Path, default=None,
+                    help="the segments' vision runs (<seg>/broadcast/tracked.json): name the broadcast's "
+                         "tracks directly too (step 6)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     frames = json.loads(args.tracked.read_text())["frames"]
-    feed = load_for(args.feed, frames, load_fixture(args.fixture))
+    b_frames = broadcast_frames(args.broadcast_vision, args.fixture.parent) if args.broadcast_vision else []
+    feed = load_for(args.feed, [*frames, *b_frames], load_fixture(args.fixture))
     association = json.loads(args.association.read_text())["tracks"]
-    named = broadcast(association, tactical(frames, feed), gate())
     events = [json.loads(x) for x in args.detected.read_text().splitlines() if x.strip()]
+    named = named_broadcast(association, tactical(frames, feed), feed, events, b_frames)
     rows = sided(events, named)
     args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     n = sum(r.get("team_source") == SOURCE for r in rows)
@@ -290,6 +375,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 __all__ = ["CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
+           "broadcast_frames", "combined", "event_ids", "named_broadcast",
            "disclosure", "gate", "lineup", "load", "load_for", "sided", "tactical"]
 
 

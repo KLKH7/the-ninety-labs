@@ -9,6 +9,7 @@
 // z up. Pixel coordinates have their origin at the top-left corner of the image.
 
 import * as THREE from 'three';
+import { applyBroadcastLook, GRADE_GLSL } from './look.js';
 
 const PX_PER_M = 35; // pitch texture resolution
 const GROUND = { x0: -6, x1: 111, y0: -6, y1: 74 }; // pitch plus apron covered by the texture
@@ -2028,11 +2029,12 @@ class BroadcastRenderer {
 
     // post: motion blur along the pan, sensor noise
     this.post = new THREE.ShaderMaterial({
-      uniforms: { tex: { value: this.beautyRT.texture }, blur: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(this.W, this.H) }, noise: { value: p.noise }, frame: { value: 0 }, rain: { value: p.weather === 'rain' ? 1 : 0 } },
+      uniforms: { tex: { value: this.beautyRT.texture }, blur: { value: new THREE.Vector2() }, res: { value: new THREE.Vector2(this.W, this.H) }, noise: { value: p.noise }, frame: { value: 0 }, rain: { value: p.weather === 'rain' ? 1 : 0 }, sharpen: { value: 0.4 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
-        uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain;
+        uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain; uniform float sharpen;
         varying vec2 vUv;
+        ${GRADE_GLSL}
         float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19 + fract(frame * 0.6180339)); return fract((p.x + p.y) * p.x); }
         // The exposure: the picture smeared along the pan over the shutter.
         vec3 smear(vec2 uv, vec2 d){
@@ -2049,7 +2051,7 @@ class BroadcastRenderer {
           // either end of its smear (the critic of 0.5.1's first clips: "two ghost copies").
           vec3 nbor = smear(vUv + vec2(px.x, 0.0), d) + smear(vUv - vec2(px.x, 0.0), d)
             + smear(vUv + vec2(0.0, px.y), d) + smear(vUv - vec2(0.0, px.y), d);
-          c += (c - nbor * 0.25) * 0.4;
+          c += (c - nbor * 0.25) * sharpen;
           if (rain > 0.0) {
             c *= 0.9;
             float col = floor(vUv.x * 150.0);
@@ -2060,13 +2062,18 @@ class BroadcastRenderer {
             float gate = step(0.78, hash(vec2(col, 4.2)));
             c += vec3(0.72, 0.76, 0.8) * line * thin * gate * 0.55;
           }
+          #ifdef BROADCAST_LOOK
+          c = broadcastGrade(c);
+          #else
           c = clamp((c - vec3(0.04)) * 1.22, 0.0, 1.0);
           float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(luma), c, 1.1);
+          #endif
           vec2 vig = vUv - 0.5;
           c *= 1.0 - dot(vig, vig) * 0.16;
           c += (hash(gl_FragCoord.xy) - 0.5) * 2.0 * noise;
           gl_FragColor = vec4(max(c, 0.0), 1.0);
+          #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
       depthTest: false, depthWrite: false,
@@ -2100,7 +2107,9 @@ class BroadcastRenderer {
       this.bugRect = [0, 0, 0, 0];
       this.bug.visible = false;
     }
-    return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
+    // The broadcast look (look.js): the stream a viewer watches of a broadcast stadium only.
+    this.look = this.graphics && p.stadium === 'broadcast' ? applyBroadcastLook(this) : null;
+    return { bugRect: this.bugRect, look: this.look, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
   setupLights(p) {

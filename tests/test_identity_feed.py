@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from ninety import e2e
-from ninety.intel import identity
+from ninety.intel import identity, naming
 from ninety.intel import match_insights as mi_mod
 from ninety.intel.match_insights import MatchInsights
 from ninety.intel.roles import TEMPLATE
@@ -367,9 +367,104 @@ def test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target(t
     held = json.loads((ROOT / "docs/eval/identity.json").read_text())["held_out"]
     met = all(held[u]["precision"] >= body["target"] for u in ("track_names", "event_names"))
     assert body["held_out_met"] == met
+    direct = json.loads((ROOT / "docs/eval/identity.json").read_text())["direct"]["held_out"]["event_names"]
+    assert body["direct_held_out_met"] == (direct["precision"] >= body["target"])  # the plan's gate
     p = tmp_path / "c.json"
-    p.write_text(json.dumps({**body, "held_out_met": False}))
-    assert identity.gate(p) == {"association": None}
+    p.write_text(json.dumps({**body, "held_out_met": False, "direct_held_out_met": False}))
+    assert identity.gate(p) == {"association": None, "direct": False}
+
+
+# --- the broadcast camera, matched to the feed directly (docs/eval/identity-direct-plan.md) ------
+
+def test_the_broadcast_frames_are_renumbered_as_the_join_renumbers_them(tmp_path):
+    for name, tid in (("seed1-t000100", "h-t3"), ("seed1-t000000", "a-t2")):
+        (tmp_path / name / "broadcast").mkdir(parents=True)
+        (tmp_path / name / "broadcast" / "tracked.json").write_text(json.dumps(
+            {"frames": [{"frame": 1, "t": 0.04, "players": [{"id": tid, "team": "home", "x": 1, "y": 1}]}]}))
+    got = [p["id"] for f in identity.broadcast_frames(tmp_path) for p in f["players"]]  # no clip: no check
+    assert got == ["a-t2", f"h-t{naming.PER_SEGMENT + 3}"]  # segments in name order: t000000 first
+
+
+def test_a_broadcast_track_on_the_wrong_side_is_named_and_given_the_feed_s_side(feed_path):
+    frames = tracked(engine_frames(), wrong_side="h-t9")  # h9's track, read as away (a-t9)
+    feed = identity.load(feed_path)
+    assert "a-t9" not in identity.tactical(frames, feed)
+    w = identity.tactical(frames, feed, any_side=True)["a-t9"]
+    assert (w["player"], w["team"]) == ("LON07", "home")  # h9 is the right winger, shirt 7
+
+
+def test_both_sides_tracks_compete_for_a_player_in_one_matching():
+    """With any_side, a home and an away track near one feed player are matched together: the away
+    track on him wins the window, so the home track holds him for only half its frames."""
+    at = {k: {"H1": (10.0, 10.0)} for k in range(500)}
+    frames = [{"frame": k, "t": k / 25, "players": [
+        {"id": "h-t1", "team": "home", "x": 10.3, "y": 10.0},
+        *([{"id": "a-t2", "team": "away", "x": 10.0, "y": 10.0}] if k < 250 else [])]} for k in range(500)]
+    assert set(identity.assign(frames, exact_feed(at), any_side=True)) == {"a-t2"}
+
+
+def test_broadcast_runs_that_are_not_the_join_s_segments_are_refused(tmp_path):
+    clip = tmp_path / "clip"
+    clip.mkdir()
+    (clip / "clip.json").write_text(json.dumps({"segments": [{"frame": 0}, {"frame": 100}]}))
+    (clip / "match_join.json").write_text(json.dumps({"segments": 2}))
+    vision = tmp_path / "vision"
+    for name in ("seed1-t000000", "seed1-t000100"):
+        (vision / name / "broadcast").mkdir(parents=True)
+        (vision / name / "broadcast" / "tracked.json").write_text(json.dumps({"frames": []}))
+    assert identity.broadcast_frames(vision, clip) == []
+    (vision / "seed1-t000050" / "broadcast").mkdir(parents=True)  # a stray run
+    (vision / "seed1-t000050" / "broadcast" / "tracked.json").write_text(json.dumps({"frames": []}))
+    with pytest.raises(ValueError, match="join"):
+        identity.broadcast_frames(vision, clip)
+
+
+def test_two_directly_named_tracks_never_share_a_number():
+    with pytest.raises(ValueError, match="number"):
+        identity.combined(["h-t3"], {}, {"h-t3": {"share": 1.0}, "a-t3": {"share": 1.0}}, {})
+
+
+def test_every_event_gets_one_reason_in_the_plan_s_order():
+    from ninety.eval.identity_eval import gate_met, unnamed_reasons
+
+    events = [{"player": p} for p in ("h-t1", None, "a-t2", "h-t3", "h-t4")]
+    got = unnamed_reasons(events, {"h-t1": {}}, seen={"1", "3", "4"}, majority={"1", "4"})
+    assert got == {"named": 1, "no_player_attributed": 1, "calibration_withheld": 1, "no_feed_majority": 1,
+                   "name_held_by_another_track": 1}
+    assert gate_met({"event_names": {"precision": 0.95}})
+    assert not gate_met({"event_names": {"precision": 0.94}})
+    assert not gate_met({"event_names": {"precision": None}})
+
+
+def test_combined_finds_a_track_by_number_and_keeps_the_more_confident_name():
+    direct = {"h-t7": {"name": "D", "share": 0.9}, "a-t8": {"name": "E", "share": 0.6},
+              "h-t5": {"name": "F", "share": 0.6}}
+    via = {"a-t8": {"name": "J", "share": 1.0}, "h-t5": {"name": "G", "share": 1.0},
+           "h-t9": {"name": "K", "share": 1.0}}
+    association = {"a-t8": {"confidence": 0.5}, "h-t5": {"confidence": 0.9}, "h-t9": {"confidence": 0.5}}
+    got = identity.combined(["a-t7", "a-t8", "h-t5", "h-t9"], via, direct, association)
+    assert got["a-t7"]["name"] == "D" and got["a-t7"]["track"] == "a-t7"  # the event's letter, by number
+    assert got["a-t8"]["name"] == "E"  # direct 0.6 beats the join's 1.0 x 0.5
+    assert got["h-t5"]["name"] == "G"  # the join's 1.0 x 0.9 beats direct 0.6
+    assert got["h-t9"]["path"] == "join"
+    tie = identity.combined(["a-t8"], {"a-t8": {"name": "J", "share": 0.6}}, direct,
+                            {"a-t8": {"confidence": 1.0}})
+    assert tie["a-t8"]["name"] == "E"  # a tie goes to the broadcast's own track
+
+
+def test_the_direct_path_is_used_only_when_its_gate_was_met(feed_path, tmp_path, monkeypatch):
+    frames = tracked(engine_frames())
+    feed = identity.load(feed_path)
+    events = [{"player": "h-t5"}]
+    for met, expect in ((True, {"h-t5"}), (False, set())):
+        p = tmp_path / f"{met}.json"
+        p.write_text(json.dumps({"association": 0.75, "held_out_met": True, "direct_held_out_met": met}))
+        monkeypatch.setattr(identity, "CALIBRATION", p)
+        monkeypatch.setattr(identity, "gate", lambda path=p: _gate(path))
+        assert set(identity.named_broadcast({}, {}, feed, events, frames)) == expect
+
+
+_gate = identity.gate
 
 
 # --- the feed is used ONLY for identity and side ------------------------------------------------

@@ -1,6 +1,7 @@
 """The phone companion's routes: pairing, the relay, the minimap, player cards and questions.
 
     POST /api/pair                     {"clip": "seed7"} -> a 6-character code, valid for 2 hours
+                                       ("code": its old code re-claims it after a restart, if free)
     GET  /api/pair/{code}              {clip, expires_in}, for a phone given only the typed code
     WS   /api/pair/{code}?role=laptop  the laptop sends clock and focus messages
     WS   /api/pair/{code}?role=phone   each phone receives them, the latest first; a refused join
@@ -98,7 +99,12 @@ PAIR_BODY = Draft202012Validator(
         "type": "object",
         "additionalProperties": False,
         "required": ["clip"],
-        "properties": {"clip": {"type": "string", "enum": list(CLIPS)}},
+        "properties": {
+            "clip": {"type": "string", "enum": list(CLIPS)},
+            # A screen re-claiming the code it showed, after this server restarted (rooms live in
+            # memory) or its own connection dropped, so the phones on it rejoin without a rescan.
+            "code": {"type": "string", "pattern": f"^[{CODE_ALPHABET}]{{{CODE_LENGTH}}}$"},
+        },
     }
 )
 
@@ -321,9 +327,19 @@ class Companion:
         if isinstance(served, JSONResponse):
             return served
         self._purge()
+        wanted = body.get("code")
+        held = self.rooms.get(wanted) if wanted else None
+        if held is not None:
+            # Still open: given back only for the same clip with no screen on it, which is no more
+            # than the laptop slot the relay already offers whoever holds the code.
+            if held.clip != body["clip"] or held.laptop is not None:
+                return _error(409, "that code is in use; pair again for a new one")
+            return JSONResponse({"code": held.code, "clip": held.clip,
+                                 "expires_in": max(0, int(held.expires - self.clock()))})
         if len(self.rooms) >= MAX_ROOMS:
             return _error(503, "too many rooms open; try again later")
-        room = Room(self._new_code(), body["clip"], self.clock() + PAIR_TTL_S)
+        # A free code asked for back is taken as it is: no likelier to guess than a new random one.
+        room = Room(wanted or self._new_code(), body["clip"], self.clock() + PAIR_TTL_S)
         self.rooms[room.code] = room
         return JSONResponse({"code": room.code, "clip": room.clip, "expires_in": PAIR_TTL_S}, status_code=201)
 

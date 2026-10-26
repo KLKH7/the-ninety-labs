@@ -75,6 +75,10 @@
                 <button type="button" role="tab" id="lt-players" aria-controls="pane-players" aria-selected="false" tabindex="-1">Players</button>
               </div>
               <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
+                <!-- The fan's focus (#362's choices): the latest of each tactical moment, or the players most
+                     in the game, above the pitch. Shown only for that focus (style.css). -->
+                <section class="focus-strip" id="tactics-strip" aria-label="Shape" hidden></section>
+                <section class="focus-strip" id="players-strip" aria-label="Players in the game" hidden></section>
                 <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
                   <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
                   <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
@@ -345,22 +349,36 @@
             <h2 id="settings-title" tabindex="-1">Listening and text</h2>
             <button type="button" class="close" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
+          <div class="group group-first persona">
+            <ion-segment value="" id="persona-mode" class="seg" aria-label="How you watch">
+              <ion-segment-button value="casual"><ion-label>Casual</ion-label></ion-segment-button>
+              <ion-segment-button value="analyst"><ion-label>Analyst</ion-label></ion-segment-button>
+            </ion-segment>
+            <ion-segment value="" id="persona-club" class="seg" aria-label="Your club">
+              <ion-segment-button value="LON"><ion-label>London</ion-label></ion-segment-button>
+              <ion-segment-button value="LIS"><ion-label>Lisbon</ion-label></ion-segment-button>
+            </ion-segment>
+          </div>
+          <div class="group group-first">
+            <label class="setting-row"><span class="row-title">Demo passcode</span>
+              <input type="password" id="passcode" class="passcode" autocomplete="off" spellcheck="false" enterkeyhint="done" /></label>
+          </div>
           <div class="group group-first">
             <button type="button" class="setting-row row-link" id="fan-edit"><span class="row-title">Personalise</span><span class="row-value" id="fan-value"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
           </div>
-          <div class="group group-first">
+          <div class="group group-first listening">
             <label class="setting-row"><span><span class="row-title">Read aloud</span></span>
               <button type="button" class="speak switch-button" role="switch" aria-checked="false" aria-pressed="false" aria-label="Read new answers and moments aloud"><span class="knob"></span></button></label>
           </div>
-          <h3 class="group-title" id="voice-title">Voice</h3>
-          <ul class="group" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>
-          <h3 class="group-title">Transcript</h3>
-          <div class="group">
+          <h3 class="group-title listening" id="voice-title">Voice</h3>
+          <ul class="group listening" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>
+          <h3 class="group-title listening">Transcript</h3>
+          <div class="group listening">
             <label class="setting-row"><span><span class="row-title">Show what is read aloud</span></span>
               <input type="checkbox" role="switch" class="switch" id="transcript-on" /></label>
           </div>
-          <h3 class="group-title" id="rate-title">Speaking rate</h3>
-          <div class="group rate-group">
+          <h3 class="group-title listening" id="rate-title">Speaking rate</h3>
+          <div class="group rate-group listening">
             <input type="range" id="rate" aria-labelledby="rate-title" />
             <output id="rate-value" for="rate"></output>
           </div>
