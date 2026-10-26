@@ -68,3 +68,13 @@ most of the play. A segment in which either team's deepest player is further out
 more than half its sampled frames names nobody (`naming.side_doubt`). The rule was chosen after
 seeing that the wrong names were in such segments, so development no longer tests it: the
 held-out half does, scored once, with the same target, grid and selection rule as above.
+
+**Amendment 2 (Oct 25, after amendment 1 was graded on development, before the held-out was
+scored).** With amendment 1, names on development were right 0.95 to 1.0 of the time, but no
+setting named the 30 events the floor asks (at most 21). Diagnosis on development only: of the
+events whose actor had a tactical track with a role, 77 lost the name to the one-name-at-a-time
+rule. Two tracks that won one slot in different windows and overlapped in time both went unnamed.
+The rule is now one man per slot at a time (Hungarian within a window, and across windows): of a
+slot's tracks in a segment, the set that never overlap and together won the most frames keeps
+it (weighted interval scheduling), and the others are unnamed. Target, floor, grid and selection
+unchanged; the held-out half is scored once.

@@ -19,7 +19,11 @@ with three changes that each make a wrong name less likely, measured in docs/eva
    the play. A segment in which either team's deepest player is further out than that in more
    than half its sampled frames holds tracks on the wrong side (a misread kit, a keeper read as
    the other team), and a wrong side is a wrong name: nobody in it is named.
-4. **Names cross the camera join.** The events come from the broadcast, whose tracks are other
+4. **One man per slot at a time.** Tracks of a segment that won the same slot in different
+   windows and overlap in time cannot all be him: of each slot's tracks, the set that never
+   overlap and together won the most frames keeps the slot (weighted interval scheduling); the
+   others are left unnamed (roles.one_track_per_name unnamed all of them).
+5. **Names cross the camera join.** The events come from the broadcast, whose tracks are other
    ids (ninety.vision.join pairs them). A broadcast track is given the name of its tactical track
    only when the association is at least the measured gate and both cameras read the same side.
 
@@ -125,6 +129,26 @@ def assign(frames: Sequence[Mapping], team: str, window_s: float = WINDOW_S) -> 
     return out
 
 
+def keep_apart(claims: Sequence[tuple[str, float, float, int]]) -> set[str]:
+    """Of tracks (id, start, end, weight) claiming one slot, the set that never overlap in time and
+    has the greatest total weight (weighted interval scheduling; ties to the earlier ids)."""
+    items = sorted(claims, key=lambda c: (c[2], c[1], c[0]))
+    best: list[tuple[int, list[str]]] = [(0, [])]
+    ends = [c[2] for c in items]
+    for i, (track, t0, _t1, w) in enumerate(items):
+        lo, hi = 0, i  # items[:j] end before this one starts
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if ends[mid] < t0:
+                lo = mid + 1
+            else:
+                hi = mid
+        j = lo
+        take = (best[j][0] + w, [*best[j][1], track])
+        best.append(take if take[0] > best[i][0] else best[i])
+    return set(best[-1][1])
+
+
 def side_doubt(frames: Sequence[Mapping]) -> set[int]:
     """The segments in which a team's deepest player is outside its own penalty area in more than
     half the sampled frames: their sides are in doubt."""
@@ -188,6 +212,17 @@ def people(
                              line=LINE[r["role"]])
             w["say"] = roles.say(w)
             out[track] = w
+        claims: dict[tuple[int, str], list] = defaultdict(list)
+        for track, w in out.items():
+            if w["team"] == team and w["name"]:
+                claims[(segment(track), w["role"])].append(
+                    (track, *spans[track], round(got[track]["share"] * got[track]["seconds"] * 1000)))
+        for group in claims.values():
+            keep = keep_apart(group)
+            for track, *_ in group:
+                if track not in keep:
+                    out[track].update(name=None, number=None, position=None, line=None)
+                    out[track]["say"] = roles.say(out[track])
     return roles.one_track_per_name(out, spans)
 
 
@@ -244,5 +279,5 @@ def lineup(broadcast: Mapping[str, Mapping]) -> list[dict]:
     ]
 
 
-__all__ = ["CALIBRATION", "PEOPLE", "WINDOW_S", "assign", "broadcast_people", "gates", "lineup",
+__all__ = ["CALIBRATION", "PEOPLE", "WINDOW_S", "assign", "broadcast_people", "gates", "keep_apart", "lineup",
            "match_windows", "people", "segment", "side_doubt", "tactical", "tactical_events", "votes"]
