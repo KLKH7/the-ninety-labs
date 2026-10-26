@@ -735,6 +735,9 @@ async def run(args: argparse.Namespace) -> dict:
             lineup = read_lineup(args.team_stats)
             if lineup is not None:
                 body["lineup"] = lineup
+            sheets = json.loads(args.team_stats.read_text()).get("sheets")
+            if sheets is not None:
+                body["sheets"] = sheets  # the team sheets, a broadcaster's before kick-off: no track in them
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
                                                              args.captioner)
         # Each moment recorded from the footage: a still and, unless --frames, its clip.

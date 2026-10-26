@@ -193,3 +193,10 @@ def test_of_two_overlapping_tracks_that_won_one_slot_the_heavier_keeps_the_name(
     striker = next(s.name for s in FX.sheet("home") if s.role == "ST")
     assert people["h-t40"]["name"] == striker  # it won windows 1 and 2, for 21 s
     assert people["h-t10"]["name"] is None  # it won window 0, and overlaps h-t40 from 9 s to 14 s
+
+
+def test_insights_carry_both_team_sheets_with_no_track_in_them():
+    body = MatchInsights.build("c", frames(), [], FX, gate=OPEN, association={}).as_dict()
+    assert [len(body["sheets"][t]) for t in ("home", "away")] == [11, 11]
+    rows = [r for t in ("home", "away") for r in body["sheets"][t]]
+    assert all(set(r) == {"number", "name", "position", "line"} for r in rows)

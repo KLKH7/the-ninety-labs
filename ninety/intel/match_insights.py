@@ -504,6 +504,9 @@ class MatchInsights:
                 "away_code": self.fixture.away_code,
             },
             "minutes": self.minutes,
+            # The two team sheets (names, shirts, positions): pre-match facts, never a track's.
+            "sheets": {t: [{k: s[k] for k in ("number", "name", "position", "line")} for s in rows]
+                       for t, rows in self.fixture.as_dict()["sheets"].items()},
             "gates": self.gates,
             "people": self.people,
             "team_stats": self.team_stats,
