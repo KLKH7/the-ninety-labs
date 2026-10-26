@@ -17,7 +17,10 @@ def site(tmp_path):
     replay = tmp_path / "replay"
     replay.mkdir()
     (replay / "manifest.json").write_text(json.dumps({"format": 1}))
-    (replay / "video.webm").write_bytes(bytes(range(256)) * 4)
+    (replay / "video.mp4").write_bytes(bytes(range(256)) * 4)
+    (replay / "hls" / "720p").mkdir(parents=True)
+    (replay / "hls" / "master.m3u8").write_text("#EXTM3U\n")
+    (replay / "hls" / "720p" / "seg0000.m4s").write_bytes(b"\0" * 64)
     phone = tmp_path / "phone"
     phone.mkdir()
     (phone / "index.html").write_text("<!doctype html><title>phone</title>")
@@ -47,8 +50,16 @@ def test_the_phone_companion_is_served_beside_the_viewer(site):
 
 def test_the_replay_bundle_is_served_with_byte_ranges(site):
     assert site.get("/bundle/manifest.json").json() == {"format": 1}
-    r = site.get("/bundle/video.webm", headers={"range": "bytes=10-19"})
+    r = site.get("/bundle/video.mp4", headers={"range": "bytes=10-19"})
     assert r.status_code == 206 and r.content == bytes(range(10, 20))
+    assert r.headers["content-type"] == "video/mp4"
+
+
+def test_the_hls_ladder_is_served_by_its_types(site):
+    # ninety/footage.py: hls.js and Safari read the playlists and fMP4 segments by these types.
+    playlist = site.get("/bundle/hls/master.m3u8").headers["content-type"]
+    assert playlist.startswith("application/vnd.apple.mpegurl")
+    assert site.get("/bundle/hls/720p/seg0000.m4s").headers["content-type"] == "video/iso.segment"
 
 
 def test_nothing_outside_the_bundle_is_served(site):

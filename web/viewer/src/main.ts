@@ -58,9 +58,9 @@ interface Footage {
  * renderer's STINGER_S (0.6 s, ninety/render/edit.py), and one frame more at 25 fps. */
 const POSTER_S = 0.6 / 2 + 1 / 25;
 
-function videoFootage(b: Bundle): Footage {
+function videoFootage(b: Bundle, startAt = 0): Footage {
   // HLS, else MP4, else the legacy file, recovering from errors and stalls (src/player.ts).
-  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"));
+  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"), startAt);
   return {
     time: () => video.currentTime,
     duration: b.manifest.footage.frames / b.manifest.fps,
@@ -240,7 +240,12 @@ async function start() {
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
   document.documentElement.style.setProperty("--ar", String(m.width / m.height)); // the big screen's fit
-  const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
+  const big = bigScreen(!!b.match, location.search);
+  // The big screen opens on a clean picture (demo audit 2, row 5): the match's first frames carry the
+  // stinger that joins the broadcast's segments, mid-wipe. It clears within half of the renderer's
+  // STINGER_S (ninety/render/edit.py, edge_stingers), so the player starts just after it, through
+  // the source it attached: never a second source set over it (which dropped HLS for the MP4).
+  const footage = m.footage.kind === "video" ? videoFootage(b, big ? POSTER_S : 0) : frameFootage(b);
   const { matchTime, videoTime, segmentOf } = timeline(m);
   const teams = teamNames(m.teams);
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
@@ -252,14 +257,8 @@ async function start() {
   if (b.audio) b.audio = { ...b.audio, said: spokenSpeeds(b.audio.said, m.speed) };
   (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
   (window as unknown as { ninetySpeed: typeof airSpeed }).ninetySpeed = airSpeed; // read by tests/test_viewer.py
-  const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
-    // Open on a clean picture (demo audit 2, row 5): the match's first frames carry the stinger that
-    // joins the broadcast's segments, mid-wipe. It clears within half of the renderer's STINGER_S
-    // (ninety/render/edit.py, edge_stingers), so the first frame shown is the one just after it.
-    // A media fragment, not a seek on load: a seek made before the metadata arrives then still wins.
-    if (m.footage.kind === "video") video.src = `${b.base}${m.footage.src}#t=${POSTER_S}`;
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);

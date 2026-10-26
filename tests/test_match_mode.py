@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import re
 import shutil
 import threading
@@ -16,7 +17,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from ninety import condensed, e2e
+from ninety import condensed, e2e, footage
 from ninety.agents.factcheck import MIN_CONFIDENCE
 from ninety.intel.stats import calculate_facts
 from tests.e2e_clip import H, W, write_clip
@@ -178,6 +179,31 @@ def test_a_clip_without_segments_is_one_chapter():
 # ---------------------------------------------------------------- in the browser
 
 
+class RangeHandler(SimpleHTTPRequestHandler):
+    """Static files with HTTP Range, as the deployed API serves the bundle (tests/test_api_site.py):
+    a browser seeks a <video> only on a server that answers byte ranges."""
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):  # noqa: N802
+        m = re.fullmatch(r"bytes=(\d+)-(\d*)", self.headers.get("Range", ""))
+        path = self.translate_path(self.path)
+        if m is None or not os.path.isfile(path):
+            return super().do_GET()
+        size = os.path.getsize(path)
+        start, end = int(m[1]), min(int(m[2]) if m[2] else size - 1, size - 1)
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start)
+            self.wfile.write(f.read(end - start + 1))
+
+
 def silent_wav(path, seconds: float, rate: int = 8000):
     import wave
 
@@ -208,9 +234,13 @@ def site(browser, tmp_path_factory):  # noqa: F811
     shutil.copyfile(events, standin)
     www = root / "www"
     shutil.copytree(DIST, www)
-    for out, path, match in (("match", events, True), ("standin", standin, True), ("plain", events, False)):
-        args = [str(clip), "--out", str(www / out), "--detections", str(detections), "--frames",
+    runs = (("match", events, True, True), ("standin", standin, True, True), ("plain", events, False, True))
+    if footage.can_encode():  # the same match as real web video (ninety/footage.py: video.mp4 + HLS)
+        runs += (("video", events, True, False),)
+    for out, path, match, frames in runs:
+        args = [str(clip), "--out", str(www / out), "--detections", str(detections),
                 "--events-file", str(path)] + (["--match"] if match else [])
+        args += ["--frames"] if frames else []
         worker = threading.Thread(target=e2e.main, args=(args,))
         worker.start()
         worker.join()
@@ -227,8 +257,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
                                                                   "stadium": "stadium.wav"}))
     _hls_bundle(www, "hls")  # the same match as an HLS ladder, where ffmpeg is installed
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
-    handler.log_message = lambda *a: None
+    handler = functools.partial(RangeHandler, directory=str(www))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}/"
@@ -489,6 +518,37 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     ctx.close()
 
 
+def test_on_the_encoded_video_the_phone_gets_match_time_after_every_seek_across_the_cut(browser, site):  # noqa: F811
+    """The footage ninety/footage.py encodes (H.264, a keyframe every 2 s; the viewer plays its HLS ladder,
+    or video.mp4 where HLS cannot play): seeking back and forth across the cut, the picture lands on the
+    image asked for and the clock sent to the phone is that image's match time."""
+    if not footage.can_encode():
+        pytest.skip(f"needs ffmpeg with {footage.ENCODER} to encode the video")
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    sent: list[dict] = []
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"),
+                         lambda ws: ws.on_message(lambda m: sent.append(json.loads(m))))
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    page = ctx.new_page()
+    fetched: list[str] = []
+    page.on("request", lambda r: fetched.append(r.url))
+    page.goto(site + "?bundle=video/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    # The encoded footage is what plays: the HLS ladder (hls.js, a blob: source) or the MP4.
+    assert any("/video/hls/" in u or "/video/video.mp4" in u for u in fetched)
+    # Image k is match frame 1500 + k before the cut (40 images), 1550 + (k - 40) after it.
+    for image in (60, 10, 45, 30, 70, 0):
+        seek(page, image)
+        at = (image + 0.5) / FPS
+        page.wait_for_function(f"Math.abs(document.querySelector('video').currentTime - {at}) < 0.05")
+        page.wait_for_timeout(300)
+        frame = 1500 + image if image < 40 else 1550 + image - 40
+        last = [m for m in sent if m["type"] == "clock"][-1]
+        assert last["t"] == pytest.approx((frame + 0.5) / FPS, abs=0.03), image
+    ctx.close()
+
+
 def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(browser, site):  # noqa: F811
     """The dev view's title row (the big screen leaves the score to the broadcast's scorebug)."""
     page, errors = open_viewer(browser, site + "?bundle=match/&dev=1")
@@ -730,6 +790,32 @@ def _hls_bundle(www, out: str) -> bool:
                     "frames": m["footage"]["frames"], "audio": None}
     (dst / "manifest.json").write_text(json.dumps(m))
     return True
+
+
+def test_the_big_screen_keeps_the_hls_source_and_opens_past_the_stinger(browser, site):  # noqa: F811
+    """The big screen opens on its first clean picture (0.34 s, past the stinger) through the player's own
+    source: hls.js stays attached (a blob: source), never replaced by the MP4 afterwards, which dropped
+    HLS's fast start and self-heal (#390's poster line ran after attachPlayer)."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(site + "hls/manifest.json").close()
+    except urllib.error.HTTPError:
+        pytest.skip("no ffmpeg to encode the ladder")
+    try:
+        chrome = browser.browser_type.launch(channel="chrome", headless=True)
+    except Exception:
+        pytest.skip("no Chrome here (Playwright's Chromium cannot play H.264)")
+    page = chrome.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(site + "?bundle=hls/")  # match mode: the big screen
+    page.wait_for_selector("body[data-state=ready][data-screen=big]")
+    page.wait_for_function("window.ninetyPlayer && document.querySelector('#video').readyState >= 2")
+    page.wait_for_timeout(500)  # anything set after the player attached would have landed by now
+    assert page.evaluate("window.ninetyPlayer.state.source") == "hls.js"
+    assert page.evaluate("document.querySelector('#video').src").startswith("blob:")
+    assert page.evaluate("document.querySelector('#video').currentTime") == pytest.approx(0.34, abs=0.05)
+    chrome.close()
 
 
 def test_hls_playback_starts_low_and_survives_a_forced_media_error(browser, site):  # noqa: F811

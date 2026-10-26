@@ -3283,6 +3283,39 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
   fails if the direct path is on without its gate met.
 
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:**
+  - **The footage** is the codec every browser and phone decodes in hardware: H.264/AAC MP4 with
+    +faststart (`ninety/footage.py`), plus an HLS ladder. The ladder is so that a slow connection drops
+    a rung instead of freezing; that is *planned*: nothing plays it until the viewer's hls.js player
+    lands.
+  - **The encoder** is the producer's system ffmpeg, run as an external tool on their Mac and never
+    shipped, with Apple's VideoToolbox H.264 encoder (libx264 is GPL, AGENTS.md) and ffmpeg's own AAC
+    encoder (THIRD_PARTY_NOTICES.md).
+  - **Macs only:** Linux CI and the Azure image ship JPEG frames.
+  - **H.264/AAC patents:** whether they need anything for our distribution is Kian's question.
+  - **Every encode is checked** by probing the file it writes: codec and profile, frame count,
+    duration, the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and
+    the sound.
+  - **A browser test** seeks a real encoded file, served with byte ranges as the API serves it.
+  - **What CI skips:** these tests need a Mac and, for the browser one, a built viewer (`npm run
+    build --prefix web/viewer`). CI's Linux runner skips them, and a pull request that relies on them
+    says so and gives the local run.
+  - **A playback claim** about real browsers needs a run in one (live-preview), and the result is
+    stated.
+- **Check:** on a Mac, after building the viewer, run
+  `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  (none skipped). On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes
+  50 frames apart, and `hls/master.m3u8` lists every rung.
+
 ### 273. Watch the frames before naming the cause
 - **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
   frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns

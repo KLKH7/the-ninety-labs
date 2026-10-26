@@ -343,6 +343,20 @@ in `AGENTS.md`.
 | FFmpeg | av, opencv-python-headless | LGPL-2.1-or-later | LGPL, bundled unmodified and dynamically linked |
 | NVIDIA CUDA libraries | torch (Linux, `vision` group) | NVIDIA proprietary | redistributable runtime, optional group only |
 
+## Tools run, not shipped
+
+Programs the producer runs on their own machine to make a bundle. No code of theirs is in the repo,
+a wheel, the container image or a bundle; only their output is.
+
+| Tool | What for | Licence | Why it is allowed |
+|---|---|---|---|
+| ffmpeg (the producer's system install, e.g. Homebrew's) | `ninety/footage.py`: encodes the bundle's video.mp4, HLS ladder and highlight clips | that build's licence (Homebrew's is GPL, `--enable-gpl`) | run as an external program on the producer's Mac, never linked or shipped; its output, the video, is not covered by the GPL. The H.264 encoder used is Apple's VideoToolbox (`h264_videotoolbox`, part of macOS), never libx264 (GPL); the AAC encoder is ffmpeg's own (`aac`). This is not the FFmpeg bundled inside `av` or OpenCV's wheels (above) |
+
+The encode is macOS only (VideoToolbox): on Linux, CI and the Azure image, `ninety-e2e` finds no
+H.264 encoder and ships JPEG frames. **Open for Kian:** H.264 and AAC are patent-licensed formats
+(royalty terms from their patent pools, e.g. for free internet video). Whether distributing our
+demo's H.264/AAC video needs anything is a question for Kian, not settled here.
+
 ## Algorithms adapted, not dependencies
 
 `ninety/sim/fmath.py` reimplements, in our own Python, the algorithms and polynomial coefficients
