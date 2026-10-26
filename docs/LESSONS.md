@@ -3108,7 +3108,7 @@ short and actionable. This file is public: no research sources, product names or
   complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
 - **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
 
-### 259. A pre-registered run starts after its plan's review, not before
+### 260. A pre-registered run starts after its plan's review, not before
 - **What happened:** the ablation's third arm was started live on the day's plan while the plan's own
   pull request was still in review. The review then found the plan's reading rule let two outcomes
   hold at once ("the graph wins" and "arm 2 matches"), its seeds were ones the other two arms had
