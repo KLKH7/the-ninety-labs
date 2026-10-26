@@ -1762,6 +1762,7 @@ let insightsAt = 0;
 let insightsBusy = false;
 let insightsShownTo = -1;
 let insightsLoaded = false; // the first fetch has answered, with cards or with none
+let insightsMissing = false; // the server has no cards route or none for this clip: not asked again
 
 function showUnread() {
   const badge = $("insights-new");
@@ -1776,6 +1777,7 @@ async function refreshInsights(force = false) {
   const t = viewTime();
   try {
     // The bundle's cards.json (the Insight Scout's, precomputed for the replay), else the feed's.
+    if (!bundleCards && insightsMissing) return; // the server has none for this clip: asked once
     const cards = bundleCards ?? (await feed.insights(state.clip, t));
     // A replay must not show what is still to come: only cards up to the big screen's clock.
     const shown = cards.filter((c) => c.t <= t + 1e-6).sort((a, b) => b.t - a.t);
@@ -1794,8 +1796,9 @@ async function refreshInsights(force = false) {
     insightsShownTo = t;
     $("insights-note").textContent = "What the broadcast can't show, computed by code from the tracked positions, newest first.";
   } catch (e) {
+    if (e instanceof ApiError && e.status === 404) insightsMissing = true;
     $("insights-note").textContent =
-      e instanceof ApiError && e.status === 404 ? "No hidden stats for this match yet." : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
+      e instanceof ApiError && e.status === 404 ? "" : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
   } finally {
     insightsBusy = false;
     if (!insightsLoaded) {
@@ -1843,7 +1846,7 @@ function playSentence(e: DetectedEvent): string | null {
     case "shot":
       // A shot vision could not tell the end of (outcome null, #368: saves are not read from video)
       // says only that it was taken, never "wide".
-      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${low(who(e.player))}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
     case "out_of_play":
       return "The ball goes out of play.";
     case "set_piece":

@@ -347,6 +347,10 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
+  // The clock also goes out on a timer, not only from the frame loop: a big screen whose frames
+  // stall (a hidden tab, a busy machine) while its video plays on would otherwise leave every
+  // phone at "Screen lost" (demo audit, Oct 25). tick() sends only when a message is due.
+  setInterval(() => phone.tick(), 500);
   // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
   // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
   let tracks: AudioTracks | null = null;

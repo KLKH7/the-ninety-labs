@@ -1311,3 +1311,28 @@ def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browse
     assert "takes a shot." in said and "wide" not in said
     assert not errors
     ctx.close()
+
+
+def test_a_saved_shot_by_a_player_vision_cannot_name_reads_lower_case_mid_sentence(browser, site):  # noqa: F811
+    """Demo audit, Oct 25: "Shot saved, from A player." The unnamed player is 'a player' mid-sentence."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def saved(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        unsure = {"outcome": "on_target", "player": None, "team_confidence": 0.1}
+        rows = [{**r, **unsure} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", saved)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play[data-event=e2]")
+    assert "Shot saved, from a player." in page.inner_text("#insights .play[data-event=e2]")
+    assert not errors
+    ctx.close()
