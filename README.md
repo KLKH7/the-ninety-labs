@@ -11,6 +11,8 @@ personalized for every viewer, including live audio description for blind and lo
 
 All clubs, players and matches are synthetic. No real match data or footage is used.
 
+Built by Kian, Dominic, Jayden and Carlos.
+
 That is the design. What runs and is measured today, and what is still being built, is in
 [Status](#status).
 
@@ -37,7 +39,53 @@ flowchart LR
     SCORE -. targeted synthetic data .-> SIM
 ```
 
-Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+### Architecture
+
+What each part is, where it runs, and what it may read. Solid lines run on `main`; dotted lines
+are the answer key, which only training and grading read; the dashed box is built and evaluated
+live but switched off in the demo path. The deployed demo plays a recorded run of this pipeline (see
+[Status](#status)).
+
+```mermaid
+flowchart LR
+    subgraph DATA["Synthetic data, offline"]
+        ENG["Match engine<br/>ninety/sim"] --> REN["Renderer, three.js<br/>broadcast + 2 tactical views"]
+        ENG -.-> TRUTH[("Ground truth<br/>sealed")]
+    end
+
+    REN -- video --> VIS["Vision<br/>RF-DETR Small, camera fit,<br/>tracking, team sides,<br/>passes, shots, restarts"]
+    VIS -- "detected events<br/>with confidence" --> STATS["Stats engine<br/>code computes every number"]
+    VIS -.-> GRADE["Grading<br/>precision and recall"]
+    TRUTH -.-> GRADE
+
+    subgraph ACA["Azure Container Apps"]
+        MCP{{"Match MCP server<br/>read-only tools"}}
+        VIEW["Big screen<br/>graphics on the footage"]
+        PHONE["Phone companion<br/>radar, stats, Ask"]
+    end
+    STATS --> MCP
+
+    subgraph FOUNDRY["Microsoft Foundry: versioned prompt agents, guardrail, tracing"]
+        AN["Analyst"] --> TAC["Tactician"]
+        TAC <--> CH["Challenger"]
+        TAC --> FC{"Fact-checking agent<br/>code checks + Judge"}
+        FC -- "rejected: rewrite" --> TAC
+        COMP["Companion"] --> FC
+    end
+    MCP --> AN
+    MCP --> COMP
+
+    FC -- verified --> PROD["Producer<br/>timed overlay cues"]
+    PROD --> VIEW
+    PROD --> DESC["Describer<br/>audio description,<br/>Azure AI Speech"]
+    FC -- "checked answer" --> PHONE
+    PROD -- "A2A, off in the demo" --> PERS["Personalizer"]
+    style PERS stroke-dasharray: 5 5
+```
+
+The agents are orchestrated with Microsoft Agent Framework and read the match only through the
+MCP server; nothing on the live path reads the ground truth (a test fails if it does). Full design,
+agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Documentation
 
@@ -125,7 +173,7 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Audited against `main` at `ea7743a8` on Oct 25, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
+Audited against `main` at `874f6deb` on Oct 25, 2026 (with #365's shot-outcome result); [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
 `65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
 seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
@@ -141,8 +189,10 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | Broadcast player tracks paired with the same man on the tactical views, 7 validation clips | 144 / 179 paired (80.4%, 95% 74 to 86%); 4 / 144 pairs wrong (2.8%, 95% 1 to 7%) | [association.md](docs/eval/association.md) |
 | Passes detected from pixels, frozen test set's five clips | on today's `main`, strict F1 0.25 (2 of 13 found, 1 false): the camera-trust band (#270) rejects most right frames on the test set's older renderer. The earlier 0.67 (7 of 13) no longer holds. Both are below the 0.70 target | [camera-cuts-plan.md](docs/eval/camera-cuts-plan.md), [detector-plan.md](docs/eval/detector-plan.md) |
 | Possession changes in open play, same clips | 1 of 5 found, none false | [possession-change.md](docs/eval/possession-change.md) |
+| Shot outcomes from video (#271), the shot-outcome set's test split, 79 clips, scored once | goals 10 of 15 found, 3 false (precision 0.77, 95% 0.50 to 0.92; recall 0.67, 95% 0.42 to 0.85; one of the false is a true goal timed 1.2 s off); saves 2 of 49 found (recall 0.04): **saves do not work yet** | [shot-outcomes/RESULT.md](docs/eval/shot-outcomes/RESULT.md) |
 | False claims aired, live ablation on held-out seeds | one agent 7 / 10, the multi-agent graph 1 / 24 | [ablation-agents.md](docs/eval/ablation-agents.md) |
-| Planted false claims kept off air by the fact-checking agent, on `ninety-judge:1` | 136 / 136, of which 9 held by a Judge service error (127 / 127 where a check decided); 7 / 105 true claims wrongly rejected. Re-run on the current Judge pending | [fact-checker.md](docs/eval/fact-checker.md) |
+| Planted false claims kept off air by the fact-checking agent, on the published `ninety-judge:4`, frozen engine, held-out seeds 21 and 33 | 170 / 170 (code checks alone 56 / 170), of which 6 held by a Judge service error (164 / 164 where a check decided); 14 / 129 true claims wrongly rejected, every one a tone word the cited facts do not show ("patient", "bold"). The planted set grew since `ninety-judge:1` (136 / 136, 7 / 105), so the two runs are not like for like | [fact-checker.md](docs/eval/fact-checker.md) |
+| The fact-checker against one human's blind labels (Kian; 23 decisions sampled by a rule fixed before the run was read) | agreed on 15 of the 18 answered yes or no (83%, 95% 61 to 94%); 1 of 9 false passes, 2 of 9 false holds. About 20 items check the checker; they do not measure its rates | [factcheck-human-labels.md](docs/eval/factcheck-human-labels.md) |
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
@@ -153,7 +203,9 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 views, rendered with exact ground truth and render checks in CI
 ([decision 0001](docs/decisions/0001-synthetic-data.md)); frozen test sets and the data contract;
 vision from pixels to events, with the tactical views giving the players and the broadcast the ball
-and the events; the live detection job for one clip (built, not deployed); the stats engine and the
+and the events, including kick-offs and set pieces (#347) and shot outcomes (#271), and team sides
+from the kit reader and the spatial side model (#283); no screen shows a score counted from
+detected goals (#349); the live detection job for one clip (built, not deployed); the stats engine and the
 hidden stats; the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
 replayable without Azure); the Personalizer over A2A (evaluated live; off in `ninety-e2e` and not
 deployed).
@@ -165,12 +217,13 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
 
 **Not yet, or not measured:**
 
-- The Companion's own sentences: the committed live run (v2) aired no model sentence; of its 32
-  answers, 24 were code's verified sentence and 8 code's "unanswerable" reply ([companion-tools.md](docs/eval/companion-tools.md)). The v3
-  run is not committed; v4, where the model chooses among code's checked sentences, is not on
-  `main` and its evaluation is pending.
+- The Companion's own sentences: in the committed live runs, v2 aired no model sentence of 32
+  ([companion-tools.md](docs/eval/companion-tools.md)) and v3 aired 2 of 32, the other 30 being
+  code's checked answer or its "unanswerable" reply ([companion-tools-v3.md](docs/eval/companion-tools-v3.md)).
+  v4, where a model answer airs only if it is one of its cited facts' checked sentences (#309),
+  is pinned on `main`; its live evaluation is not committed.
 - Event detection at the 0.70 target; the camera-trust band re-derived for the test set's renderer.
-  Shot outcomes are in an open pull request; following camera cuts is built but off (it fits a
+  Saves from video (2 of 49 found, above). Following camera cuts is built but off (it fits a
   reverse angle as the main camera's mirror).
 - The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
   off until the shot-flight measurement runs.
@@ -184,6 +237,10 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   `ninety/render/edit.py` do not yet treat `half_time` as a stop), and one seed's keeper
   acceleration ([issue #297](https://github.com/KLKH7/the-ninety-labs/issues/297)). See
   [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
+
+## Team
+
+Kian, Dominic, Jayden and Carlos.
 
 ## License
 
