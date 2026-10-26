@@ -1,0 +1,6516 @@
+{
+ "seeds": [
+  108,
+  109,
+  110,
+  112,
+  113,
+  114,
+  115,
+  116,
+  117,
+  119,
+  120,
+  121,
+  122,
+  2041,
+  2042,
+  2043,
+  2044,
+  2045,
+  3041,
+  3042,
+  3043,
+  3044,
+  3045
+ ],
+ "obs": "tactical-ours-freeze",
+ "clips": 23,
+ "outfield": {
+  "track_frames": 120702,
+  "right": 43635,
+  "accuracy": 0.3615,
+  "wilson95": [
+   0.36,
+   0.36
+  ],
+  "unmatched_tracks": 12
+ },
+ "keeper": {
+  "track_frames": 2004,
+  "right": 2004,
+  "accuracy": 1.0,
+  "wilson95": [
+   1.0,
+   1.0
+  ],
+  "unmatched_tracks": 0
+ },
+ "sound_clips": 0,
+ "flipped_clips": 15,
+ "confidence": {
+  "right": {
+   "min": 0.142,
+   "p10": 0.451,
+   "p50": 0.712,
+   "p90": 0.913,
+   "max": 1.0
+  },
+  "wrong": {
+   "min": 0.0,
+   "p10": 0.0,
+   "p50": 0.616,
+   "p90": 0.925,
+   "max": 1.0
+  },
+  "n_right": 226,
+  "n_wrong": 168,
+  "ordering": 0.6247,
+  "largest_wrong": 1.0,
+  "right_above_0.96": 0.0487,
+  "right_above_largest_wrong": 0.0,
+  "bins": [
+   {
+    "from": 0.0,
+    "to": 0.5,
+    "n": 92,
+    "accuracy": 0.3587
+   },
+   {
+    "from": 0.5,
+    "to": 0.8,
+    "n": 207,
+    "accuracy": 0.6329
+   },
+   {
+    "from": 0.8,
+    "to": 0.9,
+    "n": 50,
+    "accuracy": 0.7
+   },
+   {
+    "from": 0.9,
+    "to": 0.96,
+    "n": 26,
+    "accuracy": 0.6154
+   },
+   {
+    "from": 0.96,
+    "to": 1.0,
+    "n": 19,
+    "accuracy": 0.5789
+   }
+  ]
+ },
+ "per_clip": {
+  "108": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 143,
+    "paired": 143,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 149,
+    "paired": 149,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": true,
+    "confidence": 0.915,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 16,
+    "paired": 16,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 131,
+    "paired": 129,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 241,
+    "paired": 236,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 232,
+    "paired": 232,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 13,
+    "paired": 13,
+    "true_team": "away"
+   },
+   {
+    "id": 28,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 108,
+    "paired": 107,
+    "true_team": "home"
+   },
+   {
+    "id": 29,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.0,
+    "frames": 105,
+    "paired": 104,
+    "true_team": "home"
+   },
+   {
+    "id": 30,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 100,
+    "paired": 98,
+    "true_team": "away"
+   }
+  ],
+  "109": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 228,
+    "paired": 187,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 117,
+    "paired": 92,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 213,
+    "paired": 158,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 11,
+    "paired": 10,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.643,
+    "frames": 213,
+    "paired": 210,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.451,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.769,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.568,
+    "frames": 249,
+    "paired": 233,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.688,
+    "frames": 101,
+    "paired": 97,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.667,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.64,
+    "frames": 216,
+    "paired": 212,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 90,
+    "paired": 90,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.659,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.773,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.774,
+    "frames": 249,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.735,
+    "frames": 238,
+    "paired": 227,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 27,
+    "paired": 26,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.786,
+    "frames": 76,
+    "paired": 76,
+    "true_team": "home"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 86,
+    "paired": 63,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.609,
+    "frames": 15,
+    "paired": 14,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 55,
+    "paired": 53,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 49,
+    "paired": 37,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.688,
+    "frames": 147,
+    "paired": 146,
+    "true_team": "away"
+   },
+   {
+    "id": 33,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 161,
+    "paired": 161,
+    "true_team": "home"
+   },
+   {
+    "id": 34,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.589,
+    "frames": 133,
+    "paired": 111,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.652,
+    "frames": 156,
+    "paired": 156,
+    "true_team": "home"
+   },
+   {
+    "id": 37,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 9,
+    "paired": 9,
+    "true_team": "home"
+   },
+   {
+    "id": 38,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.589,
+    "frames": 53,
+    "paired": 39,
+    "true_team": "home"
+   },
+   {
+    "id": 39,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.691,
+    "frames": 37,
+    "paired": 33,
+    "true_team": "away"
+   },
+   {
+    "id": 41,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.691,
+    "frames": 32,
+    "paired": 32,
+    "true_team": "away"
+   },
+   {
+    "id": 43,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.584,
+    "frames": 13,
+    "paired": 13,
+    "true_team": "away"
+   }
+  ],
+  "110": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.607,
+    "frames": 117,
+    "paired": 115,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.782,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.561,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 231,
+    "paired": 231,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.782,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.258,
+    "frames": 173,
+    "paired": 173,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.743,
+    "frames": 247,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.491,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.079,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.519,
+    "frames": 244,
+    "paired": 244,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.444,
+    "frames": 241,
+    "paired": 241,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 231,
+    "paired": 231,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.751,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.782,
+    "frames": 247,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.733,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.432,
+    "frames": 231,
+    "paired": 231,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.704,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "home"
+   },
+   {
+    "id": 20,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.647,
+    "frames": 226,
+    "paired": 225,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.711,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.607,
+    "frames": 128,
+    "paired": 125,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.047,
+    "frames": 75,
+    "paired": 74,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.647,
+    "frames": 22,
+    "paired": 22,
+    "true_team": "home"
+   }
+  ],
+  "112": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 205,
+    "paired": 204,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 47,
+    "paired": 47,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": true,
+    "confidence": 0.881,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 203,
+    "paired": 203,
+    "true_team": "away"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 44,
+    "paired": 44,
+    "true_team": "home"
+   }
+  ],
+  "113": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 75,
+    "paired": 42,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 218,
+    "paired": 98,
+    "true_team": null
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 222,
+    "paired": 173,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 232,
+    "paired": 198,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 241,
+    "paired": 177,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.525,
+    "frames": 61,
+    "paired": 51,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 186,
+    "paired": 115,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.888,
+    "frames": 206,
+    "paired": 181,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 144,
+    "paired": 59,
+    "true_team": null
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 218,
+    "paired": 135,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.525,
+    "frames": 34,
+    "paired": 12,
+    "true_team": null
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.488,
+    "frames": 11,
+    "paired": 9,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 246,
+    "paired": 114,
+    "true_team": null
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 30,
+    "paired": 30,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 29,
+    "paired": 21,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 246,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.618,
+    "frames": 247,
+    "paired": 246,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 122,
+    "paired": 82,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 33,
+    "paired": 28,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.551,
+    "frames": 109,
+    "paired": 52,
+    "true_team": null
+   },
+   {
+    "id": 24,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 234,
+    "paired": 136,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 219,
+    "paired": 202,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 223,
+    "paired": 117,
+    "true_team": "home"
+   },
+   {
+    "id": 29,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 40,
+    "paired": 22,
+    "true_team": "away"
+   },
+   {
+    "id": 32,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.551,
+    "frames": 44,
+    "paired": 25,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.488,
+    "frames": 241,
+    "paired": 241,
+    "true_team": "away"
+   },
+   {
+    "id": 34,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 221,
+    "paired": 220,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 194,
+    "paired": 127,
+    "true_team": "away"
+   },
+   {
+    "id": 36,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 86,
+    "paired": 44,
+    "true_team": "away"
+   },
+   {
+    "id": 39,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.525,
+    "frames": 162,
+    "paired": 108,
+    "true_team": "away"
+   },
+   {
+    "id": 40,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.471,
+    "frames": 132,
+    "paired": 87,
+    "true_team": "home"
+   },
+   {
+    "id": 41,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.877,
+    "frames": 119,
+    "paired": 79,
+    "true_team": "away"
+   },
+   {
+    "id": 43,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.471,
+    "frames": 87,
+    "paired": 46,
+    "true_team": "home"
+   },
+   {
+    "id": 44,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 127,
+    "paired": 81,
+    "true_team": "home"
+   },
+   {
+    "id": 46,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 78,
+    "paired": 58,
+    "true_team": "home"
+   },
+   {
+    "id": 50,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 46,
+    "paired": 24,
+    "true_team": "home"
+   },
+   {
+    "id": 51,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 57,
+    "paired": 48,
+    "true_team": "home"
+   }
+  ],
+  "114": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.899,
+    "frames": 160,
+    "paired": 160,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.891,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.827,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.942,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.965,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.83,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.913,
+    "frames": 160,
+    "paired": 160,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.934,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 31,
+    "paired": 30,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.913,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 72,
+    "paired": 72,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 15,
+    "paired": 14,
+    "true_team": "away"
+   },
+   {
+    "id": 26,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 47,
+    "paired": 47,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 97,
+    "paired": 97,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.913,
+    "frames": 90,
+    "paired": 90,
+    "true_team": "away"
+   },
+   {
+    "id": 29,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.899,
+    "frames": 24,
+    "paired": 24,
+    "true_team": "home"
+   },
+   {
+    "id": 30,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.899,
+    "frames": 67,
+    "paired": 66,
+    "true_team": "home"
+   }
+  ],
+  "115": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 56,
+    "paired": 55,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 12,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 15,
+    "paired": 14,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 204,
+    "paired": 200,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 17,
+    "paired": 17,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 79,
+    "paired": 78,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 57,
+    "paired": 56,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 105,
+    "paired": 104,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 23,
+    "paired": 23,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 83,
+    "paired": 80,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 243,
+    "paired": 243,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 40,
+    "paired": 40,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 243,
+    "paired": 243,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 12,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 55,
+    "paired": 53,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 30,
+    "paired": 29,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 28,
+    "paired": 28,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 12,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 16,
+    "paired": 14,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 72,
+    "paired": 71,
+    "true_team": "home"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 33,
+    "paired": 32,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 48,
+    "paired": 47,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 13,
+    "paired": 13,
+    "true_team": "away"
+   },
+   {
+    "id": 28,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 227,
+    "paired": 227,
+    "true_team": "away"
+   },
+   {
+    "id": 29,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 121,
+    "paired": 112,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 97,
+    "paired": 96,
+    "true_team": "away"
+   },
+   {
+    "id": 31,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 225,
+    "paired": 225,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 7,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 218,
+    "paired": 218,
+    "true_team": "home"
+   },
+   {
+    "id": 36,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 30,
+    "paired": 29,
+    "true_team": "away"
+   },
+   {
+    "id": 37,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 11,
+    "paired": 11,
+    "true_team": "away"
+   },
+   {
+    "id": 38,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 22,
+    "paired": 20,
+    "true_team": "away"
+   },
+   {
+    "id": 39,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 49,
+    "paired": 48,
+    "true_team": "away"
+   },
+   {
+    "id": 41,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 173,
+    "paired": 170,
+    "true_team": "away"
+   },
+   {
+    "id": 42,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 122,
+    "paired": 116,
+    "true_team": "home"
+   },
+   {
+    "id": 43,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 49,
+    "paired": 47,
+    "true_team": "away"
+   },
+   {
+    "id": 44,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 142,
+    "paired": 142,
+    "true_team": "home"
+   },
+   {
+    "id": 45,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 8,
+    "paired": 8,
+    "true_team": "away"
+   },
+   {
+    "id": 46,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 22,
+    "paired": 22,
+    "true_team": "home"
+   },
+   {
+    "id": 47,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 184,
+    "paired": 184,
+    "true_team": "away"
+   },
+   {
+    "id": 48,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 161,
+    "paired": 158,
+    "true_team": "away"
+   },
+   {
+    "id": 49,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 162,
+    "paired": 162,
+    "true_team": "away"
+   },
+   {
+    "id": 50,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 34,
+    "paired": 33,
+    "true_team": "away"
+   },
+   {
+    "id": 51,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 153,
+    "paired": 153,
+    "true_team": "home"
+   },
+   {
+    "id": 52,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 149,
+    "paired": 149,
+    "true_team": "away"
+   },
+   {
+    "id": 53,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 147,
+    "paired": 146,
+    "true_team": "away"
+   },
+   {
+    "id": 54,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 39,
+    "paired": 33,
+    "true_team": "away"
+   },
+   {
+    "id": 56,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 118,
+    "paired": 113,
+    "true_team": "home"
+   },
+   {
+    "id": 57,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 132,
+    "paired": 132,
+    "true_team": "away"
+   },
+   {
+    "id": 59,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 55,
+    "paired": 46,
+    "true_team": "home"
+   },
+   {
+    "id": 60,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 3,
+    "true_team": "home"
+   },
+   {
+    "id": 62,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 23,
+    "paired": 22,
+    "true_team": "away"
+   },
+   {
+    "id": 63,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 60,
+    "paired": 58,
+    "true_team": "away"
+   },
+   {
+    "id": 65,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 28,
+    "paired": 28,
+    "true_team": "home"
+   },
+   {
+    "id": 66,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 26,
+    "paired": 24,
+    "true_team": "home"
+   },
+   {
+    "id": 67,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 20,
+    "paired": 20,
+    "true_team": "home"
+   }
+  ],
+  "116": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.564,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.404,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.625,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.814,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.931,
+    "frames": 244,
+    "paired": 243,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.74,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 246,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.704,
+    "frames": 245,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.74,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.749,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.566,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.723,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.83,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.561,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.925,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 67,
+    "paired": 67,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 44,
+    "paired": 44,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 203,
+    "paired": 203,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 180,
+    "paired": 180,
+    "true_team": "home"
+   }
+  ],
+  "117": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 206,
+    "paired": 206,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 174,
+    "paired": 113,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 246,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 63,
+    "paired": 51,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 45,
+    "paired": 45,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 161,
+    "paired": 161,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 232,
+    "paired": 206,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 235,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 248,
+    "paired": 245,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 110,
+    "paired": 109,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 212,
+    "paired": 212,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 76,
+    "paired": 62,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 89,
+    "paired": 73,
+    "true_team": "home"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 16,
+    "paired": 14,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 205,
+    "paired": 204,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 148,
+    "paired": 135,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 11,
+    "true_team": "home"
+   },
+   {
+    "id": 30,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 43,
+    "paired": 28,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 72,
+    "paired": 54,
+    "true_team": "away"
+   },
+   {
+    "id": 32,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 7,
+    "paired": 5,
+    "true_team": "away"
+   },
+   {
+    "id": 34,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 92,
+    "paired": 89,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.142,
+    "frames": 74,
+    "paired": 60,
+    "true_team": "away"
+   },
+   {
+    "id": 36,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 63,
+    "paired": 49,
+    "true_team": "home"
+   },
+   {
+    "id": 37,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 6,
+    "true_team": "home"
+   },
+   {
+    "id": 38,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 38,
+    "paired": 26,
+    "true_team": "home"
+   },
+   {
+    "id": 39,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 32,
+    "paired": 24,
+    "true_team": "away"
+   },
+   {
+    "id": 40,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 44,
+    "paired": 44,
+    "true_team": "home"
+   },
+   {
+    "id": 41,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 36,
+    "paired": 36,
+    "true_team": "home"
+   }
+  ],
+  "119": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.923,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.94,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.877,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.977,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.963,
+    "frames": 239,
+    "paired": 239,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.838,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.929,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.934,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.972,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 151,
+    "paired": 151,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.818,
+    "frames": 173,
+    "paired": 172,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.977,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": true,
+    "confidence": 0.918,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": true,
+    "confidence": 0.895,
+    "frames": 191,
+    "paired": 191,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 187,
+    "paired": 187,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.972,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.79,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.942,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 93,
+    "paired": 93,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": true,
+    "confidence": 0.701,
+    "frames": 63,
+    "paired": 63,
+    "true_team": "away"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 63,
+    "paired": 63,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.963,
+    "frames": 11,
+    "paired": 11,
+    "true_team": "home"
+   }
+  ],
+  "120": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.165,
+    "frames": 170,
+    "paired": 169,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.144,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 85,
+    "paired": 82,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 26,
+    "paired": 22,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "away",
+    "keeper": true,
+    "confidence": 0.899,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 145,
+    "paired": 145,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.163,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.381,
+    "frames": 133,
+    "paired": 132,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 28,
+    "paired": 2,
+    "true_team": null
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.35,
+    "frames": 250,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 70,
+    "paired": 67,
+    "true_team": "away"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 8,
+    "paired": 0,
+    "true_team": null
+   },
+   {
+    "id": 28,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 169,
+    "paired": 168,
+    "true_team": "away"
+   },
+   {
+    "id": 29,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 161,
+    "paired": 160,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 118,
+    "paired": 118,
+    "true_team": "away"
+   },
+   {
+    "id": 35,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.325,
+    "frames": 106,
+    "paired": 105,
+    "true_team": "home"
+   },
+   {
+    "id": 36,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 63,
+    "paired": 62,
+    "true_team": "away"
+   },
+   {
+    "id": 38,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.464,
+    "frames": 13,
+    "paired": 13,
+    "true_team": "away"
+   }
+  ],
+  "121": [
+   {
+    "id": 1,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 241,
+    "paired": 241,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 11,
+    "paired": 10,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.511,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": true,
+    "confidence": 0.881,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.52,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.505,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 101,
+    "paired": 100,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 192,
+    "paired": 192,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 242,
+    "paired": 242,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 26,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 227,
+    "paired": 227,
+    "true_team": "away"
+   },
+   {
+    "id": 27,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 141,
+    "paired": 140,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.533,
+    "frames": 50,
+    "paired": 50,
+    "true_team": "away"
+   }
+  ],
+  "122": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.766,
+    "frames": 243,
+    "paired": 242,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.954,
+    "frames": 34,
+    "paired": 33,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.796,
+    "frames": 244,
+    "paired": 244,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.812,
+    "frames": 165,
+    "paired": 164,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.828,
+    "frames": 223,
+    "paired": 223,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.898,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.772,
+    "frames": 90,
+    "paired": 90,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.685,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.836,
+    "frames": 222,
+    "paired": 222,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.734,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.641,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.693,
+    "frames": 233,
+    "paired": 232,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.802,
+    "frames": 222,
+    "paired": 222,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.794,
+    "frames": 88,
+    "paired": 88,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.829,
+    "frames": 225,
+    "paired": 225,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.801,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.908,
+    "frames": 229,
+    "paired": 229,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.909,
+    "frames": 162,
+    "paired": 162,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.923,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.86,
+    "frames": 161,
+    "paired": 160,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 222,
+    "paired": 222,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.954,
+    "frames": 194,
+    "paired": 156,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.774,
+    "frames": 168,
+    "paired": 168,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.856,
+    "frames": 71,
+    "paired": 70,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.812,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.812,
+    "frames": 84,
+    "paired": 84,
+    "true_team": "home"
+   },
+   {
+    "id": 34,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.954,
+    "frames": 23,
+    "paired": 22,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.812,
+    "frames": 78,
+    "paired": 78,
+    "true_team": "away"
+   },
+   {
+    "id": 36,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.86,
+    "frames": 70,
+    "paired": 70,
+    "true_team": "away"
+   },
+   {
+    "id": 39,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.794,
+    "frames": 48,
+    "paired": 45,
+    "true_team": "away"
+   }
+  ],
+  "2041": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.709,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.393,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 82,
+    "paired": 82,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 64,
+    "paired": 64,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.597,
+    "frames": 64,
+    "paired": 62,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.371,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.51,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.653,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.586,
+    "frames": 76,
+    "paired": 76,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 236,
+    "paired": 236,
+    "true_team": "home"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.69,
+    "frames": 250,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 223,
+    "paired": 220,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.69,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.597,
+    "frames": 218,
+    "paired": 214,
+    "true_team": "away"
+   },
+   {
+    "id": 26,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 187,
+    "paired": 187,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.586,
+    "frames": 31,
+    "paired": 30,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.371,
+    "frames": 160,
+    "paired": 160,
+    "true_team": "home"
+   },
+   {
+    "id": 29,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.72,
+    "frames": 134,
+    "paired": 134,
+    "true_team": "away"
+   }
+  ],
+  "2042": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.451,
+    "frames": 168,
+    "paired": 168,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.451,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.305,
+    "frames": 114,
+    "paired": 114,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.701,
+    "frames": 226,
+    "paired": 222,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.727,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.549,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 22,
+    "paired": 22,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.642,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.677,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 207,
+    "paired": 206,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.576,
+    "frames": 118,
+    "paired": 118,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.469,
+    "frames": 18,
+    "paired": 18,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.689,
+    "frames": 136,
+    "paired": 136,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 142,
+    "paired": 142,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.58,
+    "frames": 117,
+    "paired": 116,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.437,
+    "frames": 122,
+    "paired": 122,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 181,
+    "paired": 181,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.595,
+    "frames": 62,
+    "paired": 62,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 15,
+    "paired": 15,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.738,
+    "frames": 130,
+    "paired": 130,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.739,
+    "frames": 106,
+    "paired": 106,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.451,
+    "frames": 81,
+    "paired": 80,
+    "true_team": "away"
+   },
+   {
+    "id": 28,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 41,
+    "paired": 40,
+    "true_team": "home"
+   }
+  ],
+  "2043": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.731,
+    "frames": 237,
+    "paired": 237,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.968,
+    "frames": 145,
+    "paired": 143,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.786,
+    "frames": 230,
+    "paired": 227,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.874,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.954,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.621,
+    "frames": 124,
+    "paired": 124,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.978,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.205,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.981,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.692,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.284,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.578,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.526,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.831,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.639,
+    "frames": 8,
+    "paired": 7,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.69,
+    "frames": 7,
+    "paired": 6,
+    "true_team": "away"
+   },
+   {
+    "id": 25,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.223,
+    "frames": 196,
+    "paired": 184,
+    "true_team": "away"
+   },
+   {
+    "id": 26,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.86,
+    "frames": 111,
+    "paired": 110,
+    "true_team": "away"
+   },
+   {
+    "id": 27,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.639,
+    "frames": 14,
+    "paired": 14,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.701,
+    "frames": 123,
+    "paired": 116,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.654,
+    "frames": 129,
+    "paired": 129,
+    "true_team": "away"
+   },
+   {
+    "id": 33,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.786,
+    "frames": 127,
+    "paired": 116,
+    "true_team": "home"
+   },
+   {
+    "id": 34,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.786,
+    "frames": 28,
+    "paired": 8,
+    "true_team": null
+   },
+   {
+    "id": 35,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.856,
+    "frames": 41,
+    "paired": 41,
+    "true_team": "away"
+   },
+   {
+    "id": 36,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.731,
+    "frames": 14,
+    "paired": 13,
+    "true_team": "away"
+   }
+  ],
+  "2044": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "home",
+    "keeper": false,
+    "confidence": 1.0,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 9,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 224,
+    "paired": 224,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 26,
+    "paired": 22,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 45,
+    "paired": 43,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 11,
+    "paired": 10,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 18,
+    "paired": 16,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 5,
+    "paired": 4,
+    "true_team": "home"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 10,
+    "paired": 9,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 152,
+    "paired": 151,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 6,
+    "true_team": "home"
+   },
+   {
+    "id": 23,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 76,
+    "paired": 76,
+    "true_team": "home"
+   },
+   {
+    "id": 25,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 27,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 7,
+    "paired": 7,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 13,
+    "paired": 13,
+    "true_team": "home"
+   },
+   {
+    "id": 29,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 9,
+    "paired": 7,
+    "true_team": "home"
+   },
+   {
+    "id": 30,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 10,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 9,
+    "paired": 9,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 96,
+    "paired": 95,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 22,
+    "paired": 20,
+    "true_team": "home"
+   },
+   {
+    "id": 34,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 8,
+    "paired": 8,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 28,
+    "paired": 25,
+    "true_team": "home"
+   },
+   {
+    "id": 36,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 13,
+    "paired": 9,
+    "true_team": "home"
+   },
+   {
+    "id": 39,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 40,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 9,
+    "paired": 4,
+    "true_team": null
+   },
+   {
+    "id": 41,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 12,
+    "paired": 8,
+    "true_team": "home"
+   },
+   {
+    "id": 42,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 21,
+    "paired": 18,
+    "true_team": "home"
+   },
+   {
+    "id": 43,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 21,
+    "paired": 16,
+    "true_team": "home"
+   },
+   {
+    "id": 44,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 45,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 1,
+    "true_team": null
+   },
+   {
+    "id": 47,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 32,
+    "paired": 30,
+    "true_team": "home"
+   },
+   {
+    "id": 48,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 34,
+    "paired": 34,
+    "true_team": "home"
+   },
+   {
+    "id": 49,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 9,
+    "paired": 4,
+    "true_team": null
+   },
+   {
+    "id": 50,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 26,
+    "paired": 25,
+    "true_team": "home"
+   },
+   {
+    "id": 51,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 16,
+    "paired": 8,
+    "true_team": "home"
+   }
+  ],
+  "2045": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.384,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.602,
+    "frames": 247,
+    "paired": 246,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.386,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": true,
+    "confidence": 0.892,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.654,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.58,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.049,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 115,
+    "paired": 115,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.519,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.505,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.407,
+    "frames": 141,
+    "paired": 140,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": true,
+    "confidence": 0.899,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.541,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.548,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.633,
+    "frames": 220,
+    "paired": 217,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 76,
+    "paired": 75,
+    "true_team": "away"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.602,
+    "frames": 175,
+    "paired": 175,
+    "true_team": "away"
+   },
+   {
+    "id": 27,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 49,
+    "paired": 46,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 107,
+    "paired": 107,
+    "true_team": "away"
+   },
+   {
+    "id": 31,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.672,
+    "frames": 5,
+    "paired": 4,
+    "true_team": "away"
+   },
+   {
+    "id": 33,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.67,
+    "frames": 86,
+    "paired": 85,
+    "true_team": "away"
+   },
+   {
+    "id": 36,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 24,
+    "paired": 24,
+    "true_team": "away"
+   }
+  ],
+  "3041": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.652,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.573,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.95,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.334,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.743,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.768,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.988,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.757,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.965,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.523,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   }
+  ],
+  "3042": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.8,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.734,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.932,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.696,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.839,
+    "frames": 238,
+    "paired": 238,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.748,
+    "frames": 238,
+    "paired": 238,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.541,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.408,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.828,
+    "frames": 246,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.621,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.815,
+    "frames": 242,
+    "paired": 195,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.197,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.754,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.992,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.691,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.89,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 21,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.186,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.714,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.734,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   }
+  ],
+  "3043": [
+   {
+    "id": 1,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.904,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 3,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 5,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.952,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.854,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.914,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.92,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.931,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.782,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 245,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.785,
+    "frames": 214,
+    "paired": 213,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.866,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 172,
+    "paired": 171,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 27,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 81,
+    "paired": 79,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.785,
+    "frames": 36,
+    "paired": 36,
+    "true_team": "away"
+   }
+  ],
+  "3044": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 109,
+    "paired": 109,
+    "true_team": "home"
+   },
+   {
+    "id": 2,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.527,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 15,
+    "paired": 13,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 123,
+    "paired": 123,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.233,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 238,
+    "paired": 237,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.107,
+    "frames": 250,
+    "paired": 249,
+    "true_team": "away"
+   },
+   {
+    "id": 8,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.571,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 238,
+    "paired": 228,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.508,
+    "frames": 94,
+    "paired": 93,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 89,
+    "paired": 89,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.48,
+    "frames": 245,
+    "paired": 245,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 139,
+    "paired": 138,
+    "true_team": "away"
+   },
+   {
+    "id": 16,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 247,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.334,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 242,
+    "paired": 241,
+    "true_team": "home"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 246,
+    "paired": 246,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 87,
+    "paired": 87,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 240,
+    "paired": 240,
+    "true_team": "away"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 12,
+    "paired": 12,
+    "true_team": "away"
+   },
+   {
+    "id": 23,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 142,
+    "paired": 127,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 207,
+    "paired": 200,
+    "true_team": "home"
+   },
+   {
+    "id": 26,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 164,
+    "paired": 164,
+    "true_team": "away"
+   },
+   {
+    "id": 30,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 163,
+    "paired": 161,
+    "true_team": "home"
+   },
+   {
+    "id": 31,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.508,
+    "frames": 155,
+    "paired": 155,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 6,
+    "paired": 5,
+    "true_team": "home"
+   },
+   {
+    "id": 33,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 58,
+    "paired": 58,
+    "true_team": "home"
+   },
+   {
+    "id": 34,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 124,
+    "paired": 123,
+    "true_team": "home"
+   },
+   {
+    "id": 35,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 102,
+    "paired": 101,
+    "true_team": "home"
+   },
+   {
+    "id": 37,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.593,
+    "frames": 108,
+    "paired": 107,
+    "true_team": "away"
+   },
+   {
+    "id": 40,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 57,
+    "paired": 57,
+    "true_team": "away"
+   },
+   {
+    "id": 41,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 5,
+    "paired": 0,
+    "true_team": null
+   },
+   {
+    "id": 42,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 22,
+    "paired": 19,
+    "true_team": "home"
+   },
+   {
+    "id": 43,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.616,
+    "frames": 20,
+    "paired": 16,
+    "true_team": "away"
+   }
+  ],
+  "3045": [
+   {
+    "id": 1,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 249,
+    "paired": 247,
+    "true_team": "away"
+   },
+   {
+    "id": 2,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 3,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.535,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 4,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.637,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 5,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.765,
+    "frames": 249,
+    "paired": 249,
+    "true_team": "home"
+   },
+   {
+    "id": 6,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 7,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 234,
+    "paired": 234,
+    "true_team": "home"
+   },
+   {
+    "id": 8,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 9,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.608,
+    "frames": 66,
+    "paired": 66,
+    "true_team": "home"
+   },
+   {
+    "id": 10,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 234,
+    "paired": 234,
+    "true_team": "away"
+   },
+   {
+    "id": 11,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 246,
+    "paired": 245,
+    "true_team": "home"
+   },
+   {
+    "id": 12,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 13,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 234,
+    "paired": 234,
+    "true_team": "away"
+   },
+   {
+    "id": 14,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 15,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.772,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 16,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.802,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 17,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "away"
+   },
+   {
+    "id": 18,
+    "team": "away",
+    "keeper": false,
+    "confidence": 0.727,
+    "frames": 248,
+    "paired": 248,
+    "true_team": "away"
+   },
+   {
+    "id": 19,
+    "team": null,
+    "keeper": false,
+    "confidence": null,
+    "frames": 234,
+    "paired": 234,
+    "true_team": "away"
+   },
+   {
+    "id": 20,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 240,
+    "paired": 238,
+    "true_team": "home"
+   },
+   {
+    "id": 21,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 250,
+    "paired": 250,
+    "true_team": "home"
+   },
+   {
+    "id": 22,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 19,
+    "paired": 19,
+    "true_team": "home"
+   },
+   {
+    "id": 24,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.781,
+    "frames": 231,
+    "paired": 231,
+    "true_team": "home"
+   },
+   {
+    "id": 28,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 170,
+    "paired": 167,
+    "true_team": "home"
+   },
+   {
+    "id": 32,
+    "team": "home",
+    "keeper": false,
+    "confidence": 0.808,
+    "frames": 6,
+    "paired": 4,
+    "true_team": "home"
+   }
+  ]
+ }
+}

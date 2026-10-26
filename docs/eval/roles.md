@@ -24,3 +24,95 @@ row is under the name target, it is a fragmentation the gates were not set at (t
 30 s). The engine's players mostly hold their formation places; that is not proof that role
 inference is this good on football with fluid positions. Before the demo, the same grading runs on
 the demo match's own tracked output against its ground truth.
+
+## Names on the demo match's own tracks (pre-registered Oct 25, before any grading)
+
+The grading above uses the engine's frames spoilt by a model of the tracker. This section grades
+the live path's real output instead: the demo match (`runs/demo-8080-match`, 34 segments, the
+tactical camera's tracks joined to the broadcast's), named by `ninety/intel/naming.py`, against
+the answer key of seed 8080 re-simulated from the demo's own code snapshot (grading only).
+
+**What is named.** Each whole-pitch tactical track gets its role from per-frame matching to the
+team's fitted 4-3-3 places (I6, every frame, with the eleven roles matched to the tracks where the
+tracker holds more than eleven), then a one-to-one Hungarian matching of the team's tracks to the
+team sheet's eleven slots in each 10 s window of a segment, a track's gain being its net votes
+(an empty slot gains nothing). A broadcast track, the id an event names, is given its tactical
+track's name across the camera join when the association's confidence is at least its gate and
+both cameras read the same side. Everyone else is said by club, never by track id.
+
+**Right.** Each track of each camera is given its true player, the one nearest it on average over
+its frames (`ninety/eval/association.true_players`). A name is right when that player is on the
+named side and has the named role in the simulator's roster. Two units: tactical tracks, and
+detected events by their actor's broadcast track.
+
+**Split, fixed now.** Even segments of the edit (0, 2, ..., 32) are development; odd segments
+(1, 3, ..., 33) are held out, scored once with the chosen gates. Both halves are of one match, so
+the held-out score is a check against over-fitting the gates, not a second match.
+
+**Target and selection.** Precision of names at least **0.95** on development, for both units,
+each over at least 30 names (the name target above). Grid: share in {0.5, 0.6, 0.7, 0.8, 0.9},
+least seconds seen in {2, 5, 10}, least association confidence in {0.75, 0.9, 1.0}. Among the
+settings that meet the target on development, the one that names the most events is chosen (ties
+to the stricter). If none meets it, nothing is named. Reported: precision with its Wilson 95%
+interval and coverage (named over all) for each unit, on development, held out and the whole
+match, and the naming in use before this change on the same data.
+
+**Amendment 1 (Oct 25, after development was graded, before the held-out was scored).** As
+pre-registered, no setting met 0.95 on development (best 0.946 on tracks at 203 names;
+`docs/eval/naming.json` before this amendment is kept in the PR). By the rule, nothing was named.
+Diagnosis on development only: 12 of the 21 wrong names at the strictest passing-size setting
+were on the wrong side, 10 of them in one segment (24) whose sides were misread. One rule is
+added, from the Laws and not from a fitted number: each team defends one goal all match, so its
+deepest player (its keeper) stands within its penalty area (16.5 m of its goal line, Law 1) for
+most of the play. A segment in which either team's deepest player is further out than that in
+more than half its sampled frames names nobody (`naming.side_doubt`). The rule was chosen after
+seeing that the wrong names were in such segments, so development no longer tests it: the
+held-out half does, scored once, with the same target, grid and selection rule as above.
+
+**Amendment 2 (Oct 25, after amendment 1 was graded on development, before the held-out was
+scored).** With amendment 1, names on development were right 0.95 to 1.0 of the time, but no
+setting named the 30 events the floor asks (at most 21). Diagnosis on development only: of the
+events whose actor had a tactical track with a role, 77 lost the name to the one-name-at-a-time
+rule. Two tracks that won one slot in different windows and overlapped in time both went unnamed.
+The rule is now one man per slot at a time (Hungarian within a window, and across windows): of a
+slot's tracks in a segment, the set that never overlap and together won the most frames keeps
+it (weighted interval scheduling), and the others are unnamed. Target, floor, grid and selection
+unchanged; the held-out half is scored once.
+
+**Amendment 3 (Oct 25, the Coordinator's decision, before the held-out was scored).** With
+amendment 2, development names were right 0.94 to 1.0 of the time, and at most 25 events were
+named against a floor of 30. The floor cannot be met on development: it has 131 events with an
+actor, and the side check withholds 63 of them (their segments' sides are in doubt). So the
+events floor is dropped. Everything else stands: names must be right at least 0.95 of the time
+on both units, with at least 30 named tracks, and the setting that names the most events is
+chosen. The held-out half is scored once with it. If it misses 0.95, nothing is named.
+
+### Result (scored once, Oct 25): the held-out half misses 0.95, so nothing is named
+
+`uv run python -m ninety.eval.naming_eval --clip runs/demo-8080-match --vision runs/demo-8080-vision-v2
+--truth <seed 8080, 90 min, simulated from runs/demo-8080-1d0390be-code>` (`docs/eval/naming.json`).
+The answer key matches the tracked positions to a median of 0.21 m. Chosen on development: share
+0.6, at least 5 s seen, association at least 0.75.
+
+| Naming | Split | Tracks named (right, precision, 95% CI) | Track coverage | Events named (right, precision, 95% CI) | Event coverage |
+|---|---|---|---|---|---|
+| New (naming.py) | dev | 186 (177, 0.952, 0.91-0.97) | 0.208 of 893 | 24 (24, 1.0, 0.86-1.0) | 0.183 of 131 |
+| New (naming.py) | **held out** | **432 (382, 0.884, 0.85-0.91)** | 0.411 of 1052 | **54 (50, 0.926, 0.82-0.97)** | 0.443 of 122 |
+| New (naming.py) | whole match | 618 (559, 0.905, 0.88-0.93) | 0.318 of 1945 | 78 (74, 0.949, 0.88-0.98) | 0.308 of 253 |
+| Before (roles.assign, gate 0.203) | held out | 339 (277, 0.817, 0.77-0.85) | 0.322 | 65 (54, 0.831, 0.72-0.90) | 0.533 |
+| Before (roles.assign, gate 0.203) | whole match | 611 (510, 0.835, 0.80-0.86) | 0.314 | 125 (103, 0.824, 0.75-0.88) | 0.494 |
+
+**Which code scored this.** The table was scored at commit `20c4f418`. Two audit fixes came after it
+(`2af2df12`): the side-doubt rule went from a median over 16.5 m to a strict majority of frames, the
+`keep_apart` weights stopped being rounded, and `tactical()` without a gate accepts only confidence-1.0
+pairings. The published numbers therefore predate those fixes; the conclusion (the gate stays closed)
+is unchanged, and the grader has not been re-run at this head.
+
+**Reading.** On the held-out half, a name would be right 88.4% of the time on tracks and 92.6% on
+events. Both are better than the naming in use before (81.7% and 83.1%), and both are under the
+0.95 target, so by the rule the gate stays closed (`ninety/intel/naming_calibration.json`). The
+demo names nobody: every player is said by club, or as "a player" where the side is unsure.
+Before this change the live path named 611 tracks, one in six of them wrong. The side check
+withheld no held-out segment (8 of 17 development segments). The development gates were
+therefore set on a half of the match where the hardest segments were withheld, which is the
+likeliest reason the held-out score is lower; it is not tested here. Both halves are of one match.

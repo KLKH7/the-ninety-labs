@@ -72,7 +72,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
-| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (video, graphics on the footage, match mode, analyst and casual switch, agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
+| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (a streaming player: video, graphics on the footage, match mode, the audio menu; `?dev=1` keeps the persona switch and the agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
@@ -146,7 +146,7 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
-| Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | 19 / 19 claims answered, p95 4.6 s in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
+| Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | ninety-personalizer:1 run of 21 Oct, now stale (a newer version is published, not measured): the report counts 19 claims above tables of 20 requests per row (8 rows, 160 variants); p95 4.6 s (equal to the maximum) in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
 | Read-aloud in the pinned neural voice, pre-generated (not yet in the deployed Replay bundle) | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
 
 **Runs on `main`:** the seeded match engine; the broadcast and two fixed whole-pitch tactical
@@ -174,7 +174,7 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   reverse angle as the main camera's mirror).
 - The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
   off until the shot-flight measurement runs.
-- Team sides good enough to air most team claims (a spatial side model is in open #283).
+- Team sides good enough to air most team claims (a spatial side model is built, #283, but its sides are right for about 0.75 of tracks on validation and its confidence does not separate right from wrong, so the 0.96 gate still holds back most team-named claims).
 - The demo match rendered, with its render checks and its detected events.
 - Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
 - The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera

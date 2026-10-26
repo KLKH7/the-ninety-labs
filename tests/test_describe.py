@@ -327,3 +327,66 @@ def test_a_possessive_and_a_repeated_track_read_as_sentences():
     assert d.spoken("h4's pass for h8 is cut out by a3.") == \
         "The pass from Home's number 4 for number 8 is cut out by Away's number 3."
     assert d.spoken("h-t9 → h-t9, 3 m.", False) == "A player plays it 3 metres to the same player."
+
+
+# ---------------------------------------------------------------- set pieces (ninety/vision/restarts.py)
+
+SURE = min(1.0, d.MIN_CONFIDENCE + 0.5)  # a confident detection
+SIDE_SURE = 0.99  # above factcheck.MIN_TEAM_CONFIDENCE
+
+
+def set_piece(restart=None, team_confidence=SIDE_SURE, **extra) -> dict:
+    e = event(1, 8.0, "set_piece", x=40.0, team="away", player=None, confidence=SURE,
+              team_confidence=team_confidence)
+    return e | extra | ({"restart": restart} if restart else {})
+
+
+@pytest.mark.parametrize("restart, name", [("corner", "Corner"), ("goal_kick", "Goal kick"),
+                                           ("throw_in", "Throw-in"), ("free_kick", "Free kick"),
+                                           ("penalty_kick", "Penalty"), (None, "Set piece")])
+def test_each_set_piece_is_named_with_the_side_taking_it_when_the_side_is_sure(restart, name):
+    full, short = d.event_versions(set_piece(restart))
+    assert short == f"{name} to away."
+    assert full == f"{name} to away, {d.where(40.0, 30.0)}."
+    unsure_full, unsure_short = d.event_versions(set_piece(restart, team_confidence=None))
+    assert unsure_short == f"A {name.lower()}."
+    assert unsure_full == f"A {name.lower()}, {d.where(40.0, 30.0)}."
+
+
+def test_a_set_piece_side_is_said_as_the_club_only_past_the_side_gate():
+    from ninety.agents.factcheck import MIN_TEAM_CONFIDENCE
+    clubs = {"home": "London", "away": "Lisbon"}
+    sure = d.event_versions(set_piece("free_kick"))[1]
+    assert d.spoken(sure, True, clubs=clubs) == "Free kick to Lisbon."
+    for side in (MIN_TEAM_CONFIDENCE, None):  # at the gate, or not told: no side
+        line = d.event_versions(set_piece("free_kick", team_confidence=side))[1]
+        assert d.spoken(line, False, clubs=clubs) == "A free kick."
+
+
+def test_no_cause_is_said_until_it_is_measured(monkeypatch):
+    for cause in ("offside", "foul_likely", "foul", "unknown"):
+        for line in d.event_versions(set_piece("free_kick", cause=cause)):
+            assert not re.search(r"foul|offside|likely", line), line
+    # Once SAY_CAUSE is turned on by the measurement, the words are all hedged but a penalty's.
+    monkeypatch.setattr(d, "SAY_CAUSE", True)
+    said = {c: d.event_versions(set_piece("free_kick", cause=c))[1]
+            for c in ("offside", "foul_likely", "unknown")}
+    assert said == {"offside": "Free kick to away, likely for offside.",
+                    "foul_likely": "Free kick to away, likely for a foul.", "unknown": "Free kick to away."}
+    assert d.event_versions(set_piece("penalty_kick", cause="foul"))[1] == "Penalty to away, for a foul."
+    assert d.SAY_CAUSE is True
+
+
+def test_a_set_piece_never_names_a_fouler():
+    for line in d.event_versions(set_piece("free_kick", cause="foul_likely", player="a-t4")):
+        assert "a-t4" not in line
+
+
+def test_a_player_is_capitalised_only_where_he_opens_a_sentence():
+    """Demo audit: "Goal! a player scores." The unnamed player opens a sentence with a capital, and
+    stays lower case mid-sentence ("Kick-off, a player.")."""
+    unnamed = {"player": None, "team": "home", "team_confidence": 0.1, "confidence": 0.9, "x": 90, "y": 30,
+               "outcome": None}
+    assert d.event_versions({**unnamed, "type": "goal"})[1] == "Goal! A player scores."
+    assert d.event_versions({**unnamed, "type": "shot"})[1] == "A player shoots."
+    assert d.event_versions({**unnamed, "type": "kickoff"}) == ["Kick-off, a player."]

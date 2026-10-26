@@ -3,6 +3,7 @@ code whenever its plan or its draft is unusable or fails the fact-check."""
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -130,14 +131,20 @@ def test_code_answers_without_a_model():
     assert r.answer.evidence == ("cp:home:m15-29",)
 
 
+def said(fact_id, mi=None):
+    """The checked sentence the model is given for a fact (its say_as), as a v4 model returns it."""
+    mi = mi or insights()
+    call = {"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}
+    facts = companion.run_tools(mi, [call])
+    body = json.loads(companion.answer_prompt(Q, facts, (), mi))
+    return next(f["say_as"][0] for f in body["facts"] if f["id"] == fact_id)
+
+
 def test_model_plans_tools_and_answers_from_them():
     plan = json.dumps(
         {"tools": [{"name": "line_breaks", "club": "London Athletic", "minute_from": 20, "minute_to": 28}]}
     )
-    text = {
-        "text": f"{LB.name} took out 4 Lisbon Esportes players with a single pass in minute 23.",
-        "evidence": ["lb:v1"],
-    }
+    text = {"text": said("lb:v1"), "evidence": ["lb:v1"]}
     ask, prompts = scripted(plan, json.dumps(text))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "model", r.reasons
@@ -160,10 +167,7 @@ def test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only
         "evidence": ["cp1"],
     }
     plan = {"tools": [{"name": "line_breaks", "club": "London Athletic", "minute_from": 20, "minute_to": 28}]}
-    text = {
-        "text": f"{LB.name} took out 4 Lisbon Esportes players with a single pass in minute 23.",
-        "evidence": ["lb:v1"],
-    }
+    text = {"text": said("lb:v1"), "evidence": ["lb:v1"]}
     ask, _ = scripted(f"{json.dumps(plan)} {json.dumps(made_up)}", json.dumps(text))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "model", r.reasons
@@ -257,8 +261,11 @@ def test_a_draft_that_fails_the_check_never_airs(draft, why):
     )
     ask, _ = scripted(plan, json.dumps(draft))
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
-    assert r.source == "code" and any(why in x for x in r.reasons), r.reasons
+    # v4: a draft that is not a checked sentence is refused before the checks; the checks' own reasons
+    # for it are what insight_check would say (tests/test_insight_check.py covers each).
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,), r.reasons
     assert draft["text"] != r.answer.text
+    assert why  # the reason the checks would give, kept as the case's label
 
 
 def test_judge_rejection_falls_back():
@@ -271,10 +278,7 @@ def test_judge_rejection_falls_back():
     ask, _ = scripted(
         plan,
         json.dumps(
-            {
-                "text": "London Athletic took out 4 Lisbon Esportes players in minute 23.",
-                "evidence": ["lb:v1"],
-            }
+            {"text": said("lb:v1"), "evidence": ["lb:v1"]}
         ),
     )
     r = asyncio.run(companion.answer_match(Q, insights(), ask, judge))
@@ -841,3 +845,171 @@ def test_a_reply_nested_too_deep_to_read_falls_back_to_code():
     ask, _ = scripted(deep)
     r = asyncio.run(companion.answer_match(Q, insights(), ask))
     assert r.source == "code" and r.reasons == ("model reply is not the reply format",)
+
+
+def test_the_answer_step_is_given_only_sentences_the_checker_passes():
+    from ninety.agents.factcheck import Claim
+
+    mi = standin()
+    tools = ("counter_press", "line_breaks")
+    calls = [{"name": n, "club": None, "minute_from": 6, "minute_to": 20} for n in tools]
+    facts = companion.run_tools(mi, calls)
+    known = {f["id"]: f for f in facts}
+    body = json.loads(companion.answer_prompt(Question("s", None, "q", 1200.0), facts, (), mi))
+    said = [(f, t) for f in body["facts"] for t in f["say_as"]]
+    assert said, "some fact can be said"
+    for f, text in said:
+        assert companion._verify(Claim(text, [f["id"]]), known, mi).ok, text
+    assert all(f["say_as"] == [] for f in body["facts"] if not f.get("confident"))
+
+
+def test_a_say_as_sentence_returned_word_for_word_airs_as_the_models():
+    mi = standin()
+    q = Question("s", None, "How quickly do London Athletic win the ball back?", 60.0 * 20)
+    call = {"name": "counter_press", "club": "London Athletic", "minute_from": 6, "minute_to": 20}
+    plan = json.dumps({"tools": [call]})
+    seen = {}
+
+    async def ask(prompt):
+        body = json.loads(prompt)
+        if body["step"] == "plan":
+            return plan
+        f = next(f for f in body["facts"] if f["say_as"])
+        seen["text"] = f["say_as"][0]
+        return json.dumps({"text": f["say_as"][0], "evidence": [f["id"]]})
+
+    r = asyncio.run(companion.answer_match(q, mi, ask))
+    assert r.source == "model", r.reasons
+    assert r.answer.text == seen["text"]
+
+
+def _choose(pick):
+    """A scripted model: plans counter-press and line breaks, then answers with pick(facts)."""
+    names = ("counter_press", "line_breaks")
+    call = [{"name": n, "club": None, "minute_from": 6, "minute_to": 20} for n in names]
+
+    async def ask(prompt):
+        body = json.loads(prompt)
+        if body["step"] == "plan":
+            return json.dumps({"tools": call})
+        text, ids = pick([f for f in body["facts"] if f["say_as"]])
+        return json.dumps({"text": text, "evidence": ids})
+
+    return ask
+
+
+def test_a_clipped_checked_sentence_is_not_the_models_choice():
+    # The merge queue's review of #309: "lost the ball 13 times in open play from minute 6 to minute 20."
+    # passes the checks, but it is not one of the sentences the model was given, so it does not air.
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def clip(facts):
+        f = next(f for f in facts if " and " in f["say_as"][0])
+        return f["say_as"][0].split(" and ")[0] + ".", [f["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(clip)))
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,)
+
+
+def test_a_checked_sentence_of_a_fact_it_does_not_cite_is_not_its_choice():
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def other(facts):
+        a, b = facts[0], next(f for f in facts if f["id"] != facts[0]["id"])
+        return a["say_as"][0], [b["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(other)))
+    assert r.source == "code" and r.reasons == (companion.NOT_CHOSEN,)
+
+
+def test_the_aired_text_is_the_checked_sentence_exactly():
+    mi = standin()
+    q = Question("s", None, "Do London Athletic win the ball back?", 60.0 * 20)
+
+    def padded(facts):
+        f = facts[0]
+        return "  " + f["say_as"][0] + "\n", [f["id"]]
+
+    r = asyncio.run(companion.answer_match(q, mi, _choose(padded)))
+    assert r.source == "model" and r.answer.text == r.answer.text.strip()
+
+
+def _goal(gid, minute, side_known=True, confidence=0.9):
+    return {"id": f"goal:{gid}", "kind": "goal", "team": "home", "club": "London Athletic", "minute": minute,
+            "t": 60.0 * minute - 30.0, "event": gid, "event_confidence": confidence,
+            "side_known": side_known, "confident": side_known and confidence >= 0.5}
+
+
+def _score_answer(goals, question="What's the score?"):
+    mi = insights()
+    mi.facts["goal"] = goals
+    return asyncio.run(companion.answer_match(Question("s1", None, question, 80 * 60.0), mi)).answer
+
+
+@pytest.mark.parametrize("goals, said, minutes", [
+    ([_goal("v90", 23)], "London Athletic scored in minute 23.", {"23"}),  # spotted and placed
+    ([_goal("v91", 43, side_known=False)], "a goal in minute 43 too, without telling whose", {"43"}),
+    ([_goal("v92", 43, confidence=0.3)], "no goal it can vouch for", set()),  # under the detection gate
+    ([], "no goal it can vouch for", set()),
+    ([_goal("v90", 23), _goal("v91", 61, side_known=False)], "scored in minute 23.", {"23", "61"}),
+])
+def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, said, minutes):
+    # Kian, Oct 26 (option B): the scorebug shows the score; the answer names the goals vision spotted.
+    a = _score_answer(goals)
+    assert a.text.startswith(companion.SCORE_POINTER) and said in a.text, a.text
+    assert set(re.findall(r"\d+", a.text)) == minutes  # the only numbers are the goals' minutes
+    assert a.metric is None and a.value is None  # never the score's counts as the answer's number
+    assert a.headline in ("Goals spotted by vision", "See the scorebug")
+
+
+def test_who_is_winning_is_headed_by_the_scorebug_not_a_scorer():
+    a = _score_answer([_goal("v90", 23)], "Who's winning?")
+    assert a.headline in ("Goals spotted by vision", "See the scorebug") and a.metric is None
+
+
+def _bug(sid, minute, home, away, confidence=0.95):
+    return {"id": f"scorebug:{sid}", "kind": "scorebug", "metric": "scorebug", "team": None, "minute": minute,
+            "t": 60.0 * minute - 30.0, "event": sid, "home": home, "away": away, "source": "scorebug",
+            "event_confidence": confidence, "confident": confidence >= 0.5}
+
+
+@pytest.mark.parametrize("bugs, measured, said", [
+    ([_bug("s1", 23, 1, 0), _bug("s2", 61, 2, 0)], True,
+     "The broadcast's scorebug shows London Athletic 2 goals, Lisbon Esportes 0 goals."),  # the latest
+    ([_bug("s1", 23, 1, 0), _bug("s2", 85, 2, 0)], True,
+     "The broadcast's scorebug shows London Athletic 1 goal, Lisbon Esportes 0 goals."),  # none from later
+    ([_bug("s1", 23, 1, 0, confidence=0.3)], True, companion.SCORE_POINTER),  # under the gate
+    ([_bug("s1", 23, 1, 0)], False, companion.SCORE_POINTER),  # not measured yet: never said
+    ([], True, companion.SCORE_POINTER),
+])
+def test_the_score_is_said_only_as_the_scorebug_shows_it_once_measured(monkeypatch, bugs, measured, said):
+    from ninety.intel import scoring
+
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", measured)
+    bugs = [{**b, "confident": b["confident"] and measured} for b in bugs]
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], bugs
+    a = asyncio.run(companion.answer_match(Question("s1", None, "What's the score?", 80 * 60.0), mi)).answer
+    assert a.text.startswith(said), a.text
+    assert a.metric is None and a.value is None
+    if said == companion.SCORE_POINTER:
+        assert a.headline in ("Goals spotted by vision", "See the scorebug")
+    else:
+        assert re.fullmatch(r"London \d, Lisbon \d", a.headline), a.headline
+
+
+def test_a_scorebug_sentence_cannot_swap_its_numbers():
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+
+    mi = insights()
+    mi.facts["scorebug"] = [_bug("s1", 23, 2, 1)]
+    (bug,) = [f for f in mi.score(1, 30)["summary"] if f["metric"] == "scorebug"]
+    clubs = mi.fixture.clubs
+    names = [s.name for t in ("home", "away") for s in mi.fixture.sheet(t)]
+    ok = f"The broadcast's scorebug shows {clubs['home']} 2 goals, {clubs['away']} 1 goal."
+    swapped = f"The broadcast's scorebug shows {clubs['home']} 1 goal, {clubs['away']} 2 goals."
+    assert verify(Claim(ok, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
+    assert not verify(Claim(swapped, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok

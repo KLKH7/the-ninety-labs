@@ -9,7 +9,7 @@
   <body>
     <a class="skip" href="#trace">Skip to the agent trace</a>
     <header class="bar">
-      <h1>The Ninety <span>Labs</span></h1>
+      <h1>The Ninety Labs</h1>
       <div class="persona" role="radiogroup" aria-label="Persona" id="persona">
         <button type="button" role="radio" data-persona="casual" aria-checked="true">Casual <kbd>1</kbd></button>
         <button type="button" role="radio" data-persona="analyst" aria-checked="false">Analyst <kbd>2</kbd></button>
@@ -23,7 +23,9 @@
         <div class="match" id="match" hidden>
           <div class="match-top">
             <span class="match-tag">Condensed match</span>
-            <output class="score" id="score">Home 0 – 0 Away</output>
+            <span class="score-crest" id="score-crest-home" aria-hidden="true"></span>
+            <output class="score" id="score">Home v Away</output>
+            <span class="score-crest" id="score-crest-away" aria-hidden="true"></span>
             <span class="chapter-now" id="chapter-now"></span>
           </div>
           <p class="match-honest" id="match-honest"></p>
@@ -40,6 +42,34 @@
             <div class="pair-text">
               <span class="pair-line">On your phone: <b id="pair-url"></b> · code <b class="pair-code" id="pair-code"></b></span>
             </div>
+          </div>
+          <p class="captions" id="captions" hidden></p>
+          <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->
+          <div class="hud" id="hud">
+            <div class="hud-scrub" id="hud-scrub"><div class="ticks" id="ticks" aria-hidden="true"></div></div>
+            <div class="hud-row">
+              <div class="hud-left" id="hud-left"></div>
+              <div class="hud-right">
+                <button type="button" class="icon" id="hud-audio" aria-label="Audio and subtitles" aria-expanded="false" aria-controls="audio-menu" hidden></button>
+                <button type="button" class="icon" id="hud-volume" hidden></button>
+                <button type="button" class="icon" id="hud-qr" aria-label="Follow on your phone" aria-expanded="false" aria-controls="pair-card"></button>
+                <button type="button" class="icon" id="hud-full" aria-label="Full screen"></button>
+              </div>
+            </div>
+          </div>
+          <!-- The audio menu (src/commentary.ts), as a streaming app's audio and subtitles menu. -->
+          <div class="audio-menu" id="audio-menu" role="group" aria-label="Audio and subtitles" hidden>
+            <fieldset>
+              <legend>Audio</legend>
+              <label><input type="radio" name="track" value="stadium" checked /> Stadium</label>
+              <label id="track-commentary"><input type="radio" name="track" value="commentary" /> Commentary</label>
+              <label id="track-described" hidden><input type="radio" name="track" value="described" /> Audio description</label>
+            </fieldset>
+            <fieldset>
+              <legend>Subtitles</legend>
+              <label><input type="radio" name="subs" value="off" checked /> Off</label>
+              <label><input type="radio" name="subs" value="on" /> Commentary</label>
+            </fieldset>
           </div>
         </div>
         <div class="controls">

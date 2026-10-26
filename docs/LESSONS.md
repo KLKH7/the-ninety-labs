@@ -2576,6 +2576,18 @@ short and actionable. This file is public: no research sources, product names or
   broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
   `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
 
+### 233. A variant is compared with its reference at the same commit, not with the reference's old number
+- **What happened:** the sides plan's spatial variant S was to ship if it beat T1a, recorded as 0.681
+  outfield accuracy. Run again on the branch S was built on, the same observations through the same
+  measure gave T1a 0.731: the tracking and kit code differ between that branch and the one T1a was
+  first run on. Compared with the old number, S (0.750) would have looked 0.07 better; at the same
+  commit it is 0.02 better.
+- **Rule:** a decision rule that compares two variants runs both at one commit, on the same inputs,
+  and the comparison is recorded before the new variant's number is read. A number carried over from
+  another branch is context, never the bar.
+- **Check:** `docs/eval/sides-tactical/SPATIAL-PLAN.md`, Deviations (T1a re-run at the commit, before
+  any S number), and `T1a-validation-r4stack.json` next to `S-validation.json`.
+
 ### 221. A number matched by value and unit alone passes in the wrong role
 - **What happened:** the insight fact-check let a sentence state any number a cited fact held,
   written with that number's unit. A planted claim "6 players against 1 player" passed when the
@@ -2640,6 +2652,19 @@ short and actionable. This file is public: no research sources, product names or
   a separate look at the characters.
 - **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
   `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 231. A fallback that leaves cases undecided is scored on the cases it leaves, and its reference is measured first
+- **What happened:** the sides plan fixed a fallback, TB (tactical tracks inherit the broadcast's
+  sides), to ship if the tactical sides stayed below the broadcast's, B. B had never been scored,
+  so the condition could not be checked; scored, B was 0.578 and T1a 0.681 (on different track
+  populations and kit readers: PLAN.md's Oct 25 entry), and the fallback was not needed. TB itself scored 0.361: right on 0.588 of the tracks it sides, the broadcast's own rate,
+  but 38% of the tactical track-frames are players the broadcast never shows, and they get no side.
+  Judged only on what it decided, TB would have looked as good as B.
+- **Rule:** before a rule that compares with a reference is applied, the reference is measured on
+  the same clips. A variant that can leave a case undecided is scored over every case, undecided
+  ones counted against it, with its coverage reported beside its accuracy.
+- **Check:** `docs/eval/sides-tactical/B-validation.json` and `TB-validation.json`; PLAN.md's dated
+  entry gives both rates for TB.
 
 ### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
 - **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
@@ -2922,6 +2947,34 @@ short and actionable. This file is public: no research sources, product names or
   when the phone reads an event's side without the threshold;
   `tests/test_e2e.py::test_only_a_track_whose_side_was_told_surely_may_be_named_by_club` pins the list.
 
+### 246. Two kits are told apart by what the camera sees, not by their base colours
+- **What happened:** the demo match (seed 8080) passed the broadcast kit rule on shirt colour alone:
+  purple against near-white, a WCAG contrast of 14:1. But the page draws each shirt's pattern in its
+  trim, here white. Home was purple hoops in white over white shorts; away was a white shirt with
+  white shorts. Seen from the broadcast camera, the shirts' contrast was 1.9:1, and the team split
+  failed on every segment. The preflight audit found it after the render, so a pod run was lost.
+- **Rule:** a rule meant to keep two things apart on screen tests them as drawn, with every element
+  that changes what is seen (here the pattern, its colour and its area), not the parameter that seeds
+  them.
+- **Check:** `tests/test_render_params.py::test_seed_8080s_broadcast_kits_look_apart_once_the_pattern_is_on`
+  and `::test_every_broadcast_seed_is_told_apart_as_seen_and_a_passing_seed_keeps_its_draws`. Both
+  fail with the redraw off, or with the pattern's share set to 0.
+
+### 247. A paid machine's cap runs on the machine, and its results leave it as they are made
+- **What happened:** on Oct 24–25 two rented GPU hosts ran past their hard caps. Each cap was a
+  timer on the maintainer's laptop. The first fired 14 min late with the laptop asleep, hit a DNS
+  failure, and exited. The second retried with the laptop kept awake, but the laptop was offline
+  for about 1 h 40 min, so the host billed about 1.5 h past its 2 h cap. Each time, finished work
+  that had not been copied back was lost when the host was finally deleted: the shot-outcome set's
+  renders and its validation scoring.
+- **Rule:** the cap is enforced on the host itself: the first thing a rented host runs is its own
+  deletion at the cap, started before any other work. The laptop's retrying timer is only a second
+  line. Every finished result (a clip's report, a score, a set list) is copied off the host as it
+  is written, never in a batch at the end.
+- **Check:** a plan for a rented host (docs/PLAN.md, risks) states both before it is approved: the
+  deadline the host enforces on itself, and the cadence at which results are copied back (every
+  couple of minutes from the first). A run that keeps either on the laptop alone is not approved.
+
 ### 248. A place along the pitch is checked against the pitch before it is cut into thirds
 - **What happened:** territory (#314) cut the pitch's length into thirds with `int(depth // THIRD_M)`,
   capped at 2. A ball in the net or behind a goal line has a depth below 0 or past 105 m. A negative
@@ -2934,14 +2987,217 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_possession_territory.py::test_a_ball_beyond_a_goal_line_is_in_no_third`
   (x = -3, -0.5, 106, 108) fails when the check is removed.
 
-### 251. A stage that keeps every frame it reads only works on short clips
+### 249. A phrase that states a direction is bound to the fact's own role, not only approved
+- **What happened:** the closed direction check (lesson 221) approved a sentence when every word
+  was one of the cited fact's own phrases. The phrases were approved as words, though, not as this
+  fact's values. The merge queue's reviews of #321, #323 and #326 got these through:
+  - "Hugo passed to Sami" against Sami-to-Hugo (both names, the same words);
+  - "did not sprint" against a count of 4 (the zero phrase is one of the fact's phrases);
+  - "their final third on the left" against own-third-right (any third matched);
+  - a recap's twelve-moment cap dropping a goal.
+  Numbers already had roles (lesson 221); orders, zeros and places did not.
+- **Rule:** wherever a phrase carries a fact's value, the check binds it to that value:
+  - a pair is said passer-to-receiver;
+  - a zero phrase only of a zero;
+  - a zone only as the fact's own third and channel.
+  A cap on a list never drops the kind the list exists for (goals in a recap). A review probe that
+  differs from the fact only in who, where or whether is a test.
+- **Check:** `tests/test_passing_network.py::test_a_pair_is_said_in_its_order_and_with_its_caveat`,
+  `tests/test_player_running.py::test_a_zero_or_a_zone_is_said_only_as_the_fact_has_it` and
+  `tests/test_halves_and_moments.py::test_a_recap_never_drops_a_goal_however_many_moments_follow`
+  fail when their binding is removed.
+
+
+### 250. A guard on what a fan asked is a list of words, so every phrasing it misses gets an answer
+
+- **What happened:** while a named player's running figures were held, the physical tool still
+  said the zone each player was in most (#323). A guard (`held_ask`) matched "distance", "fastest",
+  "sprint" and a few more, and refused those questions. Every other phrasing got the first zone
+  fact, verified, with a player's name as the headline: "Who looks most tired?", "Who ran the
+  furthest?", "How many km has Kai done?". Then "who is on the left?" got the zone of someone who
+  played on the right, and "Where does Alex play?" got one of three Alexes. Three reviews found
+  more phrasings each time. The fact-check never sees the question, so a true sentence that does
+  not answer the question passes it.
+- **Rule:** gate on the kind of answer the question asks for, and refuse anything else:
+  - a figure, at its highest, or of the one player the question names;
+  - the zone, only for a question of where, about one named player.
+  
+  Several players fitting are named back to the fan, never picked for him. A side or a third alone is not
+  a question of where. The model path is held to the same target: an answer about another player,
+  or not the figure asked, falls back to code.
+- **Check:** `tests/test_player_running.py::test_the_zone_is_never_another_players_or_an_answer_to_a_side`
+  and `::test_a_held_figure_asked_for_is_not_available_never_another_answer` (the reviewers'
+  phrasings) fail when the gate's zone, ambiguity or player filter is removed.
+
+### 251. A confidence calibrated on validation is not a guarantee: check what the Laws make impossible
+- **What happened:** on the demo match (seed 8080) the home team's dark purple hoops have white
+  shorts, and the away kit is near-white. Main's kit reader takes one median colour of the shirt
+  patch, and on hoops the white second colour fills it, so both outfield teams read as white. Kit
+  clustering then split "everyone" from a minority (shaded players on the broadcast, the red keeper
+  on the tactical views), and the depth vote named the two cameras' clusters opposite ways: the
+  broadcast saw about 90% home, the views about 95% away, the joined frames 21 away to 1 home. Side
+  confidence on main is a track's colour margin, so tracks far from the minority looked sure, and
+  three events cleared the 0.96 gate at 0.975 and 0.989. The same dry run aired passes of 16 m at
+  3 km/h and of 0 m at 14 km/h at confidence 0.777.
+- **Rule:** a confidence fitted on validation can be confidently wrong on a case validation never
+  held, so hard limits from the Laws and from physics stand beside it and override it: no more than
+  11 players of one side on the pitch (Law 3), no pass shorter than the ball at a player's feet, and
+  no ball averaging faster than it was struck. Each limit is a sourced rule, never a fitted one, and
+  it holds (confidence 0), it does not guess.
+- **Check:** `tests/test_vision_events.py::test_law_3_more_than_eleven_of_one_side_in_a_frame_makes_no_side_sure`
+  (11 kept, 12 held), `::test_a_pass_the_ball_could_not_have_made_is_held` and
+  `::test_the_speed_check_allows_both_ends_position_error_and_no_more`; on the demo's t001350 every
+  event's side confidence is 0 and the three impossible passes are held.
+
+### 252. A test waits on the state it checks; one read of a screen is a race
+- **What happened:** two phone tests failed in CI on PRs that did not touch the phone. One read
+  `is_visible('#mockbar')` the moment the page loaded, but the phone shows that bar only after its
+  top-level `await import('./mock')`. The other read each screen's clock once, from a DOM attribute
+  written each time a frame is drawn: on a loaded runner the phone read 0.5 s behind the big
+  screen (61.77 / 61.27 / 61.93). The clock check also had a gap: it passed a phone whose clock
+  did not advance between the big screen's once-a-second messages, so it read right once a
+  second.
+- **Rule:**
+  - A browser test waits for the state it checks (an element visible, a ready flag, a status's
+    state), never a single read after an action, and never a longer timeout in its place.
+  - A value a screen writes per frame is read after a fresh frame.
+  - A sync check settles for at most one sync period (the sender's own interval, cited), keeps the
+    product's bar, then requires the next samples to stay in step. A phone constantly off, or one
+    whose clock stops between messages, still fails.
+- **Check:** `tests/test_phone.py::test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap`
+  waits for `#mockbar`. `assert_in_step` (fresh frames, `SETTLE_S`, then `STEPS` more samples)
+  fails `test_the_phone_clock_stays_within_tolerance_of_the_laptop` and
+  `test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree` against a phone clock
+  shifted 0.5 s, and fails at least one of them against a phone clock that does not run between
+  messages (mutant runs, #341 and its follow-up).
+
+### 253. A rule that walks back through events must stop at a cut
+- **What happened:** the highlights reel's `origin` rule (#324) walked back from a shot through the
+  detected events to find how the attack began. A development run on the demo match found a wrong
+  origin: a throw-in seen before a broadcast cut was read as the free kick after it, because the
+  condensed match's cut had skipped minutes and a foul in between. The run had also given every
+  origin as null before, because the rule stopped at event types it did not know.
+- **Rule:** an event before a cut says nothing about what followed it. A rule that reads backwards
+  through events stops at a cut (a restart after the cut is the restart detector's to see), and the
+  list of event types it understands is checked against the types the source writes, so "null for
+  everything" is noticed.
+- **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
+  fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 255. An evaluation's "true" label is the evaluation's opinion until a person checks it
+- **What happened:** the fact-checker evaluation labelled tone words true ("a cautious pass", "a risky
+  tackle", "a confident ball forward") whenever its own rule fitted the event, and counted the Judge
+  rejecting them as the Judge's error: 14 of its 14 false rejections. A human labelling a blind sample
+  doubted those labels too ("we can't tell it's forward", "don't know if it's risky"), and no cited fact
+  gave a direction at all. The same labels found two claims the Judge had let air: an interception said
+  to come "after" the very pass it cut out, and "despite pressure" with no pressure fact cited.
+- **Rule:** a word no cited fact states is neither true nor false in an evaluation; it is counted apart
+  (how often it airs). A claim's words about the play need a cited fact that shows them, checked in
+  code: "long ball" needs a pass of 32 m or more (GROUNDING I11), "under pressure" a pressure event, and
+  "after"/"before" never joins an interception to the pass it cut out. Have a person label a blind,
+  pre-registered sample of an evaluation's decisions before its numbers are trusted. A rule made from
+  that sample's misses is checked on it in-sample only; a fresh sample measures it. Reclassifying a
+  kind as neither true nor false is not a fix of the checker, and is reported as such.
+- **Check:** `tests/test_factcheck_eval_labels.py::test_tone_claims_are_neither_true_nor_false_and_nothing_says_forward`,
+  `tests/test_factcheck.py::test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it` (and its
+  true twins), `docs/eval/factcheck-human-labels.md`.
+
+### 256. A measured feature is merged after its measurement, and a fix is checked against the rule it narrows
+- **What happened:** the goal and save detector (#271) was marked ready and auto-merged into main
+  while its validation re-score and its test score were still waiting on a pod, so main carried an
+  unmeasured claim for an evening. Separately, its amendment 3 asked for a keeper marked by his kit,
+  narrower than the plan's own rule 5 (also the player nearest his goal line in his area); the
+  validation re-score found it, and the fix still found no save, because the true cause was the
+  ball's height (a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him).
+- **Rule:** a PR whose description promises a measurement is not marked ready or set to auto-merge
+  until the measurement is in it; whoever merges it checks. An amendment that restates a rule is
+  checked against the rule's own wording, and a fix that a re-score shows does nothing is not merged.
+- **Check:** [docs/eval/shot-outcomes/RESULT.md](eval/shot-outcomes/RESULT.md) states the order
+  (merged 22:28Z before the score); #363 (amendment 6) closed with its validation numbers.
+
+### 257. A test split is scored only after its copy-back is confirmed complete
+- **What happened:** the shot-outcome test clips were copied back from the pod as each finished. The
+  test was scored at 23:47Z on the 42 then on the Mac, read as a pod that had stopped at its cap; it was
+  still running, and all 79 arrived minutes later. The rule for a partly run split covers clips that
+  never come back, not clips still on their way, so the 42-clip score was an early look, not the
+  result. The code was already frozen, so it changed nothing, but it is disclosed
+  (docs/eval/shot-outcomes/RESULT.md).
+- **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
+  complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
+- **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
+### 258. A detection that does not work is not shown as fact, even where its measurement says so
+- **What happened:** saves from video were measured not to work (2 of 49 on the shot-outcome set's
+  test split; a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him), and the
+  docs said so. But the live path still wrote a detected save as `outcome: on_target`, and the
+  highlights reel (a save moment), the scoring facts (a save credited to a club), the shot map and the
+  phone ("Shot saved, from ...") showed it as fact.
+- **Rule:** when a measurement says a detection does not work, the live path stops emitting it at the
+  source, so no screen or sentence can show it; the rule stays reachable for measuring only, behind
+  an explicit switch.
+  Then each consumer's branch for the missing value is read: the phone's last branch said "shoots
+  wide" for any other outcome, so the first fix turned every former save into a new false miss (the
+  merge queue's review found it); a missing outcome now reads "X takes a shot." and is drawn as its
+  own grey mark (#369).
+- **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
+  #369's phone test (a null outcome never reads "wide").
+
+### 259. Two cameras' track ids are two id spaces; a name or a position crosses only through the join
+- **What happened:** on the joined demo match the players are the tactical camera's tracks and the
+  events name the broadcast's. Both trackers number from 1 in each segment, so `h-t7` is one man in
+  the events and another in the frames: 89 of the 253 event actors on 8080 also exist as a tactical
+  id. MatchInsights looked event actors up in the tactical frames and names by id. The passer of a
+  line break was usually 10 to 70 m from the event's place, and offside readings found the wrong
+  receiver or none (26 readings; 128 once fixed). Graded for the first time on real vision against
+  the answer key, the names in use were right 0.835 of the time (510 of 611 tracks). The gate that
+  should have stopped them (0.203) had been measured on simulated tracks only, where it did not bind.
+- **Rule:** an id is read only in the space it was made in. A broadcast id reaches the tactical
+  frames, and a name reaches a broadcast id, only through the association (with its measured gate
+  and the same side on both cameras), or not at all. A gate measured on simulated tracks is not a
+  gate on real ones until the live path's own output has been graded against its answer key.
+- **Check:** `tests/test_naming.py` (events move to their tactical tracks or to none; a name crosses
+  only above the gate and on the same side); docs/eval/roles.md, "Names on the demo match's own tracks".
+
+### 260. A pre-registered run starts after its plan's review, not before
+- **What happened:** the ablation's third arm was started live on the day's plan while the plan's own
+  pull request was still in review. The review then found the plan's reading rule let two outcomes
+  hold at once ("the graph wins" and "arm 2 matches"), its seeds were ones the other two arms had
+  already been run and committed on, and it had no exclusion rule or cost stop. The run was stopped
+  before it finished, its output unread and never scored, and rerun on the fixed plan with fresh seeds.
+  The stopped run's calls were billed anyway.
+- **Rule:** a run that a plan pre-registers starts only once the plan's review has passed. A reading
+  rule's outcomes are mutually exclusive and checked in a stated order, shown by a test over every
+  count in a range. Its seeds are ones no compared arm or tuned prompt has been run on. The plan
+  states its exclusions, its cost stop and what it does not claim, and records every run started,
+  scored or not.
+- **Check:** `tests/test_agent_ablation.py::test_no_two_outcomes_hold_at_once`,
+  `::test_the_cost_stop_starts_no_further_minute`,
+  `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
+  `docs/eval/ablation-third-arm-plan.md`.
+
+### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
+- **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
+  a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
+  place. On the 30 test clips every true speed became 0, so every "error" was vision's own speed,
+  the 3D and flat rows came out identical, and no frame passed the 18 km/h floor for a relative
+  error. Its tests passed because their hand-built truth frames carried a velocity.
+- **Rule:** a scorer reads truth fields strictly (`b["x"]`, never `b.get("x", 0.0)`): a missing
+  field is an error, not a value. A quantity the clip does not store is derived from what it does
+  (here, the velocity from the true places one frame either side), and the tests build truth
+  frames in the shape the real files have.
+- **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
+  reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 264. A stage that keeps every frame it reads only works on short clips
 - **What happened:** `ninety.vision.observe` decoded every image of a clip and kept them all until
   its second pass, which only needed each frame's shirt colours. At 1280 x 720 that is 2.8 MB a
   frame, about 4 GB a minute of footage: the live detection job, sized at 4 GiB, would have run out
   of memory on the 60 s demo window, and a condensed full match was out of reach on any size. Every
   test clip so far was 10 s (250 frames, 0.7 GB), so nothing showed it.
 - **Rule:** a stage that walks a clip's frames keeps per frame only what a later pass needs (here
-  the markings' points and the kit colours), never the decoded image. Memory must not grow with
-  the clip's length beyond its per-frame results.
+  the markings' points), never the decoded image; a later pass that needs the pixels again reads
+  the image again (the kit colours, which need the fitted camera). Memory must not grow with the
+  clip's length beyond its per-frame results.
 - **Check:** `tests/test_vision_observe.py::test_observe_keeps_no_more_than_one_decoded_frame_at_a_time`
   (fails on the old version: every frame read so far was still alive).

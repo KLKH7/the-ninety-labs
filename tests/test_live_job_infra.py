@@ -185,3 +185,17 @@ def test_no_demo_clip_window_or_checkpoint_is_fixed_in_the_job():
     for f in files:
         text = (ROOT / f).read_text()
         assert not re.search(r"seed ?8001|\b100 160\b|ours-v4|ours-freeze", text), f
+
+
+def test_a_view_s_own_clip_json_does_not_split_the_clip(tmp_path):
+    # The renderer writes a clip.json in each view too, named after the view (seed8001-tac-l).
+    from ninety.vision import frame_index
+
+    clip = rendered_views_clip(tmp_path)
+    for name in ("tac-l", "tac-r"):
+        (clip / "views" / name / "clip.json").write_text(json.dumps({"clip_id": f"seed8001-{name}"}))
+    out = tmp_path / "live-input" / "clip"
+    stage_live.stage_clip(clip, 1.0, 2.5, out)
+    assert set(live_job.check_views(out)) == {"tac-l", "tac-r"}
+    for index in frame_index.write_indexes(clip):
+        assert {json.loads(x)["clip"] for x in index.read_text().splitlines()} == {"seed8001"}

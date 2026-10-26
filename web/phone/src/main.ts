@@ -9,15 +9,14 @@
 
 import "./ionic";
 import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
-import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
+import { type MatchData, chapterAt, chapterLabel, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
-import londonCrest from "./crests/london-athletic.svg?raw";
-import lisbonCrest from "./crests/lisbon-esportes.svg?raw";
+import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -40,6 +39,8 @@ import {
   teams,
   teamSheet,
   type SheetEntry,
+  unnamedTrack,
+  eventName,
 } from "./types";
 import { describeVisual, drawVisual, drawable, fromScout, headline, title } from "./visual";
 
@@ -334,6 +335,8 @@ interface BundleManifest {
   teams?: unknown;
   sides_known?: unknown;
   min_team_confidence?: unknown;
+  /** scorebug.jsonl (ninety-e2e --scorebug): shown only once the reader is measured. */
+  scorebug?: { readings: number; measured: boolean; min_confidence: number } | null;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -355,6 +358,8 @@ interface DetectedEvent {
   confidence?: number | null;
   team_confidence?: number | null;
   interceptor?: string | null;
+  /** score_change only (#356): the score the broadcast's scorebug shows from this event on. */
+  score?: { home: number; away: number } | null;
 }
 /** The side threshold the fact-checker uses (the bundle's `min_team_confidence`, from
  * ninety/agents/factcheck.py); null for a bundle that does not say, where every detected side is unsure. */
@@ -370,6 +375,7 @@ function sureSide(e: DetectedEvent): "home" | "away" | null {
   return minTeamConfidence !== null && typeof told === "number" && told > minTeamConfidence ? e.team : null;
 }
 let bundleEvents = new Map<string, DetectedEvent>(); // detected events, by id
+let scorebugEvents: DetectedEvent[] = []; // the scorebug's readings (scorebug.jsonl), in time order
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -392,7 +398,12 @@ async function loadBundle() {
     const m = (await get("manifest.json")) as BundleManifest;
     // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
     if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
-    Object.assign(teams, teamNames(m.teams));
+    // A bundle that does not name both clubs is not given the demo's: neutral sides, said so.
+    // (teamNames hands back DEFAULT_TEAMS itself only when it falls back.)
+    const named = teamNames(m.teams);
+    const confirmed = named !== DEFAULT_TEAMS;
+    Object.assign(teams, confirmed ? named : { home: "Home", away: "Away" });
+    $("teams-note").hidden = confirmed;
     setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
     minTeamConfidence = typeof m.min_team_confidence === "number" ? m.min_team_confidence : null;
     showTeams();
@@ -416,15 +427,36 @@ async function loadBundle() {
           bundleEvents.set(e.id, e);
         }
       }
+      // The scorebug's own readings (vision's, from the broadcast's graphic: ninety/vision/
+      // scorebug.py), when the bundle carries them: a start reading and each change of score.
+      // One gate with the Companion (ninety/intel/scoring.py, SCOREBUG_MEASURED, which the bundle
+      // carries): nothing from the scorebug until its reader is measured; then only readings at or
+      // above the fact-checker's confidence, and never one that takes a goal away (a misread).
+      scorebugEvents = [];
+      const gate = m.scorebug;
+      const sb = gate?.measured ? await fetch(new URL("scorebug.jsonl", base)).catch(() => null) : null;
+      if (gate && sb?.ok) {
+        let last = { home: 0, away: 0 };
+        for (const line of (await sb.text()).split("\n")) {
+          if (!line.trim()) continue;
+          const e = JSON.parse(line) as DetectedEvent;
+          if ((e.type !== "score_read" && e.type !== "score_change") || !e.score) continue;
+          if ((e.confidence ?? 1) < gate.min_confidence) continue;
+          if (e.score.home < last.home || e.score.away < last.away) continue;
+          last = e.score;
+          scorebugEvents.push(e);
+        }
+      }
     }
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
     // The team sheet: names, shirts and positions the line-up tool is confident of (never a guess).
     for (const k of Object.keys(teamSheet)) delete teamSheet[k];
     for (const e of ((match as { lineup?: (SheetEntry & { id: string; confident?: boolean })[] } | null)?.lineup ?? [])) {
-      if (e.confident !== false) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
+      if (e.confident === true) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
     }
     $("match-card").hidden = !state.match;
+    renderChips(); // the Ask grid's player questions come from the match's numbers
   } catch {
     // The minimap feed still draws the radar; only the cuts and the match are missing.
   }
@@ -471,6 +503,7 @@ function showTeams() {
     for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
     for (const el of document.querySelectorAll(`.crest.${side}`)) el.innerHTML = crestSvg(teams[side], side);
     for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
+    $(`goals-${side}`).setAttribute("aria-label", `${teams[side]} goals`);
   }
   $("legend-home").textContent = `${teams.home} →`;
   $("legend-away").textContent = `← ${teams.away}`;
@@ -566,9 +599,24 @@ function averagePositions(): Map<string, [number, number]> {
 /** A club's crest, as inline SVG: the two demo clubs' are Kian's chosen crests (src/crests,
  * README); any other club a plain shield in its colour with its initial. */
 function crestSvg(club: string, side: "home" | "away"): string {
-  if (club === "London") return londonCrest;
-  if (club === "Lisbon") return lisbonCrest;
+  const own = crestOf(club);
+  if (own) return own;
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
+}
+
+/** A name as said mid-sentence: "a player", not "A player" ("Heat map of a player"). */
+const mid = (name: string) => name.replace(/^A player\b/, "a player");
+
+/** A player as a list tells him apart: his name, else where he has mostly played ("Left defender"),
+ * or on a side not told surely, where on the screen ("A player, left of the pitch"); never the
+ * tracker's number, and never "London player" twice in one list. */
+function distinctName(id: string): string {
+  if (!unnamedTrack(id)) return playerName(id);
+  const at = averagePositions().get(id);
+  if (!at) return playerName(id);
+  if (!sideUnsure(id)) return roleWords(team(id), at[0], at[1]);
+  const across = at[0] < 105 / 3 ? "left" : at[0] > (2 * 105) / 3 ? "right" : "middle";
+  return `A player, ${across} of the pitch`;
 }
 
 /** A player the line-up cannot name, by where he has mostly played ("Left defender"). */
@@ -585,6 +633,12 @@ function spot(side: "home" | "away", x: number, y: number): string {
   return `${flank} · ${depth}`;
 }
 
+const POSITION_WORDS: Record<string, string> = {
+  GK: "Goalkeeper", RB: "Right back", CB: "Centre back", LB: "Left back", RWB: "Right wing-back", LWB: "Left wing-back",
+  DM: "Defensive midfielder", CM: "Centre midfielder", AM: "Attacking midfielder", RM: "Right midfielder", LM: "Left midfielder",
+  RW: "Right winger", LW: "Left winger", ST: "Striker", CF: "Centre forward",
+};
+
 function renderRoster(roster: string[]) {
   const avg = averagePositions();
   const button = (id: string) => {
@@ -596,19 +650,22 @@ function renderRoster(roster: string[]) {
     // where he plays ("Left midfielder") until the line-up names him.
     const at = avg.get(id);
     const sheet = teamSheet[id];
-    const unnamed = isTrack(id) && playerName(id) === playerLabel(id, teams);
+    const unnamed = unnamedTrack(id);
     const num = document.createElement("span");
     num.className = "num";
     num.textContent = sheet?.number !== undefined ? String(sheet.number) : unnamed ? "" : shirt(id);
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
+    // A sheet player with a shirt but no name is his position in words ("Goalkeeper"), never
+    // "London 1" beside a "1" already in the number column.
+    const roleOnly = !!sheet && !sheet.name && !!sheet.position;
+    name.textContent = roleOnly ? POSITION_WORDS[sheet!.position!] ?? sheet!.position! : unnamed && at ? roleWords(team(id), at[0], at[1]) : playerName(id);
     // Apple Sports' line-up: the position after the name, quiet ("GK"); from the team sheet only.
     const where = document.createElement("span");
     where.className = sheet?.position ? "where pos" : "where";
-    where.textContent = sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
+    where.textContent = roleOnly ? "" : sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
     b.append(num, name, where);
-    b.setAttribute("aria-label", playerName(id));
+    b.setAttribute("aria-label", name.textContent ?? playerName(id)); // its name contains what it shows
     if (at) {
       where.id = `where-${id}`;
       b.setAttribute("aria-describedby", where.id); // "Left · defence", read after the name
@@ -617,6 +674,16 @@ function renderRoster(roster: string[]) {
     b.addEventListener("click", () => select(id));
     return b;
   };
+  // The team sheet, when the bundle carries one (match.json `sheets`, names-by-role): each club's
+  // eleven as the line-up, never a tracked fragment. Without one, only players with a real shirt
+  // (the simulator's); a tracked player is never listed as a player (demo audit, Oct 25).
+  const sheets = (state.match as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets;
+  if (sheets?.home?.length || sheets?.away?.length) {
+    renderSheets(sheets);
+    return;
+  }
+  roster = roster.filter((id) => !isTrack(id));
+  $("roster-box").hidden = roster.length === 0;
   // One card per club, home first (Apple Sports and FotMob line-ups): crest and full name, the
   // club's players at their average positions on a small pitch, then #, name and where he plays.
   $("roster").replaceChildren(
@@ -644,19 +711,86 @@ function renderRoster(roster: string[]) {
         const g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", `translate(${at[0].toFixed(1)} ${(68 - at[1]).toFixed(1)})`);
         g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
-        g.querySelector("text")!.textContent = teamSheet[id]?.number !== undefined ? String(teamSheet[id].number) : isTrack(id) && playerName(id) === playerLabel(id, teams) ? "" : shirt(id);
+        g.querySelector("text")!.textContent = teamSheet[id]?.number !== undefined ? String(teamSheet[id].number) : unnamedTrack(id) ? "" : shirt(id);
         pitch.append(g);
       }
       const cols = document.createElement("p");
       cols.className = "roster-cols";
       cols.setAttribute("aria-hidden", "true");
       const anySheet = ids.some((id) => teamSheet[id]?.position);
-      const anyWhere = ids.some((id) => avg.has(id) && !(isTrack(id) && playerName(id) === playerLabel(id, teams)));
+      const anyWhere = ids.some((id) => avg.has(id) && !(unnamedTrack(id)));
       cols.innerHTML = anySheet ? "<span>#</span><span>Name</span><span></span>" : anyWhere ? "<span>#</span><span>Name</span><span>Mostly</span>" : "<span>#</span><span>Player</span><span></span>";
       const row = document.createElement("div");
       row.className = "roster-row";
       row.append(...ids.map(button));
       card.append(head, pitch, cols, row);
+      return card;
+    }),
+  );
+}
+
+/** A team-sheet player (match.json `sheets`): pre-match facts, no track id. */
+interface SheetPlayer {
+  number: number;
+  name: string;
+  position: string;
+  line: "goalkeeper" | "defender" | "midfielder" | "forward";
+}
+/** Where a line stands on the line-up pitch, for a club attacking to the right (x, 0..105). */
+const LINE_X: Record<SheetPlayer["line"], number> = { goalkeeper: 6, defender: 26, midfielder: 52, forward: 78 };
+
+/** The line-ups from the team sheet: per club its crest and name, its eleven on a small pitch by
+ * line (the sheet lists each line right to left), then #, name and position. Pre-match facts, so no
+ * tracked number is attached to anyone unless the line-up names the track (none on the demo). */
+function renderSheets(sheets: Record<"home" | "away", SheetPlayer[]>) {
+  $("roster-box").hidden = false;
+  const svgNS = "http://www.w3.org/2000/svg";
+  $("roster").replaceChildren(
+    ...(["home", "away"] as const).map((side) => {
+      const xi = sheets[side] ?? [];
+      const card = document.createElement("section");
+      card.className = "card roster-card";
+      const head = document.createElement("h3");
+      head.className = "card-title roster-team";
+      head.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
+      head.append(fullName(teams[side]));
+      const pitch = document.createElementNS(svgNS, "svg");
+      pitch.setAttribute("viewBox", "-2 -2 109 72");
+      pitch.setAttribute("class", "lineup-pitch");
+      pitch.setAttribute("aria-hidden", "true");
+      pitch.innerHTML =
+        '<rect x="0" y="0" width="105" height="68" rx="2" class="turf"/><rect x="0" y="0" width="105" height="68" class="line"/>' +
+        '<line x1="52.5" y1="0" x2="52.5" y2="68" class="line"/><circle cx="52.5" cy="34" r="9.15" class="line"/>' +
+        '<rect x="0" y="13.84" width="16.5" height="40.32" class="line"/><rect x="88.5" y="13.84" width="16.5" height="40.32" class="line"/>';
+      for (const line of Object.keys(LINE_X) as SheetPlayer["line"][]) {
+        const men = xi.filter((p) => p.line === line);
+        men.forEach((p, k) => {
+          // Facing the goal it attacks (to the right), a team's right is the bottom of the pitch.
+          const y = (68 * (k + 1)) / (men.length + 1);
+          const g = document.createElementNS(svgNS, "g");
+          g.setAttribute("transform", `translate(${LINE_X[line]} ${(68 - y).toFixed(1)})`);
+          g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
+          g.querySelector("text")!.textContent = String(p.number);
+          pitch.append(g);
+        });
+      }
+      const cols = document.createElement("p");
+      cols.className = "roster-cols";
+      cols.setAttribute("aria-hidden", "true");
+      cols.innerHTML = "<span>#</span><span>Name</span><span></span>";
+      const rows = document.createElement("ul");
+      rows.className = "roster-row sheet-rows";
+      rows.setAttribute("aria-label", `${fullName(teams[side])} line-up`);
+      for (const p of xi) {
+        const li = document.createElement("li");
+        li.className = `who sheet ${side}`;
+        li.innerHTML = '<span class="num"></span><span class="name"></span><span class="where pos"></span>';
+        li.querySelector(".num")!.textContent = String(p.number);
+        li.querySelector(".name")!.textContent = p.name;
+        li.querySelector(".where")!.textContent = p.position.charAt(0).toUpperCase() + p.position.slice(1);
+        rows.append(li);
+      }
+      card.append(head, pitch, cols, rows);
       return card;
     }),
   );
@@ -677,7 +811,7 @@ function choose(ids: string[]) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = `who ${team(id)}`;
-    b.textContent = playerName(id);
+    b.textContent = distinctName(id); // the near players apart, not "London player" twice
     b.addEventListener("click", () => {
       box.hidden = true;
       select(id);
@@ -752,8 +886,8 @@ function announce(text: string) {
  * Playing card (Media Session). A web page cannot post a Live Activity; this is the nearest it gets. */
 function lockScreen(text: string) {
   if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
-  const score = state.match ? `${teams.home} ${$("score-home").textContent}–${$("score-away").textContent} ${teams.away}` : `${teams.home} v ${teams.away}`;
-  navigator.mediaSession.metadata = new MediaMetadata({ title: text, artist: `${score} · ${clock(laptop.time())}`, album: "Ninety" });
+  // Never a score: the broadcast carries it (Kian, Oct 25).
+  navigator.mediaSession.metadata = new MediaMetadata({ title: text, artist: `${teams.home} v ${teams.away} · ${clock(laptop.time())}`, album: "Ninety" });
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
   b.addEventListener("click", () => {
@@ -957,10 +1091,13 @@ function select(id: string | null, fromLaptop = false) {
     $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
+    // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
+    $("so-far-box").hidden = true;
+    $("heat-box").hidden = true;
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
-    if (fromLaptop) announce(`The big screen is following ${playerName(id)}.`);
+    if (fromLaptop) announce(`The big screen is following ${mid(playerName(id))}.`);
     else if (state.tab === "radar") {
       // Focus moves to the sheet's title, so a screen reader lands on it.
       playerSheet.addEventListener("ionModalDidPresent", () => $("player-title").focus(), { once: true });
@@ -1005,6 +1142,8 @@ async function refreshCard(force = false) {
 }
 
 function showCard(c: PlayerCard) {
+  $("so-far-box").hidden = false;
+  $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
@@ -1022,7 +1161,7 @@ function showCard(c: PlayerCard) {
   const v = fit(heat);
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${playerName(c.player)}: ${describeHeat(c.heat, team(c.player))}`);
+  heat.setAttribute("aria-label", `Heat map of ${mid(playerName(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
   // His average position: the heat map's own shares, weighted over its cells' centres.
   const total = c.heat.cells.reduce((a, b) => a + b, 0);
   if (total > 0) {
@@ -1075,14 +1214,22 @@ function showInvolved(id: string, t: number) {
 
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  const others = rosterIds().filter((o) => o !== id);
+  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
+  const side = { home: 0, away: 0 };
+  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
+  const others = rosterIds()
+    .filter((o) => o !== id)
+    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    .filter((o) => ++side[team(o)] <= 11);
+  $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
   $("compare-chips").replaceChildren(
     ...others.map((o) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
-      b.textContent = playerName(o);
+      b.dataset.player = o;
+      b.textContent = distinctName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
     }),
@@ -1095,9 +1242,12 @@ async function compare(a: string, b: string) {
   let cb: PlayerCard;
   try {
     [ca, cb] = await Promise.all([feed.card(state.clip, a, t), feed.card(state.clip, b, t)]);
-  } catch (e) {
-    $("compare-rows").hidden = false;
-    $("compare-rows").textContent = `Could not compare: ${(e as Error).message}`;
+  } catch {
+    // No numbers for one of them yet: nothing is drawn, and that player's chip says so quietly.
+    $("compare-rows").hidden = true;
+    const chip = $("compare-chips").querySelector<HTMLButtonElement>(`[data-player="${b}"]`);
+    chip?.setAttribute("aria-disabled", "true");
+    chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
   const rows: [string, number, number, number][] = [
@@ -1115,7 +1265,7 @@ async function compare(a: string, b: string) {
     ...rows.map(([label, x, y, places]) => {
       const li = document.createElement("li");
       li.className = "stat-row";
-      li.setAttribute("aria-label", `${label}: ${playerName(a)} ${x.toFixed(places)}, ${playerName(b)} ${y.toFixed(places)}`);
+      li.setAttribute("aria-label", `${label}: ${distinctName(a)} ${x.toFixed(places)}, ${mid(distinctName(b))} ${y.toFixed(places)}`);
       li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
       li.querySelector(".home-v")!.textContent = x.toFixed(places);
       li.querySelector(".away-v")!.textContent = y.toFixed(places);
@@ -1135,7 +1285,7 @@ async function compare(a: string, b: string) {
 // --- questions -------------------------------------------------------------------------------
 
 function playerQuestions(id: string): string[] {
-  const n = playerName(id);
+  const n = mid(playerName(id));
   return [`How fast is ${n} running now?`, `What is ${n}'s top speed?`, `How far has ${n} run?`];
 }
 
@@ -1163,11 +1313,38 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** Questions this fan has already asked: never suggested back to them. */
+const asked = new Set<string>();
+
+/** An empty conversation shows the starter grid instead of the composer's chips; after the first
+ * answer, the answers under "Recent" and the chips (or an answer's follow-ups) above the composer. */
+function syncAsk() {
+  const any = $("answers").children.length > 0;
+  $("ask-start").hidden = any;
+  $("recent-title").hidden = !any;
+  if (!any) $("ask-chips").hidden = true;
+  else if ($("ask-chips").dataset.started !== "1") {
+    $("ask-chips").dataset.started = "1";
+    $("ask-chips").hidden = false;
+  }
+}
+new MutationObserver(syncAsk).observe($("answers"), { childList: true });
+syncAsk();
+
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
-  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
+  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
+  // An empty conversation opens on a grid of questions (never a blank page), then the answers.
+  $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
+  // And about the players most in the game (the Scout's per-player numbers), when there are any.
+  const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
+  const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
+  const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
+  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
@@ -1196,11 +1373,18 @@ const METRIC_WORDS: Record<string, string> = {
 
 /** The API names players by id (a7); fans read "Lisbon 7", or the name the answer carries. Only
  * the names change, never a number. */
+/** An answer's or a card's text, its player ids said as the payload names them (tactical ids: never
+ * the team sheet's line-up, which names broadcast tracks; names-by-role, Oct 25). */
 function named(text: string, names?: Record<string, string>): string {
-  // The team sheet names a player the payload does not (only players the line-up tool is sure of).
+  return nameIds(text, teams, names);
+}
+
+/** A detected event's text (broadcast track ids): the team sheet names a track the line-up is sure
+ * of. */
+function eventNamed(text: string): string {
   const sheet: Record<string, string> = {};
   for (const [id, e] of Object.entries(teamSheet)) if (e.name) sheet[id] = e.name;
-  return nameIds(text, teams, { ...sheet, ...names });
+  return nameIds(text, teams, sheet);
 }
 
 async function ask(text: string) {
@@ -1209,6 +1393,8 @@ async function ask(text: string) {
   const input = $<HTMLInputElement>("question");
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
+  asked.add(q);
+  renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
   const at = state.card && state.card.player === state.selected ? state.card.t_to : Math.round(Math.max(0, laptop.time()) * 10) / 10;
@@ -1418,7 +1604,8 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   const who = a.evidence.map((id) => /player_([ha](?:-t\d+|[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
   const what = a.metric ? METRIC_WORDS[a.metric] ?? a.metric.replace(/_/g, " ") : "";
   const rows: [string, string][] = [
-    ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
+    // A score's number never shows (Kian, Oct 25: the broadcast carries it; #350 sends none).
+    ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null && !/score|goals?$/.test(a.metric ?? "") ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
   ];
   if (a.t_from !== null && a.t_to !== null) rows.push(["Over", a.t_from === a.t_to ? `${clock(a.t_from)} of the match` : `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
 
@@ -1660,6 +1847,7 @@ let insightsAt = 0;
 let insightsBusy = false;
 let insightsShownTo = -1;
 let insightsLoaded = false; // the first fetch has answered, with cards or with none
+let insightsMissing = false; // the server has no cards route or none for this clip: not asked again
 
 function showUnread() {
   const badge = $("insights-new");
@@ -1674,6 +1862,7 @@ async function refreshInsights(force = false) {
   const t = viewTime();
   try {
     // The bundle's cards.json (the Insight Scout's, precomputed for the replay), else the feed's.
+    if (!bundleCards && insightsMissing) return; // the server has none for this clip: asked once
     const cards = bundleCards ?? (await feed.insights(state.clip, t));
     // A replay must not show what is still to come: only cards up to the big screen's clock.
     const shown = cards.filter((c) => c.t <= t + 1e-6).sort((a, b) => b.t - a.t);
@@ -1692,8 +1881,9 @@ async function refreshInsights(force = false) {
     insightsShownTo = t;
     $("insights-note").textContent = "What the broadcast can't show, computed by code from the tracked positions, newest first.";
   } catch (e) {
+    if (e instanceof ApiError && e.status === 404) insightsMissing = true;
     $("insights-note").textContent =
-      e instanceof ApiError && e.status === 404 ? "No hidden stats for this match yet." : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
+      e instanceof ApiError && e.status === 404 ? "" : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
   } finally {
     insightsBusy = false;
     if (!insightsLoaded) {
@@ -1729,17 +1919,19 @@ function playSentence(e: DetectedEvent): string | null {
   const side = sureSide(e);
   // A tracked player nobody has named is "a London player", never the tracker's number; a pass
   // between two of them reaches "a teammate".
-  const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
+  const who = (id?: string | null) => (id ? cap(eventNamed(id)) : side ? teams[side] : "A player");
   const low = (t: string) => t.replace(/^A /, "a "); // named() capitalises a sentence's first word
   // "a teammate" only when both sides are vouched for: the id letters are the tracker's votes.
   const mates = (id: string) => !!e.player && isTrack(id) && isTrack(e.player) && !sideUnsure(id) && !sideUnsure(e.player);
-  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(named(id)));
+  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(eventNamed(id)));
   switch (e.type) {
     case "pass":
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
-      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(named(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
+      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(eventNamed(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
-      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
+      // A shot vision could not tell the end of (outcome null, #368: saves are not read from video)
+      // says only that it was taken, never "wide".
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${low(who(e.player))}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
     case "out_of_play":
       return "The ball goes out of play.";
     case "set_piece":
@@ -1775,6 +1967,32 @@ function storyItem(team: "home" | "away" | null, text: string, t: number): { li:
   return { li, body };
 }
 
+/** Live's Key moments: the newest goals and Scout moments, a minute and a line each (Apple Sports'
+ * key plays); "See all" opens Story. Hidden until there is one. */
+function renderKeyMoments(plays: DetectedEvent[]) {
+  type Moment = { t: number; team: "home" | "away" | null; text: string; goal: boolean };
+  const goals: Moment[] = plays
+    .filter((e) => e.type === "shot" && e.outcome === "goal")
+    .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })); // a club's colour only on a side told surely
+  const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
+  const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
+  $("key-moments").hidden = moments.length === 0;
+  $("key-rows").replaceChildren(
+    ...moments.map((m) => {
+      const li = document.createElement("li");
+      li.className = `moment-row ${m.team ?? "neutral"}${m.goal ? " goal" : ""}`;
+      const min = document.createElement("span");
+      min.className = "min";
+      min.textContent = `${momentum.minuteOf(m.t)}′`;
+      const text = document.createElement("span");
+      text.className = "text";
+      text.textContent = m.text;
+      li.append(min, text);
+      return li;
+    }),
+  );
+}
+
 function renderInsights() {
   renderJustNow();
   // Apple Sports' play-by-play: one card per play, newest first, the time under the sentence, the
@@ -1784,8 +2002,8 @@ function renderInsights() {
   const now = viewTime();
   const plays = playsUpTo(now);
   playsShown = plays.length;
+  renderKeyMoments(plays);
   const key = list.dataset.mode === "key";
-  const score = (t: number) => (state.match ? scoreAt(state.match, t) : null);
   type Row = { t: number; el: HTMLLIElement };
   const rows: Row[] = state.insights.map((c) => {
     const { li, body } = storyItem(c.team, named(c.text, c.names), c.t);
@@ -1809,13 +2027,7 @@ function renderInsights() {
     const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
     li.dataset.event = e.id;
-    if (goal) {
-      const s = score(e.t);
-      const tally = document.createElement("span");
-      tally.className = "tally";
-      if (s) tally.textContent = `${s.home} · ${s.away}`;
-      li.querySelector(".when-line")!.append(tally);
-    }
+    if (goal) li.classList.add("goal"); // no running score: the broadcast carries it
     rows.push({ t: e.t, el: li });
   }
   if (!rows.length && !insightsLoaded) {
@@ -1851,39 +2063,117 @@ $("story-mode").addEventListener("ionChange", (e) => {
 
 // --- team stats and the score, from the bundle's match.json (match mode) -----------------------
 
+/** Each club's scorers under its crest, as Apple Sports writes them ("⚽ Okafor 12′, 59′"): goals
+ * vision spotted, never a score (Kian, Oct 25: vision finds 2 of the demo's 3 goals, so a count
+ * would contradict the broadcast's scorebug). The scorer's name when the detection names him, else
+ * "London goal"; a goal on a side not told surely sits under the clock as "Goal". Each line opens
+ * How we know, with the detection's confidence; none is printed on the band. */
+/** How near a scorebug change must be to a goal to give it a side (design: the graphic updates just
+ * after the ball goes in; on the demo match each goal event is 0.2 to 1.6 s before its change, and
+ * changes are minutes apart, so 3 s cannot pick the wrong one). */
+const SCOREBUG_MATCH_S = 3;
+let spottedKey = "";
+function renderSpotted(m: MatchData, t: number) {
+  const goals = m.goals.filter((g) => g.t <= t);
+  // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
+  const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
+  if (key === spottedKey) return;
+  spottedKey = key;
+  const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
+  // A goal vision could not give a side takes the side whose count the broadcast's scorebug raised
+  // within SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels).
+  const sideOf = (g: { t: number; team?: string | null }): "home" | "away" | null => {
+    if (g.team === "home" || g.team === "away") return g.team;
+    const change = scorebugEvents.find(
+      (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
+    );
+    return change ? (change.team as "home" | "away") : null;
+  };
+  for (const side of ["home", "away", null] as const) {
+    const mine = goals.filter((g) => sideOf(g) === side);
+    // One line per scorer, his goals' minutes in order.
+    const lines = new Map<string, typeof mine>();
+    for (const g of mine) {
+      const who = bundleEvents.get(g.event)?.player;
+      // The scorer's name only where the team sheet names him; else his club's goal (never a track id).
+      const label = who && !unnamedTrack(who, undefined, true) ? eventName(who) : side ? `${teams[side]} goal` : "Goal";
+      lines.set(label, [...(lines.get(label) ?? []), g]);
+    }
+    $(side ? `goals-${side}` : "goals-unsure").replaceChildren(
+      ...[...lines].map(([label, gs]) => {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "side-goal";
+        b.textContent = `${label} ${gs.map(minute).join(", ")}`;
+        const sure = gs.map((g) => bundleEvents.get(g.event)?.confidence).filter((c): c is number => typeof c === "number");
+        b.addEventListener("click", () => {
+          const said = gs.map((g, k) => `${minute(g)}${typeof sure[k] === "number" ? `, ${Math.round(100 * sure[k])}% sure` : ""}`).join("; ");
+          void openHow({ t: gs[gs.length - 1].t, visual: null, source: "code", evidence: gs.map((g) => g.event),
+            why: { question: "", text: `Vision spotted ${gs.length === 1 ? "this goal" : "these goals"}: ${said}. The score is the broadcast's.` } });
+        });
+        li.append(b);
+        return li;
+      }),
+    );
+  }
+}
+
+/** The score, only as vision read it off the broadcast's own scorebug: the latest `score_change`
+ * (#356) at or before t; nothing before the first reading. Never counted from detected goals
+ * (Kian, Oct 25): vision can miss a goal, the scorebug cannot. */
+export function scorebugAt(events: Iterable<{ type: string; t: number; score?: { home: number; away: number } | null }>, t: number) {
+  let best: { t: number; score: { home: number; away: number } } | null = null;
+  for (const e of events) {
+    if ((e.type !== "score_change" && e.type !== "score_read") || !e.score || e.t > t + 1e-6) continue;
+    if (!best || e.t >= best.t) best = { t: e.t, score: e.score };
+  }
+  return best;
+}
+let scorebugKey = "";
+function renderScorebug(t: number) {
+  const read = scorebugAt(scorebugEvents, t);
+  const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
+  if (key === scorebugKey) return;
+  scorebugKey = key;
+  document.body.dataset.scorebug = read ? "read" : "";
+  for (const side of ["home", "away"] as const) {
+    const el = $(`score-${side}`);
+    el.hidden = !read;
+    // The first reading is set, not counted up from 0; a change after it ticks.
+    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
+  }
+  const btn = $("score-read");
+  btn.hidden = !read;
+  btn.textContent = read ? `Score, read from the broadcast's score graphic: ${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}` : "";
+  for (const el of document.querySelectorAll<HTMLElement>(".score-line")) el.dataset.score = read ? `${read.score.home} ${read.score.away}` : "";
+}
+for (const id of ["score-home", "score-away", "score-read"]) {
+  $(id).addEventListener("click", () => {
+    const read = scorebugAt(scorebugEvents, viewTime());
+    if (!read) return;
+    void openHow({ t: read.t, visual: null, source: "code", evidence: [],
+      why: { question: "", text: `${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}: read from the broadcast's score graphic at ${clock(read.t)}, never counted from the goals vision spotted.` } });
+  });
+}
+
 let statsKey = "";
 function showMatch(t: number) {
   const m = state.match;
   if (!m) return;
-  const s = scoreAt(m, t);
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
   const c = chapterAt(m.chapters, bundleFps, v);
   const line = $("scoreline");
   line.hidden = !c;
   const chapter = c ? chapterLabel(c, teams) : "";
   if (line.textContent !== chapter) line.textContent = chapter;
-  const score = `${s.home} – ${s.away}`;
-  tickTo($("score-home"), s.home);
-  tickTo($("score-away"), s.away);
-  if ($("score").textContent !== score) {
-    $("score").textContent = score;
-    $("score").setAttribute("aria-label", `Score: ${teams.home} ${s.home}, ${teams.away} ${s.away}`);
-  }
   $("match-card").hidden = false;
   $("no-stats").hidden = true;
-  // Scorers under the band: detected goals only, so far ("Lisbon 9 43′", or the club alone
-  // when the detection names no player, or "Goal 43′" when its side was not told surely).
-  const scored = m.goals.filter((g) => g.t <= t);
-  const scorers = $("scorers");
-  scorers.hidden = scored.length === 0;
-  const said = scored
-    .map((g) => {
-      const who = bundleEvents.get(g.event)?.player;
-      return `${who ? playerName(who) : g.team ? teams[g.team] : "Goal"} ${Math.floor(g.t / 60) + 1}′`;
-    })
-    .join(", ");
-  if (scorers.textContent !== said) scorers.textContent = said;
+  renderSpotted(m, t);
+  renderScorebug(t);
   renderShots(t);
+  renderSquad();
   if (playsUpTo(t).length !== playsShown) renderInsights();
   const st = statsAt(m, t);
   const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
@@ -1896,7 +2186,13 @@ function showMatch(t: number) {
  * the right, the label centred, each bar in its club's colour. Only rows the data holds. */
 interface StatsBlock {
   rows: { group: string; key: string; label: string; unit: string | null; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }[];
+  /** Each half on its own (#338): the same rows with one value per team; `second` from minute 46. */
+  halves?: Partial<Record<"first" | "second", { minute_from: number; minute_to: number; rows: HalfRow[] }>>;
+  player_stats?: PlayerStats[];
+  pass_network?: Record<"home" | "away", PassNetwork>;
 }
+type HalfRow = { group: string; key: string; label: string; unit: string | null; home: number | null; away: number | null; confident: boolean };
+let statsPeriod: "match" | "first" | "second" = "match";
 const round1 = (n: number) => Math.round(n * 10) / 10;
 interface TeamStatsFacts {
   from_footage: boolean;
@@ -1914,8 +2210,10 @@ function renderStats(st: MatchData["stats"][number]) {
   const groups: [string, Row[]][] = [
     ["Attack", [
       ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
-      ["Shots", st.home.shots, st.away.shots],
-      ["Shots on target", st.home.shots_on_target, st.away.shots_on_target],
+      // Counted from what vision saw: it can miss a shot or a goal the broadcast showed, so the
+      // label says so (video-prep, Oct 25: 3 goals seen under a 4-1 scorebug).
+      ["Shots seen", st.home.shots, st.away.shots],
+      ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
     ]],
     ["Passing", [
       ["Passes completed", st.home.passes_completed, st.away.passes_completed],
@@ -1963,13 +2261,16 @@ function renderStats(st: MatchData["stats"][number]) {
       li.querySelector(".label")!.append(pm);
       li.setAttribute("aria-label", `${li.getAttribute("aria-label")}, measured to within ${ts.within_pct} percent`);
     }
-    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly; 1 v 0 is all home.
+    // One track split at the home share (Apple Sports): 0 v 0 splits it evenly, in grey (nothing to
+    // share yet, so no club's colour); 1 v 0 is all home.
     const share = h + a === 0 ? 0.5 : h / (h + a);
+    li.classList.toggle("empty", h + a === 0);
     (li.querySelector(".home-bar") as HTMLElement).style.width = share === 0 ? "0" : `calc(${100 * share}% - ${share < 1 ? 2 : 0}px)`;
     (li.querySelector(".away-bar") as HTMLElement).style.width = share === 1 ? "0" : `calc(${100 * (1 - share)}% - ${share > 0 ? 2 : 0}px)`;
     for (const v of li.querySelectorAll(".v, .label, .bar")) v.setAttribute("aria-hidden", "true");
     return li;
   };
+  const listOf = (groups: [string, Row[]][]) => {
   const items: HTMLLIElement[] = [];
   for (const [name, rows] of groups) {
     const shown = rows.filter(([, h, a]) => Number.isFinite(h) && Number.isFinite(a));
@@ -1982,7 +2283,24 @@ function renderStats(st: MatchData["stats"][number]) {
     head.append(h3);
     items.push(head, ...shown.map(row));
   }
-  $("stat-rows").replaceChildren(...items);
+  return items;
+  };
+  const items = listOf(groups);
+  // A half on its own (Apple Sports' period toggle): the Scout's half rows, when it has written them.
+  const halves = block?.insight_stats?.halves;
+  $("stats-period").hidden = !halves?.first;
+  for (const btn of $("stats-period").querySelectorAll<HTMLElement>("ion-segment-button[value=second]")) btn.hidden = !halves?.second;
+  const half = statsPeriod === "match" ? null : halves?.[statsPeriod];
+  if (half) {
+    const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
+    for (const r of half.rows) {
+      if (r.home === null || r.away === null) continue;
+      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      if (!r.confident) unsure.add(label);
+      byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
+    }
+    $("stat-rows").replaceChildren(...listOf(byGroup));
+  } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
   const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
@@ -1994,6 +2312,7 @@ function renderStats(st: MatchData["stats"][number]) {
 
 let shotFilter: "all" | "home" | "away" = "all";
 let shotsKey = "";
+let liveShotsKey = "";
 $("shot-filter").addEventListener("ionChange", (e) => {
   shotFilter = (e as CustomEvent<{ value: typeof shotFilter }>).detail.value;
   shotsKey = "";
@@ -2008,6 +2327,17 @@ function renderShots(t: number) {
   $("shot-map").hidden = all.length === 0;
   // A shot on an unsure side is in "All" only: no club's filter claims it.
   const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
+  // Live's card draws what the Stats map draws: a shot only on a sure side (its place on the half
+  // pitch is read from that side's direction of attack); no sure shot, no card.
+  const drawn = all.filter((s) => s.sure);
+  $("live-shots").hidden = drawn.length === 0;
+  const allKey = drawn.map((s) => s.id).join();
+  if (allKey !== liveShotsKey) {
+    liveShotsKey = allKey;
+    shotMap.draw($("live-shots-svg") as unknown as SVGSVGElement, drawn);
+    // Shots counted, never goals: a goal count is a score (Kian, Oct 25), and the broadcast carries it.
+    $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}.`;
+  }
   const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
   if (key === shotsKey) return;
   shotsKey = key;
@@ -2015,13 +2345,12 @@ function renderShots(t: number) {
   // Placed and coloured only on a sure side: where a shot sits on the half pitch is read from the
   // direction its side attacks. An unsure one is listed, not drawn.
   shotMap.draw(svg, shown.filter((s) => s.sure));
-  const goals = shown.filter((s) => s.outcome === "goal").length;
-  svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}, ${goals} ${goals === 1 ? "goal" : "goals"}. The list follows.`);
+  svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}. The list follows.`);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
       // Who and where only on a sure side: the zone is read from that side's direction of attack.
-      const who = s.player ? playerName(s.player) : s.sure ? teams[s.team] : "A shot";
+      const who = s.player ? eventName(s.player) : s.sure ? teams[s.team] : "A shot";
       li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
@@ -2054,6 +2383,170 @@ for (const p of LIVE_PANES) {
     if (to === null) return;
     e.preventDefault();
     showPane(LIVE_PANES[(to + LIVE_PANES.length) % LIVE_PANES.length], true);
+  });
+}
+
+// --- the squads: Live's line-ups teaser, the pass network, the top performers ------------------
+
+/** match.json's per-player numbers (Insight Scout): computed by code from tracking, each with the
+ * player's id; a missing number is not measured and its list is not drawn. */
+interface PlayerStats { id: string; distance_km?: number | null; top_speed_kmh?: number | null; involvements?: number | null }
+/** match.json's pass network (Insight Scout): per club, each player's average position and passes
+ * made, and completed passes between pairs. */
+interface PassNetwork { named_passes_only?: boolean; nodes: { id: string; x: number; y: number; passes: number }[]; links: { a: string; b: string; n: number }[] }
+type Squads = { player_stats?: PlayerStats[]; pass_network?: Record<"home" | "away", PassNetwork> };
+
+let squadKey = "";
+let networkSide: "home" | "away" = "home";
+function renderSquad() {
+  const m0 = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
+  // The Scout's numbers ride in insight_stats (#338); top-level kept for a bundle that has them there.
+  const m = m0 ? { ...m0, player_stats: m0.insight_stats?.player_stats ?? m0.player_stats, pass_network: m0.insight_stats?.pass_network ?? m0.pass_network } : null;
+  const sheet = Object.entries(teamSheet);
+  const net0 = m?.pass_network?.[networkSide];
+  const sheetsN = ((m0 as { sheets?: Record<string, unknown[]> } | null)?.sheets?.home?.length ?? 0);
+  const key = `${sheet.length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  if (key === squadKey) return;
+  squadKey = key;
+  // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
+  const rows = (["home", "away"] as const).map((side) => {
+    // The team sheet's shirts (match.json `sheets`), else the line-up's.
+    const xi = (m as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets?.[side];
+    const shirts = (xi?.length ? xi.map((p) => p.number) : sheet.filter(([id, e]) => team(id) === side && e.number !== undefined).map(([, e]) => e.number!)).sort((a, b) => a - b);
+    const row = document.createElement("div");
+    row.className = `teaser ${side}`;
+    row.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
+    const name = document.createElement("span");
+    name.className = "teaser-name";
+    name.textContent = fullName(teams[side]);
+    const nums = document.createElement("span");
+    nums.className = "teaser-shirts";
+    if (shirts.length) {
+      nums.setAttribute("role", "list");
+      nums.setAttribute("aria-label", `Shirts ${shirts.join(", ")}`);
+    }
+    for (const n of shirts.slice(0, 11)) {
+      const b = document.createElement("b");
+      b.setAttribute("role", "listitem");
+      b.textContent = String(n);
+      nums.append(b);
+    }
+    row.append(name, nums);
+    return { row, n: shirts.length };
+  });
+  $("lineups-teaser").hidden = rows.every((r) => r.n === 0);
+  $("teaser-rows").replaceChildren(...rows.map((r) => r.row));
+
+  // Top performers: the three highest of each measured number, as FotMob lists them.
+  const ps = m?.player_stats ?? [];
+  const lists: [string, keyof PlayerStats, (v: number) => string][] = [
+    ["Distance", "distance_km", (v) => `${v.toFixed(1)} km`],
+    ["Top speed", "top_speed_kmh", (v) => `${v.toFixed(1)} km/h`],
+    ["Most involved", "involvements", (v) => String(Math.round(v))],
+  ];
+  const blocks = lists.flatMap(([title, k, fmt]) => {
+    const top = ps.filter((p) => typeof p[k] === "number").sort((a, b) => (b[k] as number) - (a[k] as number)).slice(0, 3);
+    if (!top.length) return [];
+    const box = document.createElement("div");
+    box.className = "top-list";
+    const h = document.createElement("h3");
+    h.className = "caps";
+    h.textContent = title;
+    const ul = document.createElement("ul");
+    ul.className = "stat-list";
+    for (const p of top) {
+      const li = document.createElement("li");
+      li.className = sideUnsure(p.id) ? "" : team(p.id); // a club's dot only on a side told surely
+      li.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="who-name"></span><span class="v"></span>';
+      li.querySelector(".who-name")!.textContent = playerName(p.id);
+      li.querySelector(".v")!.textContent = fmt(p[k] as number);
+      ul.append(li);
+    }
+    box.append(h, ul);
+    return [box];
+  });
+  $("top-players").hidden = blocks.length === 0;
+  $("top-lists").replaceChildren(...blocks);
+
+  // Pass network: each player at his average position, a line per pair as thick as their passes.
+  const net = m?.pass_network?.[networkSide];
+  // The card shows while either club has a network; a club without one shows an empty pitch never.
+  $("pass-network").hidden = !(m?.pass_network?.home?.nodes.length || m?.pass_network?.away?.nodes.length);
+  $("network").toggleAttribute("hidden", !net?.nodes.length);
+  $("network-rows").hidden = !net?.nodes.length;
+  if (!net?.nodes.length) return;
+  const svg = $("network") as unknown as SVGSVGElement;
+  const NS = "http://www.w3.org/2000/svg";
+  svg.setAttribute("viewBox", "-3 -3 111 74");
+  const el = (tag: string, attrs: Record<string, string | number>) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  };
+  const at = new Map(net.nodes.map((n) => [n.id, n]));
+  // The pitch drawn so the club attacks to the right, as its line-up does; y = 0 at the bottom.
+  const px = (n: { x: number; y: number }) => (networkSide === "home" ? [n.x, 68 - n.y] : [105 - n.x, n.y]);
+  const most = Math.max(1, ...net.links.map((l) => l.n));
+  const kids: SVGElement[] = [
+    el("rect", { x: 0, y: 0, width: 105, height: 68, class: "pitch-lines" }),
+    el("path", { d: "M52.5 0v68", class: "pitch-lines" }),
+    el("circle", { cx: 52.5, cy: 34, r: 9.15, class: "pitch-lines" }),
+    el("rect", { x: 0, y: 13.85, width: 16.5, height: 40.3, class: "pitch-lines" }),
+    el("rect", { x: 88.5, y: 13.85, width: 16.5, height: 40.3, class: "pitch-lines" }),
+  ];
+  for (const l of net.links.filter((l) => l.n >= 3)) {
+    const a = at.get(l.a);
+    const b = at.get(l.b);
+    if (!a || !b) continue;
+    const [x1, y1] = px(a);
+    const [x2, y2] = px(b);
+    kids.push(el("line", { x1, y1, x2, y2, class: "link", "stroke-width": (0.4 + (2.4 * l.n) / most).toFixed(2) }));
+  }
+  for (const n of net.nodes) {
+    const [x, y] = px(n);
+    kids.push(el("circle", { cx: x, cy: y, r: 2.6 + Math.min(1.6, n.passes / 25), class: `node ${networkSide}` }));
+    const shirt = (teamSheet[n.id] ?? Object.values(teamSheet).find((e) => e.name === n.id))?.number;
+    if (shirt !== undefined) {
+      const t = el("text", { x, y: y + 1.1, class: "node-n" });
+      t.textContent = String(shirt);
+      kids.push(t);
+    }
+  }
+  svg.replaceChildren(...kids);
+  const pair = [...net.links].sort((a, b) => b.n - a.n)[0];
+  const busiest = [...net.nodes].sort((a, b) => b.passes - a.passes)[0];
+  svg.setAttribute("aria-label", `${teams[networkSide]} pass network: ${net.nodes.length} players.`);
+  const who = (id: string) => (teamSheet[id] || isTrack(id) || /^[ha]\d+$/.test(id) ? playerName(id) : id); // a name is itself
+  const line = (label: string, value: string) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="who-name"></span><span class="v"></span>';
+    li.querySelector(".who-name")!.textContent = label;
+    li.querySelector(".v")!.textContent = value;
+    return li;
+  };
+  $("network-named").hidden = !net.named_passes_only;
+  $("network-rows").replaceChildren(
+    ...(pair ? [line(`${who(pair.a)} and ${who(pair.b)}`, `${pair.n} passes`)] : []),
+    ...(busiest ? [line(`Most passes: ${who(busiest.id)}`, String(busiest.passes))] : []),
+  );
+}
+$("stats-period").addEventListener("ionChange", (e) => {
+  statsPeriod = (e as CustomEvent<{ value: typeof statsPeriod }>).detail.value;
+  statsKey = ""; // redraw the rows now
+  if (state.match) showMatch(viewTime());
+});
+$("network-side").addEventListener("ionChange", (e) => {
+  networkSide = (e as CustomEvent<{ value: "home" | "away" }>).detail.value;
+  renderSquad();
+});
+
+// "See all" on a Live card: its full section (a Live pane, or a tab).
+for (const b of document.querySelectorAll<HTMLButtonElement>(".see-all")) {
+  b.addEventListener("click", () => {
+    if (b.dataset.pane) {
+      showPane(b.dataset.pane as LivePane, true);
+      void ($("live-content") as unknown as { scrollToTop?: (ms: number) => Promise<void> }).scrollToTop?.(0);
+    } else if (b.dataset.tab) showTab(b.dataset.tab as Tab, true);
   });
 }
 
@@ -2128,11 +2621,14 @@ function renderMomentum(live: number, t: number) {
   // card is hidden until there is something to show (design: MIN_TERRITORY_S).
   const seenS = tr ? tr.bins.filter((b) => b.t <= live && b.home !== null).reduce((sum, b) => sum + b.seen_s, 0) : 0;
   $("momentum").hidden = !tr || seenS < MIN_TERRITORY_S;
+  $("stats-territory").hidden = $("momentum").hidden;
   if (!tr || seenS < MIN_TERRITORY_S) return;
   const key = `${Math.floor(live)}|${scrubT === null ? "" : t.toFixed(1)}`;
   if (key === stripKey) return;
   stripKey = key;
   momentum.draw(strip, tr, live, scrubT === null ? null : t, state.match?.goals ?? []);
+  momentum.draw($("stats-territory-svg") as unknown as SVGSVGElement, tr, live, null, state.match?.goals ?? []);
+  $("stats-territory-said").textContent = momentum.sayAt(tr, live, teams);
   strip.setAttribute("aria-valuemax", String(Math.floor(live)));
   strip.setAttribute("aria-valuenow", String(Math.floor(t)));
   strip.setAttribute("aria-valuetext", (scrubT === null ? "Live. " : "") + momentum.sayAt(tr, t, teams));
@@ -2205,16 +2701,12 @@ function frame(now: number) {
   if (scrubT !== null && scrubT > live) scrubT = live; // never ahead of the big screen
   const t = viewTime();
   $("clock").textContent = link ? clock(t) : "–:––";
-  const mini = state.match
-    ? `${teams.home}  ${$("score-home").textContent}   ${link ? clock(t) : "–:––"}   ${$("score-away").textContent}  ${teams.away}`
-    : `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
-  // The collapsed row (Apple Sports): crest, score, clock, score, crest; one label for a screen reader.
+  const mini = `${teams.home}   ${link ? clock(t) : "–:––"}   ${teams.away}`;
+  // The collapsed row: crest, clock, crest (never a score); one label for a screen reader.
   const clockText = link ? clock(t) : "–:––";
   for (const el of document.querySelectorAll<HTMLElement>(".score-line")) {
     if (el.getAttribute("aria-label") === mini) continue;
     el.setAttribute("aria-label", mini);
-    el.querySelector(".mh")!.textContent = state.match ? $("score-home").textContent : "";
-    el.querySelector(".ma")!.textContent = state.match ? $("score-away").textContent : "";
     el.querySelector(".mc")!.textContent = clockText;
   }
   if (link) {

@@ -53,7 +53,8 @@ export function draw(svg: SVGSVGElement, shots: Shot[]) {
   ];
   for (const s of shots) {
     const p = place(s);
-    const kind = s.outcome === "goal" ? "goal" : s.outcome === "on_target" ? "on" : "off";
+    // An outcome vision did not read (null) is its own mark: never drawn as off target.
+    const kind = s.outcome === "goal" ? "goal" : s.outcome === "on_target" ? "on" : s.outcome === null ? "open" : "off";
     parts.push(el("circle", { cx: p.across, cy: p.down, r: kind === "off" ? 1.1 : 1.4, class: `shot ${s.team} ${kind}` }));
   }
   svg.replaceChildren(...parts);

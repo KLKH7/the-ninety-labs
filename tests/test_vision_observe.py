@@ -256,7 +256,7 @@ def test_the_trust_bound_is_the_committed_measurement():
 
 def test_observe_keeps_no_more_than_one_decoded_frame_at_a_time(monkeypatch):
     """A clip's frames do not fit in memory (a minute is about 4 GB), so each decoded image must be
-    let go before the next is read; the kit colours are taken on the way. Same output either way."""
+    let go before the next is read; the kit colours are still read, from the image read again."""
     import weakref
 
     from ninety.vision.detections import Detection, FrameDetections
@@ -276,4 +276,78 @@ def test_observe_keeps_no_more_than_one_decoded_frame_at_a_time(monkeypatch):
 
     rows = observe.observe([Path(f"{k}.jpg") for k in range(6)], dets, load)
     assert max(most) <= 1, most  # only the frame still in hand when the next is read
-    assert [r["players"][0]["rgb"] for r in rows] == [[200.0, 30.0, 30.0]] * 6
+    kits = [r["players"][0]["rgb"] for r in rows]
+    assert all(k is not None and k[0] > k[1] and k[0] > k[2] for k in kits), kits  # a red shirt
+
+
+def test_a_frame_is_judged_by_the_band_it_is_given():
+    assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
+    assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]
+
+
+def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_own(tmp_path, monkeypatch):
+    monkeypatch.setattr(observe, "FIXED_HEIGHT_BAND", (1.05, 1.15))
+    monkeypatch.setattr(observe, "HEIGHT_BAND", (0.90, 1.00))  # 1.10 is in the one band, not the other
+    rows = [row(1.10) | {"frame": k, "t": k / 25} for k in range(3)]
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    for fixed, expect in ((True, True), (False, False)):
+        first = rows[0] | ({"fixed": True} if fixed else {})
+        src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
+        observe.main(["--regate", str(src), "--out", str(out)])
+        assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
+
+
+def test_the_fixed_band_is_the_committed_validation_measurement():
+    body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
+    assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
+
+
+def hooped(primary, secondary, h=60, w=24, band=6):
+    """A player box of a shirt in horizontal hoops, primary and secondary alternating, on grass."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[:, :] = (40, 140, 50)  # grass behind
+    for y in range(h):
+        img[y, 4:w - 4] = secondary if (y // band) % 2 else primary
+    return img
+
+
+def test_a_hooped_shirt_reads_as_both_its_colours():
+    blue, white = (32, 46, 162), (242, 242, 242)
+    img = hooped(blue, white)
+    bbox = [0, 0, 24, 60]
+    two = observe.read_kit(img, bbox, "R4")
+    dark, light = np.array(two[:3]), np.array(two[3:])
+    assert np.abs(dark - blue).max() < 3 and np.abs(light - white).max() < 3
+    assert observe.KIT_READER == "R4"
+
+
+def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
+    from types import SimpleNamespace
+    box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    fits = [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h, **k: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
+    shirt = hooped((32, 46, 162), (242, 242, 242))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
+    assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
+
+
+def test_skin_is_found_by_the_published_rule_and_kits_are_not():
+    px = np.array([[200, 140, 110], [170, 120, 90], [23, 60, 25], [242, 242, 242], [20, 20, 20],
+                   [32, 46, 162]], float)
+    assert observe.skin(px).tolist() == [True, True, False, False, False, False]
+
+
+def test_r5_reads_a_dark_kit_without_the_arms_skin():
+    # A dark-green shirt with black stripes and bare arms across the patch: R4's lighter colour is the
+    # skin; R5 drops the skin first, so its lighter colour is the green.
+    img = np.zeros((60, 24, 3), np.uint8)
+    img[:, :] = (40, 140, 50)
+    for y in range(60):
+        img[y, 4:20] = (23, 60, 25) if (y // 4) % 2 else (12, 12, 12)
+    img[12:30, 4:7] = img[12:30, 17:20] = (200, 140, 110)  # arms
+    bbox = [0, 0, 24, 60]
+    turf = (np.array([40.0, 140.0, 50.0]), 0.02)  # the grass as measured on the pitch (the live path)
+    r4, r5 = observe.read_kit(img, bbox, "R4", turf), observe.read_kit(img, bbox, "R5", turf)
+    assert r4[3] > 150 and abs(r5[3] - 23) < 5 and abs(r5[4] - 60) < 5

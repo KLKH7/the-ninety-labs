@@ -1,0 +1,168 @@
+"""The score, scorers, assists and saves, from vision's goals and shot outcomes (GROUNDING I24)."""
+
+import re
+
+import pytest
+
+from ninety.agents import companion_match as cm
+from ninety.intel import scoring
+
+CLUBS = {"home": "London Athletic", "away": "Lisbon Esportes"}
+
+
+def e(i, kind, team, t, **kw):
+    base = {"id": f"e{i}", "type": kind, "team": team, "t": t, "confidence": 0.9, "team_confidence": 0.9}
+    return {**base, **kw}
+
+
+def goal_events(before=None):
+    """Home's h-t7 passes to h-t9, who shoots and scores into the end home attacks (x = 105)."""
+    rows = [e(1, "pass", "home", 100.0, outcome="success", player="h-t7", receiver="h-t9")]
+    rows += before or []
+    rows += [e(3, "shot", "home", 102.0, outcome="goal", player="h-t9", x=95.0, y=34.0),
+             e(4, "goal", "home", 103.0, player="h-t9", x=105.0, y=34.0)]
+    return rows
+
+
+def test_the_scorer_is_the_shooter_and_the_assist_the_pass_just_before_the_shot():
+    [g] = scoring.goals(goal_events())
+    assert (g["player"], g["assister"], g["minute"], g["confident"]) == ("h-t9", "h-t7", 2, True)
+
+
+def test_a_pass_to_someone_else_is_no_assist():
+    rows = goal_events()
+    rows[0] = {**rows[0], "receiver": "h-t8"}
+    assert scoring.goals(rows)[0]["assister"] is None
+
+
+@pytest.mark.parametrize(
+    "between",
+    [
+        [e(2, "pass", "home", 101.0, outcome="success", player="h-t9", receiver="h-t9b")],  # another pass
+        [e(2, "shot", "home", 101.0, outcome="blocked", player="h-t9", x=90.0, y=34.0)],  # a shot first
+    ],
+)
+def test_anything_between_the_pass_and_the_shot_means_no_assist(between):
+    [g] = scoring.goals(goal_events(between))
+    assert g["assister"] is None
+
+
+def test_the_club_that_scored_is_told_by_the_end_the_ball_went_in():
+    # The detected side says away, but the ball went into the end home attacks: in doubt, so the score
+    # is not said (an own goal, or a misread shirt).
+    rows = goal_events()
+    rows[-1] = {**rows[-1], "team": "away"}
+    [g] = scoring.goals(rows)
+    assert not g["confident"]
+    sc = scoring.score(scoring.goals(rows), 90, CLUBS)
+    assert not sc["confident"] and sc["hi"] == {"home": 1, "away": 1}
+
+
+def test_a_save_is_the_club_defending_the_end_the_shot_was_struck_at():
+    shots = [e(5, "shot", "home", 300.0, outcome="on_target", x=92.0, y=30.0),
+             e(6, "shot", "home", 400.0, outcome="on_target", x=95.0, y=36.0),
+             e(7, "shot", "away", 500.0, outcome="off_target", x=12.0, y=30.0)]
+    got = scoring.save_counts(scoring.saves(shots), 1, 90)
+    assert (got["away"]["value"], got["home"]["value"]) == (2, 0)  # away's keeper saved both
+
+
+def test_no_scoreline_is_ever_said_from_vision():
+    # Kian, Oct 26 (option B): vision finds some goals and misses others, so a count of them would
+    # contradict the broadcast's scorebug. The score points at the scorebug, with no numeral.
+    for goals in (scoring.goals(goal_events()), []):
+        sc = {**scoring.score(goals, 90, CLUBS), "clubs": CLUBS}
+        assert sc["confident"] is False
+        assert cm.code_texts(sc) == [cm.SCORE_POINTER] and not re.search(r"\d", cm.SCORE_POINTER)
+
+
+@pytest.mark.parametrize("text", [
+    "By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals.",  # right, but a count
+    "London Athletic lead 1-0.",
+    "It is 1 goal to 0.",
+])
+def test_a_score_sentence_is_held_whatever_its_numbers(text):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    sc = {**scoring.score(scoring.goals(goal_events()), 90, CLUBS), "clubs": CLUBS}
+    fx = Fixture(7, "OAK", "FEN")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert not verify(Claim(text, [sc["id"]]), {sc["id"]: sc}, fx.clubs, {}, names).ok
+
+
+@pytest.mark.parametrize(
+    "q", ["What's the score?", "Who scored?", "How many saves has the keeper made?", "Who got the assist?"]
+)
+def test_score_questions_route_to_the_score_first(q):
+    assert cm.route(q)[0] == "score"
+
+
+def test_losing_the_ball_is_not_the_score():
+    assert "score" not in cm.route("Why do London Athletic keep losing the ball in midfield?")
+    assert cm.route("Who's winning?")[0] == "score"
+
+
+def test_why_did_they_score_is_still_the_goals_story():
+    assert cm.route("Why did London Athletic score?")[0] == "goal_build_up"
+
+
+def test_a_goal_with_no_shot_before_it_names_no_scorer():
+    # C (#271): a goal's `player` is the scoring side's last holder; with no shot, he may not have scored.
+    rows = [e(4, "goal", "home", 103.0, player="h-t9", x=105.0, y=34.0)]
+    [g] = scoring.goals(rows)
+    assert g["player"] is None and g["confident"]
+
+
+def test_a_goal_under_the_event_gate_holds_the_score():
+    rows = goal_events()
+    rows[-1] = {**rows[-1], "confidence": 0.4}
+    [g] = scoring.goals(rows)
+    assert not g["confident"]
+    assert not scoring.score(scoring.goals(rows), 90, CLUBS)["confident"]
+
+
+def test_a_second_goal_with_no_shot_of_its_own_does_not_take_the_firsts():
+    # The merge queue's review of #337: a second goal (t = 1300) with no detected shot named the first
+    # goal's shooter.
+    rows = goal_events() + [e(9, "goal", "home", 1300.0, player="h-t3", x=105.0, y=34.0)]
+    first, second = scoring.goals(rows)
+    assert first["player"] == "h-t9" and second["player"] is None
+
+
+def test_a_save_goes_to_the_end_even_when_the_shots_side_is_misread():
+    # Read as away's, but struck at home's attacking end: the save is away's keeper's.
+    shots = [e(5, "shot", "away", 300.0, outcome="on_target", x=92.0, y=30.0)]
+    got = scoring.save_counts(scoring.saves(shots), 1, 90)
+    assert (got["away"]["value"], got["home"]["value"]) == (1, 0)
+
+
+def test_a_save_under_the_event_gate_is_unsure():
+    shots = [e(5, "shot", "home", 300.0, outcome="on_target", x=92.0, y=30.0, confidence=0.3)]
+    got = scoring.save_counts(scoring.saves(shots), 1, 90)
+    assert not got["away"]["confident"] and (got["away"]["lo"], got["away"]["hi"]) == (0, 1)
+
+
+def test_a_scorebug_reading_is_confident_once_measured_and_never_under_the_gate(monkeypatch):
+    change = {"id": "s1", "t": 1300.0, "type": "score_change", "team": "home",
+              "score": {"home": 1, "away": 0}, "confidence": 0.95, "source": "vision"}
+    # Flipped by the reader's validation against its pre-stated bar (docs/eval/scorebug-plan.md, #356).
+    assert scoring.SCOREBUG_MEASURED is True
+    (row,) = scoring.scorebug([change])
+    assert (row["home"], row["away"], row["confident"]) == (1, 0, True)
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", False)
+    assert scoring.scorebug([change])[0]["confident"] is False
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", True)
+    assert scoring.scorebug([{**change, "confidence": 0.3}])[0]["confident"] is False  # under the gate
+
+
+def test_the_first_reading_holds_the_score_before_any_change_and_a_held_reading_says_nothing_new():
+    def read(i, t, home, away, kind="score_read"):
+        return {"id": i, "t": t, "type": kind, "score": {"home": home, "away": away}, "confidence": 0.99,
+                "source": "vision", **({"team": "home"} if kind == "score_change" else {})}
+
+    # A clip that starts at 2-1: the first reading says so, before any change is seen.
+    rows = scoring.scorebug([read("r1", 0.0, 2, 1), read("r2", 54.0, 2, 1),
+                             read("c1", 300.0, 3, 1, "score_change"), read("r3", 320.0, 3, 1)])
+    assert [(r["event"], r["home"], r["away"]) for r in rows] == [("r1", 2, 1), ("c1", 3, 1)]
+    assert all(r["confident"] for r in rows)

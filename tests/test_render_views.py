@@ -30,7 +30,7 @@ from ninety.validate import validate as validate_clip
 MAIN_PARAMS = {
     1: "f519f64391fd0d30", 7: "cb2cf91406107bae", 42: "b59ab0c991e30d06", 900001: "514ba69ccdd72554",
 }
-CODES = ("home_code", "away_code")
+CODES = ("home_code", "away_code", "edge_stingers")  # edge_stingers (0.5.19) is a setting, not a draw
 
 
 def _sha(d: dict) -> str:

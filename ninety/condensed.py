@@ -1,4 +1,4 @@
-"""Match mode: a condensed match's chapters, scoreline and team stats, from the detected events.
+"""Match mode: a condensed match's chapters, goals and team stats, from the detected events.
 
     uv run ninety-e2e <clip> --out <bundle> --match        # writes match.json into the bundle
 
@@ -11,8 +11,10 @@ The viewer's match mode (web/viewer/src/match.ts) shows what this computes:
   a shot, then a set piece or kick-off; with none of those it is build-up. The segments are the
   broadcast's own timecode; what a chapter is called comes only from the detected events, never
   from the answer key.
-- `goals`: the scoreline over time, one entry per confident detected goal (a shot whose outcome is
-  a goal, as ninety/intel/stats.py counts goals).
+- `goals`: one entry per confident detected goal (a shot whose outcome is a goal, as
+  ninety/intel/stats.py counts goals), in time order, each with its side only when told surely. What
+  vision saw, never a scoreline: vision misses goals, so a count of these would contradict the
+  scorebug; the score is the scorebug's reading (ninety/intel/scoring.py, GROUNDING I24).
 - `highlights`: the reel (ninety/highlights.py): every confident detected goal, the saves that
   beat a keeper's dive once that filter is measured, and a fan's label for each once vision's
   errors are measured.
@@ -103,6 +105,20 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
     return out
 
 
+def cut_between(timeline: Timeline):
+    """Whether the broadcast cut between match times t0 and t1: they are in different segments."""
+    fps = timeline.fps
+
+    def seg(t: float) -> int:
+        i = 0
+        for n, s in enumerate(timeline.segs):
+            if s.frame <= t * fps + 1e-6:
+                i = n
+        return i
+
+    return lambda t0, t1: seg(t0) != seg(t1)
+
+
 def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None) -> dict:
     """match.json for a clip (its clip.json) and its detected events; `verdict` is what the
     highlights measurement decided (ninety/highlights.py), none until it has run."""
@@ -123,5 +139,5 @@ def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | Non
         "chapters": chapters(timeline, sure),
         "goals": goals,
         "stats": stats,
-        "highlights": highlights.reel(sure, verdict),
+        "highlights": highlights.reel(sure, verdict, cut_between(timeline)),
     }
