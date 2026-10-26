@@ -304,9 +304,9 @@ def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, 
     seen = []
     real = observe.observe
 
-    def spy(images, dets, load, fixed=False):
-        seen.append(fixed)
-        return real(images, dets, load, fixed)
+    def spy(images, dets, load, fixed=False, gantry=None):
+        seen.append(fixed if gantry is None else (fixed, gantry))
+        return real(images, dets, load, fixed, gantry=gantry)
 
     monkeypatch.setattr(observe, "observe", spy)
     # The fits' searches are tested elsewhere; this test is about which mode each camera gets, and
@@ -319,6 +319,11 @@ def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, 
     single, dets1 = clean_clip(tmp_path / "b")
     live_job.run(single, tmp_path / "out1", lambda: (lambda rows: read_detections(dets1)), {})
     assert seen == [True, True, False]
+    # The match's gantry (docs/eval/match-gantry-plan.md) goes to the broadcast, never to a view.
+    g = (58.0, -37.0, 16.0)
+    live_job.run(clip, tmp_path / "out2", lambda: (lambda rows: found), {}, gantry=g)
+    live_job.run(single, tmp_path / "out3", lambda: (lambda rows: read_detections(dets1)), {}, gantry=g)
+    assert seen[3:] == [True, True, (False, g)]
 
 
 REAL_VIEWS = Path(__file__).parent / "fixtures" / "tactical-seed108"

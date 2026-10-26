@@ -21,7 +21,10 @@ same frames of one clip.
 With views, each view is detected and placed on its own (detect, observe), and the views'
 observations are merged on the pitch (ninety.vision.fuse) before events; `views/<name>/` under
 `--out` holds each view's detections and observations, and observations.jsonl is the merged one.
-`--tiles` detects each frame as a 2 x 2 grid of tiles (ninety.vision.tiles).
+`--tiles` detects each frame as a 2 x 2 grid of tiles (ninety.vision.tiles). `--match-gantry`
+fits the broadcast through the match's gantry, fitted from all of the match's clips by
+ninety.vision.match_gantry (an earlier fit from the same feed; off by default,
+docs/eval/match-gantry-plan.md).
 
 Writes to `--out`:
 
@@ -61,7 +64,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import fuse, observe, restarts, track, tracked_frames
+from ninety.vision import fuse, match_gantry, observe, restarts, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX, VIEWS
@@ -129,10 +132,12 @@ def _jsonl(path: Path, rows: list[dict]) -> None:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
-def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None) -> dict:
+def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dict | None = None,
+        gantry: tuple | None = None) -> dict:
     """Run the live path on `clip` into `out` and return run.json's contents. `load_detector()`
     loads the model and returns a function from frame rows to detections; it is passed in so the
-    tests run the real stages after it without rfdetr installed."""
+    tests run the real stages after it without rfdetr installed. `gantry`, the match's broadcast
+    gantry (ninety.vision.match_gantry), is passed to observe for the broadcast, never a view."""
     views = check_views(clip)
     out.mkdir(parents=True, exist_ok=True)
     seconds: dict[str, float] = {}
@@ -154,7 +159,8 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         n_dets += sum(len(d.detections) for d in dets)
         lap("detect")
         write_detections(where / "detections.jsonl", dets)
-        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=bool(name))
+        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=bool(name),
+                                       gantry=None if name else gantry)
         if name:
             _jsonl(where / "observations.jsonl", placed[name])
         lap("observe")
@@ -231,6 +237,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--tiles", action="store_true", help="detect on a 2 x 2 grid of overlapping tiles")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--match-gantry", type=Path, default=None,
+                    help="the match's broadcast gantry (python -m ninety.vision.match_gantry): the "
+                         "clip's shots are fitted through it and checked against it (off by default)")
     ap.add_argument("--echo", action="store_true",
                     help="also print run.json and each detected event, one JSON line each (the job's log)")
     a = ap.parse_args(argv)
@@ -257,7 +266,8 @@ def main(argv: list[str] | None = None) -> None:
         "tiles": a.tiles,
         "commit": os.environ.get("NINETY_COMMIT", "unknown"),
     }
-    report = run(a.clip, a.out, load_detector, about)
+    gantry = match_gantry.read(a.match_gantry) if a.match_gantry else None
+    report = run(a.clip, a.out, load_detector, about | {"match_gantry": gantry}, gantry=gantry)
     print(json.dumps({k: report[k] for k in ("clip", "frames", "events", "seconds")}))
     if a.echo:  # the Container Apps job holds no storage role, so its log carries the result
         print(json.dumps({"run": report}, separators=(",", ":")))

@@ -1,0 +1,112 @@
+{
+ "match": "v920109",
+ "gantry": [
+  50.20044391201981,
+  -30.915388742005796,
+  13.067051736194077
+ ],
+ "clips": [
+  {
+   "clip": "seed920109-3109",
+   "true_gantry": [
+    50.19,
+    -30.73,
+    13.0441
+   ],
+   "match_gantry_error_m": 0.187,
+   "before": {
+    "frames": 352,
+    "trusted": 0,
+    "good": 0,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": null,
+    "gantry": [
+     53.865,
+     -20.065,
+     11.678
+    ],
+    "gantry_error_m": 11.363
+   },
+   "after": {
+    "frames": 352,
+    "trusted": 17,
+    "good": 17,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.447,
+    "gantry": [
+     50.2,
+     -30.915,
+     13.067
+    ],
+    "gantry_error_m": 0.187,
+    "shots": [
+     {
+      "frame": 3109,
+      "gantry": [
+       53.865,
+       -20.065,
+       11.678
+      ],
+      "distance_m": 11.537,
+      "ok_own": 3,
+      "ok_match": 23,
+      "unsure": false
+     }
+    ]
+   }
+  },
+  {
+   "clip": "seed920109-ko",
+   "true_gantry": [
+    50.19,
+    -30.73,
+    13.0441
+   ],
+   "match_gantry_error_m": 0.187,
+   "before": {
+    "frames": 100,
+    "trusted": 100,
+    "good": 100,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.32,
+    "gantry": [
+     50.221,
+     -29.75,
+     12.883
+    ],
+    "gantry_error_m": 0.994
+   },
+   "after": {
+    "frames": 100,
+    "trusted": 100,
+    "good": 100,
+    "bad": 0,
+    "unmeasured": 0,
+    "worst_m": 0.318,
+    "gantry": [
+     50.2,
+     -30.915,
+     13.067
+    ],
+    "gantry_error_m": 0.187,
+    "shots": [
+     {
+      "frame": 0,
+      "gantry": [
+       50.221,
+       -29.75,
+       12.883
+      ],
+      "distance_m": 1.18,
+      "ok_own": 100,
+      "ok_match": 100,
+      "unsure": false
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -3083,3 +3083,16 @@ short and actionable. This file is public: no research sources, product names or
   everything" is noticed.
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 254. A tolerance taken as the worst over several looks is set by the worst look
+- **What happened:** the match-gantry plan set the camera-unsure tolerance as the gantry fit's
+  largest error over validation clips of two renderer looks, "the larger of both". On today's look
+  the fit's gantry is within 1.0 m; on the old 0.3.2 look one clip is 38.4 m off, so the tolerance
+  became 38.5 m, and the check can no longer see a reverse angle near halfway, the case it was
+  built for. The rule was followed as written, and the check shipped off by default.
+- **Rule:** a tolerance that a check on today's footage relies on is measured on today's look; an
+  older look's precision is reported beside it, never folded in by a maximum. Before committing a
+  rule that pools measurements, say what one bad clip would do to the value.
+- **Check:** `docs/eval/match-gantry-plan.md`, Outcome, shows both looks' errors and the value;
+  `tests/test_vision_match_gantry.py::test_at_the_measured_tolerance_a_reverse_angle_near_halfway_is_a_known_limit`
+  states what the value cannot see.
