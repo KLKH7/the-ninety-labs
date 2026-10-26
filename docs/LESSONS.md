@@ -3249,3 +3249,18 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 279. Watch the frames before naming the cause
+- **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
+  frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
+  at P16's rate and the stride already follows distance. Crops of seed 8080's carriers showed the
+  real causes: a first touch on the move stood the other foot on the grass for 0.76 s while the body
+  ran on at 3.5 m/s (he skated stiff-legged), a ball in close control rode at his shins with no foot
+  ever playing it, and a carried ball jumped 0.4 m round him in a frame with no foot on it. The first
+  fix tried (taps in close control) changed no box in the test window: every carry there sat inside
+  the engine's own touch windows, so the stance was the glitch.
+- **Rule:** diagnose a look problem from per-frame engine data and crops of the drawn frames, and
+  check that a fix changes the frames it is meant to (diff the labels before and after) before
+  building on it.
+- **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
+  or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).

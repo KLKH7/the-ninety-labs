@@ -25,19 +25,24 @@ from ninety.render.meshpose import (
 from ninety.render.scene import (
     ACCEL_BOX,
     BALL_RADIUS,
+    HAND_REACH_Z,
+    HEADER_LIFT_MAX,
     KICK_SWING_S,
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_ACTIONS,
     PLANT_AHEAD_MAX,
+    SETTLE_M,
     STEP_FRAMES,
     STEP_LIFT,
+    STRIDE_FROM_MPS,
     THROW_FOLLOW_S,
     Gait,
     Look,
     _step_m,
     advance_gaits,
     body_parts,
+    carry_at,
     contacts,
     face,
     hold_at,
@@ -403,6 +408,7 @@ def _draw(frames, events=None):
             pace(g, pl["vx"], pl["vy"], g.heading, 1 / FPS, coming.get(pl["id"]))
             touch_at(g, mine.get(pl["id"], []), fi, 1.84, FPS, pl["x"], pl["y"])
             hold_at(g, held.get(pl["id"], []), fi, ball, 1.84, FPS)
+            carry_at(g, fr, pl["id"], pl["x"], pl["y"], 1.84)
             body_parts(pl["x"], pl["y"], looks[pl["id"]], g, ball)
             pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
             m = pose_markers(pose, g.heading, 1.84)
@@ -1580,3 +1586,99 @@ def test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick():
             for s in "lr":
                 side = HOLD_SIDE * look.height_m / ASSET_STATURE_M
                 assert math.dist(m[f"hand_{s}"], centre) < side + 0.06, (fi, s, m[f"hand_{s}"])
+
+
+def _carry(n=60, v=3.5, ahead=0.21, jump_at=None, jump_m=0.0):
+    """A ball in close control (engine.tick_carrier): `ahead` metres in front of a carrier running
+    at `v`, moving with him; from `jump_at` on it sits `jump_m` to his left (a shield, D8)."""
+    frames, x = [], 30.0
+    for i in range(n):
+        x += v / FPS
+        side = jump_m if jump_at is not None and i >= jump_at else 0.0
+        frames.append({"ball": {"x": x + ahead, "y": 30.0 + side, "z": 0.0, "vx": v, "vy": 0.0},
+                       "possessor": "h1",
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": _engine_action(v), "dive": 0.0}]})
+    return frames
+
+
+def test_a_ball_in_close_control_is_played_by_a_foot_once_a_stride():
+    """Old: the engine carries a ball 0.21 m in front of him with no touch of its own, and the drawn
+    stride ran through it with neither foot playing it (seed 8080, h11 at 74.6 s). Now the foot on
+    its side meets it once a stride, the sole at the back of the ball at the touch's height."""
+    frames = _carry()
+    drawn = _draw(frames)["h1"]
+    w = [p["touch"]["w"] if p["touch"] else 0.0 for p, *_ in drawn]
+    # Each touch's frame of fullest weight (the ball met), one per run of touched frames.
+    peaks = [i for i in range(1, len(w) - 1) if w[i] > 0.5 and w[i] >= w[i - 1] and w[i] > w[i + 1]]
+    assert peaks, "no foot met the carried ball"
+    episodes = len(peaks)
+    run = 3.5 * len(frames) / FPS
+    assert abs(episodes - run / (2 * _step_m(3.5))) <= 1.5, (episodes, run)
+    for i in peaks:
+        pose, m, _, _ = drawn[i]
+        side = pose["touch"]["side"]
+        b = frames[i]["ball"]
+        back = (b["x"] - BALL_RADIUS, b["y"], 0.0)
+        assert math.dist(m["foot_" + side][:2], back[:2]) < 0.15, (i, m["foot_" + side], back)
+
+
+def test_no_foot_is_drawn_on_a_ball_he_does_not_carry():
+    """The same ball 0.21 m ahead but nobody's (a loose ball he runs beside) gets no touch."""
+    frames = _carry()
+    for fr in frames:
+        fr["possessor"] = None
+    assert not any(p["touch"] for p, *_ in _draw(frames)["h1"])
+
+
+def test_a_soft_touch_on_the_move_is_taken_in_stride():
+    """Old: a first touch at 3.5 m/s stood the other foot on the grass for the touch's 0.76 s while
+    the body ran on, so he skated stiff-legged after it (seed 8080, h11 at 74.6 s). A soft touch with
+    the foot on the move is taken in stride: the other foot still runs (a kick keeps its support,
+    test_a_strike_on_the_run_keeps_a_foot_on_the_grass)."""
+    frames, x, v, touch = [], 30.0, 3.5, 20
+    for i in range(44):
+        x += v / FPS
+        if i < touch:
+            ball = {"x": x + 0.21 + 9.0 * (touch - i) / FPS, "y": 30.05, "z": 0.0, "vx": -9.0, "vy": 0.0}
+        else:
+            ball = {"x": x + 0.21, "y": 30.05, "z": 0.0, "vx": v, "vy": 0.0}
+        frames.append({"ball": ball, "possessor": "h1" if i >= touch else None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": "foot" if touch <= i < touch + 6 else _engine_action(v),
+                                    "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    touched = [(p, m) for p, m, *_ in drawn if p["touch"] and p["touch"]["part"] == "foot"
+               and p["touch"].get("soft") and p["touch"]["w"] > 0.5]
+    assert touched
+    other = {"l": "r", "r": "l"}
+    up = max(m["foot_" + other[p["touch"]["side"]]][2] for p, m in touched)
+    assert up > LOW_STEP_M, up  # the other foot left the grass on its stride, not a low step after him
+    assert 3.5 >= STRIDE_FROM_MPS
+
+
+def test_a_carried_ball_that_jumps_round_him_is_rolled_by_a_foot():
+    """Old: the engine moved a carried ball 0.4 m round him in a frame (D8, shielding; seed 8080,
+    h10 at 76.24 s) with no foot on it. A move of SETTLE_M or more against his body is a touch with
+    the foot, the way the ball went; the few centimetres a frame it swings as he turns are not."""
+    big = contacts(_carry(n=40, v=2.0, jump_at=20, jump_m=0.4))["h1"]
+    assert [c["frame"] for c in big] == [20] and big[0]["part"] == "foot"
+    assert big[0]["dv"][1] > 0  # rolled to his left, where it went
+    small = contacts(_carry(n=40, v=2.0, jump_at=20, jump_m=SETTLE_M * 0.5))
+    assert "h1" not in small
+
+
+def test_a_catch_above_his_reach_is_made_in_a_jump():
+    """Old: a shot caught 2.7 m up (seed 8080, a1 at 67.32 s) was drawn with his hands at 1.9 m and
+    the ball a metre above them on the frame the engine has him take it. Above the drawn reach he
+    goes up to it, no higher than a jump is drawn; a ball at his chest is taken standing."""
+    look_h = 1.90
+    k = look_h / ASSET_STATURE_M
+    for z, jumps in ((2.7, True), (1.1, False)):
+        g = Gait(action="hands")
+        hold_at(g, [(10, 30)], 10, (100.0, 37.0, z), look_h, FPS)
+        if jumps:
+            assert 0.0 < g.lift <= HEADER_LIFT_MAX
+            assert g.lift == pytest.approx(min(z + BALL_RADIUS - HAND_REACH_Z * k, HEADER_LIFT_MAX))
+        else:
+            assert g.lift <= 0.0
