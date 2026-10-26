@@ -72,13 +72,17 @@ def _who(event: dict) -> str:
 
 def _shot_text(event: dict, persona: str, speed: bool = False) -> str:
     player = _who(event)
-    if event["type"] == "goal":
-        return f"{player} scores"
+    if event["type"] == "goal" or (persona == "casual" and event.get("outcome") == "goal"):
+        return "a goal" if player == UNNAMED else f"{player} scores"
     if persona == "casual":
         return f"{player} takes a shot"
-    parts = ["a shot" if player == UNNAMED else f"{player} shot"]
-    if event.get("outcome") in SHOT_OUTCOME:
-        parts.append(SHOT_OUTCOME[event["outcome"]])
+    if event.get("outcome") == "goal":
+        # A shot that went in reads as a goal, not "a player shot, goal" (video-prep, Oct 25).
+        parts = ["a goal" if player == UNNAMED else f"{player} scores"]
+    else:
+        parts = ["a shot" if player == UNNAMED else f"{player} shot"]
+        if event.get("outcome") in SHOT_OUTCOME:
+            parts.append(SHOT_OUTCOME[event["outcome"]])
     # A speed only when it may be said (factcheck.sayable_speed); `speed` asks for any a kick can give,
     # as a writer's draft may state, for the fact-checker to decide.
     if plausible_speed(event) if speed else sayable_speed(event):
