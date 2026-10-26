@@ -55,7 +55,10 @@ def test_bundle_has_every_stage(tmp_path):
         validate(cue, CUE_SCHEMA)
     kinds = [(c["kind"], c["persona"]) for c in cues(out)]
     assert kinds.count(("pass_arc", "casual")) == 2 and kinds.count(("shot_speed", "analyst")) == 1
-    assert kinds.count(("insight", "analyst")) == 1
+    # The agents' claim restates the shot: it is in the trace, never on the INSIGHT bar (no insights
+    # file here, so the bar is empty: it never restates one event).
+    assert kinds.count(("insight", "analyst")) == 0
+    assert json.loads((out / "trace.json").read_text())["claims"]
 
 
 def test_the_answer_key_is_never_opened(tmp_path, monkeypatch):
@@ -108,9 +111,11 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     # Offline the Judge never ran; the trace must not say it did.
     judge = [s for s in claim["steps"] if s["role"] == "judge"]
     assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
-    (insight,) = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight["text"] == claim["text"] and insight["verified"] and insight["evidence"] == ["e2"]
-    assert insight["replaces"] == "cue-e2-analyst"  # it takes the template's place on screen
+    # It only restates the shot: verified in the trace and said by the audio description, never on the
+    # INSIGHT bar (ninety/agents/insight_bar.py), where the shot's own graphic stays.
+    assert not [c for c in cues(out) if c["kind"] == "insight"]
+    said = [s["text"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    assert claim["text"] in said
     assert manifest["agents"]["fallbacks"] == []
 
 
@@ -124,8 +129,8 @@ def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     # The planted number is named in the rejection; the draft that stated it as a speed shows it no more.
     assert "143" in rejected["detail"] and "143" not in claim["steps"][2]["detail"]
     assert rejected["detail"].startswith("back to the tactician")
-    insight = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight and all("143" not in c["text"] for c in insight)
+    assert "143" not in claim["text"]  # what was verified carries the fixed number, not the planted one
+    assert not [c for c in cues(out) if c["kind"] == "insight"]  # a restatement: never on the bar
     assert manifest["agents"]["planted"]
 
 
@@ -172,7 +177,7 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
     # The single Analyst, too, was held for vision's speed and said it again without it.
     assert claim["status"] == "accepted" and claim["text"] == "h8 shoots, on target."
-    assert [c for c in cues(out) if c["kind"] == "insight"]
+    assert claim["status"] == "accepted"  # in the trace; a restatement never reaches the bar
 
 
 def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_path, monkeypatch):

@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety import condensed, highlights, radar
-from ninety.agents import factcheck, live, onair, telemetry
+from ninety.agents import factcheck, insight_bar, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import (
@@ -754,6 +754,23 @@ async def run(args: argparse.Namespace) -> dict:
     claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
     # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
     cues, claims = onair.gate_speeds(cues, claims, events)
+    # The INSIGHT bar shows only what the broadcast can't (ninety/agents/insight_bar.py): the agents'
+    # single-event claims stay in the trace and the audio description, never on the bar.
+    # The audio description still says them in their event's place (`spoken_cues`); the bar, the
+    # bundle's cues and the commentary do not.
+    kinds = {e["id"]: e["type"] for e in events}
+    spoken_cues = cues
+    cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
+    insights_file = args.insights or args.team_stats
+    if insights_file is not None:
+        from ninety.intel.match_insights import MatchInsights
+
+        mi = MatchInsights.from_dict(json.loads(insights_file.read_text()))
+        # The feed's names by track (#389): only this path reads them, and hands the bar names alone.
+        names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
+        bar, bar_claims = insight_bar.build(mi, Timeline.of_clip(clip.meta).to_video, sides_known(events),
+                                            clubs_of(clip.meta), names)
+        cues, claims, spoken_cues = cues + bar, claims + bar_claims, spoken_cues + bar
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
@@ -761,13 +778,13 @@ async def run(args: argparse.Namespace) -> dict:
 
         try:
             async with describer.foundry_model(tokens) as (model, judge):
-                upgrades, model_calls = await describer.upgrades(events, cues, model, judge)
+                upgrades, model_calls = await describer.upgrades(events, spoken_cues, model, judge)
         except RegistryDrift:
             raise  # a changed prompt must never run under an old version's name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades,
+    track, refused = describe.describe(events, spoken_cues, voice or describe.estimate, upgrades,
                                        clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
@@ -983,6 +1000,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--team-stats", type=Path, default=None,
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")
+    ap.add_argument("--insights", type=Path, default=None,
+                    help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
+                         "either, the bar stays empty: it never restates one event")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 
