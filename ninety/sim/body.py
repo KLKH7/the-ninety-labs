@@ -30,6 +30,11 @@ STRIKE_FACING = math.radians(60)  # P16 (design): the widest run-up angle tested
 F0_MEAN, F0_SD = 5.18, 0.46  # P2: acceleration from standing, m/s² (professional sprint tests)
 V0_MEAN, V0_SD = 10.0, 0.3  # P9: top-speed capability, m/s; a sprint-test fit gives about 10.3
 BRAKE_MAX = 7.0  # P2: braking, m/s²; peak about 8.5, about 4.5 averaged over a full stop
+# V7 (demo engine v2): an unhurried arrival is no high-intensity deceleration. Match-analysis studies
+# put high-intensity decelerations at 3 m/s² and harder (Harper et al. 2019, Sports Med 49:1923-1947,
+# systematic review); a player jogging into his place (below his critical speed, P10) plans his stop
+# at that band's edge (*design*: the edge, not a measured habitual rate).
+UNHURRIED_BRAKE = 3.0
 CS_MEAN, CS_SD = 3.9, 0.2  # P10: critical speed, m/s, the fastest sustainable running pace
 D0 = 225.0  # P10: metres that can be run above critical speed from full
 TAU_LIGHT, TAU_HEAVY = 120.0, 336.0  # P10: s to refill, recovering at a walk vs near CS
@@ -183,7 +188,8 @@ def stopping_distance(v: float) -> float:
 
 
 def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_speed: float,
-         body: Body, dt: float) -> tuple[float, float, float, float]:
+         body: Body, dt: float, unhurried: bool = False,
+         target_v: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float, float, float]:
     """One step toward a target. The velocity change is limited by grip (BRAKE_MAX, shared by
     braking and turning), and any gain in speed by force-velocity, so speeding up can never
     borrow the braking budget, whether turning or reversing. The player slows in time to stop
@@ -191,8 +197,22 @@ def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_sp
     dx, dy = tx - x, ty - y
     d = math.hypot(dx, dy)
     speed = math.hypot(vx, vy)
-    want = min(want_speed, body.top_speed(), stopping_speed(d))
+    # V7: unhurried, he plans his stop gently (UNHURRIED_BRAKE); and he never plans to pass the target
+    # within the frame (d / dt), so a player at his place stands still, not rocking ±0.14 m/s a frame.
+    stop = math.sqrt(2 * UNHURRIED_BRAKE * d) if unhurried else stopping_speed(d)
+    want = min(want_speed, body.top_speed(), stop, d / dt)
     wx, wy = (dx / d * want, dy / d * want) if d > 1e-6 else (0.0, 0.0)
+    # V8 (demo engine v2): a target that is itself moving (his place in the shape, sliding with the
+    # ball) is arrived at moving with it: he closes on it as above and carries its own velocity, so
+    # he does not run onto it as if it stood still, overshoot it, brake and turn back through a stop.
+    # Never faster than he would go anyway or than his body allows.
+    tvx, tvy = target_v
+    if tvx or tvy:
+        wx, wy = wx + tvx, wy + tvy
+        cap = min(body.top_speed(), max(want_speed, math.hypot(tvx, tvy)))
+        w = math.hypot(wx, wy)
+        if w > cap:
+            wx, wy = wx / w * cap, wy / w * cap
     cx, cy = wx - vx, wy - vy
     change = math.hypot(cx, cy)
     if change > BRAKE_MAX * dt:
