@@ -52,6 +52,10 @@ interface Footage {
   seek(seconds: number): void;
 }
 
+/** The first clean picture of a match's video: past the stinger over its first frames, half of the
+ * renderer's STINGER_S (0.6 s, ninety/render/edit.py), and one frame more at 25 fps. */
+const POSTER_S = 0.6 / 2 + 1 / 25;
+
 function videoFootage(b: Bundle): Footage {
   video.src = b.base + b.manifest.footage.src;
   return {
@@ -248,6 +252,11 @@ async function start() {
   const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
+    // Open on a clean picture (demo audit 2, row 5): the match's first frames carry the stinger that
+    // joins the broadcast's segments, mid-wipe. It clears within half of the renderer's STINGER_S
+    // (ninety/render/edit.py, edge_stingers), so the first frame shown is the one just after it.
+    if (m.footage.kind === "video")
+      video.addEventListener("loadedmetadata", () => { if (video.currentTime === 0) footage.seek(POSTER_S); }, { once: true });
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);

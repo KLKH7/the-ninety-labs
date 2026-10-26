@@ -19,7 +19,8 @@ The viewer's match mode (web/viewer/src/match.ts) shows what this computes:
   beat a keeper's dive once that filter is measured, and a fan's label for each once vision's
   errors are measured.
 - `stats`: each team's passes, shots and goals so far, from the footage shown: after every confident
-  event, the same team facts the agents read (ninety/intel/stats.py), over the events up to it.
+  event on a side told surely, the same team facts the agents read (ninety/intel/stats.py), over
+  those events up to it.
 
 Confident means at or above the fact-checker's MIN_CONFIDENCE, the gate every graphic passes
 (ninety/agents/cues.py): a number on screen never rests on a detection the agents would hold.
@@ -128,9 +129,12 @@ def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | Non
     # 245); otherwise it is a goal with no team, in no club's score.
     goals = [{"t": e["t"], "team": e.get("team") if side_known(e) else None, "event": e["id"]}
              for e in sure if is_goal(e)]
+    # A club's stats count only the events whose side was told surely (the same gate, UI inventory #7):
+    # an event on an unsure side is in no club's numbers, as it is under no club's name.
+    sided = [e for e in sure if side_known(e)]
     stats = [{"t": round(timeline.segs[0].frame / timeline.fps, 2), "event": None, **team_stats([])}]
-    for i, e in enumerate(sure):
-        now = team_stats(sure[: i + 1])
+    for i, e in enumerate(sided):
+        now = team_stats(sided[: i + 1])
         if any(now[team] != stats[-1][team] for team in TEAMS):
             stats.append({"t": e["t"], "event": e["id"], **now})
     return {
