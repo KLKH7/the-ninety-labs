@@ -753,13 +753,6 @@ async def run(args: argparse.Namespace) -> dict:
                                        clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
-    # Every text the track writes, as a screen may show it: the checked form names track ids, which never
-    # air (ninety/agents/onair.py); what is said (`spoken`) never named them.
-    sure, clubs = sides_known(events), clubs_of(clip.meta)
-    for line in track.said:
-        line.text = onair.render(line.text, sure, clubs)
-    refused = [{**r, "text": onair.render(r["text"], sure, clubs)} if isinstance(r.get("text"), str) else r
-               for r in refused]
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary

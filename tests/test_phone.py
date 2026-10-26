@@ -55,6 +55,16 @@ INJECTION = (
 TOLERANCE_S = 0.2
 
 
+def open_ask(page):
+    """Open Ask; a fresh browser opens it on the onboarding (tests/test_phone_onboarding.py), whose
+    Skip brings the composer."""
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#onboard:visible, #ask-form:visible")
+    if page.is_visible("#onboard"):
+        page.click(".onboard-skip")
+    page.wait_for_selector("#ask-form:visible")
+
+
 def unavailable(reason: str):
     if os.environ.get("NINETY_REQUIRE_PHONE") == "1":
         pytest.fail(reason)
@@ -414,7 +424,7 @@ def ask_wind(phone, laptop=None):
     if laptop is not None:
         laptop.fill("#seek", "60")
         phone.wait_for_function("window.ninetyPhone.laptop.time() > 59")
-    phone.click("#tab-button-ask")
+    open_ask(phone)
     phone.fill("#question", "How are the teams moving?")
     phone.click("#ask-button")
     phone.locator("#answers .answer:not(.pending)").last.wait_for()
@@ -801,7 +811,7 @@ def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
                        "geometry": {"t_from": 0.0, "t_to": 30.0}}}
     message = {"type": "answer", "source": "code", "answer": wind}
     page, errors, requests = fake_api(browser, prod_site, flow={**FLOW}, answer=message)
-    page.click("#tab-button-ask")
+    open_ask(page)
     page.fill("#question", "How are the teams moving?")
     page.click("#ask-button")
     canvas = "[...document.querySelectorAll('#answers figure canvas')].at(-1)"
