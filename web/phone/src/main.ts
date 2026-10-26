@@ -2172,11 +2172,9 @@ const shirtCircle = (n: number | undefined, side: string) => {
 
 /** The players focus: the players most in the game (the Scout's per-player numbers), named as the
  * radar names them (the ID feed's name, shirt and position where it has a row); a tap opens his card,
- * with Compare. With no per-player numbers yet, your club's team sheet, a tap opening Players. */
+ * with Compare. Never the team sheet: line-ups are the Players tab's alone (Kian, Oct 26). */
 function renderPlayersStrip(ps: PlayerStats[]) {
   const most = ps.filter((p) => typeof p.involvements === "number").sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
-  const sheets = (state.match as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets;
-  const side = usSide() ?? "home";
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   let rows: HTMLButtonElement[] = [];
   if (most.length) {
@@ -2188,13 +2186,6 @@ function renderPlayersStrip(ps: PlayerStats[]) {
       const r = focusRow(where ? `${where} · ${Math.round(p.involvements!)} involvements` : `${Math.round(p.involvements!)} involvements`, playerName(p.id), s, shirtCircle(row?.name ? row.number : undefined, s));
       r.classList.add("player-row");
       r.addEventListener("click", () => select(p.id));
-      return r;
-    });
-  } else if (sheets?.[side]?.length) {
-    rows = sheets[side].map((p) => {
-      const r = focusRow(cap(p.position), p.name, side, shirtCircle(p.number, side));
-      r.classList.add("player-row");
-      r.addEventListener("click", () => showPane("players"));
       return r;
     });
   }
