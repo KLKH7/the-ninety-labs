@@ -523,7 +523,7 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     words = page.get_attribute("#how-body canvas.seen", "aria-label")
     assert words.startswith("The broadcast picture at 1:01")
     # a code answer: no Judge to claim
-    assert "Checked by code before it was shown" in page.inner_text("#how-body")
+    assert "Computed from tracking" in page.inner_text("#how-body")
     assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
 
@@ -1792,6 +1792,10 @@ def test_embedded_beside_the_big_screen_the_phone_opens_on_live_silent_and_answe
     page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'ask')")
     phone.locator("#tab-button-insights").click()
     page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'insights')")
+    # The passcode entered on the big screen reaches the panel's Ask (kept on this device only).
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-passcode', passcode: 'from-big'}, location.origin)")
+    frame.wait_for_function("localStorage.getItem('ninety.passcode') === 'from-big'")
     # A message from anywhere but the parent page opens nothing.
     frame.evaluate("window.postMessage({type: 'ninety-open', tab: 'ask'}, '*')")
     page.wait_for_timeout(300)

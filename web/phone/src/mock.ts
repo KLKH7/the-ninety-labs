@@ -299,7 +299,8 @@ export class MockFeed implements Feed {
     });
   }
 
-  async ask(q: Question): Promise<AnswerMessage> {
+  async ask(q: Question, _passcode?: string | null): Promise<AnswerMessage> {
+    void _passcode; // the mock has no model
     const lowered = q.text.toLowerCase();
     const kind = VISUAL_WORDS.find(([, words]) => words.test(lowered))?.[0];
     if (kind) {
