@@ -175,11 +175,20 @@ def _who(event: dict) -> str:
 
 def event_versions(event: dict) -> list[str]:
     """The line for one event, full then short. Numbers come from the event itself."""
+    return [_opening_capital(v) for v in _versions(event)]
+
+
+def _opening_capital(line: str) -> str:
+    """A sentence that opens on "a player" opens with a capital ("A player shoots.", "Goal! A player
+    scores."); "a player" mid-sentence stays lower case ("Kick-off, a player."). A player id or a side
+    (said as its club later, by spoken()) is left as it is."""
+    if line.startswith(f"{UNNAMED} "):
+        line = "A" + line[1:]
+    return line.replace(f"Goal! {UNNAMED} ", "Goal! A player ")
+
+
+def _versions(event: dict) -> list[str]:
     kind, who, place = event["type"], _who(event), where(event["x"], event["y"])
-    # A sentence that opens on "a player" opens with a capital ("Goal! A player scores."); a player
-    # id or a side (said as its club later, by spoken()) is left as it is.
-    if who == UNNAMED:
-        who = "A player"
     if kind == "goal":
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":

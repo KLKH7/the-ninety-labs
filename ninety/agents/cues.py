@@ -70,8 +70,8 @@ def _who(event: dict) -> str:
 
 def _shot_text(event: dict, persona: str) -> str:
     player = _who(event)
-    if event["type"] == "goal":
-        return f"{player} scores"
+    if event["type"] == "goal" or (persona == "casual" and event.get("outcome") == "goal"):
+        return "a goal" if player == UNNAMED else f"{player} scores"
     if persona == "casual":
         return f"{player} takes a shot"
     if event.get("outcome") == "goal":

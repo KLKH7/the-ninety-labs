@@ -578,6 +578,21 @@ function crestSvg(club: string, side: "home" | "away"): string {
   return `<svg viewBox="0 0 54 62"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" style="fill: var(--crest-${side})" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text></svg>`;
 }
 
+/** A name as said mid-sentence: "a player", not "A player" ("Heat map of a player"). */
+const mid = (name: string) => name.replace(/^A player\b/, "a player");
+
+/** A player as a list tells him apart: his name, else where he has mostly played ("Left defender"),
+ * or on a side not told surely, where on the screen ("A player, left of the pitch"); never the
+ * tracker's number, and never "London player" twice in one list. */
+function distinctName(id: string): string {
+  if (!unnamedTrack(id)) return playerName(id);
+  const at = averagePositions().get(id);
+  if (!at) return playerName(id);
+  if (!sideUnsure(id)) return roleWords(team(id), at[0], at[1]);
+  const across = at[0] < 105 / 3 ? "left" : at[0] > (2 * 105) / 3 ? "right" : "middle";
+  return `A player, ${across} of the pitch`;
+}
+
 /** A player the line-up cannot name, by where he has mostly played ("Left defender"). */
 function roleWords(side: "home" | "away", x: number, y: number): string {
   const [flank, depth] = spot(side, x, y).split(" · ");
@@ -624,7 +639,7 @@ function renderRoster(roster: string[]) {
     where.className = sheet?.position ? "where pos" : "where";
     where.textContent = roleOnly ? "" : sheet?.position ?? (at && !unnamed ? spot(team(id), at[0], at[1]) : "");
     b.append(num, name, where);
-    b.setAttribute("aria-label", playerName(id));
+    b.setAttribute("aria-label", name.textContent ?? playerName(id)); // its name contains what it shows
     if (at) {
       where.id = `where-${id}`;
       b.setAttribute("aria-describedby", where.id); // "Left · defence", read after the name
@@ -693,7 +708,7 @@ function choose(ids: string[]) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = `who ${team(id)}`;
-    b.textContent = playerName(id);
+    b.textContent = distinctName(id); // the near players apart, not "London player" twice
     b.addEventListener("click", () => {
       box.hidden = true;
       select(id);
@@ -979,7 +994,7 @@ function select(id: string | null, fromLaptop = false) {
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
-    if (fromLaptop) announce(`The big screen is following ${playerName(id)}.`);
+    if (fromLaptop) announce(`The big screen is following ${mid(playerName(id))}.`);
     else if (state.tab === "radar") {
       // Focus moves to the sheet's title, so a screen reader lands on it.
       playerSheet.addEventListener("ionModalDidPresent", () => $("player-title").focus(), { once: true });
@@ -1043,7 +1058,7 @@ function showCard(c: PlayerCard) {
   const v = fit(heat);
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${playerName(c.player)}: ${describeHeat(c.heat, team(c.player))}`);
+  heat.setAttribute("aria-label", `Heat map of ${mid(playerName(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
   // His average position: the heat map's own shares, weighted over its cells' centres.
   const total = c.heat.cells.reduce((a, b) => a + b, 0);
   if (total > 0) {
@@ -1111,8 +1126,7 @@ function renderCompareChips(id: string) {
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
       b.dataset.player = o;
-      const at = unnamedTrack(o) ? averagePositions().get(o) : undefined;
-      b.textContent = at && !sideUnsure(o) ? roleWords(team(o), at[0], at[1]) : playerName(o);
+      b.textContent = distinctName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
     }),
@@ -1148,7 +1162,7 @@ async function compare(a: string, b: string) {
     ...rows.map(([label, x, y, places]) => {
       const li = document.createElement("li");
       li.className = "stat-row";
-      li.setAttribute("aria-label", `${label}: ${playerName(a)} ${x.toFixed(places)}, ${playerName(b)} ${y.toFixed(places)}`);
+      li.setAttribute("aria-label", `${label}: ${distinctName(a)} ${x.toFixed(places)}, ${mid(distinctName(b))} ${y.toFixed(places)}`);
       li.innerHTML = '<span class="v home-v"></span><span class="label"></span><span class="v away-v"></span><span class="bar home-bar"></span><span class="bar away-bar"></span>';
       li.querySelector(".home-v")!.textContent = x.toFixed(places);
       li.querySelector(".away-v")!.textContent = y.toFixed(places);
@@ -1168,7 +1182,7 @@ async function compare(a: string, b: string) {
 // --- questions -------------------------------------------------------------------------------
 
 function playerQuestions(id: string): string[] {
-  const n = playerName(id);
+  const n = mid(playerName(id));
   return [`How fast is ${n} running now?`, `What is ${n}'s top speed?`, `How far has ${n} run?`];
 }
 

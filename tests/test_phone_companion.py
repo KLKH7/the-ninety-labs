@@ -1166,3 +1166,19 @@ def test_a_scorer_vision_could_not_name_is_his_club_s_goal_never_a_track_id(brow
         assert "7240" not in page.evaluate("document.body.innerText"), tab
     assert not errors
     ctx.close()
+
+
+def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(browser, site):  # noqa: F811
+    """Merge-queue review of #371 (WCAG 2.5.3): with track numbers gone, every unnamed player was
+    "London player" or "A player" in a screen reader's ear while the screen showed where he plays."""
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.click("#lt-players")
+    page.wait_for_selector("#roster .who")
+    for b in page.locator("#roster .who").all():
+        assert b.locator(".name").inner_text() in b.get_attribute("aria-label"), b.get_attribute("aria-label")
+    page.locator("#roster .who").first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
+    bare = {"A player", "Crowmere player", "Dunhollow player"}
+    assert chips and not bare & set(chips), chips
+    assert not errors
