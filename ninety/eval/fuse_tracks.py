@@ -100,9 +100,11 @@ def grade(tracked: dict, key: dict[int, dict]) -> dict:
 def wilson(k: int, n: int) -> list[float]:
     if n == 0:
         return [0.0, 1.0]
-    p = k / n
-    c = (p + Z95 ** 2 / (2 * n)) / (1 + Z95 ** 2 / n)
-    h = Z95 * math.sqrt(p * (1 - p) / n + Z95 ** 2 / (4 * n * n)) / (1 + Z95 ** 2 / n)
+    # event_score.wilson's formula, to 4 places (the rule compares 0.6547 with 0.6552); no ** in
+    # evaluation code: it is C's pow (tests/test_fmath.py)
+    p, z2 = k / n, Z95 * Z95
+    c = (p + z2 / (2 * n)) / (1 + z2 / n)
+    h = Z95 * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / (1 + z2 / n)
     return [round(c - h, 4), round(c + h, 4)]
 
 
