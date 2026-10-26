@@ -43,7 +43,7 @@ LENIENT_M = 2.0
 # team; a substitution has no meaningful place and is graded on time only.
 PLAYER_PLACED = {"pressure", "kickoff"}
 FOULED_PLACED = {"foul"}  # placed where the fouled player was (engine.foul): the other side
-NOT_PLACED = {"substitution"}
+NOT_PLACED = {"substitution", "score_change"}  # a score change is read from the scorebug, not a place
 
 
 def in_a_cut(k: int, cuts: list[dict] | None) -> bool:

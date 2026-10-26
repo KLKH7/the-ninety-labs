@@ -7,6 +7,7 @@ import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
+import { airSpeed, airSpeeds, claimSpeeds, commentarySpeeds, spokenSpeeds } from "./speed";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -238,7 +239,12 @@ async function start() {
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
   setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
-  b.cues = b.cues.map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  // A ball speed airs only once its error is measured, with its band, and never above P3 (src/speed.ts).
+  b.cues = airSpeeds(b.cues, m.speed).map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  b.claims = claimSpeeds(b.claims, m.speed);
+  if (b.audio) b.audio = { ...b.audio, said: spokenSpeeds(b.audio.said, m.speed) };
+  (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
+  (window as unknown as { ninetySpeed: typeof airSpeed }).ninetySpeed = airSpeed; // read by tests/test_viewer.py
   const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
@@ -341,6 +347,10 @@ async function start() {
     new URL(b.base, location.href).pathname,
     big,
   );
+  // The clock also goes out on a timer, not only from the frame loop: a big screen whose frames
+  // stall (a hidden tab, a busy machine) while its video plays on would otherwise leave every
+  // phone at "Screen lost" (demo audit, Oct 25). tick() sends only when a message is due.
+  setInterval(() => phone.tick(), 500);
   // The big screen's audio menu: commentary lines (off by default) over the stadium bed.
   // Audio description (the third persona) is a track in the same menu, as streaming apps offer it.
   let tracks: AudioTracks | null = null;
@@ -348,7 +358,9 @@ async function start() {
     const body = m.commentary?.count
       ? await fetch(new URL("commentary.json", new URL(b.base, location.href))).then((r) => (r.ok ? r.json() : null)).catch(() => null)
       : null;
-    tracks = new AudioTracks(b.base, readCommentary(body), m.stadium ?? null, $("captions"));
+    const commentary = readCommentary(body);
+    if (commentary) commentary.lines = commentarySpeeds(commentary.lines, m.speed);
+    tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"));
     tracks.described = !!b.audio;
   }
   // The QR after kick-off is behind the control bar's button only (Kian, Oct 25: option A).

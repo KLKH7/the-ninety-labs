@@ -396,8 +396,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "h11 wins the ball back from a6, a crucial defensive intervention.",
   "evidence": [
    {
@@ -419,8 +419,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "a3 wins the ball back from h11, a crucial defensive intervention.",
   "evidence": [
    {
@@ -442,8 +442,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "h10 wins the ball back from a7, a crucial defensive intervention.",
   "evidence": [
    {
@@ -465,8 +465,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "a2 wins the ball back from h11, a crucial defensive intervention.",
   "evidence": [
    {
@@ -488,9 +488,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h10 picks out h6 with a 14 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h10 picks out h6 with a 14 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00002",
@@ -514,9 +514,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h6 picks out h7 with a 8 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h6 picks out h7 with a 8 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00003",
@@ -540,9 +540,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h7 picks out h2 with a 17 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h7 picks out h2 with a 17 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00005",
@@ -566,9 +566,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "a7 picks out a11 with a 6 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "a7 picks out a11 with a 6 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00012",
@@ -592,8 +592,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "h10 tries their luck at 86 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -616,8 +616,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "h2 tries their luck at 109 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -640,8 +640,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "h11 tries their luck at 84 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -664,8 +664,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "a6 tries their luck at 96 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -688,8 +688,8 @@
   "category": null
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "h10 plays a cautious pass to h6.",
   "evidence": [
    {
@@ -711,13 +711,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h10 plays a cautious pass to h6' (The evidence shows a pass from h10 to h6 with a speed of 53 km/h over 14 meters, but does not provide any information about the pass being cautious or not.)"
+   "unsupported interpretation: 'the pass is cautious' (The evidence provides ball speed and distance but does not indicate the style or tone of the pass as cautious.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "h6 plays a cautious pass to h7.",
   "evidence": [
    {
@@ -739,13 +739,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h6 plays a cautious pass to h7' (The evidence shows h6 passed successfully to h7 with a ball speed of 39 km/h over 8 meters, but does not provide any indication of the pass being cautious.)"
+   "unsupported interpretation: 'the pass is cautious' (The evidence provides the ball speed (39 km/h) and distance (8 m) but does not establish that the pass was cautious; 'cautious' is a subjective interpretation not directly supported by the data.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "a7 plays a cautious pass to a11.",
   "evidence": [
    {
@@ -765,15 +765,13 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": false,
-  "reasons": [
-   "unsupported interpretation: 'a7 plays a cautious pass to a11' (The evidence shows a pass from a7 to a11 with a speed of 36 km/h and a distance of 6 meters, but does not provide any information about the pass being cautious.)"
-  ],
-  "category": "unsupported_claim"
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "a3 plays a cautious pass to a4.",
   "evidence": [
    {
@@ -793,13 +791,15 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "unsupported interpretation: 'a3 plays a cautious pass to a4' (The evidence shows a pass from a3 to a4 with a speed of 38 km/h and a distance of 14 meters, but does not provide any information about the pass being cautious or not.)"
+  ],
+  "category": "unsupported_claim"
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "h11 makes a risky tackle on a6.",
   "evidence": [
    {
@@ -818,13 +818,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h11 makes a risky tackle on a6' (The evidence shows h11 makes a tackle on a6, but does not indicate that the tackle was risky.)"
+   "unsupported interpretation: 'the tackle is risky' (The evidence does not provide any information about the riskiness of the tackle.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "h11 makes a risky tackle on a6.",
   "evidence": [
    {
@@ -843,13 +843,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h11 makes a risky tackle on a6' (The evidence shows h11 makes a tackle on a6 that is successful, but does not describe the tackle as risky.)"
+   "unsupported fact: 'h11 makes a risky tackle on a6' (The evidence shows h11 makes a tackle on a6 that is successful, but it does not describe the tackle as risky or provide any indication of risk.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "a2 makes a risky tackle on h11.",
   "evidence": [
    {
@@ -871,8 +871,8 @@
   "category": null
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "a3 makes a risky tackle on h11.",
   "evidence": [
    {
@@ -894,8 +894,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "h10 makes a hopeful effort from 27 metres.",
   "evidence": [
    {
@@ -918,8 +918,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "h2 makes a hopeful effort from 22 metres.",
   "evidence": [
    {
@@ -942,8 +942,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "h11 makes a hopeful effort from 22 metres.",
   "evidence": [
    {
@@ -966,8 +966,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "a6 makes a hopeful effort from 20 metres.",
   "evidence": [
    {
@@ -990,8 +990,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "h10 plays a patient pass to h6.",
   "evidence": [
    {
@@ -1011,15 +1011,13 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": false,
-  "reasons": [
-   "unsupported interpretation: 'h10 plays a patient pass to h6' (The evidence shows a successful pass from h10 to h6 at 53 km/h over 14 meters, but does not provide any indication of the pass being 'patient'.)"
-  ],
-  "category": "unsupported_claim"
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "h6 plays a patient pass to h7.",
   "evidence": [
    {
@@ -1044,8 +1042,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "a7 plays a patient pass to a11.",
   "evidence": [
    {
@@ -1065,13 +1063,15 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "unsupported interpretation: 'the pass is patient' (The evidence provides the pass speed (36 km/h) and distance (6 m) but does not establish the pass as 'patient', which is a subjective description not directly supported by the data.)"
+  ],
+  "category": "unsupported_claim"
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "a3 plays a patient pass to a4.",
   "evidence": [
    {
@@ -1091,15 +1091,13 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": false,
-  "reasons": [
-   "unsupported interpretation: 'the pass is patient' (The evidence provides the pass speed (38 km/h) and distance (14 m) but does not establish the pass as 'patient', which is a subjective description not directly supported by the data.)"
-  ],
-  "category": "unsupported_claim"
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "h11 puts in a bold challenge on a6.",
   "evidence": [
    {
@@ -1118,13 +1116,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h11 puts in a bold challenge on a6' (The evidence shows h11 attempts a tackle on a6 but does not describe the challenge as 'bold' or any other qualitative attribute.)"
+   "unsupported interpretation: 'h11 puts in a bold challenge on a6' (The evidence shows h11 attempts a tackle on a6 but does not describe the challenge as 'bold' or provide any indication of the style or character of the challenge.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "h11 puts in a bold challenge on a6.",
   "evidence": [
    {
@@ -1146,8 +1144,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "a2 puts in a bold challenge on h11.",
   "evidence": [
    {
@@ -1164,15 +1162,13 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": false,
-  "reasons": [
-   "unsupported interpretation: 'the challenge is bold' (The evidence does not provide any information about the style, tone, or character of the challenge, so the description 'bold' cannot be confirmed or contradicted.)"
-  ],
-  "category": "unsupported_claim"
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "a3 puts in a bold challenge on h11.",
   "evidence": [
    {
@@ -1194,8 +1190,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "h10 tries a speculative shot from 27 metres.",
   "evidence": [
    {
@@ -1218,8 +1214,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "h2 tries a speculative shot from 22 metres.",
   "evidence": [
    {
@@ -1242,8 +1238,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "h11 tries a speculative shot from 22 metres.",
   "evidence": [
    {
@@ -1266,8 +1262,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "a6 tries a speculative shot from 20 metres.",
   "evidence": [
    {
@@ -1281,32 +1277,6 @@
     "outcome": "blocked",
     "ball_speed_kmh": 96,
     "distance_m": 20
-   }
-  ],
-  "seed": 21,
-  "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
- },
- {
-  "kind": "true: held-out tone, long ball",
-  "true": true,
-  "claim": "h8 plays a long ball to h11.",
-  "evidence": [
-   {
-    "id": "e00485",
-    "minute": 22,
-    "second": 31,
-    "clock": "21:31",
-    "type": "pass",
-    "team": "home",
-    "player": "h8",
-    "receiver": "h11",
-    "intended": "h11",
-    "outcome": "success",
-    "ball_speed_kmh": 88,
-    "distance_m": 31
    }
   ],
   "seed": 21,
@@ -1987,7 +1957,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h6 is the best player on the pitch' (The evidence shows only one successful pass by h6 early in the match, which does not provide enough information to judge whether h6 is the best player on the pitch.)"
+   "unsupported interpretation: 'h6 is the best player on the pitch.' (The evidence shows only one successful pass by h6 early in the match, which does not establish that h6 is the best player on the pitch.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2015,7 +1985,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h7 is the best player on the pitch.' (The evidence shows a single successful pass by h7 but does not provide any information to support a judgment about h7 being the best player on the pitch.)"
+   "unsupported interpretation: 'h7 is the best player on the pitch.' (The evidence shows only one successful pass by h7 early in the match, which does not provide enough information to judge whether h7 is the best player on the pitch.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2043,7 +2013,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h2 is the best player on the pitch.' (The evidence shows only one successful pass by h2 early in the match, which does not provide enough information to judge overall performance or rank h2 as the best player on the pitch.)"
+   "unsupported interpretation: 'h2 is the best player on the pitch.' (The evidence shows only one successful pass by h2 early in the match, which does not provide enough information to judge whether h2 is the best player on the pitch.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2071,7 +2041,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h7 deliberately gives the ball away' (The evidence shows h7 attempted a pass to h6 but it was intercepted by a7, resulting in a failed pass. There is no indication in the evidence that the pass was deliberate to give the ball away.)"
+   "unsupported interpretation: 'h7 deliberately gives the ball away' (The evidence shows h7 made a pass intended for h6 that was intercepted by a7, resulting in a failed pass. However, there is no information about h7's intention or deliberateness in giving the ball away.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2099,7 +2069,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a7 deliberately gives the ball away' (The evidence shows a7 made a pass intended for a3 that was intercepted by h11, but it does not indicate that the pass was deliberate to give the ball away.)"
+   "unsupported fact: 'a7 deliberately gives the ball away' (The evidence shows a7 attempted a pass to a3 but it was intercepted by h11, resulting in a failed pass. There is no indication in the evidence that the pass was deliberately given away by a7.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2127,7 +2097,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a7 deliberately gives the ball away' (The evidence shows that a7 attempted a pass to a2 but it was intercepted by h11, resulting in a failed pass. There is no information indicating that a7 deliberately gave the ball away.)"
+   "unsupported fact: 'a7 deliberately gives the ball away' (The evidence shows a7 attempted a pass to a2 but it was intercepted by h11, resulting in a failed pass. There is no indication in the evidence that the pass was deliberately given away by a7.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2155,7 +2125,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a9 deliberately gives the ball away' (The evidence shows that a9 attempted a pass to a7 but it was intercepted by h10, resulting in a failed pass. There is no information about the intention behind the pass or whether a9 deliberately gave the ball away.)"
+   "unsupported fact: 'a9 deliberately gives the ball away' (The evidence shows a9 attempted a pass to a7 but it was intercepted by h10, resulting in a failed pass. There is no indication in the evidence that the pass was deliberate to give the ball away.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2180,7 +2150,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h11 is to blame for the goal' (The evidence shows h11 failed a tackle on a6 at 5:16, but there is no evidence of a goal event or that this failure directly caused a goal.)"
+   "unsupported interpretation: 'h11 is to blame for the goal.' (The evidence shows h11 failed a tackle on a6 at 5:16, but there is no evidence of a goal or that this failure directly caused a goal.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2230,7 +2200,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a2 is to blame for the goal.' (The evidence shows that a2 failed a tackle on h11 at 08:45, but there is no information about a goal or that this failure directly caused a goal.)"
+   "unsupported interpretation: 'a2 is to blame for the goal.' (The evidence shows a failed tackle by a2 on h11 at 8:45, but there is no evidence of a goal or that this event caused a goal. Therefore, the interpretation that a2 is to blame for the goal is unsupported.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2255,7 +2225,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a3 is to blame for the goal.' (The evidence shows a3 successfully tackled h11 at 12:34, but there is no information about a goal or any event linking a3 to a goal being conceded or caused.)"
+   "unsupported interpretation: 'a3 is to blame for the goal.' (The evidence shows a3 successfully tackled h11 at 12:34, but there is no information about a goal or any event linking a3 to a goal being conceded. Therefore, the claim that a3 is to blame for the goal is not supported by the evidence.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2278,7 +2248,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h11 makes the most important intervention of the match' (The evidence shows h11 made an interception at 2:11, but does not provide any information about the importance of this intervention relative to others in the match.)"
+   "unsupported interpretation: 'h11 makes the most important intervention of the match.' (The evidence shows h11 made an interception at 2:11, but does not provide any information about the importance of this intervention relative to others in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2301,7 +2271,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h10 makes the most important intervention of the match.' (The evidence shows h10 made an interception at 2:41, but does not establish that it was the most important intervention of the match.)"
+   "unsupported interpretation: 'The intervention by h10 is the most important of the match' (The evidence only shows one intervention by h10 but does not provide any information to compare its importance to other interventions in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2324,7 +2294,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'the intervention is the most important of the match' (The evidence does not provide any information to compare the importance of this intervention to others in the match.)"
+   "unsupported interpretation: 'The intervention is the most important of the match' (The evidence only shows one intervention by a10 but does not provide any information about its importance relative to other interventions in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2347,7 +2317,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The intervention by h4 is the most important of the match' (The evidence only shows one intervention by h4 but does not provide any information to compare its importance to other interventions in the match.)"
+   "unsupported interpretation: 'The intervention by h4 is the most important of the match' (The evidence only shows one intervention by h4 but does not provide any information to compare its importance with other interventions in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2795,7 +2765,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h2's 11 m pass to h7 is cut out' (The evidence shows h2 made a successful pass to h7, so the pass was not cut out.)"
+   "contradicted fact: 'h2's 11 m pass to h7 is cut out' (The evidence shows h2 made a successful pass intended for h6 but received by h7, so the pass was not cut out.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2851,9 +2821,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h6 of the away side plays a 8 m pass' (The evidence shows h6 of the home team, not the away side, plays an 8 m pass.)"
+   "judge service error; claim held back"
   ],
-  "category": "unsupported_claim"
+  "category": "service"
  },
  {
   "kind": "meaning: wrong team",
@@ -2907,7 +2877,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h2 of the away side plays a 11 m pass' (The evidence shows h2 of the home team, not away, plays a pass of 11 meters.)"
+   "contradicted fact: 'h2 of the away side plays a 11 m pass' (The evidence shows h2 of the home team, not the away team, plays a pass of 11 meters.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2935,7 +2905,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 ends a long passing move with a pass to h6' (The evidence shows a single pass from h10 to h6 at 00:03, but there is no information about a preceding long passing move leading up to this pass.)"
+   "unsupported fact: 'h10 ends a long passing move with a pass to h6' (The evidence shows a single pass from h10 to h6 at 00:03, but there is no information about a preceding long passing move or multiple passes before this event.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2963,7 +2933,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h6 ends a long passing move with a pass to h7' (The evidence shows a single pass from h6 to h7 at 00:05, but there is no information about a preceding long passing move leading up to this pass.)"
+   "unsupported fact: 'h6 ends a long passing move with a pass to h7.' (The evidence shows a single pass from h6 to h7 at 00:05, but there is no information about a preceding long passing move leading up to this pass.)"
   ],
   "category": "unsupported_claim"
  },
@@ -2991,7 +2961,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h7 ends a long passing move with a pass to h2' (The evidence shows a single pass from h7 to h2 at 00:07, but there is no information about a preceding long passing move leading up to this pass.)"
+   "unsupported fact: 'h7 ends a long passing move with a pass to h2' (The evidence shows a single pass from h7 to h2 at 00:07, but there is no information about a preceding long passing move.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3019,9 +2989,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "unsupported interpretation: 'h2 ends a long passing move' (The evidence shows only a single pass event from h2 to h7 at 00:10; there is no information about a preceding long passing move.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "meaning: missed shot called a goal",
@@ -3071,7 +3041,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h2 scores' (The evidence shows h2 took a shot on target but does not indicate a goal was scored.)"
+   "contradicted fact: 'h2 scores with a shot' (The evidence shows h2 took a shot on target at 04:27 but does not indicate a goal was scored.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3123,7 +3093,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'a6 scores with a shot' (The evidence shows a6 took a shot that was blocked, so it was not a goal.)"
+   "contradicted fact: 'a6 scores' (The evidence shows a6 took a shot but the outcome was 'blocked', so no goal was scored.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3173,7 +3143,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h11's tackle on a6 leads straight to a goal' (The evidence shows a successful tackle by h11 on a6 at 6:15 but does not include any goal event or indicate that a goal followed directly from this tackle.)"
+   "unsupported fact: 'h11's tackle on a6 leads straight to a goal' (The evidence shows a successful tackle by h11 on a6 at 6:15 but does not mention any goal resulting from this tackle.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3198,7 +3168,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a2's tackle on h11 leads straight to a goal' (The evidence shows a tackle by a2 on h11 at 08:45 with outcome 'fail', meaning the tackle did not succeed. There is no evidence of a goal following this tackle.)"
+   "unsupported fact: 'a2's tackle on h11 leads straight to a goal.' (The evidence shows a tackle by a2 on h11 at 08:45 with outcome 'fail', meaning the tackle did not succeed. There is no evidence of a goal following this event or that the tackle led to a goal.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3223,7 +3193,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a3's tackle leads straight to a goal' (The evidence only shows the tackle event; there is no mention of a goal or any subsequent event leading to a goal.)"
+   "unsupported fact: 'a3's tackle leads straight to a goal' (The evidence only shows the tackle event; there is no evidence of a goal or any event following the tackle leading to a goal.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3251,10 +3221,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'the pass is gentle' (The evidence does not describe the pass as gentle or provide any qualitative description of the pass's character.)",
-   "contradicted interpretation: 'the pass is slow' (The evidence shows the ball speed as 80 km/h, which is relatively fast for a pass, contradicting the claim that it was slow.)"
+   "judge service error; claim held back"
   ],
-  "category": "unsupported_claim"
+  "category": "service"
  },
  {
   "kind": "false: contradicted tone, gentle pass",
@@ -3280,9 +3249,10 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "unsupported fact: 'h6 plays a gentle pass to h9' (The evidence shows h6 passes to h9 with a ball speed of 90 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'the pass is slow' (The evidence indicates the pass speed is 90 km/h, which is not slow.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "false: contradicted tone, gentle pass",
@@ -3308,8 +3278,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a6 plays a gentle pass to a9' (The evidence shows the pass speed was 88 km/h, which is not gentle or slow.)",
-   "unsupported interpretation: 'a6 plays a slow pass to a9' (The evidence shows the pass speed was 88 km/h, which is not slow.)"
+   "contradicted interpretation: 'the pass is gentle' (The ball speed is 88 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'the pass is slow' (The ball speed of 88 km/h indicates a fast pass, not slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3337,8 +3307,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted interpretation: 'the pass is gentle' (The evidence shows the ball speed was 89 km/h, which is not gentle.)",
-   "contradicted interpretation: 'the pass is slow' (The ball speed of 89 km/h indicates the pass was not slow.)"
+   "contradicted interpretation: 'the pass is gentle' (The evidence shows the ball speed was 89 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'the pass is slow' (The ball speed of 89 km/h indicates the pass was fast, not slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3364,7 +3334,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the quality or style of the shot as tame or otherwise.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's quality or character as tame.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3390,7 +3360,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality, only that it was off target and its speed.)"
+   "unsupported interpretation: 'the shot is tame' (The evidence does not describe the shot's style or quality, only that it was off target and its speed.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3416,7 +3386,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's quality or character as tame.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality, only its speed and outcome.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3468,8 +3438,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 scores' (The evidence shows h10 took a shot on target, but there is no goal event confirming a score.)",
-   "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or style.)"
+   "unsupported fact: 'h10 scores' (The evidence shows a shot on target by h10 but does not indicate a goal was scored.)",
+   "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or finish.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3495,7 +3465,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h2 scores' (The evidence shows h2 took a shot on target but does not indicate a goal was scored.)",
+   "unsupported fact: 'h2 scores' (The evidence shows h2 took a shot on target but does not confirm a goal was scored.)",
    "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or outcome beyond being on target.)"
   ],
   "category": "unsupported_claim"
@@ -3523,7 +3493,7 @@
   "judge_ok": false,
   "reasons": [
    "contradicted fact: 'h11 scores' (The evidence shows h11 took a shot that was off target, so no goal was scored.)",
-   "contradicted interpretation: 'with a great finish' (Since the shot was off target and no goal was scored, it cannot be described as a great finish.)"
+   "contradicted interpretation: 'with a great finish' (The shot was off target and did not result in a goal, so it cannot be described as a great finish.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3549,9 +3519,10 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "contradicted fact: 'a6 scores' (The evidence shows a6 took a shot that was blocked, so no goal was scored.)",
+   "contradicted interpretation: 'with a great finish' (The shot was blocked and did not result in a goal, so it cannot be described as a great finish.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "false: prompt injection tags",
@@ -3845,7 +3816,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'After the pass, a10 intercepts the ball.' (The evidence shows that a10 made a pass to a8 at 03:50 and also that a10 made an interception at the same time, but it does not establish that the interception happened after the pass. The timing is simultaneous and no sequence is indicated.)"
+   "unsupported fact: 'After the pass, a10 intercepts the ball.' (The evidence shows that a10 made a pass to a8 at 03:50 and also that a10 made an interception at 03:50, but it does not establish that the interception happened after the pass. The timing is the same and no sequence is indicated.)"
   ],
   "category": "unsupported_claim"
  },
@@ -3899,9 +3870,11 @@
   ],
   "seed": 21,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "judge service error; claim held back"
+  ],
+  "category": "service"
  },
  {
   "kind": "true: completed pass",
@@ -4300,8 +4273,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "a10 wins the ball back from h8, a crucial defensive intervention.",
   "evidence": [
    {
@@ -4323,8 +4296,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "h8 wins the ball back from a10, a crucial defensive intervention.",
   "evidence": [
    {
@@ -4346,8 +4319,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "a5 wins the ball back from h9, a crucial defensive intervention.",
   "evidence": [
    {
@@ -4369,8 +4342,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted tackle",
-  "true": true,
+  "kind": "tone: crucial tackle",
+  "true": null,
   "claim": "a11 wins the ball back from h6, a crucial defensive intervention.",
   "evidence": [
    {
@@ -4392,9 +4365,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h10 picks out h8 with a 13 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h10 picks out h8 with a 13 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00002",
@@ -4418,9 +4391,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h8 picks out h10 with a 12 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h8 picks out h10 with a 12 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00009",
@@ -4444,9 +4417,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h10 picks out h2 with a 22 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h10 picks out h2 with a 22 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00010",
@@ -4470,9 +4443,9 @@
   "category": null
  },
  {
-  "kind": "true: interpreted pass",
-  "true": true,
-  "claim": "h2 picks out h9 with a 7 m pass, a confident ball forward.",
+  "kind": "tone: confident pass",
+  "true": null,
+  "claim": "h2 picks out h9 with a 7 m pass, a confident ball.",
   "evidence": [
    {
     "id": "e00011",
@@ -4496,8 +4469,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "h10 tries their luck at 99 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -4520,8 +4493,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "a7 tries their luck at 122 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -4544,8 +4517,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "h10 tries their luck at 104 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -4568,8 +4541,8 @@
   "category": null
  },
  {
-  "kind": "true: interpreted shot",
-  "true": true,
+  "kind": "tone: ambitious shot",
+  "true": null,
   "claim": "a10 tries their luck at 84 km/h, an ambitious effort.",
   "evidence": [
    {
@@ -4592,8 +4565,8 @@
   "category": null
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "h10 plays a cautious pass to h8.",
   "evidence": [
    {
@@ -4618,8 +4591,8 @@
   "category": null
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "h8 plays a cautious pass to h10.",
   "evidence": [
    {
@@ -4641,13 +4614,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'the pass is cautious' (The evidence provides the ball speed (46 km/h) and distance (12 m) but does not establish the pass as cautious or not; cautious is a subjective description not directly supported by the data.)"
+   "unsupported interpretation: 'h8 plays a cautious pass to h10' (The evidence shows h8 passed successfully to h10 at 46 km/h over 12 meters, but does not indicate the pass was cautious or not.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "a11 plays a cautious pass to a5.",
   "evidence": [
    {
@@ -4669,13 +4642,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a11 plays a cautious pass to a5' (The evidence shows a successful pass from a11 to a5 at 50 km/h over 7 meters, but does not provide any information about the pass being cautious.)"
+   "unsupported interpretation: 'a11 plays a cautious pass to a5' (The evidence shows a successful pass from a11 to a5 with a ball speed of 50 km/h and a distance of 7 meters, but it does not provide any information about the pass being cautious.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: neutral interpretation",
-  "true": true,
+  "kind": "tone: cautious pass",
+  "true": null,
   "claim": "a3 plays a cautious pass to a1.",
   "evidence": [
    {
@@ -4697,13 +4670,13 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a3 plays a cautious pass to a1' (The evidence shows a successful pass from a3 to a1 with a ball speed of 34 km/h and a distance of 8 meters, but it does not provide any information about the pass being cautious.)"
+   "unsupported interpretation: 'a3 plays a cautious pass to a1' (The evidence shows a3 passed successfully to a1 with a ball speed of 34 km/h over 8 meters, but does not describe the pass as cautious or provide any indication of the pass's style or intent.)"
   ],
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "a10 makes a risky tackle on h8.",
   "evidence": [
    {
@@ -4720,13 +4693,15 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a10 makes a risky tackle on h8' (The evidence shows that a10 makes a tackle on h8 and it is successful, but it does not provide any information about the tackle being risky.)"
+  ],
+  "category": "unsupported_claim"
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "h8 makes a risky tackle on a10.",
   "evidence": [
    {
@@ -4748,8 +4723,8 @@
   "category": null
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "a5 makes a risky tackle on h9.",
   "evidence": [
    {
@@ -4771,8 +4746,8 @@
   "category": null
  },
  {
-  "kind": "true: negative interpretation",
-  "true": true,
+  "kind": "tone: risky tackle",
+  "true": null,
   "claim": "a11 makes a risky tackle on h6.",
   "evidence": [
    {
@@ -4794,8 +4769,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "h10 makes a hopeful effort from 30 metres.",
   "evidence": [
    {
@@ -4818,8 +4793,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "a7 makes a hopeful effort from 35 metres.",
   "evidence": [
    {
@@ -4842,8 +4817,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "h10 makes a hopeful effort from 24 metres.",
   "evidence": [
    {
@@ -4866,8 +4841,8 @@
   "category": null
  },
  {
-  "kind": "true: distant interpretation",
-  "true": true,
+  "kind": "tone: hopeful effort",
+  "true": null,
   "claim": "a10 makes a hopeful effort from 28 metres.",
   "evidence": [
    {
@@ -4890,8 +4865,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "h10 plays a patient pass to h8.",
   "evidence": [
    {
@@ -4911,13 +4886,15 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "judge service error; claim held back"
+  ],
+  "category": "service"
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "h8 plays a patient pass to h10.",
   "evidence": [
    {
@@ -4937,13 +4914,15 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "unsupported interpretation: 'the pass is patient' (The evidence provides the pass speed and distance but does not indicate the style or tone of the pass, so the interpretation 'patient' is not established.)"
+  ],
+  "category": "unsupported_claim"
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "a11 plays a patient pass to a5.",
   "evidence": [
    {
@@ -4963,15 +4942,13 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": false,
-  "reasons": [
-   "unsupported interpretation: 'the pass is patient' (The evidence provides ball speed and distance but does not indicate the style or tone of the pass such as being patient.)"
-  ],
-  "category": "unsupported_claim"
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
  },
  {
-  "kind": "true: held-out tone, patient pass",
-  "true": true,
+  "kind": "tone: held-out, patient pass",
+  "true": null,
   "claim": "a3 plays a patient pass to a1.",
   "evidence": [
    {
@@ -4998,8 +4975,8 @@
   "category": "unsupported_claim"
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "a10 puts in a bold challenge on h8.",
   "evidence": [
    {
@@ -5016,13 +4993,15 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "judge service error; claim held back"
+  ],
+  "category": "service"
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "h8 puts in a bold challenge on a10.",
   "evidence": [
    {
@@ -5044,8 +5023,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "a5 puts in a bold challenge on h9.",
   "evidence": [
    {
@@ -5067,8 +5046,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, bold challenge",
-  "true": true,
+  "kind": "tone: held-out, bold challenge",
+  "true": null,
   "claim": "a11 puts in a bold challenge on h6.",
   "evidence": [
    {
@@ -5090,8 +5069,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "h10 tries a speculative shot from 30 metres.",
   "evidence": [
    {
@@ -5114,8 +5093,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "a7 tries a speculative shot from 35 metres.",
   "evidence": [
    {
@@ -5138,8 +5117,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "h10 tries a speculative shot from 24 metres.",
   "evidence": [
    {
@@ -5162,8 +5141,8 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, speculative shot",
-  "true": true,
+  "kind": "tone: held-out, speculative shot",
+  "true": null,
   "claim": "a10 tries a speculative shot from 28 metres.",
   "evidence": [
    {
@@ -5186,59 +5165,7 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, long ball",
-  "true": true,
-  "claim": "h4 plays a long ball to h8.",
-  "evidence": [
-   {
-    "id": "e00101",
-    "minute": 5,
-    "second": 26,
-    "clock": "04:26",
-    "type": "pass",
-    "team": "home",
-    "player": "h4",
-    "receiver": "h8",
-    "intended": "h8",
-    "outcome": "success",
-    "ball_speed_kmh": 79,
-    "distance_m": 31
-   }
-  ],
-  "seed": 33,
-  "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
- },
- {
-  "kind": "true: held-out tone, long ball",
-  "true": true,
-  "claim": "a8 plays a long ball to a11.",
-  "evidence": [
-   {
-    "id": "e00219",
-    "minute": 11,
-    "second": 33,
-    "clock": "10:33",
-    "type": "pass",
-    "team": "away",
-    "player": "a8",
-    "receiver": "a11",
-    "intended": "a11",
-    "outcome": "success",
-    "ball_speed_kmh": 87,
-    "distance_m": 31
-   }
-  ],
-  "seed": 33,
-  "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
- },
- {
-  "kind": "true: held-out tone, long ball",
+  "kind": "true: long ball",
   "true": true,
   "claim": "h1 plays a long ball to h9.",
   "evidence": [
@@ -5263,7 +5190,7 @@
   "category": null
  },
  {
-  "kind": "true: held-out tone, long ball",
+  "kind": "true: long ball",
   "true": true,
   "claim": "a3 plays a long ball to a9.",
   "evidence": [
@@ -5279,6 +5206,56 @@
     "outcome": "success",
     "ball_speed_kmh": 92,
     "distance_m": 35
+   }
+  ],
+  "seed": 33,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
+ },
+ {
+  "kind": "true: long ball",
+  "true": true,
+  "claim": "a1 plays a long ball to a11.",
+  "evidence": [
+   {
+    "id": "e00393",
+    "minute": 17,
+    "second": 11,
+    "clock": "16:11",
+    "type": "pass",
+    "team": "away",
+    "player": "a1",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 108,
+    "distance_m": 47
+   }
+  ],
+  "seed": 33,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": [],
+  "category": null
+ },
+ {
+  "kind": "true: long ball",
+  "true": true,
+  "claim": "a3 plays a long ball to a9.",
+  "evidence": [
+   {
+    "id": "e00668",
+    "minute": 29,
+    "second": 13,
+    "clock": "28:13",
+    "type": "pass",
+    "team": "away",
+    "player": "a3",
+    "receiver": "a9",
+    "outcome": "success",
+    "ball_speed_kmh": 117,
+    "distance_m": 49
    }
   ],
   "seed": 33,
@@ -5367,9 +5344,11 @@
   ],
   "seed": 33,
   "code_ok": true,
-  "judge_ok": true,
-  "reasons": [],
-  "category": null
+  "judge_ok": false,
+  "reasons": [
+   "judge service error; claim held back"
+  ],
+  "category": "service"
  },
  {
   "kind": "true: pressure",
@@ -5959,7 +5938,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h8 is the best player on the pitch.' (The evidence shows only one successful pass by h8 early in the match, which does not provide enough information to judge overall performance or rank h8 as the best player on the pitch.)"
+   "unsupported interpretation: 'h8 is the best player on the pitch.' (The evidence shows only one successful pass by h8 early in the match, which does not provide enough information to judge whether h8 is the best player on the pitch.)"
   ],
   "category": "unsupported_claim"
  },
@@ -5987,7 +5966,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h10 is the best player on the pitch.' (The evidence shows a single successful pass by h10 but does not provide any information to support a judgment about h10 being the best player on the pitch.)"
+   "unsupported interpretation: 'h10 is the best player on the pitch.' (The evidence shows only one successful pass by h10 early in the match, which does not provide enough information to judge whether h10 is the best player on the pitch.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6043,9 +6022,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "unsupported interpretation: 'a2 deliberately gives the ball away' (The evidence shows a2 made a pass intended for a10 that was intercepted by h8, but there is no information indicating the pass was deliberate or intentional to give the ball away.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "false: invented intent",
@@ -6127,7 +6106,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h9 deliberately gives the ball away' (The evidence shows h9 made a pass that was intercepted by a10, but there is no information about h9's intention or deliberateness in giving the ball away.)"
+   "unsupported interpretation: 'h9 deliberately gives the ball away' (The evidence shows h9 made a pass intended for h6 that was intercepted by a10, but there is no information about h9's intention or deliberateness in giving the ball away.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6152,7 +6131,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a10 is to blame for the goal' (The evidence shows a10 successfully tackled h8 at 00:06, but there is no information about a goal or a connection between a10's action and a goal.)"
+   "unsupported interpretation: 'a10 is to blame for the goal' (The evidence shows a10 successfully tackled h8 at 00:06, but there is no information about a goal or any event linking a10 to causing a goal.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6177,9 +6156,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h8 is to blame for the goal' (The evidence shows h8 successfully tackled a10 at 00:06, but there is no information about a goal or h8's responsibility for it.)"
+   "judge service error; claim held back"
   ],
-  "category": "unsupported_claim"
+  "category": "service"
  },
  {
   "kind": "false: invented blame",
@@ -6250,7 +6229,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h8 makes the most important intervention of the match' (The evidence shows h8 made an interception at 00:45, but does not provide any information to judge the importance of this intervention relative to others in the match.)"
+   "unsupported interpretation: 'h8 makes the most important intervention of the match' (The evidence shows h8 made an interception at 00:45, but does not provide any information to judge the importance of this intervention relative to the entire match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6273,7 +6252,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h10 makes the most important intervention of the match' (The evidence shows h10 made an interception at 01:46, but does not provide any information about the importance of this intervention relative to others in the match.)"
+   "unsupported interpretation: 'The intervention is the most important of the match.' (The evidence does not provide any comparison or evaluation of the importance of this intervention relative to others in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6296,9 +6275,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "unsupported fact: 'h7 makes an intervention' (The evidence shows h7 made an interception at 08:05, but does not specify if this was an intervention or its importance.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "false: invented importance",
@@ -6319,7 +6298,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'a9 makes the most important intervention of the match' (The evidence shows that a9 made an interception at 08:56, but it does not provide any information about the importance of this intervention relative to the rest of the match.)"
+   "unsupported interpretation: 'a9 makes the most important intervention of the match' (The evidence shows that a9 made an interception at 08:56, but it does not provide any information about the importance of this intervention relative to others in the match.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6711,7 +6690,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h8's 12 m pass to h10 is cut out' (The evidence shows h8's 12 m pass to h10 was successful, not cut out.)"
+   "contradicted fact: 'h8's 12 m pass to h10 is cut out' (The evidence shows the pass from h8 to h10 was successful, not cut out.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6739,7 +6718,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h10's 22 m pass to h2 is cut out' (The evidence shows the pass from h10 to h2 was successful, not cut out.)"
+   "contradicted fact: 'h10's 22 m pass to h2 is cut out.' (The evidence shows h10's 22 m pass to h2 was successful, not cut out.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6767,7 +6746,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h2's 7 m pass to h9 is cut out' (The evidence shows the pass from h2 to h9 was successful, not cut out.)"
+   "contradicted fact: 'h2's 7 m pass to h9 is cut out.' (The evidence shows that h2's 7 m pass to h9 was successful, not cut out.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6823,7 +6802,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h8 of the away side plays a 12 m pass' (The evidence shows h8 is on the home team, not the away side.)"
+   "contradicted fact: 'h8 of the away side plays a 12 m pass' (The evidence shows h8 of the home team, not the away team, plays a 12 m pass.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6851,7 +6830,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted fact: 'h10 of the away side plays a 22 m pass' (The evidence shows h10 of the home team, not the away team, plays a 22 m pass.)"
+   "contradicted fact: 'h10 of the away side plays a 22 m pass' (The evidence shows h10 of the home team, not the away side, plays a 22 m pass.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6907,7 +6886,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 ends a long passing move with a pass to h8' (The evidence shows a single pass from h10 to h8 at 00:03, but there is no information about a preceding long passing move leading up to this pass.)"
+   "unsupported fact: 'h10 ends a long passing move with a pass to h8' (The evidence shows a single pass from h10 to h8 at 00:03, but there is no information about a preceding long passing move or multiple passes before this event.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6935,7 +6914,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'h8 ends a long passing move' (The evidence shows only a single pass from h8 to h10 at 00:09; it does not establish a preceding long passing move.)"
+   "unsupported fact: 'h8 ends a long passing move with a pass to h10.' (The evidence shows a single pass from h8 to h10 at 00:09, but there is no information about a preceding long passing move.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6963,7 +6942,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 ends a long passing move with a pass to h2' (The evidence shows a single pass from h10 to h2 at 00:11, but there is no information about a preceding long passing move or multiple passes leading up to this one.)"
+   "unsupported fact: 'h10 ends a long passing move with a pass to h2' (The evidence shows a single pass from h10 to h2 at 00:11, but there is no information about a preceding long passing move leading up to this pass.)"
   ],
   "category": "unsupported_claim"
  },
@@ -6991,7 +6970,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h2 ends a long passing move with a pass to h9' (The evidence shows a single pass from h2 to h9 at 00:15, but there is no information about a preceding long passing move leading up to this pass.)"
+   "unsupported fact: 'h2 ends a long passing move' (The evidence shows only a single pass from h2 to h9 at 00:15; there is no information about a preceding long passing move.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7017,9 +6996,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 scores' (The evidence shows h10 took a shot on target but does not indicate a goal was scored.)"
+   "judge service error; claim held back"
   ],
-  "category": "unsupported_claim"
+  "category": "service"
  },
  {
   "kind": "meaning: missed shot called a goal",
@@ -7095,7 +7074,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a10 scores' (The evidence shows a shot by a10 on target but does not indicate a goal or score.)"
+   "contradicted fact: 'a10 scores with a shot at 84 km/h.' (The evidence shows a10 took a shot at 84 km/h at 10:40 (minute 11), but the outcome is 'on_target', not a goal (score). Therefore, a10 did not score.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7120,7 +7099,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a10's tackle leads straight to a goal' (The evidence only shows the tackle event; there is no event indicating a goal following this tackle.)"
+   "unsupported fact: 'a10's tackle leads straight to a goal' (The evidence only shows the tackle event; there is no evidence of a goal following this tackle.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7170,9 +7149,9 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "judge service error; claim held back"
+   "unsupported fact: 'a5's tackle on h9 leads straight to a goal.' (The evidence shows a successful tackle by a5 on h9 at 00:17 but does not include any goal event or any event indicating a goal followed this tackle.)"
   ],
-  "category": "service"
+  "category": "unsupported_claim"
  },
  {
   "kind": "meaning: invented consequence",
@@ -7223,8 +7202,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted interpretation: 'a8 plays a gentle pass to a11' (The evidence shows the pass speed was 90 km/h, which is not gentle or slow.)",
-   "contradicted interpretation: 'a8 plays a slow pass to a11' (The evidence shows the pass speed was 90 km/h, indicating a fast pass, not slow.)"
+   "unsupported interpretation: 'a8 plays a gentle pass to a11' (The evidence shows a pass from a8 to a11 with a ball speed of 90 km/h, which is not gentle or slow.)",
+   "unsupported interpretation: 'a8 plays a slow pass to a11' (The evidence shows a pass speed of 90 km/h, which is not slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7252,8 +7231,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'a8 plays a gentle pass to a11' (The evidence shows the pass speed was 87 km/h, which is not gentle or slow.)",
-   "contradicted fact: 'a8 plays a slow pass to a11' (The pass speed of 87 km/h indicates the pass was fast, not slow.)"
+   "contradicted interpretation: 'a8 plays a gentle pass to a11' (The evidence shows the pass speed was 87 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'a8 plays a slow pass to a11' (The evidence shows the pass speed was 87 km/h, which is not slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7281,8 +7260,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted interpretation: 'the pass is gentle' (The evidence shows the ball speed as 82 km/h, which is not gentle or slow.)",
-   "contradicted interpretation: 'the pass is slow' (The ball speed of 82 km/h indicates the pass was not slow.)"
+   "unsupported fact: 'a8 plays a gentle pass to a11' (The evidence shows a pass from a8 to a11 with a ball speed of 82 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'The pass is slow' (The evidence indicates the pass speed was 82 km/h, which is relatively fast, contradicting the claim that it was slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7309,8 +7288,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "contradicted interpretation: 'the pass is gentle' (The evidence shows the ball speed as 104 km/h, which is not gentle or slow.)",
-   "contradicted interpretation: 'the pass is slow' (The ball speed of 104 km/h indicates a fast pass, not slow.)"
+   "contradicted fact: 'h1 plays a gentle pass to h9' (The evidence shows h1 passes to h9 with a ball speed of 104 km/h, which is not gentle or slow.)",
+   "contradicted interpretation: 'the pass is slow' (The evidence indicates the pass speed is 104 km/h, which contradicts the description of the pass as slow.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7336,7 +7315,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality, only its speed and outcome.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality as tame.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7362,7 +7341,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality as tame or otherwise.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the shot's style or quality as tame.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7388,7 +7367,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the quality or style of the shot, only that it was off target and its speed.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the quality or style of the shot, only that it was off target.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7414,7 +7393,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported interpretation: 'the shot is tame' (The evidence does not describe the shot's style or quality, only that it was off target and its speed.)"
+   "unsupported interpretation: 'The shot is tame.' (The evidence does not describe the quality or style of the shot, only that it was off target and its speed.)"
   ],
   "category": "unsupported_claim"
  },
@@ -7440,7 +7419,7 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 scores' (The evidence shows a shot on target by h10 but does not confirm a goal was scored.)",
+   "unsupported fact: 'h10 scores' (The evidence shows h10 took a shot on target but does not confirm a goal was scored.)",
    "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or style.)"
   ],
   "category": "unsupported_claim"
@@ -7494,8 +7473,8 @@
   "code_ok": true,
   "judge_ok": false,
   "reasons": [
-   "unsupported fact: 'h10 scores' (The evidence shows a shot on target by h10 but does not confirm a goal was scored.)",
-   "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or style.)"
+   "unsupported fact: 'h10 scores' (The evidence shows a shot on target by h10 but does not indicate a goal was scored.)",
+   "unsupported interpretation: 'with a great finish' (The evidence does not provide any qualitative description of the shot's quality or finish.)"
   ],
   "category": "unsupported_claim"
  },

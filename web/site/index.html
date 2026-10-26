@@ -270,7 +270,8 @@
         <caption id="fc-cap">Claims whose truth is known, each citing the event it describes, from the
           <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">fact-checker evaluation</a>
           (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>), run on the
-          Judge as it is published today; every true claim it rejected used a tone word the facts do not show</caption>
+          Judge as it is published today; a commentator's tone word that no fact states is neither true nor false,
+          and is counted apart</caption>
         <thead>
           <tr><th scope="col">What</th><th scope="col">Code checks alone</th><th scope="col">Code checks and Judge</th></tr>
         </thead>
@@ -285,16 +286,22 @@
           <tr>
             <th scope="row">True claims wrongly rejected, leaving out claims held back when the Judge service failed</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
-            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">14</data> of
-              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">129</data></td>
+              <data value="56" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">56</data></td>
+            <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">0</data> of
+              <data value="54" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">54</data></td>
           </tr>
           <tr>
             <th scope="row">True claims held back or rejected, counting service failures</th>
             <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
-              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
-            <td><data value="14" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">14</data> of
-              <data value="129" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">129</data></td>
+              <data value="56" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">56</data></td>
+            <td><data value="2" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">2</data> of
+              <data value="56" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">56</data></td>
+          </tr>
+          <tr>
+            <th scope="row">Tone words no cited fact states ("cautious", "risky"), let on air</th>
+            <td>not judged</td>
+            <td><data value="57" data-src="docs/eval/fact-checker.json" data-key="tone_aired" data-fmt="int">57</data> of
+              <data value="72" data-src="docs/eval/fact-checker.json" data-key="tone_claims" data-fmt="int">72</data></td>
           </tr>
         </tbody>
       </table>

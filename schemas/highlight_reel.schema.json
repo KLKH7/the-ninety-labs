@@ -49,7 +49,7 @@
         "player": { "type": ["string", "null"], "description": "The shooter's track (h-t12); null unless the side was told surely, since a track names its side." },
         "kind": { "enum": ["goal", "save"] },
         "why": { "enum": ["goal", "beat_the_dive", "filter_off"] },
-        "origin": { "enum": ["corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play", null], "description": "How the shooting side's possession began (docs/eval/highlights-plan.md, Amendment 2): the restart the detector saw (ninety/vision/restarts.py), else the one inferred from the ball going out, or open_play when the ball was won back. Null when its start was not seen." },
+        "origin": { "enum": ["corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play", null], "description": "How the shooting side's possession began (docs/eval/highlights-plan.md, Amendment 2): the restart the detector saw (ninety/vision/restarts.py), else the one inferred from the ball going out, or open_play when the ball was won back. Null when its start was not seen. `kick_off` is the reel's word for a `kickoff` event (Law 8)." },
         "label": { "enum": ["THUNDERBOLT", "SCREAMER", "LONG-RANGE", "ROCKET", "REFLEX SAVE", "TAP-IN", "GOAL", "SAVE"] },
         "label_detail": { "type": ["string", "null"], "description": "The number that earned the label, as shown (\"112 km/h\"); null for GOAL and SAVE." },
         "d_m": { "type": "number", "minimum": 0, "description": "From the strike to the centre of the goal attacked." },

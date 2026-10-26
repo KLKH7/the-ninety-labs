@@ -3083,3 +3083,108 @@ short and actionable. This file is public: no research sources, product names or
   everything" is noticed.
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
+
+### 255. An evaluation's "true" label is the evaluation's opinion until a person checks it
+- **What happened:** the fact-checker evaluation labelled tone words true ("a cautious pass", "a risky
+  tackle", "a confident ball forward") whenever its own rule fitted the event, and counted the Judge
+  rejecting them as the Judge's error: 14 of its 14 false rejections. A human labelling a blind sample
+  doubted those labels too ("we can't tell it's forward", "don't know if it's risky"), and no cited fact
+  gave a direction at all. The same labels found two claims the Judge had let air: an interception said
+  to come "after" the very pass it cut out, and "despite pressure" with no pressure fact cited.
+- **Rule:** a word no cited fact states is neither true nor false in an evaluation; it is counted apart
+  (how often it airs). A claim's words about the play need a cited fact that shows them, checked in
+  code: "long ball" needs a pass of 32 m or more (GROUNDING I11), "under pressure" a pressure event, and
+  "after"/"before" never joins an interception to the pass it cut out. Have a person label a blind,
+  pre-registered sample of an evaluation's decisions before its numbers are trusted. A rule made from
+  that sample's misses is checked on it in-sample only; a fresh sample measures it. Reclassifying a
+  kind as neither true nor false is not a fix of the checker, and is reported as such.
+- **Check:** `tests/test_factcheck_eval_labels.py::test_tone_claims_are_neither_true_nor_false_and_nothing_says_forward`,
+  `tests/test_factcheck.py::test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it` (and its
+  true twins), `docs/eval/factcheck-human-labels.md`.
+
+### 256. A measured feature is merged after its measurement, and a fix is checked against the rule it narrows
+- **What happened:** the goal and save detector (#271) was marked ready and auto-merged into main
+  while its validation re-score and its test score were still waiting on a pod, so main carried an
+  unmeasured claim for an evening. Separately, its amendment 3 asked for a keeper marked by his kit,
+  narrower than the plan's own rule 5 (also the player nearest his goal line in his area); the
+  validation re-score found it, and the fix still found no save, because the true cause was the
+  ball's height (a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him).
+- **Rule:** a PR whose description promises a measurement is not marked ready or set to auto-merge
+  until the measurement is in it; whoever merges it checks. An amendment that restates a rule is
+  checked against the rule's own wording, and a fix that a re-score shows does nothing is not merged.
+- **Check:** [docs/eval/shot-outcomes/RESULT.md](eval/shot-outcomes/RESULT.md) states the order
+  (merged 22:28Z before the score); #363 (amendment 6) closed with its validation numbers.
+
+### 257. A test split is scored only after its copy-back is confirmed complete
+- **What happened:** the shot-outcome test clips were copied back from the pod as each finished. The
+  test was scored at 23:47Z on the 42 then on the Mac, read as a pod that had stopped at its cap; it was
+  still running, and all 79 arrived minutes later. The rule for a partly run split covers clips that
+  never come back, not clips still on their way, so the 42-clip score was an early look, not the
+  result. The code was already frozen, so it changed nothing, but it is disclosed
+  (docs/eval/shot-outcomes/RESULT.md).
+- **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
+  complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
+- **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
+### 258. A detection that does not work is not shown as fact, even where its measurement says so
+- **What happened:** saves from video were measured not to work (2 of 49 on the shot-outcome set's
+  test split; a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him), and the
+  docs said so. But the live path still wrote a detected save as `outcome: on_target`, and the
+  highlights reel (a save moment), the scoring facts (a save credited to a club), the shot map and the
+  phone ("Shot saved, from ...") showed it as fact.
+- **Rule:** when a measurement says a detection does not work, the live path stops emitting it at the
+  source, so no screen or sentence can show it; the rule stays reachable for measuring only, behind
+  an explicit switch.
+  Then each consumer's branch for the missing value is read: the phone's last branch said "shoots
+  wide" for any other outcome, so the first fix turned every former save into a new false miss (the
+  merge queue's review found it); a missing outcome now reads "X takes a shot." and is drawn as its
+  own grey mark (#369).
+- **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
+  #369's phone test (a null outcome never reads "wide").
+
+### 259. Two cameras' track ids are two id spaces; a name or a position crosses only through the join
+- **What happened:** on the joined demo match the players are the tactical camera's tracks and the
+  events name the broadcast's. Both trackers number from 1 in each segment, so `h-t7` is one man in
+  the events and another in the frames: 89 of the 253 event actors on 8080 also exist as a tactical
+  id. MatchInsights looked event actors up in the tactical frames and names by id. The passer of a
+  line break was usually 10 to 70 m from the event's place, and offside readings found the wrong
+  receiver or none (26 readings; 128 once fixed). Graded for the first time on real vision against
+  the answer key, the names in use were right 0.835 of the time (510 of 611 tracks). The gate that
+  should have stopped them (0.203) had been measured on simulated tracks only, where it did not bind.
+- **Rule:** an id is read only in the space it was made in. A broadcast id reaches the tactical
+  frames, and a name reaches a broadcast id, only through the association (with its measured gate
+  and the same side on both cameras), or not at all. A gate measured on simulated tracks is not a
+  gate on real ones until the live path's own output has been graded against its answer key.
+- **Check:** `tests/test_naming.py` (events move to their tactical tracks or to none; a name crosses
+  only above the gate and on the same side); docs/eval/roles.md, "Names on the demo match's own tracks".
+
+### 260. A pre-registered run starts after its plan's review, not before
+- **What happened:** the ablation's third arm was started live on the day's plan while the plan's own
+  pull request was still in review. The review then found the plan's reading rule let two outcomes
+  hold at once ("the graph wins" and "arm 2 matches"), its seeds were ones the other two arms had
+  already been run and committed on, and it had no exclusion rule or cost stop. The run was stopped
+  before it finished, its output unread and never scored, and rerun on the fixed plan with fresh seeds.
+  The stopped run's calls were billed anyway.
+- **Rule:** a run that a plan pre-registers starts only once the plan's review has passed. A reading
+  rule's outcomes are mutually exclusive and checked in a stated order, shown by a test over every
+  count in a range. Its seeds are ones no compared arm or tuned prompt has been run on. The plan
+  states its exclusions, its cost stop and what it does not claim, and records every run started,
+  scored or not.
+- **Check:** `tests/test_agent_ablation.py::test_no_two_outcomes_hold_at_once`,
+  `::test_the_cost_stop_starts_no_further_minute`,
+  `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
+  `docs/eval/ablation-third-arm-plan.md`.
+
+### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
+- **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
+  a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
+  place. On the 30 test clips every true speed became 0, so every "error" was vision's own speed,
+  the 3D and flat rows came out identical, and no frame passed the 18 km/h floor for a relative
+  error. Its tests passed because their hand-built truth frames carried a velocity.
+- **Rule:** a scorer reads truth fields strictly (`b["x"]`, never `b.get("x", 0.0)`): a missing
+  field is an error, not a value. A quantity the clip does not store is derived from what it does
+  (here, the velocity from the true places one frame either side), and the tests build truth
+  frames in the shape the real files have.
+- **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
+  reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.

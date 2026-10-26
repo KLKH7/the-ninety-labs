@@ -380,3 +380,13 @@ def test_no_cause_is_said_until_it_is_measured(monkeypatch):
 def test_a_set_piece_never_names_a_fouler():
     for line in d.event_versions(set_piece("free_kick", cause="foul_likely", player="a-t4")):
         assert "a-t4" not in line
+
+
+def test_a_player_is_capitalised_only_where_he_opens_a_sentence():
+    """Demo audit: "Goal! a player scores." The unnamed player opens a sentence with a capital, and
+    stays lower case mid-sentence ("Kick-off, a player.")."""
+    unnamed = {"player": None, "team": "home", "team_confidence": 0.1, "confidence": 0.9, "x": 90, "y": 30,
+               "outcome": None}
+    assert d.event_versions({**unnamed, "type": "goal"})[1] == "Goal! A player scores."
+    assert d.event_versions({**unnamed, "type": "shot"})[1] == "A player shoots."
+    assert d.event_versions({**unnamed, "type": "kickoff"}) == ["Kick-off, a player."]

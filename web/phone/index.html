@@ -45,22 +45,26 @@
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen scroll-events="true" id="live-content">
-              <!-- No score here (Kian, Oct 25): the broadcast's scorebug carries it; a scoreline from
-                   detected goals could contradict it. The crests and names, each club's scorers under it. -->
+              <!-- The score only as vision read it off the broadcast's scorebug (`score_change` events, #356),
+                   never counted from detected goals (Kian, Oct 25): with no reading, crests and names alone.
+                   Each club's scorers under it. -->
               <section class="band" aria-label="Match">
                 <p class="league">Ninety League</p>
                 <div class="fixture">
                   <div class="side">
+                    <span class="side-score" id="score-home" aria-hidden="true" hidden></span>
                     <span class="crest home" aria-hidden="true"></span>
                     <span class="club-name home-name">London</span>
                     <ul class="side-goals" id="goals-home" aria-label="Home goals"></ul>
                   </div>
                   <div class="centre">
                     <output id="clock" aria-live="off">0:00</output>
+                    <button type="button" class="sr-only score-read" id="score-read" hidden></button>
                     <p class="status" id="status" role="status" data-state="off">Not connected</p>
                     <ul class="side-goals" id="goals-unsure" aria-label="Goals on a side not told surely"></ul>
                   </div>
                   <div class="side">
+                    <span class="side-score" id="score-away" aria-hidden="true" hidden></span>
                     <span class="crest away" aria-hidden="true"></span>
                     <span class="club-name away-name">Lisbon</span>
                     <ul class="side-goals" id="goals-away" aria-label="Away goals"></ul>
@@ -169,7 +173,7 @@
                 </ion-segment>
                 <svg id="shots" class="half-pitch" role="img"></svg>
                 <ul class="sr-only" id="shot-list"></ul>
-                <p class="sr-only">Filled: goal. Ringed: saved. Hollow: off target or blocked. Each club shooting up the page.</p>
+                <p class="sr-only">Filled: goal. Ringed: saved. Hollow: off target or blocked. Grey: a shot whose end the video did not show. Each club shooting up the page.</p>
               </section>
               <section class="card" id="stats-territory" aria-labelledby="stats-territory-title" hidden>
                 <h2 class="section-title" id="stats-territory-title">Territory</h2>
