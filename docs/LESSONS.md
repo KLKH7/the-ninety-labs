@@ -3084,6 +3084,24 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is`
   fails when the cut check is removed; `::test_a_start_not_seen_gives_no_origin` pins the null case.
 
+### 255. An evaluation's "true" label is the evaluation's opinion until a person checks it
+- **What happened:** the fact-checker evaluation labelled tone words true ("a cautious pass", "a risky
+  tackle", "a confident ball forward") whenever its own rule fitted the event, and counted the Judge
+  rejecting them as the Judge's error: 14 of its 14 false rejections. A human labelling a blind sample
+  doubted those labels too ("we can't tell it's forward", "don't know if it's risky"), and no cited fact
+  gave a direction at all. The same labels found two claims the Judge had let air: an interception said
+  to come "after" the very pass it cut out, and "despite pressure" with no pressure fact cited.
+- **Rule:** a word no cited fact states is neither true nor false in an evaluation; it is counted apart
+  (how often it airs). A claim's words about the play need a cited fact that shows them, checked in
+  code: "long ball" needs a pass of 32 m or more (GROUNDING I11), "under pressure" a pressure event, and
+  "after"/"before" never joins an interception to the pass it cut out. Have a person label a blind,
+  pre-registered sample of an evaluation's decisions before its numbers are trusted. A rule made from
+  that sample's misses is checked on it in-sample only; a fresh sample measures it. Reclassifying a
+  kind as neither true nor false is not a fix of the checker, and is reported as such.
+- **Check:** `tests/test_factcheck_eval_labels.py::test_tone_claims_are_neither_true_nor_false_and_nothing_says_forward`,
+  `tests/test_factcheck.py::test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it` (and its
+  true twins), `docs/eval/factcheck-human-labels.md`.
+
 ### 256. A measured feature is merged after its measurement, and a fix is checked against the rule it narrows
 - **What happened:** the goal and save detector (#271) was marked ready and auto-merged into main
   while its validation re-score and its test score were still waiting on a pod, so main carried an
@@ -3107,6 +3125,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a held-out split is scored once, after whoever runs the machine confirms the copy-back is
   complete (the count, the failures, the machine gone); a file count or a quiet folder is not that.
 - **Check:** RESULT.md gives the full score as the result and the early look beside it, with both reports.
+
+### 258. A detection that does not work is not shown as fact, even where its measurement says so
+- **What happened:** saves from video were measured not to work (2 of 49 on the shot-outcome set's
+  test split; a ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him), and the
+  docs said so. But the live path still wrote a detected save as `outcome: on_target`, and the
+  highlights reel (a save moment), the scoring facts (a save credited to a club), the shot map and the
+  phone ("Shot saved, from ...") showed it as fact.
+- **Rule:** when a measurement says a detection does not work, the live path stops emitting it at the
+  source, so no screen or sentence can show it; the rule stays reachable for measuring only, behind
+  an explicit switch.
+  Then each consumer's branch for the missing value is read: the phone's last branch said "shoots
+  wide" for any other outcome, so the first fix turned every former save into a new false miss (the
+  merge queue's review found it); a missing outcome now reads "X takes a shot." and is drawn as its
+  own grey mark (#369).
+- **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
+  #369's phone test (a null outcome never reads "wide").
 
 ### 261. A line said in another's place keeps the more important one's priority
 - **What happened:** the Describer says a verified claim in the place of the event it is about, but at

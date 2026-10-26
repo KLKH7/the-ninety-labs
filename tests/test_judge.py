@@ -158,14 +158,14 @@ def test_instructions_do_not_quote_the_evaluations_tone_words():
 
 
 def test_tone_labels_fit_their_events():
-    """Planted defect guard: a true tone claim is only built on an event the word fits."""
+    """Planted defect guard: a tone claim is only built on an event the word fits."""
     from ninety.eval.factcheck_eval import FAST_PASS_KMH, LONG_RANGE_M, SHORT_SLOW, cases
 
     for row in cases(7, 30):
         e = row["evidence"][0]
-        if row["kind"] in ("true: neutral interpretation", "true: held-out tone, patient pass"):
+        if row["kind"] in ("tone: cautious pass", "tone: held-out, patient pass"):
             assert e["distance_m"] <= SHORT_SLOW[0] and e["ball_speed_kmh"] <= SHORT_SLOW[1], row
-        if row["kind"] in ("true: distant interpretation", "true: held-out tone, speculative shot"):
+        if row["kind"] in ("tone: hopeful effort", "tone: held-out, speculative shot"):
             assert e["distance_m"] >= LONG_RANGE_M, row
         if row["kind"] == "false: contradicted tone, gentle pass":
             assert e["ball_speed_kmh"] >= FAST_PASS_KMH, row
