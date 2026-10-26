@@ -676,7 +676,9 @@ fact); the injection count checks that the text agrees with it.
 **Names come from a simulated tracking-provider ID feed; vision does not identify players.** We
 simulate that feed, including occasional identity swaps that get corrected
 ([FEED_SPEC.md](FEED_SPEC.md)). The phone's names, and the side of each event whose player is
-named, are not a vision result, and no vision number in this file depends on them.
+named, are not a vision result, and no vision number in this file depends on them. The demo's
+side-dependent statistics (possession share, team claims the fact-checker airs) do: a named
+event's side is sure because the feed says so.
 
 `uv run python -m ninety.sim.identity_feed --run <the seed's ninety-sim run> --home-code LON
 --away-code LIS --out identity_feed.jsonl` exports the feed: 25 Hz, pitch-centred metres, each

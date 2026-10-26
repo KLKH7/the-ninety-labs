@@ -43,7 +43,7 @@ FPS = 25  # GROUNDING ID1 (Linke, Link & Lames 2020): TRACAB tracks at 25 Hz
 NOISE_M = 0.08  # GROUNDING ID2 (Linke, Link & Lames 2020): TRACAB Gen5 position RMSE 0.08 m
 NOISE_RHO = 0.95  # design (ID2): a tracker's error drifts frame to frame, it does not jitter
 LATENCY_S = 15.0  # GROUNDING ID3 (SciSports): the live TRACAB stream is held ~15 s for operator corrections
-JITTER_S = 0.04  # design (ID3): delivery jitter up to one frame, so rows can arrive out of order
+JITTER_S = 0.1  # design (ID3): delivery jitter up to 2.5 frames, so rows can arrive out of order
 OCCLUDED_M = 0.75  # design (ID4): another player this close hides a player from most cameras
 DROP_PER_S = 0.2  # design (ID4): while occluded, a dropout starts at this rate
 DROP_FRAMES = (3, 12)  # design (ID4): a dropout lasts 0.12 to 0.48 s
@@ -74,7 +74,7 @@ def roster(engine_roster: Iterable[Mapping], fixture: Fixture) -> tuple[list[dic
 
 def metadata(fixture: Fixture, players: list[dict], half_time: float | None, seed_feed: int) -> dict:
     return {
-        "type": "metadata", "schema": SCHEMA, "provider": PROVIDER, "fps": FPS,
+        "type": "metadata", "schema": SCHEMA, "provider": PROVIDER, "seed": fixture.seed, "fps": FPS,
         "pitch": {"length": PITCH_M[0], "width": PITCH_M[1], "origin": "centre", "units": "m"},
         "kickoff": "2026-10-24T15:00:00Z",  # design: a fictional fixture's kick-off
         "periods": [{"period": 1, "start_t": 0.0},
@@ -96,6 +96,7 @@ def rows(frames: Iterable[Mapping], ids: Mapping[str, str], teams: Mapping[str, 
     dropped: dict[str, int] = {}  # id -> frames left
     low: dict[str, int] = {}  # id -> low-confidence frames left
     swaps: list[dict] = []  # open swaps: {"a", "b", "from_t", "end_t"}
+    t = 0.0
     for f in frames:
         t = float(f["t"])
         period = 2 if half_time is not None and t >= half_time else 1
@@ -145,6 +146,12 @@ def rows(frames: Iterable[Mapping], ids: Mapping[str, str], teams: Mapping[str, 
         yield {"type": "frame", "frame_id": int(f["frame"]), "period": period, "game_clock": round(clock, 2),
                "t": round(t, 3), "delivered": round(t + LATENCY_S + rng.uniform(0, JITTER_S), 3),
                "players": out}
+    end = t + dt  # the stream ends: the operator corrects every swap still open, up to its last frame
+    for w in swaps:
+        yield {"type": "id_correction", "t": round(end, 3),
+               "delivered": round(end + LATENCY_S + rng.uniform(0, JITTER_S), 3),
+               "player_ids": [ids[w["a"]], ids[w["b"]]], "from_t": round(w["from_t"], 3),
+               "to_t": round(end, 3)}
 
 
 def write(path: Path, engine_roster: list[Mapping], frames: Iterable[Mapping], fixture: Fixture,

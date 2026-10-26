@@ -23,7 +23,7 @@ by the capture time `t`). Line 1 is the match metadata; then frame rows and corr
 |---|---|
 | `type` | `"metadata"` |
 | `schema` | `"ninety-id-feed/2"` |
-| `provider`, `fps` | who and how often: 25 Hz (ID1) |
+| `provider`, `seed`, `fps` | who, which match (the reader refuses another match's feed), and how often: 25 Hz (ID1) |
 | `pitch` | `{length: 105, width: 68, origin: "centre", units: "m"}` |
 | `kickoff` | the fixture's kick-off, UTC (*design*: fictional) |
 | `periods` | `[{period, start_t}]`, from the engine's half-time |
@@ -46,7 +46,10 @@ by the capture time `t`). Line 1 is the match metadata; then frame rows and corr
 
 `{"type": "id_correction", "t", "delivered", "player_ids": [a, b], "from_t", "to_t"}`: the
 operator found that `a` and `b` were swapped from `from_t` until `to_t` (ID6 to ID8). The frames
-already delivered are not re-sent; a consumer applies the correction to what it holds.
+already delivered are not re-sent; a consumer applies the correction to what it holds. A real
+provider's 15 s hold lets its operator fix many swaps before they are delivered; ours always
+arrive after the swapped frames (*design*: the harder case), and a swap still open when the
+stream ends is corrected then.
 
 ## What the feed never carries
 
@@ -63,6 +66,8 @@ with any other field (`identity.load`).
 4. Carry the name to the broadcast's tracks through the camera join only (lesson 259).
 5. **Side:** an event whose actor is named takes that player's side from the feed
    (`team_source: "id_feed"`, confidence 1.0); every other event keeps vision's side and confidence.
+   A track is matched only on its own side, so this mostly makes vision's side sure, and it
+   reaches whatever reads a sure side (the fact-checker's side gate, possession share).
 
 Live, names lag the picture by `latency_s` (15 s): a consumer can name a track only once the
 feed rows for its frames have arrived.

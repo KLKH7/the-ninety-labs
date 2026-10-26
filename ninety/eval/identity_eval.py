@@ -21,6 +21,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ninety.agents.factcheck import side_known
 from ninety.eval.association import true_players
 from ninety.eval.event_score import git_commit
 from ninety.eval.naming_eval import (
@@ -107,6 +108,10 @@ def main(argv: list[str] | None = None) -> None:
         sided = identity.sided(events, bp)
         out["events_sided"] = sum(e.get("team_source") == identity.SOURCE for e in sided)
         out["events_total"] = len(events)
+        # Sides sure enough for the fact-checker to air (factcheck.side_known), without and with the feed.
+        out["events_side_sure"] = {"without_feed": sum(map(side_known, events)),
+                                   "with_feed": sum(map(side_known, sided))}
+        out["events_side_changed"] = sum(a["team"] != b["team"] for a, b in zip(events, sided, strict=True))
     args.out.write_text(json.dumps(out, indent=1) + "\n")
     # The gate is used only if the held-out half also meets the target on both units.
     h = out.get("held_out") or {}
@@ -115,7 +120,7 @@ def main(argv: list[str] | None = None) -> None:
                                             "target": TARGET, "held_out_met": met,
                                             "source": "docs/eval/identity.json"}, indent=1) + "\n")
     shown = ("chosen", "held_out", "all", "frame_coverage", "tracks", "id_corrections", "events_sided",
-             "events_total")
+             "events_total", "events_side_sure", "events_side_changed")
     print(json.dumps({k: out.get(k) for k in shown},
                      indent=1))
 

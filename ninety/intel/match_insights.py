@@ -168,7 +168,8 @@ class MatchInsights:
             # Last, after every fact and stat is computed: the feed names tracks and nothing else
             # (an event's side from the feed is set before, in the detected file: identity.sided).
             if not feed.matches(fixture):
-                raise ValueError(f"{clip}: the player-ID feed is another fixture's ({feed.meta['teams']})")
+                raise ValueError(f"{clip}: the player-ID feed is another fixture's (seed "
+                                 f"{feed.meta.get('seed')}, {feed.meta['teams']})")
             mi.identity = identity_mod.tactical(f.frames, feed)
             if association is not None:
                 mi.identity_broadcast = identity_mod.broadcast(association, mi.identity, identity_mod.gate())

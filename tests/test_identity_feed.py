@@ -151,9 +151,11 @@ def test_the_reader_aligns_by_capture_time_not_arrival_order(feed_path, tmp_path
     assert identity.load(shuffled).at == identity.load(feed_path).at
 
 
-def test_rows_reach_the_file_in_delivery_order(feed_path):
-    delivered = [r["delivered"] for r in _lines(feed_path)[1:]]
-    assert delivered == sorted(delivered)
+def test_rows_reach_the_file_in_delivery_order_which_is_not_capture_order(feed_path):
+    rows = _lines(feed_path)[1:]
+    assert [r["delivered"] for r in rows] == sorted(r["delivered"] for r in rows)
+    captured = [r["t"] for r in rows if r["type"] == "frame"]
+    assert captured != sorted(captured)  # jitter (ID3): a reader must sort by `t`
 
 
 def _pair(seconds: float, gap: float):
@@ -190,6 +192,26 @@ def test_swaps_are_between_close_team_mates_and_each_is_corrected(tmp_path):
     roster, frames = _pair(600, 3.0)  # 3 m apart: never confused
     identity_feed.write(path, roster, frames, FX, None, seed=5)
     assert not [r for r in _lines(path)[1:] if r["type"] == "id_correction"]
+
+
+@pytest.mark.parametrize("seconds,seed", [(600, 5), (120, 1), (120, 6)])  # 1 and 6: a swap open at the end
+def test_a_swap_relabels_exactly_its_span_and_every_one_is_corrected(tmp_path, seconds, seed):
+    """Raw rows: inside each correction's span LON01's id is at h2's spot, outside it at his own;
+    once loaded, every LON01 is at his own spot, a swap still open at the stream's end included."""
+    roster, frames = _pair(seconds, 0.5)
+    path = tmp_path / "f.jsonl"
+    identity_feed.write(path, roster, frames, FX, None, seed=seed)
+    lines = _lines(path)
+    spans = [(c["from_t"], c["to_t"]) for c in lines[1:] if c["type"] == "id_correction"]
+    assert spans
+    for r in (r for r in lines[1:] if r["type"] == "frame"):
+        x = next((e[3] + 52.5 for e in r["players"] if e[0] == "LON01"), None)
+        if x is not None:
+            swapped = any(a - 1e-6 <= r["t"] < b - 1e-6 for a, b in spans)
+            assert (abs(x - 50.5) < abs(x - 50.0)) == swapped, r["t"]
+    for k, at in identity.load(path).at.items():
+        if "LON01" in at:
+            assert abs(at["LON01"][0] - 50.0) < abs(at["LON01"][0] - 50.5), k / 25
 
 
 def test_the_reader_applies_corrections(feed_path, tmp_path):
@@ -230,9 +252,19 @@ def test_a_feed_entry_with_a_speed_or_metadata_with_more_is_refused(feed_path):
         identity.load(feed_path)
 
 
+def test_a_metadata_player_with_more_than_his_label_is_refused(feed_path):
+    lines = _lines(feed_path)
+    lines[0]["players"][0]["birth_date"] = "2000-01-01"
+    _write(feed_path, lines)
+    with pytest.raises(ValueError, match="identity only"):
+        identity.load(feed_path)
+
+
 def test_a_feed_of_another_fixture_is_refused(feed_path):
     frames = tracked(engine_frames())
-    with pytest.raises(ValueError, match="not this match"):
+    with pytest.raises(ValueError, match="not"):
+        identity.load_for(feed_path, frames, Fixture(7, "LON", "LIS"))  # same clubs, another match
+    with pytest.raises(ValueError, match="not"):
         identity.load_for(feed_path, frames, Fixture(8080, "LIS", "LON"))
     with pytest.raises(ValueError, match="another fixture"):
         MatchInsights.build("c", frames, [], Fixture(8080, "OAK", "FEN"), feed=identity.load(feed_path))
@@ -282,6 +314,15 @@ def test_a_one_frame_fragment_never_takes_the_player_from_a_track_on_him_all_win
     frames = flat_frames({"h-t1": [(k, 10.3, 10.0) for k in range(250)], "h-t2": [(100, 10.0, 10.0)]})
     got = identity.assign(frames, exact_feed(at))
     assert got["h-t1"]["id"] == "H1" and got["h-t1"]["share"] == 1.0 and "h-t2" not in got
+
+
+def test_a_track_on_a_man_all_clip_is_not_given_the_team_mate_a_metre_away():
+    at = {k: {"H1": (10.0, 10.0), "H2": (11.0, 10.0)} for k in range(1000)}
+    track = [(k, 10.0, 10.0) for k in range(1000)]
+    # a fragment in 3 windows, 0.5 m from H1 and 1.5 m (past the gate) from H2
+    bits = {f"h-t{9 + w}": [(250 * w + 100, 9.5, 10.0)] for w in range(1, 4)}
+    got = identity.assign(flat_frames({"h-t1": track, **bits}), exact_feed(at))
+    assert got["h-t1"]["id"] == "H1" and got["h-t1"]["share"] == 1.0
 
 
 def test_a_track_that_is_the_player_for_exactly_half_its_frames_is_not_named(feed_path):
@@ -343,6 +384,31 @@ def test_an_event_takes_only_its_named_player_s_side_from_the_feed():
     rest = lambda e: {k: v for k, v in e.items() if k not in side}  # noqa: E731
     assert rest(a) == rest(events[0])
     assert b == events[1]
+
+
+def test_the_side_step_changes_only_the_named_events_sides(feed_path, tmp_path):
+    frames = tracked(engine_frames())
+    (tmp_path / "tracked.json").write_text(json.dumps({"frames": frames}))
+    events = [{"id": "e1", "t": 3.0, "frame": 75, "type": "pass", "team": "away", "team_confidence": 0.6,
+               "player": "h-t7", "receiver": "h-t8", "x": 30.0, "y": 30.0, "confidence": 0.8},
+              {"id": "e2", "t": 4.0, "frame": 100, "type": "pass", "team": "home", "team_confidence": 0.7,
+               "player": "h-t3", "x": 30.0, "y": 30.0, "confidence": 0.8}]
+    (tmp_path / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    params = {"home_code": "LON", "away_code": "LIS"}
+    (tmp_path / "clip.json").write_text(json.dumps({"seed": 8080, "params": params}))
+    pairs = {"h-t7": {"track": "h-t7", "confidence": 1.0}}
+    (tmp_path / "association.json").write_text(json.dumps({"tracks": pairs}))
+    out = tmp_path / "sided.jsonl"
+    identity.main(["--tracked", str(tmp_path / "tracked.json"),
+                   "--association", str(tmp_path / "association.json"),
+                   "--detected", str(tmp_path / "detected.jsonl"), "--fixture", str(tmp_path / "clip.json"),
+                   "--feed", str(feed_path), "--out", str(out)])
+    a, b = _lines(out)
+    side = ("team", "team_confidence", "team_source")
+    assert (a["team"], a["team_confidence"], a["team_source"]) == ("home", 1.0, "id_feed")
+    rest = lambda e: {k: v for k, v in e.items() if k not in side}  # noqa: E731
+    assert rest(a) == rest(events[0])
+    assert b == events[1]  # h-t3 has no association: vision's side, untouched
 
 
 def _build(feed_path, feed: bool):
@@ -418,7 +484,8 @@ ALLOWED = {
     "ninety/e2e.py",  # copies the line-up rows and the disclosure into match.json
 }
 TOKENS = re.compile(r"\b(identity_feed|identity_tracks|identity_broadcast|identity_source|lineup_tactical"
-                    r"|identity_mod|load_for)\b|(?<!azure)\.identity\b")
+                    r"|identity_mod|load_for)\b"
+                    r"|(?<!azure)\.identity\b(?!\s*\()")  # not azure.identity, nor three.js's q.identity()
 MODULES = {"ninety.intel.identity", "ninety.sim.identity_feed"}
 
 
@@ -448,13 +515,14 @@ def test_only_the_identity_path_touches_the_feed():
     """No vision module, agent, MCP tool, metric or other evaluation imports the feed's writer or
     reader (however it is imported) or reads anything made from it; on the web, only the phone,
     which shows the names with their source."""
-    py = list((ROOT / "ninety").rglob("*.py"))
+    py = [*(ROOT / "ninety").rglob("*.py"), *(ROOT / "scripts").rglob("*.py")]
     by_import = {str(p.relative_to(ROOT)) for p in py if imports(p) & MODULES}
     by_name = {str(p.relative_to(ROOT)) for p in py if TOKENS.search(p.read_text())}
     assert by_import | by_name <= ALLOWED, sorted((by_import | by_name) - ALLOWED)
     assert {"ninety/intel/match_insights.py", "ninety/e2e.py"} <= by_import | by_name
-    web = {str(p.relative_to(ROOT)) for p in (ROOT / "web").rglob("*.ts")
-           if "node_modules" not in p.parts and TOKENS.search(p.read_text())}
+    files = [p for ext in ("*.ts", "*.tsx", "*.js", "*.mjs") for p in (ROOT / "web").rglob(ext)]
+    web = {str(p.relative_to(ROOT)) for p in files
+           if not {"node_modules", "dist", "dist-mock"} & set(p.parts) and TOKENS.search(p.read_text())}
     assert all(p.startswith("web/phone/src/") for p in web), web
     insights = (ROOT / "ninety/intel/match_insights.py").read_text()
     build = insights[insights.index("    def build("):insights.index("        return mi\n")]

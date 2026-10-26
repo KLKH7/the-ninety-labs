@@ -15,9 +15,11 @@ an outcome (tests/test_identity_feed.py).
 2. **One to one, per window, on the same side.** Within each window of WINDOW_S seconds of a
    segment, a side's tracks are matched to that side's feed players by the Hungarian method. A
    pair counts only if their mean distance over the frames both are seen is at most GATE_M,
-   vision's measured position error (ninety/vision/events.RIVAL_M), and among those the matching
-   keeps the most shared frames, nearer pairs first on a tie: a short fragment never takes a
-   player from a track that follows him for the whole window. A track read on the wrong side is
+   vision's measured position error (ninety/vision/events.RIVAL_M), a track may be matched to
+   nobody, and the matching keeps the most shared frames, each discounted by the pair's mean
+   distance over the gate: a short fragment never takes a player from a track that follows him
+   for the whole window, and a track on a man is not given the team-mate beside him. A track
+   read on the wrong side is
    never given a player of the other side, so it stays unnamed.
 3. **Carried along the track.** A track is the player it was matched to for a strict majority of
    its frames on the feed; its `share` is that fraction.
@@ -28,6 +30,10 @@ an outcome (tests/test_identity_feed.py).
    (naming.tactical: at least the association gate and the same side), never by its id string.
 6. **Side.** An event whose player is named takes his side from the feed (`team_source`
    id_feed, confidence 1.0); every other field of every event is left as vision detected it.
+   Since a track is matched only on its own side, this mostly confirms the side vision's track
+   reads, now surely, and corrects an event whose side disagreed with its player's track. A sure
+   side reaches whatever reads sides (the fact-checker's side gate, possession share): that is
+   the feed's one effect on a statistic, and it is allowed (AGENTS.md).
 """
 
 from __future__ import annotations
@@ -50,8 +56,8 @@ DISCLOSURE = ("Names come from a simulated tracking-provider ID feed; vision doe
 GATE_M = RIVAL_M  # measured: vision's pooled 90th-percentile pitch-position error (EVALUATION.md)
 WINDOW_S = naming.WINDOW_S  # design: the window naming.py matches in
 FPS = 25  # vision's frames are the broadcast's 25 fps (ninety/intel/scene.FPS)
-META_KEYS = {"type", "schema", "provider", "fps", "pitch", "kickoff", "periods", "teams", "players",
-             "latency_s", "noise_m", "feed_seed"}
+META_KEYS = {"type", "schema", "provider", "seed", "fps", "pitch", "kickoff", "periods", "teams",
+             "players", "latency_s", "noise_m", "feed_seed"}
 PLAYER_KEYS = {"player_id", "team", "jersey", "name", "position"}
 FRAME_KEYS = {"type", "frame_id", "period", "game_clock", "t", "delivered", "players"}
 CORRECTION_KEYS = {"type", "t", "delivered", "player_ids", "from_t", "to_t"}
@@ -79,8 +85,10 @@ class Feed:
         return self.at.get(_key(t), {})
 
     def matches(self, fixture: Fixture) -> bool:
-        return (self.meta["teams"]["home"]["code"], self.meta["teams"]["away"]["code"]) == (
-            fixture.home_code, fixture.away_code)
+        """The same match: its seed (the team sheets' names come from it) and its two clubs."""
+        teams = self.meta["teams"]
+        return (self.meta.get("seed"), teams["home"]["code"], teams["away"]["code"]) == (
+            fixture.seed, fixture.home_code, fixture.away_code)
 
 
 def _refuse(path, what) -> None:
@@ -166,16 +174,16 @@ def assign(frames: Sequence[Mapping], feed: Feed, window_s: float = WINDOW_S,
             c = by_track[tr].get(i)
             if not c or c[0] / c[1] > gate_m:
                 return far
-            return -c[1] + c[0] / c[1] / (gate_m + 1.0)  # most shared frames; the nearer on a tie (< 1)
+            # design: a pair's gain is its shared frames, discounted by how far apart they are on
+            # average (1 at 0 m, 0 at the gate): a track on a man all window beats a fragment on him,
+            # and beats itself paired with a team-mate a metre away.
+            return -c[1] * (1.0 - c[0] / c[1] / gate_m)
 
-        m = [[cost(tr, i) for i in ids] for tr in tracks]
-        if len(tracks) <= len(ids):
-            pairs = list(enumerate(roles.hungarian(m)))
-        else:
-            t_cost = [[m[k][j] for k in range(len(tracks))] for j in range(len(ids))]
-            pairs = [(k, j) for j, k in enumerate(roles.hungarian(t_cost))]
-        for k, j in pairs:
-            if m[k][j] < far:
+        # One "no player" column per track at cost 0 (as naming.match_windows): a track with no
+        # pair within the gate takes one, and never forces another track onto the wrong man.
+        m = [[cost(tr, i) for i in ids] + [0.0] * len(tracks) for tr in tracks]
+        for k, j in enumerate(roles.hungarian(m)):
+            if j < len(ids) and m[k][j] < far:
                 votes[tracks[k]][ids[j]] += by_track[tracks[k]][ids[j]][1]
     out: dict[str, dict] = {}
     for track, w in votes.items():
@@ -253,8 +261,8 @@ def load_for(path: Path, frames: Sequence[Mapping], fixture: Fixture) -> Feed:
     """The feed for these tracked frames, refused unless it is this fixture's."""
     feed = load(path, [f["t"] for f in frames])
     if not feed.matches(fixture):
-        raise ValueError(f"{path}: the feed's clubs {feed.meta['teams']} are not this match's "
-                         f"({fixture.home_code} v {fixture.away_code})")
+        raise ValueError(f"{path}: the feed (seed {feed.meta.get('seed')}, {feed.meta['teams']}) is not "
+                         f"this match's (seed {fixture.seed}, {fixture.home_code} v {fixture.away_code})")
     return feed
 
 
