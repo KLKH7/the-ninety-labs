@@ -938,3 +938,55 @@ def test_with_the_demo_passcode_ask_is_the_agents_and_a_refused_one_falls_back_t
     assert "Model off" in said and "Computed from tracking" in said
     assert not errors
     ctx.close()
+
+
+# A page-side WebSocket that plays a script of opens, messages and closes (Playwright's mocked socket
+# deadlocks when closed from inside its own handler, and cannot send 1012).
+FAKE_SOCKET = """(script) => {
+  window.__joins = 0;
+  window.WebSocket = class extends EventTarget {
+    constructor() {
+      super();
+      const step = script[Math.min(window.__joins++, script.length - 1)];
+      setTimeout(() => {
+        if (step.open) this.dispatchEvent(new Event("open"));
+        if (step.clock !== undefined) this.dispatchEvent(new MessageEvent("message",
+          { data: JSON.stringify({ type: "clock", t: step.clock, playing: false }) }));
+        const close = () => this.dispatchEvent(new CloseEvent("close", { code: step.close }));
+        if (step.close) setTimeout(close, step.after || 0);
+      }, 50);
+    }
+    close() {}
+    send() {}
+  };
+}"""
+
+
+def test_a_phone_that_lost_its_screen_waits_for_a_restarted_server_to_know_its_code_again(browser, prod_site):
+    """desktop-companion, Oct 26: after a server restart the big screen claims its code back within
+    about 2 s. Reconnecting, the phone takes "unknown code" (4404) as the server coming back for
+    RECLAIM_S (30 s), then joins; a code typed on the pairing screen still fails at once."""
+    tracked = {**MOCK_MINIMAP, "source": "tracked", "clip": "demo"}
+    restart = [{"open": True, "clock": 30.0, "close": 1012, "after": 300},  # joined, then the server restarts
+               {"open": True, "close": 4404}, {"open": True, "close": 4404},  # it does not know the code yet
+               {"open": True, "clock": 42.0}]  # the big screen has claimed it back
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    ctx.route(re.compile(r".*/api/minimap\b.*"), lambda r: r.fulfill(content_type="application/json",
+                                                                      body=json.dumps(tracked)))
+    ctx.add_init_script(f"({FAKE_SOCKET})({json.dumps(restart)})")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo")
+    page.wait_for_function("window.ninetyPhone.laptop.time() >= 42", timeout=20_000)
+    assert page.evaluate("window.__joins") == 4 and page.get_attribute("body", "data-state") == "live"
+    assert not errors
+    ctx.close()
+    # A code typed or scanned that no screen shows still fails at once.
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    ctx.add_init_script(f"({FAKE_SOCKET})({json.dumps([{'close': 4404}])})")
+    page = ctx.new_page()
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo")
+    error = "document.getElementById('pair-error').textContent.includes('No screen is showing that code')"
+    page.wait_for_function(error, timeout=10_000)
+    assert page.evaluate("window.__joins") == 1
+    ctx.close()
