@@ -148,6 +148,18 @@ def turn_on_read_aloud(page):
     page.wait_for_function("!document.querySelector('#settings-sheet').classList.contains('show-modal')")
 
 
+def tap_player(page, index: int = 0):
+    """Tap a tracked player's dot on Live's pitch, the way a fan opens a player the roster does not
+    list (a tracked player is never listed as a player: demo audit, Oct 25)."""
+    page.click("#lt-pitch")
+    page.wait_for_function("document.querySelector('#status').dataset.state !== 'waiting'")
+    x, y = page.evaluate(f"""(() => {{ const s = window.ninetyPhone.radarAt(window.ninetyPhone.laptop.time());
+        const p = s.players[{index}]; return window.ninetyPhone.screenOf(p.x, p.y); }})()""")
+    box = page.locator("#map").bounding_box()
+    page.mouse.click(box["x"] + x, box["y"] + y)
+    page.wait_for_selector("#player:not([hidden])")
+
+
 def open_roster(page):
     """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
     page.focus("#lt-players")
@@ -707,9 +719,9 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"
         assert page.text_content("#roster-summary") == "Players"
-        open_roster(page)
-        page.locator("#roster .who").first.focus()
-        page.keyboard.press("Enter")
+        page.click("#lt-players")
+        assert page.locator("#roster .who").count() == 0  # tracks are never listed as players
+        tap_player(page)
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
         assert re.fullmatch(r"(London|Lisbon) player|A player", page.inner_text("#player-title"))  # no number
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
