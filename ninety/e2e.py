@@ -45,7 +45,7 @@ Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
 Every card must be verified and match the schema, or the bundle is not written.
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
-radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
+radar.json and match.json when asked for, and the footage as video.mp4 + hls/ or frames/) is all the
 viewer reads. This module never opens the clip's events.jsonl or frames.jsonl: they are the answer
 key (tests/test_e2e.py checks).
 """
@@ -66,7 +66,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ninety import condensed, highlights, radar
+from ninety import condensed, footage, highlights, radar
 from ninety.agents import factcheck, insight_bar, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
@@ -684,20 +684,21 @@ def load_views(views: Path):
 # ---------------------------------------------------------------- footage
 
 
-def write_footage(clip: Clip, out: Path, encode: bool) -> dict:
-    """The clip as video.webm (VP9: plays in every browser, Playwright's Chromium included) when
-    ffmpeg is there, else the JPEG frames themselves. The viewer plays either."""
+def write_footage(clip: Clip, out: Path, encode: bool, audio: Path | None = None) -> dict:
+    """The clip as web video (ninety/footage.py: video.mp4, H.264/AAC, and an HLS ladder under hls/)
+    when ffmpeg has the H.264 encoder, else the JPEG frames themselves. The viewer plays either.
+    `audio` (any file ffmpeg reads with a sound track, such as the render's crowd bed) is muxed in,
+    cut to the picture's length so the frames and the duration are the images' own."""
     images = clip.images
     if not images:
         raise SystemExit(f"{clip.dir}/images has no frames")
     fps = clip.meta["fps"]
-    if encode and shutil.which("ffmpeg"):
-        video = out / "video.webm"
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i",
-               str(clip.dir / "images" / "%05d.jpg"), "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32",
-               "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1", "-pix_fmt", "yuv420p", str(video)]
-        subprocess.run(cmd, check=True)
-        return {"kind": "video", "src": video.name, "frames": len(images)}
+    if encode and footage.can_encode():
+        params = clip.meta.get("params", {})
+        return footage.write(images, fps, out, audio, height=int(params.get("height", 720)),
+                             width=params.get("width"))
+    if encode:
+        print(f"no {footage.ENCODER} in ffmpeg: shipping the JPEG frames (ninety/footage.py)")
     frames = out / "frames"
     frames.mkdir(exist_ok=True)
     for image in images:
@@ -816,7 +817,7 @@ async def run(args: argparse.Namespace) -> dict:
     audio = describe.write_track(track, refused, out, clip.meta["t_start"], timeline=timeline)
     audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
                           "unavailable": unavailable}
-    footage = write_footage(clip, out, encode=not args.frames)
+    footage_info = write_footage(clip, out, encode=not args.frames, audio=args.footage_audio)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
     radar_body = None
@@ -904,7 +905,7 @@ async def run(args: argparse.Namespace) -> dict:
         "speed": {"measured": any(factcheck.measured_speed(e) and factcheck.plausible_speed(e)
                                   for e in events),
                   "error_kmh": factcheck.SPEED_ERROR_KMH},
-        "footage": footage,
+        "footage": footage_info,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
         "events": {"source": events_source, "count": len(events), "standin": "stand-in" in events_source,
@@ -1024,7 +1025,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--insights", type=Path, default=None,
                     help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
                          "either, the bar stays empty: it never restates one event")
-    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
+    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
+    ap.add_argument("--footage-audio", type=Path, default=None,
+                    help="a sound track for the video (e.g. the render's crowd bed), muxed in as AAC")
     return ap
 
 

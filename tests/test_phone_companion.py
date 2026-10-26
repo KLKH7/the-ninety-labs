@@ -523,7 +523,7 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     words = page.get_attribute("#how-body canvas.seen", "aria-label")
     assert words.startswith("The broadcast picture at 1:01")
     # a code answer: no Judge to claim
-    assert "Checked by code before it was shown" in page.inner_text("#how-body")
+    assert "Computed from tracking" in page.inner_text("#how-body")
     assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
 
@@ -1760,6 +1760,46 @@ def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser
     page.wait_for_function("document.querySelector('#score-home').textContent === '2'")
     lines = page.locator("#goals-home .side-goal").all_inner_texts()
     assert lines == ["Rondell 2′", "Crowmere 2′"], lines  # e2's scorer h8 by name; the other by club
+    assert not errors
+    ctx.close()
+
+
+def test_embedded_beside_the_big_screen_the_phone_opens_on_live_silent_and_answers_its_parent(browser, site):  # noqa: F811
+    """desktop-companion, Oct 26: the big screen docks the phone in an iframe (?embed=1), already
+    paired, the big screen playing every sound. No pairing screen, no sound controls, no first-run
+    choices over Live; tab changes go to the parent page, and the parent can open Ask."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    src = f"phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/&embed=1"
+    host = f"""<!doctype html><body style="margin:0;background:#000">
+      <iframe id="phone" src="{site}{src}" style="width:380px;height:860px;border:0"></iframe>
+      <script>window.got = []; addEventListener("message", (e) => got.push(e.data));</script></body>"""
+    ctx.route("**/embed-host.html", lambda r: r.fulfill(body=host, content_type="text/html"))
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}embed-host.html")
+    phone = page.frame_locator("#phone")
+    frame = page.frame(url=lambda u: "embed=1" in u)
+    frame.wait_for_selector("body[data-state=live][data-embed='1']")
+    assert frame.is_hidden("#pair") and frame.locator(".speak:visible, .listening:visible").count() == 0
+    assert frame.is_hidden("#onboard")  # a first visit, yet Live is not covered by the choices
+    assert frame.evaluate("document.body.dataset.tab") in ("radar", None)
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-open', tab: 'ask'}, location.origin)")
+    frame.wait_for_function("document.body.dataset.tab === 'ask'")
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'ask')")
+    phone.locator("#tab-button-insights").click()
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'insights')")
+    # The passcode entered on the big screen reaches the panel's Ask (kept on this device only).
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-passcode', passcode: 'from-big'}, location.origin)")
+    frame.wait_for_function("localStorage.getItem('ninety.passcode') === 'from-big'")
+    # A message from anywhere but the parent page opens nothing.
+    frame.evaluate("window.postMessage({type: 'ninety-open', tab: 'ask'}, '*')")
+    page.wait_for_timeout(300)
+    assert frame.evaluate("document.body.dataset.tab") == "insights"
     assert not errors
     ctx.close()
 

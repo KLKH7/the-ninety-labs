@@ -47,6 +47,7 @@ from ninety.render.scene import (
     advance_gaits,
     ball_parts,
     body_parts,
+    carry_at,
     contacts,
     crowded_start,
     drawn_ball,
@@ -61,6 +62,7 @@ from ninety.render.scene import (
     throw_at,
     throws,
     touch_at,
+    watch_ball,
 )
 from ninety.render.splits import split_of
 from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
@@ -334,6 +336,8 @@ def render_clip(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
+        if info.get("look"):  # the broadcast look (web/render/look.js): stadium=broadcast only
+            clip["renderer"]["look"] = info["look"]
         # Each tactical lens films the same scene in a page of its own: the same seed, looks and
         # per-frame spec as the broadcast, its own camera and picture size, and no graphics.
         vpages = {}
@@ -380,10 +384,12 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
                 fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
+                watch_ball(g, pl["x"], pl["y"], ball)  # his head turned to the ball
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.

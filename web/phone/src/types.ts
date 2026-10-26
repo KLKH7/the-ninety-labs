@@ -177,6 +177,8 @@ export interface InsightCard {
 
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
+  /** The phone's own mark: the demo passcode was refused, so this is the code answer. */
+  model_off?: boolean;
   /** Who wrote the text, copied from the answer message's `source` (main.ts): "model" (the
    * Companion agent, then the code checks and the Judge) or "code" (a template filled from the
    * cited fact, through the code checks only). Missing (an older server) counts as code. */
@@ -205,6 +207,9 @@ export interface AnswerMessage {
   answer: ViewerAnswer;
   /** schemas/companion_message.schema.json: who wrote the answer. */
   source?: "code" | "model";
+  /** Set by the phone, never sent: a passcode was given but the server refused it (401) or has no
+   * model (503), so this is the code answer instead ("Model off" in How we know). */
+  model_off?: boolean;
 }
 
 export const PITCH_X = 105;

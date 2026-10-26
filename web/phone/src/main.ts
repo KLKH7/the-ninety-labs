@@ -49,6 +49,38 @@ import { describeVisual, drawVisual, drawable, fromScout, headline, title } from
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** Docked beside the big screen on a desktop (`?embed=1`, web/viewer's companion panel): already
+ * paired by the page around it, which plays every sound; it opens on Live and talks to its parent
+ * page about tabs, same origin only. */
+const embed = params.get("embed") === "1" && window.parent !== window;
+if (embed) document.body.dataset.embed = "1";
+
+/** The demo passcode (ninety/api/companion.py): with it the server's agents answer Ask. Kept on this
+ * device only (localStorage, guarded: a private window refuses it); taken once from `?pass=` and
+ * struck from the address bar at once; never logged, never sent but as Ask's header. */
+const PASS_KEY = "ninety.passcode";
+let passcode: string | null = (() => {
+  try {
+    return localStorage.getItem(PASS_KEY);
+  } catch {
+    return null;
+  }
+})();
+function setPasscode(value: string | null) {
+  passcode = value ? value.trim() || null : null;
+  try {
+    if (passcode) localStorage.setItem(PASS_KEY, passcode);
+    else localStorage.removeItem(PASS_KEY);
+  } catch {
+    // a private window: the passcode lasts for this visit only
+  }
+}
+if (params.has("pass")) {
+  setPasscode(params.get("pass"));
+  params.delete("pass");
+  const rest = params.toString();
+  history.replaceState(history.state, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+}
 
 const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/window.py)
 // design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
@@ -227,14 +259,21 @@ function onRelay(m: RelayMessage) {
   }
 }
 
+/** How long a phone that lost its screen keeps asking for the same code when the server does not know
+ * it (design: a restarted server, whose big screen claims its code back within about 2 s,
+ * desktop-companion, Oct 26); a code typed or scanned still fails at once. */
+const RECLAIM_S = 30;
+let reclaimUntil = 0; // while reconnecting, an unknown code is the server coming back, not a wrong code
 function onClosed(why: Closed) {
-  if (why === "lost") {
+  const reclaiming = (w: unknown) => w === "unknown-code" && Date.now() < reclaimUntil;
+  if (why === "lost" || reclaiming(why)) {
+    if (Date.now() >= reclaimUntil) reclaimUntil = Date.now() + RECLAIM_S * 1000;
     setStatus("lost", "Reconnecting…");
     const retry = async () => {
       try {
         link = await feed.join(state.code, onRelay, onClosed);
       } catch (again) {
-        if (again === "lost" || again === "not-joined") setTimeout(retry, 2000);
+        if (again === "lost" || again === "not-joined" || reclaiming(again)) setTimeout(retry, 2000);
         else backToPairing(again as Closed);
       }
     };
@@ -289,6 +328,7 @@ function showTab(tab: Tab, focus = false) {
   // ion-tabs shows the panel; keyboard focus follows once it has.
   void ($("live") as IonTabs).select(tab).then(() => focus && $(`tab-button-${tab}`).focus());
   document.body.dataset.tab = tab;
+  if (embed) window.parent.postMessage({ type: "ninety-tab", tab }, location.origin);
   if (tab === "insights") {
     unread = 0;
     showUnread();
@@ -296,6 +336,19 @@ function showTab(tab: Tab, focus = false) {
   if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
 }
 
+// The big screen around an embedded phone may open a tab ("Ask anything about this match →").
+const OPEN_TABS: Record<string, Tab> = { live: "radar", radar: "radar", ask: "ask", story: "insights", insights: "insights" };
+if (embed) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return; // the parent page only
+    const m = e.data as { type?: unknown; tab?: unknown } | null;
+    // The passcode entered on the big screen, so the docked panel's Ask is the agents' too.
+    const pm = e.data as { type?: unknown; passcode?: unknown } | null;
+    if (pm && pm.type === "ninety-passcode" && (typeof pm.passcode === "string" || pm.passcode === null)) setPasscode(pm.passcode);
+    const tab = m && m.type === "ninety-open" && typeof m.tab === "string" ? OPEN_TABS[m.tab] : undefined;
+    if (tab && document.body.dataset.state === "live") showTab(tab, true);
+  });
+}
 $("live").addEventListener("ionTabsDidChange", (e) => {
   const tab = (e as CustomEvent<{ tab: Tab }>).detail.tab;
   if (tab !== state.tab) showTab(tab);
@@ -922,6 +975,7 @@ let settings = prefs.load();
 let captionTimer = 0;
 /** Speaks a line with the fan's voice and rate; with the transcript on, shows it as a caption too. */
 function say(text: string) {
+  if (embed) return; // the big screen around it plays all sound
   speakAloud(text, { rate: settings.rate, voice: settings.voice });
   if (!settings.transcript) return;
   const caption = $("caption");
@@ -975,7 +1029,7 @@ function renderSettings() {
       play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10l8-5z"/></svg>';
       play.addEventListener("click", () => {
         if ("speechSynthesis" in window) speechSynthesis.cancel();
-        speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
+        if (!embed) speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
       });
       return radioRow("voice", v.name, settings.voice === v.name, () => (settings.voice = v.name), play);
     }),
@@ -1356,6 +1410,11 @@ function setPersona(change: Partial<fans.Fan>) {
   storyTouched = false;
   applyFan(true);
 }
+// The demo passcode field (••• sheet): blank removes it. Its value is never echoed anywhere.
+const passField = $<HTMLInputElement>("passcode");
+passField.value = passcode ?? "";
+passField.addEventListener("change", () => setPasscode(passField.value));
+
 $("persona-mode").addEventListener("ionChange", (e) => {
   const v = (e as CustomEvent<{ value: string }>).detail.value;
   if ((v === "casual" || v === "analyst") && v !== chosen()?.mode) setPersona({ mode: v });
@@ -1464,7 +1523,7 @@ function syncAsk() {
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
 $("panel-ask").addEventListener("animationend", () => $("panel-ask").classList.remove("composer-in"));
-if (fan === null) onboard.open(null, false); // the first visit opens on the three choices
+if (fan === null && !embed) onboard.open(null, false); // the first visit opens on the three choices
 applyFan();
 
 function renderChips() {
@@ -1558,8 +1617,8 @@ async function ask(text: string) {
   let answer: ViewerAnswer | null = null;
   let failed = "";
   try {
-    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at });
-    answer = { ...message.answer, source: message.source ?? message.answer.source };
+    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at }, passcode);
+    answer = { ...message.answer, source: message.source ?? message.answer.source, ...(message.model_off ? { model_off: true } : {}) };
   } catch (e) {
     failed =
       e instanceof ApiError && e.status === 429
@@ -2000,8 +2059,9 @@ async function openHow(h: How) {
   const measured = p("Measured from player tracking", "said");
   if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), measured));
   else steps.push(step("What was measured", measured));
-  const checked = h.source === "model" ? "Written by the Companion, checked by code and the Judge before it was shown" : "Checked by code before it was shown";
-  steps.push(step("What the fact-checker did", p(checked, "said"), ...(h.answer ? evidence(h.answer) : [])));
+  const checked = h.source === "model" ? "Answered by our agents, checked by the fact-checker" : "Computed from tracking";
+  const off = h.answer?.model_off ? [p("Model off", "fine model-off")] : [];
+  steps.push(step("What the fact-checker did", p(checked, "said"), ...off, ...(h.answer ? evidence(h.answer) : [])));
   const count = p(`${steps.length} checks · all passed`, "count-line");
   list.replaceChildren(...steps);
   body.replaceChildren(...top, count, list);
