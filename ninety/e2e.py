@@ -767,6 +767,11 @@ async def run(args: argparse.Namespace) -> dict:
                                        clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
+    # A line's checked `text` keeps the track ids the fact-checker matched; it is never spoken (the voice
+    # reads `spoken`), but audio.json is in a public bundle: it is written as every screen says a
+    # player (onair.render), so no track id is in any of the bundle's text.
+    for said in track.said:
+        said.text = onair.render(said.text, sides_known(events), clubs_of(clip.meta))
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
