@@ -909,10 +909,10 @@ class Engine:
 
     def reach(self, p: Player, x: float, y: float, z: float, at: float | None = None) -> tuple[float, float]:
         """How far (across the ground) this player can reach a ball at (x, y), height z, at time
-        `at`, and how high he can reach at all (offball.reach_for). Demo engine v2 (V3): on his feet
-        a keeper's hands reach KEEPER_STAND_REACH_M; only a dive stretches them, from when it began
-        to be prepared (stretch_from); a deflection does not un-stretch a dive already under way, nor
-        pull him back out of his jump (rise_from)."""
+        `at`, and how high he can reach at all (offball.reach_for). Demo engine v2 (V3): at a shot,
+        on his feet a keeper's hands reach KEEPER_STAND_REACH_M and only a dive stretches them; at
+        any other ball they stretch from his reaction (stretch_from). A deflection does not
+        un-stretch a dive already under way, nor pull him back out of his jump (rise_from)."""
         hands = self.hands(p, x, y)
         if not hands:
             return offball.reach_for(False, 0.0)
@@ -3059,14 +3059,19 @@ class Engine:
         return self.kicked_at + self.reaction(p)
 
     def stretch_from(self, p: Player) -> float:
-        """P11, P15 (demo engine v2): when the keeper's arms began to stretch beyond his standing
-        reach. Only a dive stretches him out (KEEPER_DIVE_EXTRA_M is what the dive adds): during one,
-        or down after one, from when it began to be prepared; on his feet, never (his standing reach,
-        KEEPER_STAND_REACH_M). His arms once stretched to the dive's full reach from his reaction
-        whether or not he dived, so a standing keeper took balls 1.48 m to his side on his feet."""
+        """P11, P15 (demo engine v2, V3): when the keeper's arms began to stretch beyond his standing
+        reach. At a shot only a dive stretches him out (KEEPER_DIVE_EXTRA_M is what the dive adds):
+        during one, or down after one, from when it began to be prepared; on his feet, never (his
+        standing reach, KEEPER_STAND_REACH_M). His arms once stretched to the dive's full reach from
+        his reaction at a shot whether or not he dived, so he took shots 1.48 m to his side on his
+        feet. At any other ball (a pass, a cross, a loose ball) he does not dive, and his arms stretch
+        from his reaction as before (main's rule)."""
         diving = self.dive and self.dive[0] == p.id
         down = self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t
-        return self.save_from(p) if diving or down else math.inf
+        if diving or down:
+            return self.save_from(p)
+        k = self.kicked
+        return math.inf if k and k["type"] == "shot" and k["team"] != p.team else self.save_from(p)
 
     def rise_from(self, p: Player) -> float:
         """P15: when the keeper's centre of mass can begin to rise: when his save began, but no

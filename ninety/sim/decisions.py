@@ -620,10 +620,10 @@ def _reach(bx: float, by: float, bz: float, t: float, react: float, box_x: float
     high he reaches at all, by the engine's own rules (offball.may_handle, offball.reach_for): a
     foot, or, for the opposing keeper (his box at `box_x`), his hands in his box, his save begun
     when he reacted (rising from then, or UP_AFTER_CONTACT_S if later). The pass is not his
-    release, nor a pass from his own side, so only his box decides. Demo engine v2 (V3): he dives
-    only at shots, so at a pass his hands have his standing reach, as the engine gives him."""
+    release, nor a pass from his own side, so only his box decides. At a pass his arms stretch from
+    his reaction, as the engine has them (demo engine v2, V3: only at a shot must he dive for it)."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, 0.0, bz, t - max(react, offball.UP_AFTER_CONTACT_S))
+    return offball.reach_for(hands, t - react, bz, t - max(react, offball.UP_AFTER_CONTACT_S))
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
