@@ -3188,3 +3188,22 @@ short and actionable. This file is public: no research sources, product names or
   frames in the shape the real files have.
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 269. When vision cannot do a job the product needs, take a disclosed input; never a hidden one
+- **What happened:** the demo had to name players, and vision cannot: shirt numbers are a few
+  pixels tall on our renders, and naming by role missed its 0.95 gate (held-out 0.884, #374).
+  The tempting shortcut was to read the simulator's ids where vision's tracks are, quietly, and
+  call the names vision's. Kian decided (Oct 26) to name players openly the way broadcasts do,
+  from a licensed tracking provider's player-ID feed.
+- **Rule:** an input the live path takes from the engine is a separate, named artifact
+  (`identity_feed.jsonl`) carrying only what that job needs (here identity: who, and where to
+  match him), read by one module, for one purpose (identity, and the side it implies), allowed by name in AGENTS.md's hard rules, and
+  disclosed wherever its output is shown ("Player ID feed"; README, EVALUATION, CHALLENGE_MAP).
+  Everything else the pipeline computes must be the same with it and without it, and its matching
+  is graded like any vision result, without claiming it as vision's.
+- **Check:** `uv run pytest tests/test_identity_feed.py`:
+  `::test_only_the_identity_path_touches_the_feed` fails if any other module imports the feed's
+  reader (any import form) or reads a field made from it;
+  `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
+  fact, event or match.json field other than the line-up changes;
+  `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.

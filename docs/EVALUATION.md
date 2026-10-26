@@ -671,6 +671,47 @@ phrasing means were written into `ninety/agents/companion_eval.py` before its fi
 A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
 fact); the injection count checks that the text agrees with it.
 
+### Player names from the ID feed
+
+**Names come from a simulated tracking-provider ID feed; vision does not identify players.** We
+simulate that feed, including occasional identity swaps that get corrected
+([FEED_SPEC.md](FEED_SPEC.md)). The phone's names, and the side of each event whose player is
+named, are not a vision result, and no vision number in this file depends on them.
+
+`uv run python -m ninety.sim.identity_feed --run <the seed's ninety-sim run> --home-code LON
+--away-code LIS --out identity_feed.jsonl` exports the feed: 25 Hz, pitch-centred metres, each
+player's provider id, side and shirt, with a certified provider's 0.08 m position error, occlusion
+dropouts, a 15 s delivery delay and seeded identity swaps between close team-mates, each followed
+a few seconds later by an `id_correction` row (GROUNDING ID1 to ID9). `ninety/intel/identity.py`
+aligns vision's tactical frames to it by capture time, applies the corrections, skips
+low-confidence entries, and matches tracks to the feed's players: per side and per 10 s window of
+a segment, Hungarian keeping the most shared frames among pairs whose mean distance is within
+GATE_M = 1.26 m (vision's measured 90th-percentile position error, RIVAL_M above); a track is the
+player it was matched to for a strict majority of its frames, and of overlapping tracks given one
+player the heaviest non-overlapping set keeps him. Broadcast tracks (the ids events name) take a
+name, and their events the player's side, only through the camera join's association (lesson 259).
+
+`uv run python -m ninety.eval.identity_eval --clip runs/demo-8080-match --vision
+runs/demo-8080-vision-v2 --truth <the run> --feed identity_feed.jsonl` grades it as
+`naming_eval` grades role names: each track's true player is the one nearest it on average, and a
+name is right when that is the engine player behind the feed id given (matched by side and
+position through the team sheet). The feed is the engine's own players, so this measures vision's
+side of the match (a track that switches players, a wrong side, a wrong join pairing) and the
+feed's own swaps. The association gate was chosen on the even segments from naming_eval's
+pre-registered grid (0.75, 0.9, 1.0) at its 0.95 target, then the odd segments scored once
+([identity.json](eval/identity.json); the feed as shipped: seed 8080, 20 swaps, all corrected):
+
+| Demo seed 8080 | Tracks named, right | Event actors named, right | Event actors named |
+|---|---|---|---|
+| Held-out (odd segments), association 0.75 | 466 / 469 (0.994, 95% 0.98 to 1.00) | 56 / 56 (1.000, 0.94 to 1.00) | 56 of 122 |
+| Whole match | 868 / 878 (0.989) | 110 / 111 (0.991) | 111 of 253 |
+
+878 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
+club. 111 of the match's 345 detected events take their player's side from the feed, so 113 have
+a side sure enough to air (5 before); the others have no join pairing at the gate and keep
+vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
+(no change to `ninety/sim/engine.py` or its modules since `1d0390be`).
+
 ### Tracked positions for the phone
 
 `uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance

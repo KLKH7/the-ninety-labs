@@ -1,0 +1,140 @@
+{
+ "commit": "cd5c3550c7b0b2f7e861e8cf4bc2525ab3dc9d34",
+ "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-match",
+ "truth": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-friendly-satoshi-58a337/f0944a04-a1d3-4240-9c94-7b1fe56ea87e/scratchpad/truth8080",
+ "feed": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-infallible-gates-f4e517/e8bdacb3-0a9d-4bd6-95e7-933eda1173a1/scratchpad/feed2.jsonl",
+ "target": 0.95,
+ "gate_m": 1.26,
+ "grid": [
+  {
+   "association": 0.75,
+   "dev": {
+    "track_names": {
+     "named": 409,
+     "right": 402,
+     "precision": 0.983,
+     "ci": [
+      0.97,
+      0.99
+     ]
+    },
+    "events": 131,
+    "event_names": {
+     "named": 55,
+     "right": 54,
+     "precision": 0.982,
+     "ci": [
+      0.9,
+      1.0
+     ]
+    },
+    "event_coverage": 0.42,
+    "tracks_named": 409
+   }
+  },
+  {
+   "association": 0.9,
+   "dev": {
+    "track_names": {
+     "named": 409,
+     "right": 402,
+     "precision": 0.983,
+     "ci": [
+      0.97,
+      0.99
+     ]
+    },
+    "events": 131,
+    "event_names": {
+     "named": 35,
+     "right": 35,
+     "precision": 1.0,
+     "ci": [
+      0.9,
+      1.0
+     ]
+    },
+    "event_coverage": 0.267,
+    "tracks_named": 409
+   }
+  },
+  {
+   "association": 1.0,
+   "dev": {
+    "track_names": {
+     "named": 409,
+     "right": 402,
+     "precision": 0.983,
+     "ci": [
+      0.97,
+      0.99
+     ]
+    },
+    "events": 131,
+    "event_names": {
+     "named": 27,
+     "right": 27,
+     "precision": 1.0,
+     "ci": [
+      0.88,
+      1.0
+     ]
+    },
+    "event_coverage": 0.206,
+    "tracks_named": 409
+   }
+  }
+ ],
+ "chosen": 0.75,
+ "held_out": {
+  "track_names": {
+   "named": 469,
+   "right": 466,
+   "precision": 0.994,
+   "ci": [
+    0.98,
+    1.0
+   ]
+  },
+  "events": 122,
+  "event_names": {
+   "named": 56,
+   "right": 56,
+   "precision": 1.0,
+   "ci": [
+    0.94,
+    1.0
+   ]
+  },
+  "event_coverage": 0.459,
+  "tracks_named": 469
+ },
+ "all": {
+  "track_names": {
+   "named": 878,
+   "right": 868,
+   "precision": 0.989,
+   "ci": [
+    0.98,
+    0.99
+   ]
+  },
+  "events": 253,
+  "event_names": {
+   "named": 111,
+   "right": 110,
+   "precision": 0.991,
+   "ci": [
+    0.95,
+    1.0
+   ]
+  },
+  "event_coverage": 0.439,
+  "tracks_named": 878
+ },
+ "frame_coverage": 0.734,
+ "tracks": 1945,
+ "id_corrections": 20,
+ "events_sided": 111,
+ "events_total": 345
+}

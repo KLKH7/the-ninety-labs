@@ -37,6 +37,7 @@ from ninety.intel import (
     shot_map,
     style,
 )
+from ninety.intel import identity as identity_mod
 from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
@@ -63,6 +64,11 @@ class MatchInsights:
     # A joined match's broadcast tracks (the ids its events name) -> what a fan may be told of each,
     # through the camera join (ninety/intel/naming.broadcast_people); empty for a single camera.
     broadcast: dict = field(default_factory=dict)
+    # Names from the player-ID feed (ninety/intel/identity.py), tactical and broadcast tracks: the
+    # bundle's line-up only. No fact, person record or statistic above reads them.
+    identity: dict = field(default_factory=dict)
+    identity_broadcast: dict = field(default_factory=dict)
+    identity_source: dict = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -74,6 +80,7 @@ class MatchInsights:
         gate: Mapping | None = None,
         association: Mapping[str, Mapping] | None = None,
         score_reads: Sequence[Mapping] = (),
+        feed: identity_mod.Feed | None = None,
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
@@ -157,6 +164,15 @@ class MatchInsights:
         from ninety.intel.stats_table import stats_table
 
         mi.stats = stats_table(mi)  # the phone's Stats tab, from the same tools the Companion reads
+        if feed is not None:
+            # Last, after every fact and stat is computed: the feed names tracks and nothing else
+            # (an event's side from the feed is set before, in the detected file: identity.sided).
+            if not feed.matches(fixture):
+                raise ValueError(f"{clip}: the player-ID feed is another fixture's ({feed.meta['teams']})")
+            mi.identity = identity_mod.tactical(f.frames, feed)
+            if association is not None:
+                mi.identity_broadcast = identity_mod.broadcast(association, mi.identity, identity_mod.gate())
+            mi.identity_source = identity_mod.disclosure(feed)
         return mi
 
     # -- what the tools answer -------------------------------------------------------------
@@ -522,6 +538,13 @@ class MatchInsights:
             "facts": self.facts,
             **({"broadcast": self.broadcast, "lineup": naming.lineup(self.broadcast)}
                if self.broadcast else {}),
+            # With a player-ID feed, the line-up is the feed's (marked source id_feed), and the
+            # tactical tracks' names come with it for the radar and the player card.
+            **({"identity": self.identity_source, "identity_tracks": self.identity,
+                "identity_broadcast": self.identity_broadcast,
+                "lineup_tactical": identity_mod.lineup(self.identity)}
+               if self.identity_source else {}),
+            **({"lineup": identity_mod.lineup(self.identity_broadcast)} if self.identity_broadcast else {}),
         }
 
     @classmethod
@@ -537,6 +560,9 @@ class MatchInsights:
             dict(body.get("team_stats") or {}),
             dict(body.get("stats") or {}),
             dict(body.get("broadcast") or {}),
+            dict(body.get("identity_tracks") or {}),
+            dict(body.get("identity_broadcast") or {}),
+            dict(body.get("identity") or {}),
         )
 
 
@@ -613,6 +639,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--association", type=Path,
                     help="a joined match's association.json: names cross the camera join (naming.py)")
+    ap.add_argument("--identity-feed", type=Path, default=None,
+                    help="the simulated tracking provider's player-ID feed (ninety/sim/identity_feed.py): "
+                         "names for the line-up only, never a fact or a stat")
     ap.add_argument("--scorebug", type=Path, default=None,
                     help="the clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score")
     args = ap.parse_args(argv)
@@ -622,8 +651,12 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
     association = json.loads(args.association.read_text())["tracks"] if args.association else None
     reads = score_reads(args.scorebug) if args.scorebug is not None else []
+    feed = None
+    if args.identity_feed:  # the player-ID feed: names (and nothing else) for the line-up
+        feed = identity_mod.load_for(args.identity_feed, frames, load_fixture(args.fixture))
     mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
-                             association=association, score_reads=reads)
+                             association=association, score_reads=reads,
+                             feed=feed)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 
