@@ -1,5 +1,7 @@
 """The score, scorers, assists and saves, from vision's goals and shot outcomes (GROUNDING I24)."""
 
+import re
+
 import pytest
 
 from ninety.agents import companion_match as cm
@@ -64,24 +66,21 @@ def test_a_save_is_the_club_defending_the_end_the_shot_was_struck_at():
     assert (got["away"]["value"], got["home"]["value"]) == (2, 0)  # away's keeper saved both
 
 
-def test_the_score_is_said_with_each_number_in_its_own_place():
-    sc = {**scoring.score(scoring.goals(goal_events()), 90, CLUBS), "clubs": CLUBS}
-    want = "By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals."
-    assert cm.code_texts(sc) == [want]
-    nil = {**scoring.score([], 90, CLUBS), "clubs": CLUBS}
-    assert cm.code_texts(nil) == ["By minute 90, neither London Athletic nor Lisbon Esportes had scored."]
+def test_no_scoreline_is_ever_said_from_vision():
+    # Kian, Oct 26 (option B): vision finds some goals and misses others, so a count of them would
+    # contradict the broadcast's scorebug. The score points at the scorebug, with no numeral.
+    for goals in (scoring.goals(goal_events()), []):
+        sc = {**scoring.score(goals, 90, CLUBS), "clubs": CLUBS}
+        assert sc["confident"] is False
+        assert cm.code_texts(sc) == [cm.SCORE_POINTER] and not re.search(r"\d", cm.SCORE_POINTER)
 
 
-@pytest.mark.parametrize(
-    "text, ok",
-    [
-        ("By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals.", True),
-        ("By minute 90, London Athletic had scored 0 goals and Lisbon Esportes 1 goal.", False),
-        ("By minute 90, London Athletic had scored 2 goals and Lisbon Esportes 0 goals.", False),
-        ("By minute 90, London Athletic were cruising, 1 goal and Lisbon Esportes 0 goals.", False),
-    ],
-)
-def test_a_score_sentence_cannot_swap_or_dress_up_the_numbers(text, ok):
+@pytest.mark.parametrize("text", [
+    "By minute 90, London Athletic had scored 1 goal and Lisbon Esportes 0 goals.",  # right, but a count
+    "London Athletic lead 1-0.",
+    "It is 1 goal to 0.",
+])
+def test_a_score_sentence_is_held_whatever_its_numbers(text):
     from ninety.agents.factcheck import Claim
     from ninety.agents.insight_check import verify
     from ninety.intel.teamsheet import Fixture
@@ -89,7 +88,7 @@ def test_a_score_sentence_cannot_swap_or_dress_up_the_numbers(text, ok):
     sc = {**scoring.score(scoring.goals(goal_events()), 90, CLUBS), "clubs": CLUBS}
     fx = Fixture(7, "OAK", "FEN")
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
-    assert verify(Claim(text, [sc["id"]]), {sc["id"]: sc}, fx.clubs, {}, names).ok is ok
+    assert not verify(Claim(text, [sc["id"]]), {sc["id"]: sc}, fx.clubs, {}, names).ok
 
 
 @pytest.mark.parametrize(
@@ -142,3 +141,28 @@ def test_a_save_under_the_event_gate_is_unsure():
     shots = [e(5, "shot", "home", 300.0, outcome="on_target", x=92.0, y=30.0, confidence=0.3)]
     got = scoring.save_counts(scoring.saves(shots), 1, 90)
     assert not got["away"]["confident"] and (got["away"]["lo"], got["away"]["hi"]) == (0, 1)
+
+
+def test_a_scorebug_reading_is_confident_once_measured_and_never_under_the_gate(monkeypatch):
+    change = {"id": "s1", "t": 1300.0, "type": "score_change", "team": "home",
+              "score": {"home": 1, "away": 0}, "confidence": 0.95, "source": "vision"}
+    # Flipped by the reader's validation against its pre-stated bar (docs/eval/scorebug-plan.md, #356).
+    assert scoring.SCOREBUG_MEASURED is True
+    (row,) = scoring.scorebug([change])
+    assert (row["home"], row["away"], row["confident"]) == (1, 0, True)
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", False)
+    assert scoring.scorebug([change])[0]["confident"] is False
+    monkeypatch.setattr(scoring, "SCOREBUG_MEASURED", True)
+    assert scoring.scorebug([{**change, "confidence": 0.3}])[0]["confident"] is False  # under the gate
+
+
+def test_the_first_reading_holds_the_score_before_any_change_and_a_held_reading_says_nothing_new():
+    def read(i, t, home, away, kind="score_read"):
+        return {"id": i, "t": t, "type": kind, "score": {"home": home, "away": away}, "confidence": 0.99,
+                "source": "vision", **({"team": "home"} if kind == "score_change" else {})}
+
+    # A clip that starts at 2-1: the first reading says so, before any change is seen.
+    rows = scoring.scorebug([read("r1", 0.0, 2, 1), read("r2", 54.0, 2, 1),
+                             read("c1", 300.0, 3, 1, "score_change"), read("r3", 320.0, 3, 1)])
+    assert [(r["event"], r["home"], r["away"]) for r in rows] == [("r1", 2, 1), ("c1", 3, 1)]
+    assert all(r["confident"] for r in rows)

@@ -38,3 +38,22 @@ So this set is rendered for it, by these rules.
   saves are also counted on the frozen 30-clip test set.
 - **What it cannot show:** the kick-off after a goal (rule 4 of the plan): the goals here are
   judged on the line and the net alone.
+
+## Amendment (Oct 24, before any of the set's matches is simulated on the render machine or any clip rendered)
+
+**Matches and render at main `1d0390be`** (engine at the freeze, `65247ba3`; the demo's checkout),
+not at `6ea8e37`. The demo is drawn by today's engine and renderer, so its goals and saves are what
+this set must measure; the Mac holds only nine of the sixteen matches at `6ea8e37`, and all sixteen
+are simulated again at `1d0390be` on the render machine. Everything else is as registered: the seeds,
+the split, the windows and the subset (`ninety/eval/shot_outcome_set.py`, unchanged; its
+`RENDER_COMMIT` field records the old commit and is superseded by this line), broadcast only,
+`stadium=broadcast`, every frame. The set's json is committed with the commit it was built at.
+
+## The list (Oct 24)
+
+`docs/eval/shot-outcome-set.json`: built by main's `ninety/eval/shot_outcome_set.py` (byte-identical to
+`e24f3e6`'s) on the sixteen matches simulated at `1d0390be` on the render machine: **80 validation
+clips and 79 test clips, 1,682.5 s**. Re-running the builder on those matches reproduces the file byte
+for byte (checked on the maintainer's machine). The matches' answer keys are not committed (the test
+split is sealed); their sha256s are in `docs/eval/shot-outcome-set-sims.sha256`, so a copy can be
+checked before the rebuild.

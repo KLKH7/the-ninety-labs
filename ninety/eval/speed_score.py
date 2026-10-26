@@ -32,6 +32,7 @@ from pathlib import Path
 from ninety.eval import event_score, pitch_score
 from ninety.eval.attribution_score import observations_file, write_or_check
 from ninety.eval.vision_score import IN_AIR_Z, height_group
+from ninety.render.splits import TEST_SEEDS
 from ninety.vision import events as ev
 from ninety.vision import track as tr
 
@@ -288,8 +289,17 @@ def main(argv: list[str] | None = None) -> None:
                     help="the seed<N>.jsonl detections the observations were made from: checked first")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--final-test", action="store_true",
+                    help="score the test seeds (900001-900030): the plan's one look; needs --detections")
     a = ap.parse_args(argv)
     clip_set = json.loads(a.clip_set.read_text())
+    sealed = sorted(set(clip_set["seeds"]) & set(TEST_SEEDS))
+    if sealed and not a.final_test:
+        raise SystemExit(f"refused: seeds {sealed[0]} to {sealed[-1]} are the test set: scored once, "
+                         "with --final-test (docs/eval/speed-plan.md)")
+    if a.final_test and a.detections is None:
+        raise SystemExit("refused: a final test names the detections its observations were made from "
+                         "(--detections), checked before anything is scored")
     if a.detections is not None:
         problems = check_detections(a.detections, clip_set, a.detector)
         if problems:

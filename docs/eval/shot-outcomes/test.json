@@ -1,0 +1,943 @@
+{
+ "commit": "8ac10a913829f6f17db245b39048df6bbc738357",
+ "clips": [
+  "seed910009-t000288",
+  "seed910009-t016867",
+  "seed910009-t025132",
+  "seed910009-t026766",
+  "seed910009-t032553",
+  "seed910009-t034186",
+  "seed910009-t041262",
+  "seed910009-t042974",
+  "seed910009-t115238",
+  "seed910009-t133519",
+  "seed910010-t000116",
+  "seed910010-t004280",
+  "seed910010-t006406",
+  "seed910010-t010344",
+  "seed910010-t018604",
+  "seed910010-t018939",
+  "seed910010-t024808",
+  "seed910010-t035496",
+  "seed910010-t064717",
+  "seed910011-t010408",
+  "seed910011-t011406",
+  "seed910011-t015523",
+  "seed910011-t015867",
+  "seed910011-t021251",
+  "seed910011-t038358",
+  "seed910011-t041906",
+  "seed910011-t045319",
+  "seed910011-t053785",
+  "seed910011-t057184",
+  "seed910011-t065190",
+  "seed910011-t065464",
+  "seed910011-t097321",
+  "seed910012-t002601",
+  "seed910012-t010705",
+  "seed910012-t035796",
+  "seed910012-t037623",
+  "seed910012-t072504",
+  "seed910012-t104055",
+  "seed910012-t126191",
+  "seed910012-t133387",
+  "seed910013-t000406",
+  "seed910013-t005077",
+  "seed910013-t018517",
+  "seed910013-t025352",
+  "seed910013-t028688",
+  "seed910013-t038825",
+  "seed910013-t039453",
+  "seed910013-t040844",
+  "seed910013-t053581",
+  "seed910013-t074894",
+  "seed910013-t119511",
+  "seed910014-t002087",
+  "seed910014-t005291",
+  "seed910014-t010992",
+  "seed910014-t011273",
+  "seed910014-t026062",
+  "seed910014-t029828",
+  "seed910014-t032745",
+  "seed910014-t033124",
+  "seed910014-t065869",
+  "seed910015-t004346",
+  "seed910015-t005590",
+  "seed910015-t013793",
+  "seed910015-t037152",
+  "seed910015-t052305",
+  "seed910015-t056188",
+  "seed910015-t061204",
+  "seed910015-t062729",
+  "seed910015-t103242",
+  "seed910015-t132176",
+  "seed910016-t002192",
+  "seed910016-t006564",
+  "seed910016-t022720",
+  "seed910016-t030646",
+  "seed910016-t036247",
+  "seed910016-t047226",
+  "seed910016-t064592",
+  "seed910016-t082365",
+  "seed910016-t095458"
+ ],
+ "gate": 0.5,
+ "by": {
+  "gated": {
+   "goal": {
+    "tp": 10,
+    "fp": 3,
+    "fn": 5,
+    "failures": [
+     {
+      "clip": "seed910009-t034186",
+      "false": {
+       "t": 1371.12,
+       "team": "away",
+       "confidence": 0.806
+      }
+     },
+     {
+      "clip": "seed910010-t064717",
+      "missed": {
+       "t": 2593.28,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910010-t064717",
+      "false": {
+       "t": 2592.12,
+       "team": "home",
+       "confidence": 0.862
+      }
+     },
+     {
+      "clip": "seed910011-t011406",
+      "missed": {
+       "t": 461.24,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t065869",
+      "missed": {
+       "t": 2638.92,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t056188",
+      "missed": {
+       "t": 2252.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "false": {
+       "t": 4133.16,
+       "team": "home",
+       "confidence": 0.86
+      }
+     },
+     {
+      "clip": "seed910015-t132176",
+      "missed": {
+       "t": 5290.48,
+       "team": "away"
+      }
+     }
+    ],
+    "precision": 0.769,
+    "recall": 0.667,
+    "precision_95": [
+     0.5,
+     0.92
+    ],
+    "recall_95": [
+     0.42,
+     0.85
+    ]
+   },
+   "save": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 47,
+    "failures": [
+     {
+      "clip": "seed910009-t000288",
+      "missed": {
+       "t": 14.52,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t016867",
+      "missed": {
+       "t": 677.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t025132",
+      "missed": {
+       "t": 1008.28,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t026766",
+      "missed": {
+       "t": 1073.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t032553",
+      "missed": {
+       "t": 1305.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910009-t034186",
+      "missed": {
+       "t": 1370.44,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t004280",
+      "missed": {
+       "t": 174.2,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t010344",
+      "missed": {
+       "t": 416.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t018604",
+      "missed": {
+       "t": 749.72,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t018939",
+      "missed": {
+       "t": 760.56,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t024808",
+      "missed": {
+       "t": 995.32,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910010-t035496",
+      "missed": {
+       "t": 1422.84,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t038358",
+      "missed": {
+       "t": 1537.32,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t053785",
+      "missed": {
+       "t": 2154.4,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t057184",
+      "missed": {
+       "t": 2290.36,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t065190",
+      "missed": {
+       "t": 2610.6,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t065464",
+      "missed": {
+       "t": 2621.56,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910012-t035796",
+      "missed": {
+       "t": 1434.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t037623",
+      "missed": {
+       "t": 1507.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t072504",
+      "missed": {
+       "t": 2903.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t104055",
+      "missed": {
+       "t": 4165.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910012-t126191",
+      "missed": {
+       "t": 5050.64,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t133387",
+      "missed": {
+       "t": 5338.48,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t025352",
+      "missed": {
+       "t": 1017.08,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "missed": {
+       "t": 1556.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t039453",
+      "missed": {
+       "t": 1581.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t040844",
+      "missed": {
+       "t": 1636.76,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t053581",
+      "missed": {
+       "t": 2146.24,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t074894",
+      "missed": {
+       "t": 2998.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t002087",
+      "missed": {
+       "t": 86.48,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t005291",
+      "missed": {
+       "t": 214.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t010992",
+      "missed": {
+       "t": 442.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t011273",
+      "missed": {
+       "t": 453.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t029828",
+      "missed": {
+       "t": 1196.12,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t032745",
+      "missed": {
+       "t": 1312.8,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t013793",
+      "missed": {
+       "t": 554.72,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t037152",
+      "missed": {
+       "t": 1489.08,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t052305",
+      "missed": {
+       "t": 2095.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t061204",
+      "missed": {
+       "t": 2451.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910015-t062729",
+      "missed": {
+       "t": 2512.16,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "missed": {
+       "t": 4132.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t002192",
+      "missed": {
+       "t": 90.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t030646",
+      "missed": {
+       "t": 1228.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t036247",
+      "missed": {
+       "t": 1452.88,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t047226",
+      "missed": {
+       "t": 1892.04,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t082365",
+      "missed": {
+       "t": 3297.6,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t095458",
+      "missed": {
+       "t": 3821.32,
+       "team": "home"
+      }
+     }
+    ],
+    "precision": 1.0,
+    "recall": 0.041,
+    "precision_95": [
+     0.34,
+     1.0
+    ],
+    "recall_95": [
+     0.01,
+     0.14
+    ]
+   }
+  },
+  "all": {
+   "goal": {
+    "tp": 10,
+    "fp": 3,
+    "fn": 5,
+    "failures": [
+     {
+      "clip": "seed910009-t034186",
+      "false": {
+       "t": 1371.12,
+       "team": "away",
+       "confidence": 0.806
+      }
+     },
+     {
+      "clip": "seed910010-t064717",
+      "missed": {
+       "t": 2593.28,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910010-t064717",
+      "false": {
+       "t": 2592.12,
+       "team": "home",
+       "confidence": 0.862
+      }
+     },
+     {
+      "clip": "seed910011-t011406",
+      "missed": {
+       "t": 461.24,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t065869",
+      "missed": {
+       "t": 2638.92,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t056188",
+      "missed": {
+       "t": 2252.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "false": {
+       "t": 4133.16,
+       "team": "home",
+       "confidence": 0.86
+      }
+     },
+     {
+      "clip": "seed910015-t132176",
+      "missed": {
+       "t": 5290.48,
+       "team": "away"
+      }
+     }
+    ],
+    "precision": 0.769,
+    "recall": 0.667,
+    "precision_95": [
+     0.5,
+     0.92
+    ],
+    "recall_95": [
+     0.42,
+     0.85
+    ]
+   },
+   "save": {
+    "tp": 2,
+    "fp": 1,
+    "fn": 47,
+    "failures": [
+     {
+      "clip": "seed910009-t000288",
+      "missed": {
+       "t": 14.52,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t016867",
+      "missed": {
+       "t": 677.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t025132",
+      "missed": {
+       "t": 1008.28,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t026766",
+      "missed": {
+       "t": 1073.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910009-t032553",
+      "missed": {
+       "t": 1305.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910009-t034186",
+      "missed": {
+       "t": 1370.44,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t004280",
+      "missed": {
+       "t": 174.2,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t010344",
+      "missed": {
+       "t": 416.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t018604",
+      "missed": {
+       "t": 749.72,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t018939",
+      "missed": {
+       "t": 760.56,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910010-t024808",
+      "missed": {
+       "t": 995.32,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910010-t035496",
+      "missed": {
+       "t": 1422.84,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t038358",
+      "missed": {
+       "t": 1537.32,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t053785",
+      "missed": {
+       "t": 2154.4,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t057184",
+      "missed": {
+       "t": 2290.36,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t065190",
+      "missed": {
+       "t": 2610.6,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910011-t065464",
+      "missed": {
+       "t": 2621.56,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910012-t035796",
+      "missed": {
+       "t": 1434.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t037623",
+      "missed": {
+       "t": 1507.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t072504",
+      "missed": {
+       "t": 2903.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t104055",
+      "missed": {
+       "t": 4165.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910012-t126191",
+      "missed": {
+       "t": 5050.64,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910012-t133387",
+      "missed": {
+       "t": 5338.48,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t025352",
+      "missed": {
+       "t": 1017.08,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "missed": {
+       "t": 1556.0,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t038825",
+      "false": {
+       "t": 1562.24,
+       "team": "home",
+       "confidence": 0.368
+      }
+     },
+     {
+      "clip": "seed910013-t039453",
+      "missed": {
+       "t": 1581.12,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910013-t040844",
+      "missed": {
+       "t": 1636.76,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t053581",
+      "missed": {
+       "t": 2146.24,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910013-t074894",
+      "missed": {
+       "t": 2998.76,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t002087",
+      "missed": {
+       "t": 86.48,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t005291",
+      "missed": {
+       "t": 214.64,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t010992",
+      "missed": {
+       "t": 442.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t011273",
+      "missed": {
+       "t": 453.92,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910014-t029828",
+      "missed": {
+       "t": 1196.12,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910014-t032745",
+      "missed": {
+       "t": 1312.8,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t013793",
+      "missed": {
+       "t": 554.72,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t037152",
+      "missed": {
+       "t": 1489.08,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t052305",
+      "missed": {
+       "t": 2095.2,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t061204",
+      "missed": {
+       "t": 2451.16,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910015-t062729",
+      "missed": {
+       "t": 2512.16,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910015-t103242",
+      "missed": {
+       "t": 4132.68,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t002192",
+      "missed": {
+       "t": 90.68,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t030646",
+      "missed": {
+       "t": 1228.84,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t036247",
+      "missed": {
+       "t": 1452.88,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t047226",
+      "missed": {
+       "t": 1892.04,
+       "team": "home"
+      }
+     },
+     {
+      "clip": "seed910016-t082365",
+      "missed": {
+       "t": 3297.6,
+       "team": "away"
+      }
+     },
+     {
+      "clip": "seed910016-t095458",
+      "missed": {
+       "t": 3821.32,
+       "team": "home"
+      }
+     }
+    ],
+    "precision": 0.667,
+    "recall": 0.041,
+    "precision_95": [
+     0.21,
+     0.94
+    ],
+    "recall_95": [
+     0.01,
+     0.14
+    ]
+   }
+  }
+ }
+}

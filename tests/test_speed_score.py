@@ -283,3 +283,20 @@ def test_the_command_stops_before_scoring_on_refused_detections(tmp_path):
                  "--observations", str(tmp_path), "--detector", "ours-freeze",
                  "--detections", str(tmp_path / "d"), "--out", str(tmp_path / "r")])
     assert not (tmp_path / "r.json").exists()
+
+
+def test_the_test_seeds_are_refused_without_final_test_and_a_final_test_needs_its_detections(tmp_path):
+    import json
+
+    (tmp_path / "set.json").write_text(json.dumps({"seeds": [900001, 900002], "clips": []}))
+    args = ["--set", str(tmp_path / "set.json"), "--clips", str(tmp_path), "--observations", str(tmp_path),
+            "--detector", "ours-freeze", "--out", str(tmp_path / "r")]
+    with pytest.raises(SystemExit, match="refused: seeds 900001 to 900002 are the test set"):
+        ss.main(args)
+    with pytest.raises(SystemExit, match="refused: a final test names the detections"):
+        ss.main([*args, "--final-test"])
+    assert not (tmp_path / "r.json").exists()
+    # not a test seed: no flag needed (the validation set and the synthetic sets score as before)
+    (tmp_path / "set.json").write_text(json.dumps({"seeds": [1], "clips": []}))
+    ss.main(args)
+    assert (tmp_path / "r.json").exists()

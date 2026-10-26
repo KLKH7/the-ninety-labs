@@ -61,7 +61,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.vision import events as ev
-from ninety.vision import fuse, observe, track, tracked_frames
+from ninety.vision import fuse, observe, restarts, track, tracked_frames
 from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX, VIEWS
@@ -164,6 +164,10 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
     # Read back as the events stage always reads its input, so this run and the CLIs agree.
     obs = track.read_observations(out / "observations.jsonl")
     found, summary = ev.detect(obs)
+    # Restarts from the same observations (ninety/vision/restarts.py): kick-offs and set pieces with
+    # their kind, merged in time; a possession change while the ball lies set is the restart's set-up.
+    set_balls, restarted = restarts.detect(obs)
+    found = restarts.merge(found, set_balls, restarted["dead_balls"])
     (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in found), encoding="utf-8")
     lap("events")
     rows = next(iter(views.values()))
@@ -179,6 +183,7 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         "camera_ok": summary["frames_camera_ok"],
         "detections": n_dets,
         "events": summary["events"],
+        "restarts": restarted["events"],
         "named": summary["named"],
         "seconds": seconds | {"total": round(sum(seconds.values()), 3)},
         "detect_seconds_per_frame": round(seconds["detect"] / len(rows), 4),

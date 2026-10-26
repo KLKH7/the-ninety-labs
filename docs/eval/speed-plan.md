@@ -1,7 +1,8 @@
 # Ball speed and shot speed from video: the speed error, pre-registered
 
-Status: **pre-registered, nothing scored.** Written and committed before any speed number on a
-dataset v2 clip was computed (R3, docs/TEAM.md, Sat 24: "speed error"; docs/EVALUATION.md, the
+Status: **scored once** on the 30 test clips (docs/eval/speed-report-freeze.md; the first run's frame half
+was invalid, lesson 263, and was rerun after the fix; see Deviations). Written and committed before any
+speed number on a dataset v2 clip was computed (R3, docs/TEAM.md, Sat 24: "speed error"; docs/EVALUATION.md, the
 event detection row). The detector is ours-freeze, from its one scored test run (below). A change
 after this commit is listed under "Deviations" with its date and reason, before any result is read.
 
@@ -128,7 +129,7 @@ reach is set down beforehand from committed measurements, not from speeds:
   (f7ec71de), `track.py` (cf0be765) and `detections.py` (17ed58cc) are those of this branch after
   the merge. Each file is used only if its sha256 matches the list that run publishes, and it holds
   one line per frame of its clip. Carlos approved both changes.
-- 2026-10-24, after the first score, a scorer defect fixed (lesson 253): frame speed read the true
+- 2026-10-24, after the first score, a scorer defect fixed (lesson 263): frame speed read the true
   ball's velocity from fields a rendered clip does not hold, with a default of 0, so every true
   speed was 0 and that half of the first report graded nothing. The true velocity is now the
   central difference of the true places one frame either side (a frame without both neighbours is

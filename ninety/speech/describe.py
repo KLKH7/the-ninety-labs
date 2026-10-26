@@ -73,7 +73,18 @@ QUOTES = {'"': "&quot;", "'": "&apos;"}
 
 # Lower is more important: what keeps its place when there is no time for everything.
 PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4,
-            "shape": 4}
+            "set_piece": 4, "shape": 4}
+# A detected set piece (ninety/vision/restarts.py) by its kind, and why a free kick or penalty was
+# given as far as tracking can tell (ninety/intel/restart_cause.py). A foul is never said to be
+# anyone's: tracking sees positions, not contact.
+RESTART_NAMES = {"corner": "Corner", "goal_kick": "Goal kick", "throw_in": "Throw-in",
+                 "free_kick": "Free kick", "penalty_kick": "Penalty"}
+CAUSE_WORDS = {"offside": "likely for offside", "foul_likely": "likely for a foul", "foul": "for a foul"}
+# The cause is said only once it is measured: SAY_CAUSE is turned on when the validation cause table
+# (ninety/eval/restart_score.py, `cause.right`) clears the bar docs/eval/restarts-vision-plan.md
+# states before scoring. Until then the line names only the restart's kind; the cause stays in the
+# data. A claim ships with its measurement (AGENTS.md).
+SAY_CAUSE = False
 # A shape change is said only when it is larger than tracking error could make it: each minute's
 # value is within the position error (ninety/intel/shape.POSITION_ERROR_M, 1.26 m) of the truth, so
 # their difference is within twice that, 2.52 m; the smallest whole-metre change past it is 3 m.
@@ -164,6 +175,19 @@ def _who(event: dict) -> str:
 
 def event_versions(event: dict) -> list[str]:
     """The line for one event, full then short. Numbers come from the event itself."""
+    return [_opening_capital(v) for v in _versions(event)]
+
+
+def _opening_capital(line: str) -> str:
+    """A sentence that opens on "a player" opens with a capital ("A player shoots.", "Goal! A player
+    scores."); "a player" mid-sentence stays lower case ("Kick-off, a player."). A player id or a side
+    (said as its club later, by spoken()) is left as it is."""
+    if line.startswith(f"{UNNAMED} "):
+        line = "A" + line[1:]
+    return line.replace(f"Goal! {UNNAMED} ", "Goal! A player ")
+
+
+def _versions(event: dict) -> list[str]:
     kind, who, place = event["type"], _who(event), where(event["x"], event["y"])
     if kind == "goal":
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
@@ -185,6 +209,14 @@ def event_versions(event: dict) -> list[str]:
         return [f"{who} tackles{target}, {place}.", f"{who} tackles{target}."]
     if kind == "kickoff":
         return [f"Kick-off, {who}.", ]
+    if kind == "set_piece":
+        name = RESTART_NAMES.get(event.get("restart") or "", "Set piece")
+        # The side by name when it was told surely (spoken() turns it into the club's name), else
+        # no side at all: "A free kick".
+        head = f"{name} to {event['team']}" if side_known(event) else f"A {name.lower()}"
+        why = CAUSE_WORDS.get(event.get("cause") or "", "") if SAY_CAUSE else ""
+        head += f", {why}" if why else ""
+        return [f"{head}, {place}.", f"{head}."]
     return []
 
 

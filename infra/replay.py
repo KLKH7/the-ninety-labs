@@ -32,7 +32,8 @@ FILES = {"manifest.json", "cues.jsonl", "trace.json", "detections.jsonl", "event
          "commentary.json",  # the commentary toggle's calls (ninety/speech/commentary.py)
          "radar.json", "match.json",  # --tracked and --match (ninety/radar.py, ninety/condensed.py)
          "agents.json",  # --agents live: every model answer, for audit
-         "cards.json"}  # --cards: the Insight Scout's verified cards (schemas/insight_card.schema.json)
+         "cards.json",  # --cards: the Insight Scout's verified cards (schemas/insight_card.schema.json)
+         "scorebug.jsonl"}  # --scorebug: the broadcast's score readings (ninety/vision/scorebug.py)
 # Folders of footage and speech: JPEG frames (--frames), the audio description's spoken lines
 # (ninety/speech/describe.py, when made with Azure Speech) and the phone's read-aloud lines
 # (ninety/speech/bundle.py, --voice-audio), and each highlight's still and clip (ninety/highlights.py,

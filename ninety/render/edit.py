@@ -150,3 +150,15 @@ def stingers(frames: list[int], fps: int) -> dict[int, float]:
             if i + k < len(frames):
                 out[i + k] = (k + 0.5) / half
     return out
+
+
+def edge_stingers(n: int, fps: int) -> dict[int, float]:
+    """The stinger over a clip's own ends, for clips cut back to back: clearing over its first
+    frames (0 to 1, as after a cut) and coming in over its last (-1 to 0, as before one), half of
+    STINGER_S each, so two such clips joined show one whole stinger across the join."""
+    half = max(1, round(STINGER_S * fps / 2))
+    out: dict[int, float] = {}
+    for k in range(min(half, n)):
+        out[k] = (k + 0.5) / half
+        out[n - 1 - k] = -(k + 0.5) / half
+    return out
