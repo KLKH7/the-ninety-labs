@@ -152,7 +152,9 @@ def code_caption(moment: dict, shot: dict) -> str:
     speed = f" at {moment['v_kmh']:.0f} km/h" if moment.get("v_kmh") is not None else ""
     what = "scores" if moment["kind"] == "goal" else "is denied"
     start = ORIGIN_PHRASE.get(moment.get("origin"), "")
-    return f"{who} {what} from {round(moment['d_m'])} m{speed}{start}."
+    # A goal whose strike was not seen has no distance (highlights.reel): none is said.
+    where = "" if moment.get("d_m") is None else f" from {round(moment['d_m'])} m"
+    return f"{who} {what}{where}{speed}{start}."
 
 
 def prompt(moment: dict, shot: dict, around: list[dict], fact: dict) -> dict:
@@ -169,6 +171,8 @@ async def captions(moments: Sequence[dict], events: Sequence[dict], model: Capti
     endpoint or token from an Azure error reaches the bundle."""
 
     async def one(moment: dict) -> dict:
+        if moment.get("d_m") is None:  # no strike seen, so no distance fact to check a model's line by
+            return {"event": moment["event"], "text": code_caption(moment, {}), "source": "code"}
         shot, around, fact = evidence_for(moment, events)
         out = {"event": moment["event"], "text": code_caption(moment, shot), "source": "code"}
         if model is None:

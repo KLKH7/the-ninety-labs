@@ -77,6 +77,37 @@ def test_a_goal_on_a_side_not_told_surely_counts_for_no_club():
     assert condensed.build(META, unsure)["goals"] == [{"t": 61.0, "team": None, "event": "g"}]
 
 
+# Lesson 270: a goal is the detected `goal` event (GROUNDING I24); a shot that went in, just before
+# it, is the same goal, and the goal event carries the side.
+PAIR_AND_LONE = [
+    event("s1", 60.6, "shot", "home", "goal", team_confidence=0.2),  # the strike: its side unsure
+    event("g1", 61.0, "goal", "home", team_confidence=0.99, ball_speed_kmh=None),  # same goal, sure
+    event("g2", 62.4, "goal", "away", team_confidence=0.99, ball_speed_kmh=None),  # its strike unseen
+]
+
+
+def test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts():
+    body = condensed.build(META, PAIR_AND_LONE)
+    assert body["goals"] == [{"t": 61.0, "team": "home", "event": "g1"},
+                             {"t": 62.4, "team": "away", "event": "g2"}]
+    # Chapters (the scrubber's ticks) are named by the goal event, which carries the side.
+    assert [(c["kind"], c["label"], c["event"]) for c in body["chapters"]] == [
+        ("goal", "Goal, home", "g1"), ("goal", "Goal, away", "g2")]
+    # The reel has each goal once: at its shot, or at the goal event when no strike was seen.
+    moments = body["highlights"]["moments"]
+    assert [(m["event"], m["kind"], m["team"], m["d_m"] is None) for m in moments] == [
+        ("s1", "goal", "home", False), ("g2", "goal", "away", True)]
+    assert body["stats"][-1]["home"]["goals"] == 1 and body["stats"][-1]["away"]["goals"] == 1
+
+
+def test_a_shot_that_went_in_with_no_goal_event_is_still_a_goal():
+    lone_shot = [event("s1", 60.6, "shot", "home", "goal", team_confidence=0.99),
+                 event("p1", 61.0, "pass", "away", "success")]
+    body = condensed.build(META, lone_shot)
+    assert body["goals"] == [{"t": 60.6, "team": "home", "event": "s1"}]
+    assert [m["event"] for m in body["highlights"]["moments"]] == ["s1"]
+
+
 def test_the_scoreline_counts_only_confident_detected_goals():
     body = condensed.build(META, EVENTS)
     assert body["goals"] == [{"t": 61.0, "team": "home", "event": "v2"}]

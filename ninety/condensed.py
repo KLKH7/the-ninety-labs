@@ -11,8 +11,9 @@ The viewer's match mode (web/viewer/src/match.ts) shows what this computes:
   a shot, then a set piece or kick-off; with none of those it is build-up. The segments are the
   broadcast's own timecode; what a chapter is called comes only from the detected events, never
   from the answer key.
-- `goals`: one entry per confident detected goal (a shot whose outcome is a goal, as
-  ninety/intel/stats.py counts goals), in time order, each with its side only when told surely. What
+- `goals`: one entry per confident detected goal (a `goal` event, merged with the shot that scored
+  it: stats.goal_moments, GROUNDING I24), in time order, each with the goal event's side only when
+  told surely. What
   vision saw, never a scoreline: vision misses goals, so a count of these would contradict the
   scorebug; the score is the scorebug's reading (ninety/intel/scoring.py, GROUNDING I24).
 - `highlights`: the reel (ninety/highlights.py): every confident detected goal, the saves that
@@ -30,7 +31,7 @@ from __future__ import annotations
 
 from ninety import highlights
 from ninety.agents.factcheck import MIN_CONFIDENCE, side_known
-from ninety.intel.stats import pass_facts, shot_facts
+from ninety.intel.stats import goal_moments, pass_facts, shot_facts
 from ninety.match.timeline import Timeline
 
 FORMAT = 1
@@ -49,7 +50,8 @@ def confident(events: list[dict]) -> list[dict]:
 
 
 def is_goal(e: dict) -> bool:
-    return e["type"] == "shot" and e.get("outcome") == "goal"
+    """A goal event, or a shot that went in (stats.goal_moments merges the two into one goal)."""
+    return e["type"] == "goal" or (e["type"] == "shot" and e.get("outcome") == "goal")
 
 
 def kind_of(e: dict) -> str | None:
@@ -83,9 +85,11 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
         best = None
         for e in inside:
             k = kind_of(e)
-            if k and (best is None or KINDS.index(k) < KINDS.index(best[0])):
-                best = (k, e)
-        kind, event = best if best else ("build_up", None)
+            # A goal's own event, not its shot, names the chapter: it carries the goal's side.
+            rank = None if k is None else (KINDS.index(k), e["type"] != "goal")
+            if rank is not None and (best is None or rank < best[0]):
+                best = (rank, k, e)
+        kind, event = best[1:] if best else ("build_up", None)
         label = LABEL[kind]
         if event is not None and event.get("team") in TEAMS:
             label += f", {event['team']}"
@@ -126,8 +130,8 @@ def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | Non
     sure = confident(events)
     # A goal counts for a side only when that side was told surely (factcheck.side_known, lesson
     # 245); otherwise it is a goal with no team, in no club's score.
-    goals = [{"t": e["t"], "team": e.get("team") if side_known(e) else None, "event": e["id"]}
-             for e in sure if is_goal(e)]
+    goals = [{"t": g["t"], "team": g.get("team") if side_known(g) else None, "event": g["id"]}
+             for g, _ in goal_moments(events) if (g.get("confidence") or 0.0) >= MIN_CONFIDENCE]
     stats = [{"t": round(timeline.segs[0].frame / timeline.fps, 2), "event": None, **team_stats([])}]
     for i, e in enumerate(sure):
         now = team_stats(sure[: i + 1])
