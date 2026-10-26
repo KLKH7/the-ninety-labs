@@ -49,13 +49,12 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from ninety.vision import outcomes
+from ninety.vision import outcomes, sides
 from ninety.vision.track import (
     FPS,
     MAX_GAP_FRAMES,
     BallPoint,
     Track,
-    assign_teams,
     ball_path,
     read_observations,
     track_players,
@@ -360,7 +359,7 @@ def detect(rows: list[dict], join_breaks: bool = True,
     always the one in `rows`."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
-    teams = assign_teams(tracks)
+    teams = sides.assign(tracks, rows)  # on the tactical views, kit and position combined (sides.py)
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     sp = spells(path, tracks)
