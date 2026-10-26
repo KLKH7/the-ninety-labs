@@ -1,0 +1,401 @@
+{
+ "seeds": [
+  108,
+  109,
+  110,
+  112,
+  113,
+  114,
+  115,
+  116,
+  117,
+  119,
+  120,
+  121,
+  122,
+  2041,
+  2042,
+  2043,
+  2044,
+  2045,
+  3041,
+  3042,
+  3043,
+  3044,
+  3045
+ ],
+ "obs": "T1-fused",
+ "transfers": 93,
+ "kit": {
+  "outfield": {
+   "track_frames": 119546,
+   "right": 87746,
+   "accuracy": 0.734,
+   "wilson95": [
+    0.73,
+    0.74
+   ],
+   "unmatched_tracks": 12
+  },
+  "sound_clips": 12,
+  "flipped_clips": 2,
+  "calibration_error": 0.0189,
+  "confidence": {
+   "right": {
+    "min": 0.505,
+    "p10": 0.65,
+    "p50": 0.773,
+    "p90": 0.838,
+    "max": 0.881
+   },
+   "wrong": {
+    "min": 0.51,
+    "p10": 0.655,
+    "p50": 0.763,
+    "p90": 0.826,
+    "max": 0.88
+   },
+   "n_right": 466,
+   "n_wrong": 193,
+   "ordering": 0.5363,
+   "largest_wrong": 0.8804,
+   "right_above_0.96": 0.0,
+   "right_above_largest_wrong": 0.0021,
+   "bins": [
+    {
+     "from": 0.0,
+     "to": 0.5,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.5,
+     "to": 0.8,
+     "n": 467,
+     "accuracy": 0.6809
+    },
+    {
+     "from": 0.8,
+     "to": 0.9,
+     "n": 192,
+     "accuracy": 0.7708
+    },
+    {
+     "from": 0.9,
+     "to": 0.96,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.96,
+     "to": 1.0,
+     "n": 0,
+     "accuracy": null
+    }
+   ]
+  },
+  "at_or_above_0.96": {
+   "tracks": 0,
+   "right": 0
+  }
+ },
+ "spatial": {
+  "outfield": {
+   "track_frames": 119546,
+   "right": 79027,
+   "accuracy": 0.6611,
+   "wilson95": [
+    0.66,
+    0.66
+   ],
+   "unmatched_tracks": 12
+  },
+  "sound_clips": 0,
+  "flipped_clips": 2,
+  "calibration_error": 0.0135,
+  "confidence": {
+   "right": {
+    "min": 0.502,
+    "p10": 0.545,
+    "p50": 0.656,
+    "p90": 0.836,
+    "max": 0.985
+   },
+   "wrong": {
+    "min": 0.502,
+    "p10": 0.544,
+    "p50": 0.651,
+    "p90": 0.848,
+    "max": 0.881
+   },
+   "n_right": 417,
+   "n_wrong": 242,
+   "ordering": 0.53,
+   "largest_wrong": 0.8807,
+   "right_above_0.96": 0.0144,
+   "right_above_largest_wrong": 0.0767,
+   "bins": [
+    {
+     "from": 0.0,
+     "to": 0.5,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.5,
+     "to": 0.8,
+     "n": 569,
+     "accuracy": 0.6257
+    },
+    {
+     "from": 0.8,
+     "to": 0.9,
+     "n": 65,
+     "accuracy": 0.5538
+    },
+    {
+     "from": 0.9,
+     "to": 0.96,
+     "n": 19,
+     "accuracy": 1.0
+    },
+    {
+     "from": 0.96,
+     "to": 1.0,
+     "n": 6,
+     "accuracy": 1.0
+    }
+   ]
+  },
+  "at_or_above_0.96": {
+   "tracks": 6,
+   "right": 6
+  }
+ },
+ "graph": {
+  "outfield": {
+   "track_frames": 119546,
+   "right": 51749,
+   "accuracy": 0.4329,
+   "wilson95": [
+    0.43,
+    0.44
+   ],
+   "unmatched_tracks": 12
+  },
+  "sound_clips": 0,
+  "flipped_clips": 16,
+  "calibration_error": 0.0575,
+  "confidence": {
+   "right": {
+    "min": 0.5,
+    "p10": 0.501,
+    "p50": 0.502,
+    "p90": 0.505,
+    "max": 0.542
+   },
+   "wrong": {
+    "min": 0.5,
+    "p10": 0.501,
+    "p50": 0.503,
+    "p90": 0.506,
+    "max": 0.553
+   },
+   "n_right": 307,
+   "n_wrong": 352,
+   "ordering": 0.4647,
+   "largest_wrong": 0.5526,
+   "right_above_0.96": 0.0,
+   "right_above_largest_wrong": 0.0,
+   "bins": [
+    {
+     "from": 0.0,
+     "to": 0.5,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.5,
+     "to": 0.8,
+     "n": 659,
+     "accuracy": 0.4659
+    },
+    {
+     "from": 0.8,
+     "to": 0.9,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.9,
+     "to": 0.96,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.96,
+     "to": 1.0,
+     "n": 0,
+     "accuracy": null
+    }
+   ]
+  },
+  "at_or_above_0.96": {
+   "tracks": 0,
+   "right": 0
+  }
+ },
+ "S": {
+  "outfield": {
+   "track_frames": 119546,
+   "right": 89602,
+   "accuracy": 0.7495,
+   "wilson95": [
+    0.75,
+    0.75
+   ],
+   "unmatched_tracks": 12
+  },
+  "sound_clips": 12,
+  "flipped_clips": 1,
+  "calibration_error": 0.0373,
+  "confidence": {
+   "right": {
+    "min": 0.5,
+    "p10": 0.594,
+    "p50": 0.802,
+    "p90": 0.899,
+    "max": 0.986
+   },
+   "wrong": {
+    "min": 0.504,
+    "p10": 0.55,
+    "p50": 0.764,
+    "p90": 0.922,
+    "max": 0.948
+   },
+   "n_right": 471,
+   "n_wrong": 188,
+   "ordering": 0.5492,
+   "largest_wrong": 0.9483,
+   "right_above_0.96": 0.0127,
+   "right_above_largest_wrong": 0.0318,
+   "bins": [
+    {
+     "from": 0.0,
+     "to": 0.5,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.5,
+     "to": 0.8,
+     "n": 343,
+     "accuracy": 0.6764
+    },
+    {
+     "from": 0.8,
+     "to": 0.9,
+     "n": 240,
+     "accuracy": 0.8083
+    },
+    {
+     "from": 0.9,
+     "to": 0.96,
+     "n": 70,
+     "accuracy": 0.5571
+    },
+    {
+     "from": 0.96,
+     "to": 1.0,
+     "n": 6,
+     "accuracy": 1.0
+    }
+   ]
+  },
+  "at_or_above_0.96": {
+   "tracks": 6,
+   "right": 6
+  }
+ },
+ "G": {
+  "outfield": {
+   "track_frames": 119546,
+   "right": 89994,
+   "accuracy": 0.7528,
+   "wilson95": [
+    0.75,
+    0.76
+   ],
+   "unmatched_tracks": 12
+  },
+  "sound_clips": 11,
+  "flipped_clips": 1,
+  "calibration_error": 0.041,
+  "confidence": {
+   "right": {
+    "min": 0.504,
+    "p10": 0.604,
+    "p50": 0.8,
+    "p90": 0.908,
+    "max": 0.988
+   },
+   "wrong": {
+    "min": 0.509,
+    "p10": 0.547,
+    "p50": 0.767,
+    "p90": 0.934,
+    "max": 0.972
+   },
+   "n_right": 473,
+   "n_wrong": 186,
+   "ordering": 0.5521,
+   "largest_wrong": 0.9718,
+   "right_above_0.96": 0.0254,
+   "right_above_largest_wrong": 0.0085,
+   "bins": [
+    {
+     "from": 0.0,
+     "to": 0.5,
+     "n": 0,
+     "accuracy": null
+    },
+    {
+     "from": 0.5,
+     "to": 0.8,
+     "n": 345,
+     "accuracy": 0.6841
+    },
+    {
+     "from": 0.8,
+     "to": 0.9,
+     "n": 219,
+     "accuracy": 0.7991
+    },
+    {
+     "from": 0.9,
+     "to": 0.96,
+     "n": 82,
+     "accuracy": 0.6098
+    },
+    {
+     "from": 0.96,
+     "to": 1.0,
+     "n": 13,
+     "accuracy": 0.9231
+    }
+   ]
+  },
+  "at_or_above_0.96": {
+   "tracks": 13,
+   "right": 12
+  }
+ },
+ "G_weights_all": [
+  -0.1648,
+  1.6117,
+  2.2893,
+  1.4615,
+  -1.6829
+ ]
+}

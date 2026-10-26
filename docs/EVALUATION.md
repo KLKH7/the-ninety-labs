@@ -410,6 +410,7 @@ only the trust test and the placing run again.
 | Two views (tactical camera, planned for the demo) | each lens detected on its own (optionally as a 2 x 2 grid of overlapping tiles, boxes merged back) and placed on the pitch; a player or ball seen by both lenses merged when the two places differ by less than both measurements can miss by (each box's 99th-percentile ground-point error, measured on validation, carried to the pitch through its view's camera; [fuse-gate.md](eval/fuse-gate.md)) | `ninety/vision/tiles.py`, `ninety/vision/fuse.py` |
 | Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
 | Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames; a possession change when a spell is the other side's and no out of play or cut lies between ([eval/possession-change-plan.md](eval/possession-change-plan.md)) | `ninety/vision/events.py` |
+| Shot outcomes | after a detected shot, the broadcast ball's path: a `goal` when it rests in the net (over the line by its radius plus the measured along error, between the posts, under the bar where its flight height is known) on 3 frames, with a kick-off later adding evidence; `on_target` (a save) when an on-target ball turns at the keeper; `blocked` at another defender; `off_target` out past the posts. Rules and thresholds fixed before measuring ([shot-outcomes-plan.md](eval/shot-outcomes-plan.md)); the errors they use measured on validation clips only; scored once on the pre-registered shot-outcome set's test split ([shot-outcome-set.md](eval/shot-outcome-set.md)). **Measured** at 8ac10a91 ([RESULT.md](eval/shot-outcomes/RESULT.md)): test, all 79 clips: goals 10 of 15 found, 3 false (precision 0.77, 95% 0.50 to 0.92; recall 0.67, 95% 0.42 to 0.85), one of the false a true goal timed 1.2 s off; saves 2 of 49, 0 false (recall 0.04, 95% 0.01 to 0.14). An early look at 42 of the 79, taken before the copy-back was complete with the code already frozen, is disclosed there (goals 6 of 8, 2 false; saves 1 of 24). Validation: goals 12 of 16, 6 false (4 of them true goals timed over 1 s off); saves 0 of 50. **Saves do not work:** the ball in the keeper's hands, placed on the ground, lands 2 to 7 m from him. #271 merged before this measurement; the rules were fixed before each score | `ninety/vision/outcomes.py`, `ninety/eval/shot_outcomes.py` |
 
 Events are graded by the rules above (Vision scoring), unchanged: same type and team within 1.0 s,
 spot within 1.0 m (strict) of the ball at the detected time. Pitch positions use the pixel
@@ -423,7 +424,7 @@ Measured with the camera fit, the height band (0.901 to 1.002) and the trust gat
 
 | Measure | Result |
 |---|---|
-| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67. **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
+| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67 (old band; on today's main it is 0.25, see the Camera trusted row). **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Possession changes | 1 of 5 found, none false (recall 0.20, 95% 0.04 to 0.62; strict, lenient and time-only the same), scored once with a rule that adds no constant ([eval/possession-change.md](eval/possession-change.md)). By phase: open play 1 of 4, at a restart 0 of 1 (not claimed: after an out of play or a cut no change is told). Three of the five are on 900003, whose camera is trusted on 4 frames. The open-play miss on 900001 is the keeper's save: the shot before it is read as a pass whose ball goes over the goal line (the false out of play below), so no change is told after it. **Without seed 900001:** 0 of 3. Not set or checked on validation clips: their observations were not on the machine that scored it |
@@ -440,8 +441,9 @@ Measured with the camera fit, the height band (0.901 to 1.002) and the trust gat
 - teams can be told apart by brightness as well as by colour;
 - the side vote uses each side's mean position, not its deepest player.
 The event and tracker thresholds were tried on a grid and none changed. On seed 900001 the pass F1
-is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure (F1 0.67
-on 13 passes) replaces it as the headline.
+is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure on the old band (F1 0.67
+on 13 passes) replaced it on 21 Oct; on today's main it is 0.25 (2 of 13, 1 false;
+[camera-cuts-plan.md](eval/camera-cuts-plan.md)).
 
 **Read with care.** Five ten-second clips hold 13 passes and one shot, and two of the clips give no
 events at all. A single pass moves the recall by 8 points. This shows the pipeline works end to end
@@ -512,14 +514,29 @@ side is wrong on 5 of 16 passes, even after the side naming was re-derived ([eva
 step A). The remaining cause is how the kit's colour is read from the image (`observe.kit_rgb`).
 A team-level claim inherits that error, which the fact-checker cannot see.
 
-**Side confidence** (`team_confidence`, an optional field on detected events). It is the weaker of
-two margins: how much nearer the holder's kit is to its own side's colour than to the other side's,
-and how one-sided the clip's vote on which colour is home was. A keeper's is how far he stands from
-halfway. Defined before it was measured; no threshold is set from it. **It does not tell a wrong
-side from a right one well:** on validation the 5 wrong sides score 0.431 to 0.96, and the 11 right
-ones score 0.447 to 0.985. It ranks a right side above a wrong one in 60% of (wrong, right) pairs,
-where 50% is chance ([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on it alone
-does not protect a team-level claim.
+**Side confidence** (`team_confidence`, an optional field on detected events). On the broadcast
+it is the weaker of two clip-level numbers (`track.assign_teams`): how surely the two kit clusters
+each hold one team (`soundness`: how far apart the kits are, and the share of tracks nearer their
+own kit than halfway to the other), and how one-sided the clip's vote on which colour is home was.
+A keeper's is how far he stands from halfway. The kit is read from both colours of the shirt (R4,
+adopted by its plan's rule, [kit-colour.md](eval/kit-colour.md)): on the 13 validation clips, 6
+clips sound against 4 for the single median it replaced (R0), side accuracy 0.894 by track-frames
+(R0 0.815), pass teams right 12 of 16 (11), and the confidence ranks a right side above a wrong one
+in 81% of pairs (R0 55%). **On the tactical views** the side is S (`ninety/vision/sides.py`): a
+logistic over the kit, how deep the player stands, and his half at a kick-off, fitted on tactical1's
+23 validation clips. Leave one clip out, its outfield accuracy is 0.750 against 0.731 for the kit
+alone at the same commit, its confidence is within 0.037 of the accuracy it claims (calibration
+error, frame-weighted over the bins), and 6 tracks reach 0.96, all right
+([SPATIAL-PLAN.md](eval/sides-tactical/SPATIAL-PLAN.md); the possession graph G was measured and not
+adopted). Events, the radar's tracked frames and kick-offs all take their sides from one function
+(`sides.assign`), so no two stages name a track differently. **Not handled: a change of ends.**
+Both namings take home to defend x = 0 for the whole clip, as our engine plays it (it never changes
+ends); the Laws have the teams change ends for the second half (Law 8), so a clip spanning half-time
+would name its second half backwards. Before R4, the old colour margin did not tell a wrong side from
+a right one: on validation the 5 wrong sides scored 0.431 to 0.96 and the 11 right ones 0.447 to
+0.985, a right side ranked above a wrong one in 60% of pairs, where 50% is chance
+([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on a confidence alone does not
+protect a team-level claim; the hard limits below stand beside it.
 
 **The agents see it, and a team claim waits for a sure side** (audit Q3). `ninety/match/facts.compact`
 passes `team_confidence` to the agents, and the fact-checker's confidence gate holds any claim that
@@ -657,7 +674,7 @@ fact); the injection count checks that the text agrees with it.
 `uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance
 from tracked positions against the ground truth, offline, with and without the shipped smoothing
 ([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
-for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
+for speed now and 1.5 km/h for top speed (measured 21 Oct, before #250 and #270; not re-measured), against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
 
 ### Possession now (the wind map's layer)

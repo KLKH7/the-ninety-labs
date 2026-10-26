@@ -193,15 +193,25 @@ def test_side_confidence_is_the_weaker_of_the_kit_and_the_side_vote():
     assert {t.side_confidence for t in tracks if t.team} == {round(14 / 26, 3)}
 
 
-def test_a_kit_nearer_the_other_side_is_less_sure_and_a_keeper_is_as_sure_as_he_is_deep():
-    off_blue = [45.0, 60.0, 185.0]  # near the blue kit, a little toward red: still blue, less surely
-    rows = [row(f, crowd(f) + [(60.0, 50.0, off_blue), (101.0, 34.0, GREEN_KEEPER)]) for f in range(30)]
-    tracks = tr.track_players(rows)
-    tr.assign_teams(tracks)
-    by_colour = {tuple(t.rgb[0]): t for t in tracks}
-    assert 0 < by_colour[tuple(off_blue)].side_confidence < by_colour[tuple(BLUE)].side_confidence
-    assert by_colour[tuple(off_blue)].team == "home"
-    assert by_colour[tuple(GREEN_KEEPER)].side_confidence == round((101.0 - 52.5) / 52.5, 3)
+def test_kits_told_apart_less_surely_give_every_outfield_side_a_lower_confidence_a_keeper_his_own():
+    # The kit term is the clip's: how surely its two clusters each hold one team
+    # (docs/eval/kit-colour-plan.md). Every outfield track shares it; a keeper's is his depth.
+    def clip_conf(home_kits, away_kits):
+        rows = [row(f, [(30 + 4 * k, 10.0 + 5 * k, c) for k, c in enumerate(home_kits)]
+                    + [(70 + 4 * k, 12.0 + 5 * k, c) for k, c in enumerate(away_kits)]
+                    + [(101.0, 34.0, GREEN_KEEPER)]) for f in range(30)]
+        tracks = tr.track_players(rows)
+        info = tr.assign_teams(tracks)
+        outfield = {t.side_confidence for t in tracks if t.team and not t.keeper}
+        keeper = next((t for t in tracks if t.keeper), None)
+        return outfield, info, keeper
+    clear, info, keeper = clip_conf([BLUE] * 4, [RED] * 4)
+    # Each kit's shirts vary a little, so the clusters are a spread, not two points.
+    near_away = [[110.0, 60.0, 150.0], [100.0, 66.0, 160.0], [110.0, 60.0, 150.0], [104.0, 62.0, 156.0]]
+    blur, blur_info, _ = clip_conf([BLUE, [45.0, 60.0, 185.0], BLUE, [40.0, 66.0, 180.0]], near_away)
+    assert len(clear) == 1 and len(blur) == 1  # one value per clip for its outfield sides
+    assert 0 < blur_info["soundness"] < info["soundness"] and max(blur) < max(clear)
+    assert keeper.side_confidence == round((101.0 - 52.5) / 52.5, 3)
 
 
 def test_a_detected_event_carries_its_holders_side_confidence():
@@ -213,8 +223,10 @@ def test_a_detected_event_carries_its_holders_side_confidence():
 
 
 def test_out_of_play_names_nobody():
+    # The ball comes to rest over the goal line wide of the post (a ball at rest between the posts
+    # is a goal: ninety/vision/outcomes.py).
     events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
-        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
+        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 50.0)) for f in range(21, 30)])
     outs = [e for e in events if e["type"] == "out_of_play"]
     assert outs and all(e["player"] is None for e in outs)
 
@@ -233,7 +245,7 @@ def test_a_ball_rolling_past_a_player_is_not_his():
     assert ev.CARRY_MPS < 12.0
 
 
-def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_away_is_not():
+def test_a_strike_toward_the_goal_home_attacks_is_home_s_shot_whatever_the_kit_says():
     def scene(colour):
         rows, bx = [], 90.3
         for f in range(40):
@@ -241,10 +253,14 @@ def test_a_strike_toward_the_goal_home_attacks_is_a_shot_and_the_same_strike_by_
                 bx += 25.0 / FPS
             rows.append(row(f, crowd(f) + [(90.0, 34.0, colour)], (bx, 34.0)))
         return rows
-    home = [e["type"] for e in ev.detect(scene(BLUE))[0]]
-    away = [e["type"] for e in ev.detect(scene(RED))[0]]
-    assert home == ["shot", "out_of_play"]  # it goes on over the goal line
-    assert "shot" not in away and away[0] == "pass"
+    # Amendment 3: a shot is the side's that attacks the goal it heads for (home attacks x = 105), so
+    # a side read wrong does not make it a pass; where the kit says otherwise its side is unsure.
+    home = ev.detect(scene(BLUE))[0]
+    away = ev.detect(scene(RED))[0]
+    assert [e["type"] for e in home] == ["shot", "out_of_play"]  # it goes on over the goal line
+    assert [e["type"] for e in away] == ["shot", "out_of_play"]
+    assert home[0]["team"] == away[0]["team"] == "home"
+    assert home[0]["team_confidence"] is not None and away[0]["team_confidence"] is None
 
 
 def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not():
@@ -395,6 +411,18 @@ def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
     passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
     assert passes == [("pass", "home", "fail")]
     assert any(e["type"] == "out_of_play" for e in events)
+
+
+def test_consistency_is_the_share_of_frame_readings_nearer_their_own_cluster():
+    # Four red tracks always red; four blue tracks blue but red in 3 of every 10 frames.
+    def scene(f):
+        flip = f % 10 < 3
+        return ([(70 + 3 * k, 60.0, RED) for k in range(4)]
+                + [(30 + 3 * k, 60.0, RED if flip else BLUE) for k in range(4)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(30)])
+    info = tr.assign_teams(tracks)
+    assert abs(info["consistency"] - (4 * 30 + 4 * 21) / (8 * 30)) < 1e-9
+    assert tr.USE_CONSISTENCY is False  # set only by the amendment's rule on dataset v2
 
 
 def side_scene(per_side_home, frames=12):
