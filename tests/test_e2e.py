@@ -91,13 +91,18 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     out, manifest = run(tmp_path)
     claim = only_claim(out)
     assert claim["status"] == "accepted" and claim["verdict"] == "verified" and claim["evidence"] == ["e2"]
-    assert claim["text"] == "h8 shoots at 101 km/h, on target."
+    # Its first draft said vision's speed ("at 101 km/h"), which is not measured yet
+    # (factcheck.SPEED_MEASURED): held, sent back, and said again without it.
+    assert claim["text"] == "h8 shoots, on target."
     assert claim["mode"] == "graph offline" and manifest["agents"]["mode"] == "graph offline"
-    assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 1}
+    assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 2}
     # The graph ran: the Analyst picked, the Tactician wrote, the Challenger read it, the checker
-    # verified, the Producer aired.
+    # held its speed, the Tactician rewrote it, the checker verified, the Producer aired.
     roles = [s["role"] for s in claim["steps"]]
-    assert roles == ["analyst", "tactician", "challenger", "judge", "fact_checker", "producer"]
+    assert roles == ["analyst", "tactician", "challenger", "fact_checker", "tactician", "judge",
+                     "fact_checker", "producer"]
+    (held,) = [s for s in claim["steps"] if s["action"] == "hold"]
+    assert "101 km/h" in claim["steps"][1]["detail"] and "not measured" in held["detail"]
     # Offline the Judge never ran; the trace must not say it did.
     judge = [s for s in claim["steps"] if s["role"] == "judge"]
     assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
@@ -110,9 +115,9 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
 def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     out, manifest = run(tmp_path, "--plant")
     claim = only_claim(out)
-    assert claim["drafts"] == 2 and claim["status"] == "accepted" and claim["planted"]
+    assert claim["drafts"] == 3 and claim["status"] == "accepted" and claim["planted"]
     assert [s["action"] for s in claim["steps"]] == [
-        "pick", "tamper", "draft", "agree", "reject", "rewrite", "skip", "verify", "air"]
+        "pick", "tamper", "draft", "agree", "reject", "rewrite", "hold", "rewrite", "skip", "verify", "air"]
     (rejected,) = [s for s in claim["steps"] if s["action"] == "reject"]
     assert "143" in rejected["detail"] and "143" in claim["steps"][2]["detail"]
     assert rejected["detail"].startswith("back to the tactician")
@@ -125,7 +130,8 @@ def test_the_single_analyst_path_still_runs_on_request(tmp_path):
     out, manifest = run(tmp_path, "--single-analyst", "--plant")
     claim = only_claim(out)
     assert manifest["agents"]["mode"] == "single analyst offline" and claim["mode"] == "offline"
-    assert [s["action"] for s in claim["steps"]] == ["draft", "reject", "draft", "skip", "verify"]
+    steps = [s["action"] for s in claim["steps"]]
+    assert steps == ["draft", "reject", "draft", "hold", "draft", "skip", "verify"]
 
 
 def test_a_claim_the_fact_checker_never_accepts_never_airs(tmp_path, monkeypatch):
@@ -161,7 +167,8 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert fell == {"minute": 2, "error": "RuntimeError"}  # the type only: no service text on screen
     claim = only_claim(out)
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
-    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots at 101 km/h, on target."
+    # The single Analyst, too, was held for vision's speed and said it again without it.
+    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots, on target."
     assert [c for c in cues(out) if c["kind"] == "insight"]
 
 
@@ -469,6 +476,42 @@ def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
     out, _ = run(tmp_path, events=[fast])
     said = "".join((out / f).read_text() for f in ("cues.jsonl", "audio.json", "commentary.json"))
     assert "251" not in said
+
+
+def _tracked(events: list[dict]) -> list[dict]:
+    """The clip's events with every player as a tracked one ("h8" -> "h-t8"), as vision names them."""
+    import re
+
+    def track(v):
+        return re.sub(r"^([ha])(\d+)$", r"\1-t\2", v) if isinstance(v, str) else v
+
+    people = ("player", "receiver", "intended", "interceptor", "deflected_by")
+    return [{**e, **{k: track(e[k]) for k in people if e.get(k)}} for e in events]
+
+
+@pytest.mark.parametrize("sure", [0.99, 0.5])  # each side told surely, and not
+def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
+    # A track id is the tracker's label: checked, never shown or said (ninety/agents/onair.py). Every
+    # aired text in the bundle: the graphics and insights, the claim trace, the commentary, the audio
+    # description and its captions.
+    from ninety.agents.onair import TRACK_ID
+
+    events = [{**e, "team_confidence": sure} for e in _tracked(EVENTS)]
+    out, _ = run(tmp_path, events=events)
+    raw = json.loads((out / "events.jsonl").read_text().splitlines()[0])
+    assert TRACK_ID.search(json.dumps(raw)), "the events must carry track ids, or this proves nothing"
+    aired = [c["text"] for c in cues(out)]
+    for claim in json.loads((out / "trace.json").read_text())["claims"]:
+        aired += [claim["text"], *(s["detail"] for s in claim["steps"])]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    aired.append((out / "description.vtt").read_text())
+    assert aired and not [t for t in aired if TRACK_ID.search(t)]
+    import re
+
+    shown = " ".join(c["text"] for c in cues(out))
+    club = re.compile(r"\b[Aa] [A-Z]\w+ player\b")  # "a Crowmere player": a side named
+    assert "player" in shown and bool(club.search(shown)) is (sure > 0.96)
 
 
 def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tmp_path):
