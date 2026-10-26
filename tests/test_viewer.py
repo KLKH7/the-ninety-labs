@@ -100,7 +100,10 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     claim = page.locator("#claims .claim")
     assert claim.count() == 1
     assert claim.locator(".chip").text_content() == "Accepted"
-    assert "h8 shoots at 101 km/h, on target." in claim.inner_text()
+    # The fixture's speed is not measured, so the trace says the claim without it (src/speed.ts); the
+    # fact-checker's reason still names the planted 143 it rejected.
+    assert "h8 shoots, on target." in claim.inner_text()
+    assert "km/h" not in claim.inner_text()
     assert claim.locator(".step.reject").count() == 1
     assert "143" in claim.locator(".step.reject").inner_text()
     assert "Events" in page.locator("#pipeline").inner_text()
@@ -279,12 +282,17 @@ def aired_speeds(page) -> list[str]:
 
 
 def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tracked_site):
+    import re
+
     # Option H (Oct 25): vision's ball speeds (48 and 101 km/h here) are held until #331's error is
     # measured; the bundle says nothing about it, so no graphic states one, and the shot still airs.
     page, errors = open_viewer(browser, tracked_site)
     assert aired_speeds(page) == []
     texts = page.evaluate("window.ninetyCues.map((c) => c.text)")
     assert any("shoots" in t for t in texts), texts
+    said = page.evaluate("window.ninetyNarrator.lines.flatMap((l) => [l.text, l.spoken])")
+    assert said and not any(re.search(r"\d\s*(km/h|kilomet)", t) for t in said), said  # the voice too
+    assert "km/h" not in page.locator("#claims").inner_text()
     page.get_by_role("button", name="Watch it").click()
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.3")
     page.keyboard.press("2")  # the analyst's graphics, which state speeds
@@ -324,4 +332,31 @@ def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, tr
     speeds = aired_speeds(page)
     assert speeds and all(s.endswith(" ± 4 km/h") for s in speeds), speeds  # 48 km/h, with its band
     assert not any(s.startswith("147") for s in speeds), speeds
+    assert not errors
+
+
+def test_every_way_a_speed_is_written_or_said_is_gated(browser, site):
+    """Merge-queue review of #378: the gate fails closed on any number with a speed unit, written or
+    spoken, and `measured: false` airs nothing even with an error given."""
+    page, errors = open_viewer(browser, site)
+
+    def say(text, gate=None):
+        return page.evaluate("([t, g]) => window.ninetySpeed(t, g)", [text, gate])
+
+    held = [
+        ("a pass (incomplete), 19 m, 146 km/h", "a pass (incomplete), 19 m"),
+        ("h-t1 plays a 19 m pass at 49 km/h, but it doesn't arrive.",
+         "h-t1 plays a 19 m pass, but it doesn't arrive."),
+        ("A player plays it 13 metres to another player, at 49 kilometres an hour.",
+         "A player plays it 13 metres to another player."),
+        ("a 101.4 km/h strike", "a strike"),
+        ("scores, 147 km/h", "scores"),
+    ]
+    for text, want in held:
+        assert say(text) == want
+        assert say(text, {"measured": False, "error_kmh": 3.5}) == want
+    measured = {"measured": True, "error_kmh": 3.5}
+    assert say("a 19 m pass at 49 km/h.", measured) == "a 19 m pass at 49 ± 4 km/h."
+    assert say("at 49 kilometres an hour.", measured) == "at 49 kilometres an hour, give or take 4."
+    assert say("scores, 147 km/h", measured) == "scores"  # above P3: no ball goes that fast
     assert not errors
