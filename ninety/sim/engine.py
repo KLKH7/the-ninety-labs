@@ -1355,6 +1355,8 @@ class Engine:
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
+                                carry_mps=decisions.carry_speed(carrier.physique.top_speed()),
+                                velocity=(carrier.vx, carrier.vy),
                                 progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
                                 loss_weight=style.loss_weight())
         return scene
@@ -1548,6 +1550,13 @@ class Engine:
             self.kicker_clear = True
         hits = []
         back_on = self.t - self.free_since >= TOUCH_GAP_S
+        # Demo engine v2 (Law 9, 10; P15): a keeper leaves a shot going wide or over, as he never
+        # dives at one; once he took every shot his hands could reach, most of them over his head
+        # and over the bar. Judged once a frame, only while a shot at him is in flight.
+        k = self.kicked
+        leaves = None
+        if k and k["type"] == "shot" and self.possessor is None:
+            leaves = self.keeper(other(k["team"])).id if self.going_wide(k["team"]) else None
         for p in self.players:
             if (p is kicker and not self.kicker_clear) or p.id == done:
                 continue
@@ -1568,7 +1577,7 @@ class Engine:
             # On course into his body: its path crosses his outline (P11), not beside him or a clip.
             sl = 0.0 if rseg == 0 else ((qx - x0) * rdx + (qy - y0) * rdy) / rseg
             into = shape.clearance(x0 + sl * rdx, y0 + sl * rdy, qx, qy, p.heading) <= 0
-            if reacted and p.id != self.restart_kicker:  # a deliberate touch, first chance
+            if reacted and p.id != self.restart_kicker and p.id != leaves:  # a deliberate touch, first chance
                 st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, reach_z)
                 if st is not None:
                     tx, ty, tz = x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz)
@@ -1591,7 +1600,7 @@ class Engine:
                 # Above a foot, a player who has reacted gets a thigh, chest or head to it (A4); a
                 # ball he has not reacted to just rebounds off him.
                 # Only a ball on course into his body (its path crosses the outline), not a clip of it.
-                aerial = (reacted and into and bz > BODY_TOUCH_Z and p.id != self.restart_kicker
+                aerial = (reacted and into and bz > BODY_TOUCH_Z and p.id not in (self.restart_kicker, leaves)
                           and not self.hands(p, ux + sb * mx, uy + sb * my))
                 hits.append((sb, "touch" if aerial else "body", p, ux + sb * mx, uy + sb * my, bz,
                              qx + sb * mx, qy + sb * my, aerial))
@@ -1612,6 +1621,12 @@ class Engine:
             worse = self.touch_worse(p, rel, foot)
             absorb /= worse
         if kind == "touch" and hands:  # a keeper holds what his hands can, or it beats them
+            # Demo engine v2 (A4, P11; *design*): both hands get behind a ball within his standing
+            # reach; beyond it, stretched out in a dive, less and less of them does, and at the
+            # dive's full stretch (fingertips) he holds nothing: it comes off his hands (a parry).
+            off = math.hypot(cx - px, cy - py) - offball.KEEPER_STAND_REACH_M
+            if off > 0:
+                absorb *= max(0.0, 1.0 - off / offball.KEEPER_DIVE_EXTRA_M)
             controls = rel <= absorb
         elif kind == "touch" and not firsttouch.beaten(rel, absorb, foot):
             sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb), cz if aerial else 0.0, worse)
@@ -1652,7 +1667,7 @@ class Engine:
             start = self.heavy_touch(p, cx, cy, cz, sent, (px, py, left))
         else:
             keep = MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION
-            start = self.deflect(p, cx, cy, cz, keep, (px, py, left))
+            start = self.deflect(p, cx, cy, cz, keep, (px, py, left), palm=kind == "touch" and hands)
         if left <= 1e-9:
             return
         # The rest of the frame, from where it left him: the posts and the lines first, as for
@@ -1772,7 +1787,7 @@ class Engine:
         return start
 
     def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float,
-                at: tuple[float, float, float] | None = None) -> ball.State:
+                at: tuple[float, float, float] | None = None, palm: bool = False) -> ball.State:
         """The ball bounces off a player (a block, a parry, a heavy touch) and stays free. In the
         player's frame, the part of the ball's velocity into the body reverses and keeps `keep`
         of its speed; the part along the body is unchanged. The body's surface is normal to the
@@ -1789,13 +1804,26 @@ class Engine:
         else:  # dead centre: it comes straight back
             speed = math.hypot(rx, ry) or 1.0
             nx, ny = -rx / speed, -ry / speed
+        # It leaves from where it met him, on his surface, never from inside him.
+        out = max(math.hypot(cx - sx, cy - sy), shape.RADIUS_M + ball.RADIUS) + 0.001
+        lx, ly = sx + nx * out, sy + ny * out
+        if palm:
+            # Demo engine v2 (P11; *design*): a keeper's hands meet the ball palms facing it, turned
+            # out toward the side they reached to, so a ball off them (a parry) goes back and wide,
+            # not on along his arm. The palm's normal: halfway between straight back at the ball
+            # and out from his body to where his hands met it.
+            speed = math.hypot(rx, ry) or 1.0
+            px_, py_ = at[:2] if at else (p.x, p.y)
+            ox, oy = cx - px_, cy - py_
+            o = math.hypot(ox, oy) or 1.0
+            nx, ny = -rx / speed + ox / o, -ry / speed + oy / o
+            n = math.hypot(nx, ny)
+            nx, ny = (nx / n, ny / n) if n > 1e-6 else (-rx / speed, -ry / speed)
         into = rx * nx + ry * ny
         if into < 0:
             rx, ry = rx - (1 + keep) * into * nx, ry - (1 + keep) * into * ny
-        # It leaves from where it met him, on his surface, never from inside him.
-        out = max(math.hypot(cx - sx, cy - sy), shape.RADIUS_M + ball.RADIUS) + 0.001
         # Then it flies on, at its new velocity and under gravity, for the rest of the frame.
-        start = (sx + nx * out, sy + ny * out, cz, rx + p.vx, ry + p.vy, vz)
+        start = (lx, ly, cz, rx + p.vx, ry + p.vy, vz)
         self.ball = ball.step(start, left) if left > 1e-9 else start
         self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is truth too
         self.last_touch = p.id
@@ -1902,6 +1930,17 @@ class Engine:
             if (a[0] - line) * (b[0] - line) <= 0 and a[0] != b[0]:
                 s = (line - a[0]) / (b[0] - a[0])
                 return self.in_goal(a[1] + s * (b[1] - a[1]), a[2] + s * (b[2] - a[2]))
+        return False
+
+    def going_wide(self, team: str) -> bool:
+        """Law 9, 10: would the ball, untouched from here, cross the goal line this team attacks
+        outside the goal (wide or over) within the next few seconds?"""
+        line = goal_x(team)
+        path = ball.predict(self.ball, DT, 4.0)
+        for a, b in zip(path, path[1:], strict=False):
+            if (a[0] - line) * (b[0] - line) <= 0 and a[0] != b[0]:
+                s = (line - a[0]) / (b[0] - a[0])
+                return not self.in_goal(a[1] + s * (b[1] - a[1]), a[2] + s * (b[2] - a[2]))
         return False
 
     def woodwork(self, before: ball.State) -> None:
@@ -3012,14 +3051,24 @@ class Engine:
             self.runs[p.id] = (*spot, self.t)
         return spot
 
-    def stretch_from(self, p: Player) -> float:
-        """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
-        to the touch that set it off), or his reaction to the last touch."""
+    def save_from(self, p: Player) -> float:
+        """When the keeper's save began: when his dive began to be prepared (his reaction to the
+        touch that set it off), or his reaction to the last touch."""
         if self.dive and self.dive[0] == p.id:
             return self.dive[4]
         if self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t:
             return self.landed[1]  # down after a dive: stretched out as he landed
         return self.kicked_at + self.reaction(p)
+
+    def stretch_from(self, p: Player) -> float:
+        """P11, P15 (demo engine v2): when the keeper's arms began to stretch beyond his standing
+        reach. Only a dive stretches him out (KEEPER_DIVE_EXTRA_M is what the dive adds): during one,
+        or down after one, from when it began to be prepared; on his feet, never (his standing reach,
+        KEEPER_STAND_REACH_M). His arms once stretched to the dive's full reach from his reaction
+        whether or not he dived, so a standing keeper took balls 1.48 m to his side on his feet."""
+        diving = self.dive and self.dive[0] == p.id
+        down = self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t
+        return self.save_from(p) if diving or down else math.inf
 
     def rise_from(self, p: Player) -> float:
         """P15: when the keeper's centre of mass can begin to rise: when his save began, but no
@@ -3031,7 +3080,7 @@ class Engine:
         down = self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t
         if (diving or down) and self.dived_at is not None:
             kick = self.dived_at
-        return max(self.stretch_from(p), kick + offball.UP_AFTER_CONTACT_S)
+        return max(self.save_from(p), kick + offball.UP_AFTER_CONTACT_S)
 
     def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
         # `seconds`: only a bound; the ball's own path stops when it comes to rest
@@ -3067,8 +3116,11 @@ class Engine:
                 # only as far as his body must go beyond what his hands will reach, at that height,
                 # by then (P11 envelope: his arms began to stretch when he reacted, whenever the dive
                 # itself starts); no dive at one going over the top of it
-                at, start = self.t + when, self.stretch_from(p)
-                arms, top = offball.reach_for(True, at - start, height, at - self.rise_from(p))
+                # Demo engine v2 (P11, P15): on his feet his hands reach KEEPER_STAND_REACH_M; only a
+                # dive stretches them further. Beyond that reach, his body goes as far as the ball is
+                # beyond it (at most KEEPER_DIVE_TRAVEL_M), and the dive's stretch takes his hands on.
+                at = self.t + when
+                arms, top = offball.reach_for(True, 0.0, height, at - self.rise_from(p))
                 need = abs(cross - p.y) - arms
                 # P2, P15: he dives only when moving across, on his feet, cannot bring his hands to it
                 # before it gets there; a ball he can step to needs no dive, and he is not put on the
@@ -3520,7 +3572,7 @@ class Engine:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         elif self.dribble_to:  # carrying the ball where he chose, as fast as his dribbling allows
             tx, ty = self.dribble_to
-            pace = decisions.dribble_speed(carrier.profile["dribbling"])
+            pace = decisions.carry_speed(carrier.physique.top_speed())
             if self.closest_opponent(carrier) < CLOSE_CONTROL_M:
                 pace *= CLOSE_CONTROL_PACE  # close control: slower, the ball never leaves his feet
             steer(carrier, tx, ty, pace)
@@ -3532,7 +3584,7 @@ class Engine:
             # A4: settling the ball he does not stop dead: he takes it in his stride and carries on
             # the way he was going, no faster than he can dribble, slower in close control.
             pace = min(math.hypot(carrier.vx, carrier.vy),
-                       decisions.dribble_speed(carrier.profile["dribbling"]))
+                       decisions.carry_speed(carrier.physique.top_speed()))
             if self.closest_opponent(carrier) < CLOSE_CONTROL_M:
                 pace *= CLOSE_CONTROL_PACE
             steer(carrier, clamp(carrier.x + carrier.vx, 1.0, PITCH_X - 1.0),
@@ -3944,7 +3996,7 @@ class Engine:
         )
         space = clamp((felt - 2.0) / 8.0, 0.0, 1.0)
         ahead = TOUCH_CLOSE_M + TOUCH_SPACE_M * space
-        run = max(decisions.dribble_speed(carrier.profile["dribbling"]), math.hypot(carrier.vx, carrier.vy))
+        run = max(decisions.carry_speed(carrier.physique.top_speed()), math.hypot(carrier.vx, carrier.vy))
         speed = self.touch_speed(carrier, (tx - bx) / d, (ty - by) / d, run, run + ahead / TOUCH_GAP_S)
         if speed is None:  # no push is his: close control, the ball stays at his feet
             return False

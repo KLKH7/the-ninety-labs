@@ -35,12 +35,13 @@ def beyond_his_hands(e: Engine, k, b: tuple) -> float:
 
 
 def test_a_ball_beyond_his_hands_that_his_legs_get_him_to_is_taken_on_his_feet():
-    # A ground shot from 13 m that crosses 0.55 m beyond his hands 0.77 s after it is struck. Moving
-    # across gets his hands there in time (body.can_get_to), so he does, and takes it standing. Main
+    # A ground shot from 15 m that crosses 0.56 m beyond his standing reach 1.07 s after it is struck
+    # (demo engine v2: on his feet his hands reach KEEPER_STAND_REACH_M; only a dive stretches them).
+    # Moving across gets his hands there in time (body.can_get_to), so he does, and takes it standing. Main
     # dived at it, and so does a keeper who only waits for the last moment to dive without asking
     # whether his legs will do: at that moment he is still on his way across.
     e = Engine(1)
-    b = (92.0, 34.0, 0.3, 20.0, 3.0, 0.0)
+    b = (90.0, 34.0, 0.3, 18.0, 2.0, 0.0)
     k = shot_at_keeper(e, b)
     assert 0.5 < beyond_his_hands(e, k, b) < offball.KEEPER_DIVE_TRAVEL_M  # the premise
     e.ball = b
@@ -95,14 +96,14 @@ def in_the_air_until(e: Engine, k) -> float:
 
 
 def test_at_a_long_shot_he_launches_no_sooner_than_he_must_and_is_in_the_air_as_it_arrives():
-    # A ground shot from 15 m that crosses 1.2 m beyond his hands, further than his legs take him in
+    # A ground shot from 15 m that crosses 1.3 m beyond his standing reach, further than his legs take him in
     # the time left (body.can_get_to), so only a dive gets there, and with time to spare: as he
     # reacts there is more time left than that dive takes. He waits on his feet and launches when the
     # dive just gets there: it ends as the ball arrives, not before, and not after it (one frame
     # later would be late). Main launched on reacting and landed 0.1 s early.
     from ninety.sim.body import can_get_to
     e = Engine(1)
-    b = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
+    b = (90.0, 34.0, 0.3, 18.0, 3.0, 0.0)
     k = shot_at_keeper(e, b)
     need = beyond_his_hands(e, k, b)
     react = e.kicked_at + e.reaction(k)
@@ -116,7 +117,10 @@ def test_at_a_long_shot_he_launches_no_sooner_than_he_must_and_is_in_the_air_as_
     assert launched is not None and launched > react + DT  # not on reacting
     lands = launched + offball.dive_time_to(abs(e.dive[3]), e.dive[5])  # the dive's own model
     assert arrives - DT < lands <= arrives + 1e-9  # he lands as the ball gets there, never after
-    assert in_the_air_until(e, k) >= arrives - DT  # flown frame by frame, still moving then
+    # Flown frame by frame, he is still moving in the frame the model lands in (a frame moves him to
+    # where he is at its end, so its start is up to DT before that). Demo engine v2: this once
+    # compared the frame's start with the ball's arrival less a frame, which held only by alignment.
+    assert in_the_air_until(e, k) >= lands - DT - 1e-9
 
 
 def test_a_run_toward_it_lets_him_launch_later_and_still_land_as_it_arrives():

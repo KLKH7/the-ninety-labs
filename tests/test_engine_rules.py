@@ -1039,7 +1039,8 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
     assert e.keeper_dive(k)
     travel = e.dive[3]
     when, cross, _ = e.ball_at_x(k.x)
-    assert abs(travel - (abs(cross - y0) - offball.arm_reach_m(when))) < 1e-6  # his arms by then
+    # demo engine v2: as far as it is beyond his standing reach (the dive's stretch takes his hands on)
+    assert abs(travel - (abs(cross - y0) - offball.KEEPER_STAND_REACH_M)) < 1e-6
     frames = 0
     while e.keeper_dive(k):
         frames += 1
@@ -1094,13 +1095,18 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
 
 
 
-def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows():
+def test_on_his_feet_the_keeper_has_only_his_standing_reach_and_a_dive_stretches_it():
+    # Demo engine v2 (P11, P15): his arms once stretched to the dive's reach from his reaction whether
+    # or not he dived, so he took balls 1.48 m to his side standing. On his feet, before or after he
+    # reacts, he has his standing reach; once he dives it grows.
     from ninety.sim import offball
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
     e.t += e.reaction(k) * 0.5
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == offball.KEEPER_STAND_REACH_M
     e.t += e.reaction(k) * 0.5 + 0.2
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == offball.KEEPER_STAND_REACH_M
+    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] > offball.KEEPER_STAND_REACH_M
 
 
@@ -1124,7 +1130,8 @@ def test_a_late_dive_counts_the_stretch_his_arms_already_have():
     y0 = k.y
     assert e.keeper_dive(k)
     assert e.dive[4] == e.kicked_at + e.reaction(k)  # his arms began when he reacted, not when he dived
-    want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
+    # demo engine v2: his body goes as far as it is beyond his standing reach
+    want = min(abs(cross - y0) - offball.KEEPER_STAND_REACH_M, offball.KEEPER_DIVE_TRAVEL_M)
     assert abs(abs(e.dive[3]) - want) < 1e-6
 
 
@@ -1269,11 +1276,12 @@ def test_can_reach_counts_a_keepers_stretching_hands_in_his_box_not_his_feet():
     k = e.keeper("away")
     k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
     e.kicked_at = e.t - 0.1
-    t = e.reaction(k) + 0.6  # by then his arms are fully stretched
-    assert e.can_reach(k, 103.0, 35.4, 0.5, t, delay=t)[0]  # 1.4 m: his hands, without a step
+    t = e.reaction(k) + 0.6
+    # demo engine v2: on his feet his hands reach KEEPER_STAND_REACH_M across, at any height to his chest
+    assert e.can_reach(k, 103.0, 34.9, 1.2, t, delay=t)[0]  # 0.9 m across at 1.2 m up: his hands
     outfield = e.by_id["a4"]
     outfield.x, outfield.y, outfield.vx, outfield.vy = 60.0, 34.0, 0.0, 0.0
-    assert not e.can_reach(outfield, 60.0, 35.7, 0.5, t, delay=t)[0]  # a foot reaches 1 m
+    assert not e.can_reach(outfield, 60.0, 34.9, 1.2, t, delay=t)[0]  # a foot does not reach that high
 
 
 def test_can_reach_counts_his_speed_toward_the_ball_and_braking_away_from_it():
@@ -1373,6 +1381,9 @@ def test_the_engine_the_dive_and_the_shooter_share_one_envelope():
     e.kicked = {"type": "shot", "team": "home"}
     e.kicked_at = e.t
     e.reaction = lambda p: react
+    # demo engine v2: a dive stretches him (on his feet he has his standing reach); diving, the
+    # engine's reach is the envelope the passer and the shooter judge by
+    e.dive = (k.id, e.t, k.y, 0.0, e.kicked_at + react, 0.0)
     for at, z in ((0.5, 0.2), (0.6, 1.0), (0.7, 2.3), (1.2, 2.6)):
         engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
         passer = decisions._reach(104.0, 34.0, z, at, react, 105.0)
@@ -1548,8 +1559,8 @@ def test_can_reach_judges_a_keepers_hands_by_the_balls_height():
     k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
     e.kicked_at = e.t - 0.1
     t = e.reaction(k) + 0.6
-    assert e.can_reach(k, 103.0, 35.4, 1.0, t, delay=t)[0]  # at his waist
-    assert not e.can_reach(k, 103.0, 35.4, 2.9, t, delay=t)[0]  # near the top of his jump: not so far across
+    assert e.can_reach(k, 103.0, 34.9, 1.0, t, delay=t)[0]  # at his waist (demo v2: within standing reach)
+    assert not e.can_reach(k, 103.0, 34.9, 2.9, t, delay=t)[0]  # near the top of his jump: not so far across
 
 
 def test_the_dives_push_stays_within_what_legs_give():

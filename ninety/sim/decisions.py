@@ -105,6 +105,11 @@ CLEAR_AHEAD_M = 45.0  # design: a clearance is aimed this far up the pitch
 # clear_value, the contest where it lands differs by under 0.0001 goals across the width, so only
 # staying in play tells aims apart, and a search over aims would be a coin toss on a flat value.
 CLEAR_IN_FROM_LINE_M = 20.0
+# Demo engine v2 (design): a clearance may be aimed at a team-mate at least this far up the pitch
+# from the ball (nearer, it is a pass), and no further away than the lofted strikes he can estimate
+# (MAX_PASS_M, the end of the LOFT table).
+CLEAR_MATE_FROM_M = 20.0
+MAX_CLEAR_M = MAX_PASS_M
 
 
 # D7: what having the ball is worth by area, measured from the engine's own matches
@@ -135,8 +140,40 @@ def loft_launch(distance: float) -> tuple[float, float]:
 
 
 def dribble_speed(dribbling: float) -> float:
-    """How fast a player can carry the ball, m/s (design): one definition for choosing and doing."""
+    """How fast a player walks a dead ball to its spot, m/s (design)."""
     return 2.5 + 2.0 * dribbling
+
+
+# D6 (demo engine v2): sprinting with the ball, professional players averaged 91% of their speed
+# without it over 20 m from standing (20.37 against 22.39 km/h; Preissler et al. 2023, Sci Rep
+# 13:22, doi 10.1038/s41598-022-27255-y, 33 professional female players). Here the ball caps how
+# fast he runs: the cap is whatever makes an average body (P2, P9) take 20 m from standing that
+# much longer with it (derived below by bisection, about 6.2 m/s, 62% of his top speed; not
+# chosen). A carry once went at 2.5 to 4.5 m/s whoever carried it, so it was caught and rarely
+# chosen, and looked like jogging.
+WITH_BALL_SHARE = 20.37 / 22.39
+
+
+def _carry_share() -> float:
+    body = Body(F0_MEAN, V0_MEAN, CS_MEAN)
+    target = body.time_to_cover(20.0) / WITH_BALL_SHARE
+    lo, hi = 0.5, V0_MEAN
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        if body.time_to_cover(20.0, 0.0, cap=mid) > target:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2 / V0_MEAN
+
+
+CARRY_SHARE = _carry_share()
+
+
+def carry_speed(top: float = V0_MEAN) -> float:
+    """How fast a player can carry the ball in open play, m/s, from his own top speed now (P10):
+    one definition for choosing and doing."""
+    return CARRY_SHARE * top
 
 
 def _generic_time(distance: float) -> float:
@@ -209,6 +246,12 @@ class Scene:
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
+    carry_mps: float = 0.0  # how fast he can carry the ball (carry_speed); 0: an average fresh body's
+    velocity: tuple[float, float] = (0.0, 0.0)  # his own, m/s
+
+    def __post_init__(self) -> None:
+        if not self.carry_mps:
+            self.carry_mps = carry_speed()
 
 
 @dataclass
@@ -946,7 +989,7 @@ def short_pass_lean(dist: float) -> float:
     return 1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M)
 
 
-def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
+def clear_value(scene: Scene, tx: float, ty: float, contest: float | None = None) -> float:
     """D9, Law 9: what a clearance aimed at (tx, ty) is worth, over the strikes his own kick error
     allows (strike_nodes, lofted, as the pass estimate weighs them): `contest` if it stays in play,
     or, if it crosses a line before any player (either side: whoever gets there, it is still the
@@ -962,9 +1005,9 @@ def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
     players = []
     for m in scene.mates:
         mvx, mvy = m[4:6] or (0.0, 0.0)
-        players.append((m[1] + mvx * wait, m[2] + mvy * wait, mvx, mvy, None))
+        players.append((m[1] + mvx * wait, m[2] + mvy * wait, mvx, mvy, None, True))
     for ox, oy, ovx, ovy, keeper in scene.moving:
-        players.append((ox + ovx * wait, oy + ovy * wait, ovx, ovy, scene.goal_x if keeper else None))
+        players.append((ox + ovx * wait, oy + ovy * wait, ovx, ovy, scene.goal_x if keeper else None, False))
     total = 0.0
     for w, d_angle, ground, up in strike_nodes(scene, tx, ty, True, ARRIVE_MPS):
         points, rests = flight(ground, up)
@@ -974,10 +1017,32 @@ def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
             if out_of_play(sx + ux * a, sy + uy * a):
                 t_end, where = t, (sx + ux * a, sy + uy * a)
                 break
-        kept = where is None or any(
-            reach_time(points, t_end, rests, sx, sy, ux, uy, px, py, pvx, pvy, react, t_end, box)[0] < t_end
-            for px, py, pvx, pvy, box in players)
-        total += w * (contest if kept else -restart_cost(*where, scene.goal_x))
+        # Who gets to it first, each side's soonest (the same race, both sides).
+        ours, theirs = (math.inf, -1), (math.inf, -1)
+        for px, py, pvx, pvy, box, mine in players:
+            got = reach_time(points, t_end, rests, sx, sy, ux, uy, px, py, pvx, pvy, react, t_end, box)
+            if mine and got[0] < ours[0]:
+                ours = got
+            elif not mine and got[0] < theirs[0]:
+                theirs = got
+        kept = where is None or min(ours[0], theirs[0]) < t_end
+        if not kept:
+            total += w * -restart_cost(*where, scene.goal_x)
+            continue
+        if contest is not None:
+            total += w * contest
+            continue
+        # Demo engine v2 (D1, D9): where it comes down is a race, not an even contest: his side
+        # keeps it as often as the pass estimate's race says (softened by LANE_MARGIN_S), and it is
+        # worth what having it, or losing it, there is worth. Once every clearance was an even
+        # contest wherever it landed, so he aimed at an empty spot 45 m up the pitch.
+        if ours[0] == math.inf and theirs[0] == math.inf:  # nobody before it stops: a loose ball
+            p, at = 0.5, len(points) - 1
+        else:
+            p = sigmoid((theirs[0] - ours[0]) / LANE_MARGIN_S) if theirs[0] < math.inf else 1.0
+            at = ours[1] if ours[0] <= theirs[0] else theirs[1]
+        lx, ly = sx + ux * points[at][1], sy + uy * points[at][1]
+        total += w * (p * our_value(scene, lx, ly) - (1 - p) * our_loss(scene, lx, ly))
     return total
 
 
@@ -1029,7 +1094,9 @@ def options(scene: Scene) -> list[Option]:
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     # Laws 8, 13, 16, 17: carrying a set ball off is touching it twice before anyone else has.
-    for turn in () if scene.set_piece else (0.0, 0.8, -0.8):  # straight at goal, or angled away
+    # Straight at goal, or angled away; demo engine v2 (D6, design): also half that angle and half
+    # as much again, so a carrier can go round a defender rather than only at him or well away.
+    for turn in () if scene.set_piece else (0.0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2):
         heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
         tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
         ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
@@ -1044,7 +1111,10 @@ def options(scene: Scene) -> list[Option]:
             if d <= LUNGE_REACH_M:
                 win *= 1 - tackle_chance(d)
                 continue
-            my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
+            # Demo engine v2: he gets there as his body does, from the speed he has along the carry,
+            # no faster than he can carry it (as the race times everyone else: generic_time).
+            along = (scene.velocity[0] * (tx - scene.x) + scene.velocity[1] * (ty - scene.y)) / DRIBBLE_STEP_M
+            my_t = AVERAGE_BODY.time_to_cover(s * DRIBBLE_STEP_M, along, cap=scene.carry_mps)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = our_value(scene, tx, ty)
         ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
@@ -1052,9 +1122,16 @@ def options(scene: Scene) -> list[Option]:
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         tx = scene.x + attack(scene.goal_x) * CLEAR_AHEAD_M
         ty = CLEAR_IN_FROM_LINE_M if scene.y < PITCH_Y / 2 else PITCH_Y - CLEAR_IN_FROM_LINE_M
-        # A long ball away is a contest where it lands (an even one: design), if it stays in play.
-        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
-        out.append(Option("clear", clear_value(scene, tx, ty, contest), (tx, ty), lofted=True))
+        # A long ball away, aimed up the pitch away from goal, or (demo engine v2) toward a
+        # team-mate he sees well up the pitch (within kicking range, MAX_CLEAR_M): each valued by the
+        # race where it comes down (clear_value), so he aims where his side can win it.
+        aims = [(tx, ty)]
+        for _, mx, my, *_ in scene.mates:
+            ahead = (mx - scene.x) * attack(scene.goal_x)
+            if CLEAR_MATE_FROM_M <= ahead and math.hypot(mx - scene.x, my - scene.y) <= MAX_CLEAR_M:
+                aims.append((mx, my))
+        best = max(((clear_value(scene, ax, ay), ax, ay) for ax, ay in aims), key=lambda c: c[0])
+        out.append(Option("clear", best[0], (best[1], best[2]), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
@@ -1113,7 +1190,7 @@ def taste_key(scene: Scene, o: Option) -> tuple:
     if o.kind == "dribble" and o.target:
         goal = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
         turn = fmath.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
-        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
+        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.4)  # demo v2: per direction
     return (o.kind,)
 
 
