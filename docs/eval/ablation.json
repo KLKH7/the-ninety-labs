@@ -5296,8 +5296,8 @@
   "kind": "confident detection: shot",
   "true": true,
   "full": {
-   "status": "verified",
-   "layer": "judge"
+   "status": "held",
+   "layer": "confidence gate"
   },
   "no fact-checker": {
    "status": "verified",
@@ -5317,8 +5317,8 @@
   "kind": "confident detection: shot",
   "true": true,
   "full": {
-   "status": "verified",
-   "layer": "judge"
+   "status": "held",
+   "layer": "confidence gate"
   },
   "no fact-checker": {
    "status": "verified",
@@ -5464,8 +5464,8 @@
   "kind": "confident detection: shot",
   "true": true,
   "full": {
-   "status": "verified",
-   "layer": "judge"
+   "status": "held",
+   "layer": "confidence gate"
   },
   "no fact-checker": {
    "status": "verified",
@@ -5485,8 +5485,8 @@
   "kind": "confident detection: shot",
   "true": true,
   "full": {
-   "status": "verified",
-   "layer": "judge"
+   "status": "held",
+   "layer": "confidence gate"
   },
   "no fact-checker": {
    "status": "verified",

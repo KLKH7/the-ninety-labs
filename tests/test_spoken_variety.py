@@ -6,7 +6,7 @@ import asyncio
 import json
 
 from ninety.agents import cues
-from ninety.agents.factcheck import Claim, check
+from ninety.agents.factcheck import WITHOUT_SPEED, Claim, check
 from ninety.speech import commentary, describe, spells
 
 CLUBS = {"home": "London", "away": "Lisbon"}
@@ -128,7 +128,30 @@ def test_a_graphic_never_shows_a_speed_no_kick_can_give():
     fast = ev("p1", 10.0, "pass", "h-t1", "h-t2", "success", ball_speed_kmh=137.2, distance_m=19)
     text = cues._text(fast, "analyst")
     assert "km/h" not in text and check(Claim(text, ["p1"]), {"p1": fast}).ok
-    assert "100.0 km/h" in cues._text(fast | {"ball_speed_kmh": 100.0}, "analyst")
+    # A possible speed is shown from the simulator; vision's waits for its measured error (SPEED_MEASURED).
+    assert "100.0 km/h" in cues._text(fast | {"ball_speed_kmh": 100.0, "confidence": None}, "analyst")
+    assert "km/h" not in cues._text(fast | {"ball_speed_kmh": 100.0}, "analyst")
+
+
+def test_a_claim_stating_visions_speed_is_held_until_it_is_measured(monkeypatch):
+    from ninety.agents import factcheck
+    from ninety.agents.contracts import status_for
+    from ninety.agents.workflow import sent_back
+
+    seen = ev("p1", 10.0, "pass", "h-t1", "h-t2", "success", ball_speed_kmh=60.0, distance_m=19, minute=1,
+              second=10, clock="00:10")
+    claim = Claim("h-t1 plays it 19 m to h-t2, at 60 km/h.", ["p1"])
+    verdict = factcheck.confidence_gate(claim, {"p1": seen})
+    assert status_for(verdict) == "held" and verdict.reasons[0].endswith(factcheck.WITHOUT_SPEED)
+    assert sent_back(verdict)  # the writer can fix it: said again without the speed
+    assert factcheck.confidence_gate(Claim("h-t1 plays it 19 m to h-t2.", ["p1"]), {"p1": seen}).ok
+    assert factcheck.confidence_gate(claim, {"p1": seen | {"confidence": None}}).ok  # the simulator's
+    monkeypatch.setattr(factcheck, "SPEED_MEASURED", True)
+    assert factcheck.confidence_gate(claim, {"p1": seen}).ok
+    # A hold the writer cannot fix (an unsure detection) is still not sent back.
+    unsure = factcheck.confidence_gate(Claim("h-t1 plays it 19 m to h-t2.", ["p1"]),
+                                       {"p1": seen | {"confidence": 0.2}})
+    assert status_for(unsure) == "held" and not sent_back(unsure)
 
 
 def test_the_offline_writer_sent_back_for_a_speed_says_it_again_without_it():
@@ -140,5 +163,5 @@ def test_the_offline_writer_sent_back_for_a_speed_says_it_again_without_it():
     moment = {"moment": {"main_event": "p1"}}
     first = json.loads(asyncio.run(models.tactician(json.dumps(moment))))["text"]
     again = json.loads(asyncio.run(models.tactician(json.dumps(
-        moment | {"rejected": {"reasons": ["implausible speed: 100 km/h ..."]}}))))["text"]
+        moment | {"rejected": {"reasons": [f"implausible speed: 100 km/h ...: {WITHOUT_SPEED}"]}}))))["text"]
     assert "km/h" in first and "km/h" not in again

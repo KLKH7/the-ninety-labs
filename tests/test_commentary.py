@@ -70,10 +70,10 @@ def test_an_insight_is_said_only_when_verified_and_never_names_an_unsure_side():
     events = [ev("v3", 10.0, "pass", side=0.3, player="h-t4", receiver="h-t8", outcome="success",
                  end_x=78.0, end_y=34.0, ball_speed_kmh=40.0)]
     cue = {"id": "insight-m-v3", "kind": "insight", "persona": "analyst", "t_in": 10.0,
-           "text": "h-t4 plays it 12 m to h-t8, at 40 km/h.", "evidence": ["v3"]}
+           "text": "h-t4 plays it 12 m to h-t8.", "evidence": ["v3"]}
     assert texts(events, [{**cue, "verified": False}]) == []
     (said,) = texts(events, [{**cue, "verified": True}])
-    assert said == "A player plays it 12 metres to another player, at 40 kilometres an hour."
+    assert said == "A player plays it 12 metres to another player."
     assert "London" not in said and "h-t" not in said
 
 

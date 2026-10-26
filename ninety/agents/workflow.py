@@ -21,7 +21,8 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    is not verified (once it is, the reading cannot air, so it is not checked or rewritten). A
    claim may cite only its moment's evidence. A rejected claim goes back to its author with the
    reasons, at most MAX_REWRITES times. A held claim (the check could not be done, or it rests on
-   an unsure detection) is not rewritten.
+   an unsure detection) is not rewritten, except one held only for a speed vision has not
+   measured: its writer says it without the speed.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
    With `shape` (team-shape facts from tracked positions, ninety/intel/shape.py), code adds the
@@ -78,7 +79,7 @@ from ninety.agents.credentials import (  # noqa: F401  (FOUNDRY_SCOPE, TOKEN_MAR
     sign_in_then_load,
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
-from ninety.agents.factcheck import Claim, Verdict, confidence_gate
+from ninety.agents.factcheck import WITHOUT_SPEED, Claim, Verdict, confidence_gate
 from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
@@ -227,10 +228,13 @@ ACTION = {"verified": "verify", "rejected": "reject", "held": "hold"}
 
 
 def sent_back(verdict: Verdict) -> bool:
-    """A claim goes back to its author only when it is wrong (status_for: rejected). A held claim
-    is not rewritten: neither a failed check nor an unsure detection (`low_confidence`) is
-    something the writer can fix. The slice sends a low-confidence claim back; its replay pins
-    that, so the slice keeps it."""
+    """A claim goes back to its author when it is wrong (status_for: rejected), or when it is held
+    only for stating a speed vision has not measured (factcheck.SPEED_MEASURED): the writer can say
+    it without the speed. Any other held claim is not rewritten: neither a failed check nor an
+    unsure detection (`low_confidence`) is something the writer can fix. The slice sends a
+    low-confidence claim back; its replay pins that, so the slice keeps it."""
+    if status_for(verdict) == "held":
+        return bool(verdict.reasons) and all(r.endswith(WITHOUT_SPEED) for r in verdict.reasons)
     return status_for(verdict) == "rejected"
 
 

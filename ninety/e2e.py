@@ -70,7 +70,14 @@ from ninety import condensed, highlights, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
-from ninety.agents.factcheck import MIN_CONFIDENCE, MIN_TEAM_CONFIDENCE, Claim, Verdict, side_known
+from ninety.agents.factcheck import (
+    MIN_CONFIDENCE,
+    MIN_TEAM_CONFIDENCE,
+    WITHOUT_SPEED,
+    Claim,
+    Verdict,
+    side_known,
+)
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected, territory
@@ -289,7 +296,9 @@ def offline_analyst(events: list[dict], plant: bool):
         event = most_interesting(by_minute.get(minute, []))
         if event is None:
             return json.dumps({"text": "", "evidence": []})
-        claim = Claim(describe.as_sentence(_text(event, "analyst") + "."), [event["id"]])
+        if WITHOUT_SPEED in prompt:  # sent back for its speed: said again without it (offline_models)
+            event = {k: v for k, v in event.items() if k != "ball_speed_kmh"}
+        claim = Claim(describe.as_sentence(_text(event, "analyst", speed=True) + "."), [event["id"]])
         if plant and calls == 1:
             claim = tamper(claim)
         return json.dumps({"text": claim.text, "evidence": claim.evidence})
@@ -322,8 +331,13 @@ def trace_step(line: str, moment: str, judged: bool) -> dict:
         action, detail = "hold", detail.removeprefix("rejected, out of rewrites: ")
     elif detail.startswith("rejected: "):
         action, detail = "reject", detail.removeprefix("rejected: ")
-    else:
+    elif detail.startswith(("held: ", "held, out of rewrites: ")):
+        # The confidence gate held it (slice.FactCheckExecutor): a hold, never shown as verified.
+        action, detail = "hold", detail.split(": ", 1)[1]
+    elif detail == "accepted":
         action = "verify"
+    else:
+        raise ValueError(f"an unknown fact-checker step: {line!r}")
     return {"role": role, "moment": moment, "action": action, "ms": ms, "detail": detail}
 
 
@@ -412,10 +426,11 @@ def offline_models(events: list[dict]) -> Models:
         body = json.loads(prompt)
         event = by_id[body["moment"]["main_event"]]
         reasons = (body.get("rejected") or {}).get("reasons", [])
-        if any(r.startswith("implausible speed") for r in reasons):
-            # Sent back for a speed no kick gives: said again without it, as a writer would.
+        if any(r.endswith(WITHOUT_SPEED) for r in reasons):
+            # Sent back for its speed (none a kick gives, or vision's, not yet measured): said again
+            # without it, as a writer would. A first draft states it, as a writer may.
             event = {k: v for k, v in event.items() if k != "ball_speed_kmh"}
-        text = describe.as_sentence(_text(event, "analyst") + ".")
+        text = describe.as_sentence(_text(event, "analyst", speed=True) + ".")
         return json.dumps({"text": text, "evidence": [event["id"]]})
 
     async def challenger(prompt: str) -> str:
