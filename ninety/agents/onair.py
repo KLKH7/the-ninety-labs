@@ -57,3 +57,45 @@ def trace(claims: list[dict], sure: Iterable[str], clubs: dict[str, str] | None 
              "steps": [{**s, "detail": render(s.get("detail") or "", sure, clubs)}
                        for s in c.get("steps", [])]}
             for c in claims]
+
+
+# A ball speed as the bundle's words write or say it, with what joins it to the sentence (", " or
+# " at "), which goes with it: the same reading as the viewer's gate (web/viewer/src/speed.ts).
+SPEED_TEXT = re.compile(
+    r"(,\s*|\s+at\s+|\s+)?(\d+(?:\.\d+)?)\s*(km/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)", re.I)
+
+
+def speeds(text: str, cited: Iterable[dict]) -> str:
+    """The text with each ball speed no cited event may state taken out (factcheck.sayable_speed): a
+    screen bands every speed it shows once the bundle's speed is measured (manifest.speed), so a held
+    draft's or a shot's must not be there to band."""
+    from ninety.agents.factcheck import sayable_speed
+
+    ok = {float(e["ball_speed_kmh"]) for e in cited if sayable_speed(e)}
+    ok |= {float(round(v)) for v in ok}
+
+    def keep(m: re.Match) -> str:
+        return m[0] if float(m[2]) in ok else ""
+
+    out = SPEED_TEXT.sub(keep, text)
+    if out == text:
+        return text
+    out = re.sub(r"\s{2,}", " ", out)
+    return re.sub(r",([.!?'])", r"\1", re.sub(r"\s+([,.!?])", r"\1", out)).strip()
+
+
+def gate_speeds(
+    cue_rows: list[dict], claims: list[dict], events: list[dict]
+) -> tuple[list[dict], list[dict]]:
+    """Cues and the claim trace with every speed their cited events may not state taken out."""
+    by_id = {e["id"]: e for e in events}
+
+    def cited(ids) -> list[dict]:
+        return [by_id[i] for i in ids or () if i in by_id]
+
+    rows = [{**c, "text": speeds(c["text"], cited(c.get("evidence")))}
+            if isinstance(c.get("text"), str) else c for c in cue_rows]
+    traced = [{**c, "text": speeds(c.get("text") or "", cited(c.get("evidence"))),
+               "steps": [{**s, "detail": speeds(s.get("detail") or "", cited(c.get("evidence")))}
+                         for s in c.get("steps", [])]} for c in claims]
+    return rows, traced

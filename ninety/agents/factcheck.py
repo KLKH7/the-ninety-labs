@@ -255,11 +255,16 @@ MIN_CONFIDENCE = 0.5
 # misread frame), and is refused, never rounded down. No bound below it is sourced for a pass
 # (docs/LESSONS.md, lesson 262).
 MAX_BALL_KMH = detected.MAX_BALL_KMH
-# Vision's ball speed has no measured error yet (docs/EVALUATION.md: speed error planned; R3's
-# measurement is #331). Until it is on main, a claim stating a detected event's speed is held, as a
-# claim on an unsure detection is: the speed may be right, but nothing vouches for it. The flag
-# turns on only with that measurement, and then a speed is said with its error band.
-SPEED_MEASURED = False
+# Vision's ball speed, measured once on the frozen test set (#331, docs/eval/speed-report-freeze.md):
+# for a pass along the ground, n = 35, median error 3.5 km/h, p90 7.7 (vision reads 4.1 slow on
+# average). A lofted pass is not measured (one, read at 229.7 for a true 93.5: its ground track is not
+# its flight) and no shot was matched. So a detected speed is said only for a pass vision itself marks
+# as along the ground (`lofted` false, ninety/vision: a flight fit covers none of its speed window),
+# with that band, SPEED_ERROR_KMH (p90 rounded up), and never above MAX_BALL_KMH; any other detected
+# speed is held, as a claim on an unsure detection is. An event with no `lofted` is not known to be on
+# the ground, so its speed is held too (fail closed).
+SPEED_MEASURED = True
+SPEED_ERROR_KMH = 8
 WITHOUT_SPEED = "state it without the speed"  # how a speed reason ends: what the writer is asked to do
 # Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
 # confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
@@ -310,10 +315,17 @@ def _normalize_clock(clock: str) -> str:
     return f"{minute.zfill(2)}:{second.zfill(2)}"
 
 
+def measured_speed(event: dict) -> bool:
+    """Whether a detection's ball speed is one vision's measured error covers (SPEED_MEASURED): a pass
+    vision marks as along the ground."""
+    return SPEED_MEASURED and event.get("type") == "pass" and event.get("lofted") is False
+
+
 def sayable_speed(event: dict) -> bool:
-    """Whether a graphic or line may state the event's ball speed: one a kick can give, and either
-    the simulator's or a detection's once vision's speed error is measured (SPEED_MEASURED)."""
-    return plausible_speed(event) and (SPEED_MEASURED or event.get("confidence") is None)
+    """Whether a graphic or line may state the event's ball speed: one the ball can reach, and either
+    the simulator's or a detection's that vision's measured error covers (measured_speed). A screen
+    says it with its band (manifest.speed, web/viewer/src/speed.ts)."""
+    return plausible_speed(event) and (event.get("confidence") is None or measured_speed(event))
 
 
 def plausible_speed(event: dict) -> bool:
@@ -908,12 +920,16 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and _is_shape(known[i]) and not known[i]["confident"]
     ]
-    if not SPEED_MEASURED and any(True for _ in SPEED_NUMBER.finditer(spelled_as_digits(claim.text))):
+    if any(True for _ in SPEED_NUMBER.finditer(spelled_as_digits(claim.text))):
         for i in claim.evidence:
             event = known.get(i, {})
-            if event.get("confidence") is not None and event.get("ball_speed_kmh") is not None:
-                reasons.append(f"event {i}'s ball speed is vision's, whose error is not measured yet: "
-                               f"{WITHOUT_SPEED}")
+            if (event.get("confidence") is not None and event.get("ball_speed_kmh") is not None
+                    and not measured_speed(event)):
+                why = ("it is not a pass" if event.get("type") != "pass" else
+                       "this pass was in the air" if event.get("lofted")
+                       else "this pass is not marked on the ground")
+                reasons.append(f"event {i}'s ball speed is vision's, whose error is measured only for a pass "
+                               f"along the ground ({why}): {WITHOUT_SPEED}")
     if TEAM_NAMED.search(claim.text) or team_view:
         for i in claim.evidence:
             event = known.get(i, {})

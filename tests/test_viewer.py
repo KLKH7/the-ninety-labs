@@ -304,34 +304,41 @@ def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tr
     assert not errors
 
 
-def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, tracked_site):
+@pytest.fixture(scope="module")
+def ground_site(browser, tmp_path_factory):
+    # The tracked clip with its pass marked along the ground by vision (`lofted` false): the one speed
+    # vision's measured error covers (factcheck.measured_speed), so the bundle's manifest.speed opens.
+    yield from serve_site(browser, tmp_path_factory,
+                          events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
+
+
+def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, ground_site):
     # Once measured (manifest.speed), a speed shows with its error band; 147 km/h is above P3's
     # 40 m/s (144 km/h), so no ball went that fast and it never airs (the demo's 4-1 graphic).
     import json
-    import re
+
+    from ninety.agents import factcheck
 
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
 
-    def measured(route):
-        m = json.loads(route.fetch().text())
-        route.fulfill(body=json.dumps({**m, "speed": {"measured": True, "error_kmh": 3.5}}),
-                      content_type="application/json")
-
     def fast(route):
         cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
-        cues = [{**c, "text": re.sub(r"101(\.4)? km/h", "147 km/h", c["text"])} for c in cues]
+        first = next(c for c in cues if "48" in c["text"] and "km/h" in c["text"])
+        fast_text = first["text"].replace("48.0 km/h", "147 km/h")
+        cues.append({**first, "id": first["id"] + "-fast", "text": fast_text})
         route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
 
-    ctx.route("**/bundle/manifest.json", measured)
     ctx.route("**/bundle/cues.jsonl", fast)
     page = ctx.new_page()
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(tracked_site)
+    page.goto(ground_site)
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
     speeds = aired_speeds(page)
-    assert speeds and all(s.endswith(" ± 4 km/h") for s in speeds), speeds  # 48 km/h, with its band
+    band = f" ± {factcheck.SPEED_ERROR_KMH} km/h"
+    assert speeds and all(s.endswith(band) for s in speeds), speeds  # 48 km/h, with its band
     assert not any(s.startswith("147") for s in speeds), speeds
+    assert not any(s.startswith("101") for s in speeds), speeds  # the shot's speed is not measured
     assert not errors
 
 
