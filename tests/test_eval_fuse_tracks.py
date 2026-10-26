@@ -33,3 +33,18 @@ def test_the_rule_needs_every_part():
     assert adopted(b, better)["adopt"]
     assert not adopted(b, better | {"id_switches": 5})["adopt"]
     assert not adopted(b, summary(b | {"tracks": 110, "over": 0, "abs_diff": 1, "found": 80}))["adopt"]
+
+
+def test_lower_side_accuracy_alone_blocks_adoption():
+    b = summary({"side_frames": 10, "tracks": 120, "over": 5, "abs_diff": 10, "true_frames": 10000,
+                 "found": 9800, "matched": 9800, "right_side": 9000, "id_switches": 4})
+    c = summary(b | {"tracks": 110, "over": 0, "abs_diff": 1, "right_side": 8800})
+    rule = adopted(b, c)
+    failed = [k for k, v in rule.items() if not v]
+    assert failed == ["side_not_below_baseline_lower_bound", "adopt"]
+
+
+def test_a_track_beyond_the_gate_is_not_matched_even_to_a_free_player():
+    key = {0: {"h1": ("home", 50.0, 30.0)}}
+    g = grade({"frames": [frame(0, [("h-t1", "home", 51.5, 30.0)])]}, key)
+    assert g["found"] == 0 and g["true_frames"] == 1

@@ -104,3 +104,82 @@ path (`ninety.vision.tracked_frames`), and graded offline against the union of b
 the mean absolute count difference is lower, ID switches are no more, and player recall and side
 accuracy are each no lower than the baseline's Wilson 95% lower bound. Otherwise main keeps the
 current gate, and this section reports the numbers either way.
+
+### Step 1: what the tactical renders measure
+
+```
+uv run python -m ninety.eval.foot_precision --clips runs/tactical1/val \
+    --detections runs/tactical1/score/validation/ours-tactical --view tac-l \
+    --seeds 117 119 120 121 122 2041 2042 2043 2044 2045 3041 3042 3043 3044 3045 \
+    --out docs/eval/fuse-gate/foot-precision-tac-l.json      # and the same for tac-r
+```
+
+| Player, share of box height | tac-l | tac-r | broadcast (above) |
+|---|---|---|---|
+| matched | 9,024 | 10,295 | 13,641 |
+| 99th pct across | 0.230 | 0.243 | 0.155 |
+| 99th pct down | 0.136 | 0.138 | 0.082 |
+| bias across, `a + b*c` | 0.026 + 0.062 c | -0.015 + 0.080 c | not measured |
+| bias down, `a + b*c` | 0.051 - 0.028 c | 0.039 + 0.014 c | not measured |
+| 99th pct across, after the line | 0.172 | 0.182 | |
+| 99th pct down, after the line | 0.130 | 0.129 | |
+
+[foot-precision-tac-l.json](fuse-gate/foot-precision-tac-l.json),
+[foot-precision-tac-r.json](fuse-gate/foot-precision-tac-r.json) (balls there too: 268 and 445).
+
+- **The lean is real, and it points the way the 8080 split does.** At its own edge each lens's box
+  sits outward of the feet by about 0.09 of the box (tac-l +0.088 at c = +1, tac-r -0.095 at
+  c = -1). Those point in opposite directions along the pitch, and for a 50 px player near
+  halfway that is roughly 0.3 m between the two places. That matches the +0.29 m found on the
+  demo.
+- **The broadcast precision is too tight for these lenses.** Before the lean is taken out, the
+  tactical errors are about 1.5 times wider across and 1.7 times wider down. After it, across is
+  1.1 to 1.2 times the broadcast figure, and down is still about 1.6. So the first limit above was
+  right to worry.
+
+### Step 2: scored once, on the 8 score clips
+
+```
+uv run python -m ninety.eval.fuse_tracks --runs runs/tactical1/join/runs --clips runs/tactical1/val \
+    --seeds 108 109 110 112 113 114 115 116 --out docs/eval/fuse-gate/tracks-validation.json
+```
+
+| 8 clips, 3,210 side-frames | baseline (main) | candidate |
+|---|---|---|
+| tracks per side per frame | 9.62 | 9.29 |
+| mean absolute difference from the side's true count | 5.78 | 5.50 |
+| side-frames with more than 11 tracks | 0.415 | 0.391 |
+| ID switches | 414 | **61** |
+| player recall (95%) | 0.835 (0.831-0.839) | 0.838 (0.834-0.841) |
+| side accuracy (95%) | 0.661 (0.655-0.666) | **0.655** (0.649-0.660) |
+
+[tracks-validation.json](fuse-gate/tracks-validation.json), per clip inside.
+
+**Not adopted.** Four parts of the rule pass. Side accuracy, at 0.6547, falls below the baseline's
+lower bound of 0.6552, so main keeps the gate it had. The correction ships switched off
+(`fuse.USE_LENS_BIAS = False`), with its constants and its test, the same way
+`track.USE_CONSISTENCY` does. Nothing on the 8080 demo changes.
+
+What the clips show, read after the score and changing nothing:
+- **Side assignment, not the seam, is most of the count error.** In five clips (110, 112, 113, 115,
+  116) the baseline's side accuracy is 0.40 to 0.63, so a side's track count is off by 6 to 11
+  whatever fuse does. In 110, 112 and 113 the two arms come out the same.
+- **Where sides are right, the result is mixed.** Seed 108 (side accuracy 1.00) goes from over-11
+  in 0.54 of side-frames to 0, the count difference from 1.15 to 0.81, and ID switches from 66 to
+  3. Seed 114 (side accuracy 0.92 to 0.94) gets worse on counts: over-11 goes from 0.40 to 0.50
+  and the count difference from 1.40 to 1.52, while its ID switches fall from 70 to 7. ID switches
+  fall in every clip where the arms differ.
+- **What cost side accuracy is 109 and 116.** Side accuracy goes 0.79 to 0.68 in 109 and 0.63 to
+  0.60 in 116. Fewer, longer tracks change what the kit clustering learns from; that is
+  `ninety.vision.sides` and `track`, not the fuse gate.
+- **Recall dips in 108 and 109** (0.944 to 0.925, 0.947 to 0.926), even though it rises over all
+  8 clips. The wider gate may be merging two near players of one side. Not diagnosed.
+
+Deviation: the pre-registration put the correction in observe. It is in fuse, because fuse is the
+only place the tactical views' ground points go on from: the events stage and `tracked.json` read
+the fused lines, never a view's own. The candidate's fused lines are what observe-then-fuse would
+give.
+
+What it would take to adopt, as a new pre-registration on new clips (this score set has been read):
+make the kit clustering stable to the track set first, or take side accuracy out of the fuse's
+rule and gate it where sides are decided.

@@ -35,14 +35,14 @@ def drawn(cls: str, view: str, box: list[float], z: float, lean: bool) -> dict:
 
 
 def player(view: str, x: float, y: float, score: float = 0.9, rgb=(200.0, 20.0, 20.0),
-           lean: bool = True) -> dict:
+           lean: bool = False) -> dict:
     """A player detection in `view` of someone standing at (x, y): the box drawn from (x, y), with
-    the lens's measured lean unless `lean` is False, and placed as observe would."""
+    the lens's measured lean if `lean`, and placed as observe would."""
     box = player_box(VIEWS[view], x, y)
     return drawn("player", view, box, 0.0, lean) | {"score": score, "rgb": list(rgb)}
 
 
-def ball(view: str, x: float, y: float, score: float = 0.8, lean: bool = True) -> dict:
+def ball(view: str, x: float, y: float, score: float = 0.8, lean: bool = False) -> dict:
     return drawn("ball", view, ball_box(VIEWS[view], x, y), fuse.BALL_CENTRE_Z, lean) | {"score": score}
 
 
@@ -126,9 +126,8 @@ def test_a_detection_below_the_scorer_s_threshold_is_passed_through_not_merged()
 
 
 def test_a_poor_camera_fit_widens_the_gate():
-    # 1.5 m apart in depth at the far touchline does not merge on a clean fit (the views' reach
-    # there is about 1.2 m); on a fit 5 px off (about 1.9 m), it does.
-    pair = ([player("tac-l", 52.5, 65.25)], [player("tac-r", 52.5, 66.75)])
+    # 1 m apart at the far touchline does not merge on a clean fit; on a fit 5 px off, it does.
+    pair = ([player("tac-l", 52.5, 65.5)], [player("tac-r", 52.5, 66.5)])
     assert len(fuse_frame(frame(*pair))["players"]) == 2
     assert len(fuse_frame(frame(*pair, residual=5.0))["players"]) == 1
 
@@ -196,25 +195,53 @@ def test_the_lens_width_is_the_renderer_s():
     assert fuse.VIEW_WIDTH_PX == TACTICAL_SIZE[0]
 
 
-def test_one_player_on_the_seam_seen_leaning_outward_by_both_lenses_is_one_player():
+@pytest.fixture
+def lens_bias(monkeypatch):
+    monkeypatch.setattr(fuse, "USE_LENS_BIAS", True)
+
+
+def test_the_lens_correction_is_off_until_a_rule_adopts_it():
+    # docs/eval/fuse-gate.md: it failed side accuracy on validation, so main fuses as before.
+    assert fuse.USE_LENS_BIAS is False
+    a, b = player("tac-l", 40.0, 20.0, lean=True), player("tac-r", 52.5, 34.0)
+    out = fuse_frame(frame([a], [b]))
+    assert sorted((d["x"], d["y"]) for d in out["players"]) == sorted([(a["x"], a["y"]), (b["x"], b["y"])])
+
+
+def test_one_player_on_the_seam_seen_leaning_outward_by_both_lenses_is_one_player(lens_bias):
     # Each lens sees him off its own centre, his box leaning outward: placed as drawn, the two places
     # are 0.18 to 0.23 m apart along the pitch on this stand-in rig (0.29 m on the 8080 demo, where
     # halfway is nearer each lens's edge). Corrected, they are one man, where he stands.
     for y in (6.0, 34.0, 60.0):
-        a, b = player("tac-l", 52.5, y), player("tac-r", 52.5, y)
-        assert a["x"] - b["x"] > 0.15  # the lean, as observe places it
+        a, b = player("tac-l", 52.5, y, lean=True), player("tac-r", 52.5, y, lean=True)
+        assert a["x"] - b["x"] > 0.15  # the lean, as observe places it (the rig gives 0.18 to 0.23)
         out = fuse_frame(frame([a], [b]))
         assert len(out["players"]) == 1 and abs(out["players"][0]["x"] - 52.5) < 0.05
 
 
-def test_a_detection_seen_by_one_lens_is_placed_from_its_corrected_pixel():
-    out = fuse_frame(frame([player("tac-l", 40.0, 20.0)], []))
-    assert abs(out["players"][0]["x"] - 40.0) < 0.02 and abs(out["players"][0]["y"] - 20.0) < 0.02
+def test_a_detection_seen_by_one_lens_is_placed_from_its_corrected_pixel(lens_bias):
+    # Each lens alone, at the seam and off it: the leaned box goes back where he stands. 2 cm is
+    # the rounding of a place (3 decimals) plus the Jacobian's linearity, well under the 0.18 m lean.
+    cases = (("tac-l", 40.0, 20.0), ("tac-l", 52.5, 60.0), ("tac-r", 52.5, 6.0), ("tac-r", 70.0, 40.0))
+    for view, x, y in cases:
+        out = fuse_frame(frame([player(view, x, y, lean=True)], []) if view == "tac-l"
+                         else frame([], [player(view, x, y, lean=True)]))
+        assert abs(out["players"][0]["x"] - x) < 0.02 and abs(out["players"][0]["y"] - y) < 0.02
 
 
-def test_a_view_without_measured_bias_keeps_the_broadcast_precision():
-    d = player("tac-l", 52.5, 34.0, lean=False)
+def test_a_view_without_measured_bias_keeps_the_broadcast_precision(lens_bias, monkeypatch):
+    # With the lean zeroed, only the precision tells a named lens from another view.
+    zero = ((0.0, 0.0), (0.0, 0.0))
+    monkeypatch.setattr(fuse, "BIAS", {v: {"player": zero, "ball": zero} for v in fuse.BIAS})
+    d = player("tac-l", 52.5, 34.0)
     named = ellipse("player", d | {"view": "tac-l"}, VIEWS["tac-l"], 0.0)
     other = ellipse("player", d | {"view": "broadcast"}, VIEWS["tac-l"], 0.0)
     assert not np.allclose(named, other)
     assert np.allclose(other, ellipse("player", d, VIEWS["tac-l"], 0.0))
+
+
+def test_the_seam_pair_merges_on_the_broadcast_precision_too_once_corrected(lens_bias, monkeypatch):
+    monkeypatch.setattr(fuse, "VIEW_PRECISION", {v: dict(PRECISION) for v in fuse.VIEW_PRECISION})
+    a, b = player("tac-l", 52.5, 34.0, lean=True), player("tac-r", 52.5, 34.0, lean=True)
+    out = fuse_frame(frame([a], [b]))
+    assert len(out["players"]) == 1 and abs(out["players"][0]["x"] - 52.5) < 0.02

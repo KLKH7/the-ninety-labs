@@ -27,10 +27,12 @@ On the tactical renders the detector's ground point is also off in a set directi
 leans away from the image centre in perspective, so the box's bottom centre sits outward of the
 feet, more the nearer the edge. In the shared band each lens sees the player near its own edge, in
 opposite directions, so one player's two places lie about 0.3 m apart and the pair stayed split.
-For a named lens (`BIAS`), each ground pixel is first moved back by its measured bias (a line in
-the pixel's column, as a share of its box) and placed again through the view's camera, and the gate
-uses the precision left after that (`VIEW_PRECISION`): docs/eval/fuse-gate.md, the tactical
-re-measurement, on 15 validation clips. A view without those constants keeps `PRECISION`.
+With `USE_LENS_BIAS`, for a named lens (`BIAS`), each ground pixel is first moved back by its
+measured bias (a line in the pixel's column, as a share of its box) and placed again through the
+view's camera, and the gate uses the precision left after that (`VIEW_PRECISION`):
+docs/eval/fuse-gate.md, the tactical re-measurement, on 15 validation clips. Scored once on 8
+others, it failed its pre-registered rule (side accuracy), so it is off: every view keeps
+`PRECISION` and its pixel as drawn.
 
 Candidates are taken one to one, closest first (in that measure), so a detection is merged at most
 once, and two detections from one view are never merged: the detector already told them apart.
@@ -77,6 +79,8 @@ VIEW_PRECISION = {
     "tac-l": {"player": (0.1723, 0.13), "ball": (0.3551, 0.2678)},
     "tac-r": {"player": (0.1819, 0.1287), "ball": (0.345, 0.229)},
 }
+# Off: the correction failed its pre-registered adoption rule on validation (docs/eval/fuse-gate.md).
+USE_LENS_BIAS = False
 # The tactical lens's picture width in pixels: the renderer's TACTICAL_SIZE (ninety/render/camera.py;
 # the live path may not import the renderer, so a test holds the two equal).
 VIEW_WIDTH_PX = 1920
@@ -100,7 +104,7 @@ def _point(cls: str, bbox, view: str | None = None) -> tuple[tuple[float, float]
         uv, z, size = ((x0 + x1) / 2, y1), 0.0, y1 - y0
     else:
         uv, z, size = ((x0 + x1) / 2, (y0 + y1) / 2), BALL_CENTRE_Z, x1 - x0
-    if view in BIAS:
+    if USE_LENS_BIAS and view in BIAS:
         (au, bu), (av, bv) = BIAS[view][cls]
         c = (uv[0] - VIEW_WIDTH_PX / 2) / (VIEW_WIDTH_PX / 2)
         uv = (uv[0] - size * (au + bu * c), uv[1] - size * (av + bv * c))
@@ -109,7 +113,7 @@ def _point(cls: str, bbox, view: str | None = None) -> tuple[tuple[float, float]
 
 def corrected(cls: str, d: dict, P: np.ndarray) -> dict:
     """The detection placed again from its bias-corrected pixel, for a lens in BIAS; else as it is."""
-    if d.get("view") not in BIAS:
+    if not USE_LENS_BIAS or d.get("view") not in BIAS:
         return d
     uv, z, _ = _point(cls, d["bbox"], d["view"])
     g = _ground(P, uv, z)
@@ -121,7 +125,8 @@ def ellipse(cls: str, d: dict, P: np.ndarray, residual_px: float) -> np.ndarray 
     its pixel error (PRECISION of its size, the fit's residual and LABEL_PX, in quadrature)
     through the Jacobian of the ground mapping at its pixel. None if it cannot be mapped."""
     uv, z, size = _point(cls, d["bbox"], d.get("view"))
-    across, down = VIEW_PRECISION[d["view"]][cls] if d.get("view") in VIEW_PRECISION else PRECISION[cls]
+    lens = USE_LENS_BIAS and d.get("view") in VIEW_PRECISION
+    across, down = VIEW_PRECISION[d["view"]][cls] if lens else PRECISION[cls]
     su = np.sqrt((across * size) ** 2 + residual_px ** 2 + LABEL_PX ** 2)
     sv = np.sqrt((down * size) ** 2 + residual_px ** 2 + LABEL_PX ** 2)
     g0 = _ground(P, uv, z)

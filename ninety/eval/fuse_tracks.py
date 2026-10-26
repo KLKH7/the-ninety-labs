@@ -5,8 +5,9 @@ re-measurement of the fuse gate (docs/eval/fuse-gate.md), its two arms on the sa
         --seeds 108 109 110 112 113 114 115 116 --out docs/eval/fuse-gate/tracks-validation.json
 
 Each seed's `views/views/<lens>/observations.jsonl` (the live run's per-view observations) is fused
-twice: *baseline*, with no lens's bias and the broadcast precision (fuse as it was), and
-*candidate*, as fuse.py now stands. Each is tracked by the live path (ninety.vision.tracked_frames).
+twice: *baseline*, fuse with `USE_LENS_BIAS` off (each view's pixel as drawn, the broadcast
+precision), and *candidate*, with it on (each lens's measured bias and the precision it leaves).
+Each is tracked by the live path (ninety.vision.tracked_frames).
 Grading data, read offline: the union of the views' and the broadcast's `frames.jsonl` players. A
 frozen test seed is refused.
 
@@ -30,14 +31,14 @@ Z95 = 1.96
 
 
 @contextmanager
-def baseline():
-    """fuse as it was before the tactical re-measurement: no bias, the broadcast precision."""
-    saved = fuse.BIAS, fuse.VIEW_PRECISION
-    fuse.BIAS, fuse.VIEW_PRECISION = {}, {}
+def lens_bias(on: bool):
+    """fuse with the tactical lens correction on or off, restored after."""
+    saved = fuse.USE_LENS_BIAS
+    fuse.USE_LENS_BIAS = on
     try:
         yield
     finally:
-        fuse.BIAS, fuse.VIEW_PRECISION = saved
+        fuse.USE_LENS_BIAS = saved
 
 
 def truth(clip: Path) -> dict[int, dict[str, tuple[str, float, float]]]:
@@ -150,9 +151,10 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(f"test seed {seed}: the test clips are for the final score only")
         key = truth(a.clips / f"seed{seed}")
         view_dir = a.runs / f"seed{seed}" / "views" / "views"
-        with baseline():
+        with lens_bias(False):
             b = grade(arm(view_dir), key)
-        c = grade(arm(view_dir), key)
+        with lens_bias(True):
+            c = grade(arm(view_dir), key)
         per_seed[seed] = {"baseline": summary(b), "candidate": summary(c)}
         for name, g in (("baseline", b), ("candidate", c)):
             for k, v in g.items():
