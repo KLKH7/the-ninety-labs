@@ -1,5 +1,7 @@
-"""A foul made legible on screen (lesson 173): the body is drawn at the engine's `fall` and
-`fall_dir`. The renderer does not time the fall. x and y stay the feet; `tip` pivots the drawn
+"""A foul made legible on screen (lesson 173): the body is down on the frames the engine has it
+down (`fall`, `fall_dir`), and up when it has it up. Inside that spell the drawing is a person's
+(lesson 280, `falls`, `drawn_spell`): a stumble, a topple that gathers pace the way his run carries
+him, arms out to the grass, the engine's get-up. x and y stay the feet; `tip` pivots the drawn
 body over them. (The fouler's leg going out is a contact like a tackle's: scene.contacts.)
 
 `fall` is degrees over the feet. `fall_dir` is radians, the same convention as heading: the way

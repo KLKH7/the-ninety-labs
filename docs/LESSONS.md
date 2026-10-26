@@ -3345,3 +3345,19 @@ short and actionable. This file is public: no research sources, product names or
   building on it.
 - **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
   or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 280. A pose the engine times can still be drawn like a person
+- **What happened:** a fouled player was drawn as the engine's `fall` angle and nothing else: the
+  whole body, straight as a plank, pivoted over its feet at a steady rate the same way for every
+  foul, lay still with the arms hanging, and pivoted back up. Kian: they "fall so robotically". The
+  timing was right (the engine's spell down, up before the restart); the drawing had no stumble, no
+  momentum from his run, no arms and no variety.
+- **Rule:** the engine owns when a player is down, for how long, where his feet are and the outcome;
+  the renderer may shape the body inside that spell (a stumble, a topple that gathers pace, the way
+  his run carries him, arms out to break the fall), seeded by the player and the engine frame so the
+  same foul is drawn the same in every clip. The labels follow the drawn body (`fall`, `fall_dir`
+  and the arms in the label row), as they do for touches (lessons 212, 273).
+- **Check:** `uv run pytest tests/test_render_fouls.py -k "spell or stumbles or same_foul or run_into
+  or hands_go_out or under_way or drawn_way"` and the page parity test
+  (`tests/test_render_mesh.py::test_the_page_turns_steps_and_touches_like_the_python_pose`, brace
+  poses); `ninety-render-check` passes on the foul's window before and after.
