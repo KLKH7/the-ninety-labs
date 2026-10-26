@@ -3250,6 +3250,19 @@ short and actionable. This file is public: no research sources, product names or
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
 
+### 271. A name that reaches events through one bridge is capped by that bridge
+- **What happened:** #389 named the broadcast's tracks, which events name, only through the camera
+  join to the tactical tracks. Its precision was high, but 232 of 345 events stayed unnamed and
+  side-unsure, because most broadcast tracks have no join pairing at the gate. The broadcast
+  camera is calibrated and its tracks are already in pitch metres, so they could be matched to the
+  feed directly, as real broadcasts do. Doing that named 224 events (106 of 106 held-out right).
+- **Rule:** before shipping a coverage number, count what stops the rest and check that the limit
+  is the data, not the route: every unnamed event gets one reason, and a fix is pre-registered with
+  its precision gate before it runs.
+- **Check:** `docs/eval/identity.json` `direct.reasons` covers all 345 events;
+  `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
+  fails if the direct path is on without its gate met.
+
 ### 273. Watch the frames before naming the cause
 - **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
   frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns

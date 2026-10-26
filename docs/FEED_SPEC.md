@@ -63,7 +63,10 @@ with any other field (`identity.load`).
 3. Match the tactical camera's tracks to the feed's players (Hungarian per 10 s window, same
    side, within vision's 1.26 m measured error); a track takes the player it followed for most of
    its frames ([EVALUATION.md](EVALUATION.md#player-names-from-the-id-feed)).
-4. Carry the name to the broadcast's tracks through the camera join only (lesson 259).
+4. Carry the name to the broadcast's tracks through the camera join (lesson 259), and match the
+   broadcast's own calibrated tracks to the feed directly too, both sides' players as candidates;
+   a track named both ways keeps the more confident name (pre-registered:
+   [identity-direct-plan.md](eval/identity-direct-plan.md)).
 5. **Side:** an event whose actor is named takes that player's side from the feed
    (`team_source: "id_feed"`, confidence 1.0); every other event keeps vision's side and confidence.
    A track is matched only on its own side, so this mostly makes vision's side sure, and it
