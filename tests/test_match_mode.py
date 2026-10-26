@@ -17,7 +17,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from ninety import condensed, e2e
+from ninety import condensed, e2e, footage
 from ninety.agents.factcheck import MIN_CONFIDENCE
 from ninety.intel.stats import calculate_facts
 from tests.e2e_clip import H, W, write_clip
@@ -171,7 +171,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     www = root / "www"
     shutil.copytree(DIST, www)
     runs = (("match", events, True, True), ("standin", standin, True, True), ("plain", events, False, True))
-    if shutil.which("ffmpeg"):  # the same match as a real video.webm (e2e.write_footage's VP9)
+    if footage.can_encode():  # the same match as real web video (ninety/footage.py: video.mp4 + HLS)
         runs += (("video", events, True, False),)
     for out, path, match, frames in runs:
         args = [str(clip), "--out", str(www / out), "--detections", str(detections),
@@ -444,10 +444,10 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
 
 
 def test_on_the_encoded_video_the_phone_gets_match_time_after_every_seek_across_the_cut(browser, site):  # noqa: F811
-    """video.webm (standard VP9, a keyframe every 2 s): seeking back and forth across the cut, the
-    picture lands on the image asked for and the clock sent to the phone is that image's match time."""
-    if not shutil.which("ffmpeg"):
-        pytest.skip("needs ffmpeg to encode video.webm")
+    """video.mp4 (ninety/footage.py: H.264, a keyframe every 2 s): seeking back and forth across the cut,
+    the picture lands on the image asked for and the clock sent to the phone is that image's match time."""
+    if not footage.can_encode():
+        pytest.skip(f"needs ffmpeg with {footage.ENCODER} to encode the video")
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
     sent: list[dict] = []
     ctx.route_web_socket(re.compile(r".*/api/pair/.*"),
@@ -457,7 +457,7 @@ def test_on_the_encoded_video_the_phone_gets_match_time_after_every_seek_across_
     page = ctx.new_page()
     page.goto(site + "?bundle=video/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    assert page.evaluate("document.querySelector('video').src").endswith("video.webm")
+    assert page.evaluate("document.querySelector('video').src").endswith("video.mp4")
     # Image k is match frame 1500 + k before the cut (40 images), 1550 + (k - 40) after it.
     for image in (60, 10, 45, 30, 70, 0):
         seek(page, image)

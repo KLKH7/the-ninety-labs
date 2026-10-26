@@ -45,7 +45,7 @@ Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
 Every card must be verified and match the schema, or the bundle is not written.
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
-radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
+radar.json and match.json when asked for, and the footage as video.mp4 + hls/ or frames/) is all the
 viewer reads. This module never opens the clip's events.jsonl or frames.jsonl: they are the answer
 key (tests/test_e2e.py checks).
 """
@@ -66,7 +66,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ninety import condensed, highlights, radar
+from ninety import condensed, footage, highlights, radar
 from ninety.agents import live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
@@ -685,23 +685,20 @@ def load_views(views: Path):
 
 
 def write_footage(clip: Clip, out: Path, encode: bool, audio: Path | None = None) -> dict:
-    """The clip as video.webm (standard web VP9, highlights.VP9: plays in every browser, Playwright's
-    Chromium included) when ffmpeg is there, else the JPEG frames themselves. The viewer plays either.
-    `audio` (any file ffmpeg reads with a sound track, such as the render's crowd bed) is muxed in as
-    Opus, cut to the picture's length so the frames and the duration are the images' own."""
+    """The clip as web video (ninety/footage.py: video.mp4, H.264/AAC, and an HLS ladder under hls/)
+    when ffmpeg has the H.264 encoder, else the JPEG frames themselves. The viewer plays either.
+    `audio` (any file ffmpeg reads with a sound track, such as the render's crowd bed) is muxed in,
+    cut to the picture's length so the frames and the duration are the images' own."""
     images = clip.images
     if not images:
         raise SystemExit(f"{clip.dir}/images has no frames")
     fps = clip.meta["fps"]
-    if encode and shutil.which("ffmpeg"):
-        video = out / "video.webm"
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i",
-               str(clip.dir / "images" / "%05d.jpg")]
-        if audio is not None:
-            cmd += ["-i", str(audio), "-map", "0:v", "-map", "1:a", "-c:a", "libopus", "-b:a", "96k"]
-        cmd += [*highlights.VP9, "-frames:v", str(len(images)), "-t", f"{len(images) / fps:.3f}", str(video)]
-        subprocess.run(cmd, check=True)
-        return {"kind": "video", "src": video.name, "frames": len(images), "audio": audio is not None}
+    if encode and footage.can_encode():
+        params = clip.meta.get("params", {})
+        return footage.write(images, fps, out, audio, height=int(params.get("height", 720)),
+                             width=params.get("width"))
+    if encode:
+        print(f"no {footage.ENCODER} in ffmpeg: shipping the JPEG frames (ninety/footage.py)")
     frames = out / "frames"
     frames.mkdir(exist_ok=True)
     for image in images:
@@ -971,9 +968,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--team-stats", type=Path, default=None,
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")
-    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
+    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
     ap.add_argument("--footage-audio", type=Path, default=None,
-                    help="a sound track for video.webm (e.g. the render's crowd bed), muxed in as Opus")
+                    help="a sound track for the video (e.g. the render's crowd bed), muxed in as AAC")
     return ap
 
 

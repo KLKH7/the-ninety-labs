@@ -68,7 +68,7 @@
             "video_t": { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 2, "maxItems": 2, "description": "The same, in the bundle footage's own seconds." },
             "shot_image": { "type": "integer", "minimum": 0 },
             "poster": { "type": "string", "pattern": "^highlights/[A-Za-z0-9_-]+\\.jpg$", "description": "A still at the strike." },
-            "clip": { "type": ["string", "null"], "pattern": "^highlights/[A-Za-z0-9_-]+\\.webm$", "description": "The window as VP9 video; null when the bundle ships frames, not video." }
+            "clip": { "type": ["string", "null"], "pattern": "^highlights/[A-Za-z0-9_-]+\\.mp4$", "description": "The window as VP9 video; null when the bundle ships frames, not video." }
           }
         }
       }

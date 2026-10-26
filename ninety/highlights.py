@@ -24,10 +24,10 @@ from __future__ import annotations
 import math
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ninety import footage
 from ninety.agents.factcheck import side_known
 
 PITCH_X, CENTRE_Y = 105.0, 34.0
@@ -301,18 +301,8 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
             "moments": moments, "saves_by_pace": [m["event"] for m in saves], "saves_left_out": left_out}
 
 
-# The recording's VP9 settings: the bundle's own video.webm's (ninety/e2e.py, write_footage), so a
-# clip plays wherever the footage does. Never H.264: its usual encoder, x264, is GPL (AGENTS.md).
-# Standard web VP9 (Oct 26: the all-keyframe, full-range file this replaced, 15 Mbps, broke real Chrome's
-# hardware decoder intermittently, black at 0.34 s with media error 3): a keyframe every 2 s at 25 fps
-# (-g 50) for seeking, about 4 Mbps, and the renderer's full-range BT.601 JPEGs converted to TV-range
-# BT.709 and tagged so, as browsers expect of web video.
-# setparams tags the frames: libvpx writes no primaries or transfer from the output options alone.
-VP9 = ["-vf", "scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709,"
-       "setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709",
-       "-c:v", "libvpx-vp9", "-b:v", "4M", "-g", "50", "-deadline", "good", "-cpu-used", "4",
-       "-row-mt", "1", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709",
-       "-color_primaries", "bt709", "-color_trc", "bt709"]
+# A recording is encoded as the bundle's footage is (ninety/footage.py: H.264 MP4, lesson 272), so a
+# clip plays wherever the footage does.
 DIR = "highlights"
 
 
@@ -323,13 +313,13 @@ def _name(event_id: str) -> str:
 
 def record(reel: dict, timeline, images: list[Path], out: Path, encode: bool) -> dict:
     """Records each moment from the clip's own images into out/highlights/: a still of the image at
-    the strike (`<event>.jpg`) and, with `encode` and ffmpeg there, its window as `<event>.webm`.
+    the strike (`<event>.jpg`) and, with `encode` and the H.264 encoder there, its window as `<event>.mp4`.
     Each moment gets `recording`: the images it covers [first, end), their video times, the strike's
     image and the files, relative to the bundle; a moment wholly outside the footage gets none.
     `timeline` maps match time to the footage (ninety/match/timeline.py), across its cuts."""
     fps, n = timeline.fps, len(images)
     folder = out / DIR
-    can_encode = encode and shutil.which("ffmpeg") is not None
+    can_encode = encode and footage.can_encode()
     for m in reel["moments"]:
         v0, v1 = timeline.to_video(m["clip"][0]), timeline.to_video(m["clip"][1])
         first, end = max(0, math.floor(v0 * fps)), min(n, math.ceil(v1 * fps))
@@ -342,11 +332,8 @@ def record(reel: dict, timeline, images: list[Path], out: Path, encode: bool) ->
         shutil.copyfile(images[shot], folder / f"{name}.jpg")
         clip = None
         if can_encode:
-            clip = f"{DIR}/{name}.webm"
-            pattern = str(images[0].parent / "%05d.jpg")  # the clip's images, numbered from 0
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps),
-                            "-start_number", str(first), "-i", pattern, "-frames:v", str(end - first),
-                            *VP9, str(out / clip)], check=True)
+            clip = f"{DIR}/{name}.mp4"
+            footage.clip(images, first, end, fps, out / clip)  # the clip's images, numbered from 0
         m["recording"] = {"images": [first, end], "video_t": [round(first / fps, 2), round(end / fps, 2)],
                           "shot_image": shot, "poster": f"{DIR}/{name}.jpg", "clip": clip}
     return reel
