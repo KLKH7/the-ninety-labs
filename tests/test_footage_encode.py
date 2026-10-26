@@ -116,3 +116,25 @@ def test_a_source_shorter_than_a_rung_gets_no_rung_taller_than_itself():
     assert [h for h, _, _ in footage.rungs(1080)] == [1080, 720, 480]
     assert [h for h, _, _ in footage.rungs(480)] == [480]
     assert footage.rungs(180, 320) == [(180, 320, 1_200_000)]  # smaller than every rung: its own size
+
+
+def test_a_hard_cut_keeps_every_rung_on_the_2_s_keyframe_grid(tmp_path):
+    # A broadcast cut can make the encoder start a new picture group there; the 2 s grid is forced by
+    # time, so every rung still has a keyframe at 2, 4, 6 and 8 s and its segments end at 4 and 8 s.
+    clip = tmp_path / "clip"
+    (clip / "images").mkdir(parents=True)
+    for i, src in enumerate((f"testsrc2=size={W}x{H}:rate={FPS}", f"mandelbrot=size={W}x{H}:rate={FPS}")):
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", src, "-frames:v",
+                        "37" if i == 0 else str(N - 37), "-start_number", "0" if i == 0 else "37",
+                        "-pix_fmt", "yuvj420p", str(clip / "images" / "%05d.jpg")], check=True)
+    (clip / "clip.json").write_text(json.dumps({"clip_id": "c", "fps": FPS, "frames": N,
+                                                "params": {"width": W, "height": H}}))
+    out = tmp_path / "bundle"
+    out.mkdir()
+    e2e.write_footage(e2e.load_clip(clip), out, encode=True)
+    for path in (out / "video.mp4", out / "hls" / "720p" / "index.m3u8", out / "hls" / "480p" / "index.m3u8"):
+        assert {0, 50, 100, 150, 200} <= set(keys(path)), path
+    for rung in ("720p", "480p"):
+        text = (out / "hls" / rung / "index.m3u8").read_text()
+        lengths = [float(x.split(":")[1].rstrip(",")) for x in text.splitlines() if x.startswith("#EXTINF")]
+        assert lengths == pytest.approx([4.0, 4.0, 1.2], abs=1 / FPS), rung

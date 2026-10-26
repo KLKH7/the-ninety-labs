@@ -15,6 +15,8 @@ smaller rung instead of freezing.
   converted to TV-range BT.709 and tagged so (`setparams`: the encoder writes no primaries or
   transfer from the output options alone).
 - **Keyframes:** one every 2 s, forced by time on every rung, so the rungs' 4 s segments line up.
+  VideoToolbox adds none at a cut (tests/test_footage_encode.py), so `-g` alone holds the grid
+  today; the forced times keep it for an encoder that starts a picture group at a scene change.
   fMP4 segments start at time 0: HLS's currentTime is the MP4's, the video time the viewer maps to
   match time (ninety/match/timeline.py).
 - **Sound:** any track ffmpeg reads (the render's crowd bed) is muxed into the MP4 and every rung as

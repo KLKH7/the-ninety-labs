@@ -3249,3 +3249,24 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:** the bundle's footage is the codec every browser and phone decodes in hardware: H.264/AAC MP4
+  with +faststart, plus an HLS ladder, so a slow connection drops a rung instead of freezing
+  (`ninety/footage.py`).
+  - It is encoded with VideoToolbox, Apple's encoder. libx264 is GPL (AGENTS.md).
+  - Every encode is checked by probing the file it writes: codec and profile, frame count, duration,
+    the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and the sound.
+  - A browser test seeks a real encoded file, served with byte ranges as the API serves it.
+  - A playback claim about real browsers needs a run in one (live-preview), and the result is stated.
+- **Check:** `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  on a Mac. On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes 50 frames
+  apart, and `hls/master.m3u8` lists every rung.
