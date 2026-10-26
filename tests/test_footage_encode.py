@@ -60,5 +60,9 @@ def test_video_webm_is_standard_vp9_with_the_images_frames_and_duration(tmp_path
     assert keys == [0, 50, 100]  # one every 2 s, not every frame
     duration = float(probe(video, "-show_entries", "format=duration")["format"]["duration"])
     assert abs(duration - N / FPS) <= 1 / FPS
+    # TV range in the pixels, not only the tag: the test pattern's black and white land on 16 and 235.
+    luma = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(video), "-frames:v", "1", "-f", "rawvideo",
+                           "-pix_fmt", "yuv420p", "-"], check=True, capture_output=True).stdout[: 320 * 180]
+    assert min(luma) >= 14 and max(luma) <= 237 and max(luma) - min(luma) > 180
     sound = probe(video, "-select_streams", "a", "-show_entries", "stream=codec_name")["streams"]
     assert [s["codec_name"] for s in sound] == (["opus"] if with_audio else [])
