@@ -3143,6 +3143,21 @@ short and actionable. This file is public: no research sources, product names or
   (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
   #369's phone test (a null outcome never reads "wide").
 
+### 259. Two cameras' track ids are two id spaces; a name or a position crosses only through the join
+- **What happened:** on the joined demo match the players are the tactical camera's tracks and the
+  events name the broadcast's. Both trackers number from 1 in each segment, so `h-t7` is one man in
+  the events and another in the frames: 89 of the 253 event actors on 8080 also exist as a tactical
+  id. MatchInsights looked event actors up in the tactical frames and names by id. The passer of a
+  line break was usually 10 to 70 m from the event's place, and offside readings found the wrong
+  receiver or none (26 readings; 128 once fixed). Graded for the first time on real vision against
+  the answer key, the names in use were right 0.835 of the time (510 of 611 tracks). The gate that
+  should have stopped them (0.203) had been measured on simulated tracks only, where it did not bind.
+- **Rule:** an id is read only in the space it was made in. A broadcast id reaches the tactical
+  frames, and a name reaches a broadcast id, only through the association (with its measured gate
+  and the same side on both cameras), or not at all. A gate measured on simulated tracks is not a
+  gate on real ones until the live path's own output has been graded against its answer key.
+- **Check:** `tests/test_naming.py` (events move to their tactical tracks or to none; a name crosses
+  only above the gate and on the same side); docs/eval/roles.md, "Names on the demo match's own tracks".
 
 ### 260. A pre-registered run starts after its plan's review, not before
 - **What happened:** the ablation's third arm was started live on the day's plan while the plan's own
@@ -3160,3 +3175,16 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_cost_stop_starts_no_further_minute`,
   `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
   `docs/eval/ablation-third-arm-plan.md`.
+
+### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
+- **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
+  a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
+  place. On the 30 test clips every true speed became 0, so every "error" was vision's own speed,
+  the 3D and flat rows came out identical, and no frame passed the 18 km/h floor for a relative
+  error. Its tests passed because their hand-built truth frames carried a velocity.
+- **Rule:** a scorer reads truth fields strictly (`b["x"]`, never `b.get("x", 0.0)`): a missing
+  field is an error, not a value. A quantity the clip does not store is derived from what it does
+  (here, the velocity from the true places one frame either side), and the tests build truth
+  frames in the shape the real files have.
+- **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
+  reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.

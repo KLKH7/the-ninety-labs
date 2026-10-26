@@ -1,0 +1,13 @@
+{
+ "share": null,
+ "seconds": null,
+ "association": null,
+ "target": 0.95,
+ "chosen_on_dev": {
+  "share": 0.6,
+  "seconds": 5.0,
+  "association": 0.75
+ },
+ "held_out_met": false,
+ "source": "docs/eval/naming.json"
+}

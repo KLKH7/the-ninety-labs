@@ -27,6 +27,7 @@ from tests.test_phone import (  # noqa: F401
     PHONE_SIZE,
     browser,
     open_ask,
+    tap_player,
     turn_on_read_aloud,
     unavailable,
     watch,
@@ -802,9 +803,7 @@ def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip
     """The cut clip's tracks have no player card in the mock feed, as a real track fragment can
     have none: the sheet keeps its name and hides what it cannot fill."""
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
-    page.click("#lt-players")
-    page.locator("#pane-players button.who").first.click()
-    page.wait_for_selector("#player:not([hidden])")
+    tap_player(page)
     page.wait_for_timeout(300)  # the card request has failed by now
     assert page.locator("#so-far-box").is_hidden() and page.locator("#heat-box").is_hidden()
     chips = page.locator("#compare-chips button")
@@ -1183,12 +1182,7 @@ def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(b
     """Merge-queue review of #371 (WCAG 2.5.3): with track numbers gone, every unnamed player was
     "London player" or "A player" in a screen reader's ear while the screen showed where he plays."""
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
-    page.click("#lt-players")
-    page.wait_for_selector("#roster .who")
-    for b in page.locator("#roster .who").all():
-        assert b.locator(".name").inner_text() in b.get_attribute("aria-label"), b.get_attribute("aria-label")
-    page.locator("#roster .who").first.click()
-    page.wait_for_selector("#player:not([hidden])")
+    tap_player(page)
     chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
     bare = {"A player", "Crowmere player", "Dunhollow player"}
     assert chips and not bare & set(chips), chips
@@ -1319,5 +1313,129 @@ def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browse
     page.wait_for_selector("#insights .play[data-event=e2]")
     said = page.inner_text("#insights .play[data-event=e2]")
     assert "takes a shot." in said and "wide" not in said
+    assert not errors
+    ctx.close()
+
+
+def test_a_saved_shot_by_a_player_vision_cannot_name_reads_lower_case_mid_sentence(browser, site):  # noqa: F811
+    """Demo audit, Oct 25: "Shot saved, from A player." The unnamed player is 'a player' mid-sentence."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def saved(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        unsure = {"outcome": "on_target", "player": None, "team_confidence": 0.1}
+        rows = [{**r, **unsure} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", saved)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "62.8")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play[data-event=e2]")
+    assert "Shot saved, from a player." in page.inner_text("#insights .play[data-event=e2]")
+    assert not errors
+    ctx.close()
+
+
+def test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track(browser, site):  # noqa: F811
+    """Demo audit: Players listed track fragments (12 London, 6 centre forwards, Lisbon with no keeper).
+    With the team sheet (match.json `sheets`, names-by-role), it lists each club's eleven: shirt, name,
+    position. Without one, a tracked player is never listed as a player."""
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
+    page.click("#lt-players")
+    assert page.locator("#roster .who").count() == 0  # the cut clip has tracks only and no sheet
+    page.context.close()
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    lines = ["goalkeeper"] + ["defender"] * 4 + ["midfielder"] * 3 + ["forward"] * 3
+    sheet = {side: [{"number": n + 1, "name": f"{side.title()} Player{n + 1}", "position": line, "line": line}
+                    for n, line in enumerate(lines)] for side in ("home", "away")}
+
+    def match(route):
+        body = route.fetch().json()
+        body["sheets"] = sheet
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#lt-players")
+    page.wait_for_selector("#roster .who.sheet")
+    for side in ("home", "away"):
+        rows = page.locator(f"#roster .who.sheet.{side}")
+        assert rows.count() == 11
+        assert rows.first.locator(".num").inner_text() == "1"
+        assert rows.first.locator(".name").inner_text() == f"{side.title()} Player1"
+        assert rows.first.locator(".where").inner_text() == "Goalkeeper"
+    assert page.locator("#roster .lineup-pitch .shirt").count() == 22
+    assert not errors
+    ctx.close()
+
+
+def test_a_line_up_name_labels_the_event_s_track_never_the_radar_s_same_string(browser, site):  # noqa: F811
+    """names-by-role, Oct 25: the line-up names BROADCAST tracks (events, highlights); the radar and the
+    player card use TACTICAL tracks, and the same string can be another man. a-t3 is named in the
+    line-up: his detected pass says the name, while the radar's a-t3 stays his club's player."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def match(route):
+        body = route.fetch().json()
+        named = {"id": "a-t3", "name": "Dee Named", "number": 9, "position": "striker", "confident": True}
+        body["lineup"] = [named]
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", str(round(1505 / FPS, 1)))
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")  # the line-up has loaded
+    assert page.evaluate("window.ninetyPhone.name('a-t3')") == "Dunhollow player"  # the radar's a-t3
+    laptop.fill("#seek", "63")
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play[data-event=e4]")
+    assert "Dee Named" in page.inner_text("#insights .play[data-event=e4]")  # the event's a-t3
+    assert not errors
+    ctx.close()
+
+
+def test_a_sheet_never_names_an_event_and_a_line_up_entry_without_confident_names_nobody(browser, site):  # noqa: F811
+    """Merge-queue review of #376: the team sheet names nobody on the pitch (no line-up, or an entry
+    that does not say it is confident), so the detected pass stays the club's player."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    lines = ["goalkeeper"] + ["defender"] * 4 + ["midfielder"] * 3 + ["forward"] * 3
+    sheet = {side: [{"number": n + 1, "name": f"{side.title()} Player{n + 1}", "position": line, "line": line}
+                    for n, line in enumerate(lines)] for side in ("home", "away")}
+
+    def match(route):
+        body = route.fetch().json()
+        body["sheets"] = sheet
+        body["lineup"] = [{"id": "a-t3", "name": "Dee Named", "number": 9, "position": "striker"}]
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.click("#tab-button-insights")
+    page.wait_for_selector("#insights .play[data-event=e4]")
+    said = page.inner_text("#insights .play[data-event=e4]")
+    assert "Dee Named" not in said and "Player" not in said.replace("player", ""), said
     assert not errors
     ctx.close()

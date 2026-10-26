@@ -158,6 +158,18 @@ def turn_on_read_aloud(page):
     page.wait_for_function("!document.querySelector('#settings-sheet').classList.contains('show-modal')")
 
 
+def tap_player(page, index: int = 0):
+    """Tap a tracked player's dot on Live's pitch, the way a fan opens a player the roster does not
+    list (a tracked player is never listed as a player: demo audit, Oct 25)."""
+    page.click("#lt-pitch")
+    page.wait_for_function("document.querySelector('#status').dataset.state !== 'waiting'")
+    x, y = page.evaluate(f"""(() => {{ const s = window.ninetyPhone.radarAt(window.ninetyPhone.laptop.time());
+        const p = s.players[{index}]; return window.ninetyPhone.screenOf(p.x, p.y); }})()""")
+    box = page.locator("#map").bounding_box()
+    page.mouse.click(box["x"] + x, box["y"] + y)
+    page.wait_for_selector("#player:not([hidden])")
+
+
 def open_roster(page):
     """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
     page.focus("#lt-players")
@@ -603,6 +615,32 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
     assert not errors
 
 
+def test_the_phone_stays_in_step_when_the_big_screen_stops_drawing_frames(browser, api_site):
+    """Demo audit, Oct 25: the phone sat at "Screen lost" while the big screen played on. The big
+    screen's clock went out only from its frame loop, which a hidden tab or a busy machine stalls.
+    It also goes out on a timer now: with the frame loop stopped, the phone still hears the clock."""
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, api_site)
+    phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
+    viewer.click("#play")
+    phone.wait_for_function("window.ninetyPhone.laptop.isPlaying()")
+    viewer.evaluate("window.requestAnimationFrame = () => 0")  # the frame loop stops here
+    phone.wait_for_timeout(6000)  # past STALE_S (4 s) and past the clip's end (3 s)
+    assert phone.text_content("#status") != "Screen lost"
+    assert not phone.evaluate("window.ninetyPhone.laptop.stale()")
+    assert not errors
+
+
+def test_a_server_without_insights_is_asked_once_not_every_few_seconds(browser, api_site):
+    """Demo audit, Oct 25: /api/insights 404'd every ~5 s. A 404 means the server has none for this
+    clip: the phone asks once, and Story keeps its plays."""
+    viewer, phone, errors, requests, _ = pair_through_viewer(browser, api_site)
+    phone.wait_for_timeout(12_000)  # past two INSIGHTS_EVERY_MS periods
+    asked = [u for u in requests if "/api/insights/" in u]
+    assert len(asked) <= 1, asked
+    errors[:] = [e for e in errors if "404" not in e]  # the one 404 is the answer
+    assert not errors
+
+
 def test_ground_truth_from_the_api_never_reaches_the_screen(browser, api_site):
     viewer, phone, errors, requests, responses = pair_through_viewer(browser, api_site)
     phone.wait_for_selector("#refused:not([hidden])")
@@ -691,9 +729,9 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"
         assert page.text_content("#roster-summary") == "Players"
-        open_roster(page)
-        page.locator("#roster .who").first.focus()
-        page.keyboard.press("Enter")
+        page.click("#lt-players")
+        assert page.locator("#roster .who").count() == 0  # tracks are never listed as players
+        tap_player(page)
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
         assert re.fullmatch(r"(London|Lisbon) player|A player", page.inner_text("#player-title"))  # no number
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
