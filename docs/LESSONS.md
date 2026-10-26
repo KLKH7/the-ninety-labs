@@ -3010,3 +3010,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_events.py::test_every_copied_engine_value_is_the_engines` finds the
   engine's pressure condition with the detector's two values in it, and
   `::test_the_eight_seconds_are_the_sides_not_the_pressers` fails when the memory is keyed by presser.
+
+### 266. A kind written by default on a stand-in number is a claim no vision number backs
+- **What happened:** pressure was put in `events.WRITTEN` (so it reached the agents and PPDA) because
+  it met its bar on stand-in observations: the answer key's places plus noise, with each side's kit
+  given. On the detector's real output for 80 validation windows it found 19 of 66 and was right 19
+  of 46, under the bar. The stand-in could not show the largest cause: in 24 of the 80 windows the
+  broadcast names both kits the wrong way round, and a stand-in's kits are never misnamed.
+- **Rule:** a new event kind is written by default only after it meets its bar on the detector's real
+  output (validation renders through the live path), never on stand-ins alone. A stand-in number
+  says the rule is right given its inputs; it says nothing about the inputs.
+- **Check:** `docs/eval/turnovers-vision-result.md`; `uv run pytest tests/test_vision_events.py -k
+  committed_fixture` (the fixture is main's again: nothing new is written).
