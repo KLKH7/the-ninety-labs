@@ -533,10 +533,11 @@ def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tm
     assert "scorebug.jsonl" in manifest["files"]
 
 
-def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_band(tmp_path):
+def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_band(tmp_path, monkeypatch):
     # web/viewer/src/speed.ts opens its gate from this (#378): a speed on screen only with its band.
     from ninety.agents import factcheck
 
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)  # as it will be once measured
     # No event here is marked along the ground, so nothing vision read is covered: the gate stays shut.
     _, manifest = run(tmp_path / "a")
     assert manifest["speed"] == {"measured": False, "error_kmh": factcheck.SPEED_ERROR_KMH}

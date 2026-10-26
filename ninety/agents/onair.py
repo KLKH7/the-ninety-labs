@@ -61,8 +61,12 @@ def trace(claims: list[dict], sure: Iterable[str], clubs: dict[str, str] | None 
 
 # A ball speed as the bundle's words write or say it, with what joins it to the sentence (", " or
 # " at "), which goes with it: the same reading as the viewer's gate (web/viewer/src/speed.ts).
+# The fact-checker's other units too (factcheck.SPEED_UNITS: kmh, k.p.h, km per hour), so an unsayable
+# speed in one of them leaves the words as well. A speed in spelled-out words ("one hundred km/h") is
+# not found here: an aired claim may state a measured speed only in digits (factcheck.SHOWN_SPEED).
 SPEED_TEXT = re.compile(
-    r"(,\s*|\s+at\s+|\s+)?(\d+(?:\.\d+)?)\s*(km/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)", re.I)
+    r"(,\s*|\s+at\s+|\s+)?(\d+(?:\.\d+)?)\s*"
+    r"(km/h|kph|kmh|k\.p\.h\.?|(?:km|kilomet(?:re|er)s?)\s+(?:an|per)\s+hour)", re.I)
 
 
 def speeds(text: str, cited: Iterable[dict]) -> str:
@@ -80,8 +84,10 @@ def speeds(text: str, cited: Iterable[dict]) -> str:
     out = SPEED_TEXT.sub(keep, text)
     if out == text:
         return text
+    out = re.sub(r"\(\s*\)", "", out)  # "(101 km/h)" leaves no empty brackets
     out = re.sub(r"\s{2,}", " ", out)
-    return re.sub(r",([.!?'])", r"\1", re.sub(r"\s+([,.!?])", r"\1", out)).strip()
+    out = re.sub(r",([.!?'])", r"\1", re.sub(r"\s+([,.!?:])", r"\1", out))
+    return re.sub(r":([.!?])", r"\1", out).strip()  # "Shot speed: 101 km/h." is "Shot speed." 
 
 
 def gate_speeds(

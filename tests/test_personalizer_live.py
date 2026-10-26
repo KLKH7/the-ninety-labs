@@ -35,6 +35,16 @@ SURE = next(e for e in EVENTS if e["type"] == "pass" and e.get("receiver") and e
 ROW = compact(SURE)
 CLAIM = Claim(f"{ROW['player']} finds {ROW['receiver']} at {ROW['ball_speed_kmh']} km/h.", [ROW["id"]])
 SPANISH = translate.translated(verified_text, translate.mock)
+
+
+@pytest.fixture(autouse=True)
+def ground_mark_measured(monkeypatch):
+    # The claim states the pass's speed, the number each variant must keep: these tests are about the
+    # Personalizer, not the speed hold (tests/test_spoken_variety.py pins that), so vision's ground mark
+    # is taken as measured here.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
 ALL = {(p, lang) for p in ("analyst", "casual", "club", "player_focus") for lang in ("en", "es")}
 
 
