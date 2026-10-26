@@ -75,6 +75,10 @@
                 <button type="button" role="tab" id="lt-players" aria-controls="pane-players" aria-selected="false" tabindex="-1">Players</button>
               </div>
               <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
+                <!-- The fan's focus (#362's choices): the latest of each tactical moment, or the players most
+                     in the game, above the pitch. Shown only for that focus (style.css). -->
+                <section class="focus-strip" id="tactics-strip" aria-label="Shape" hidden></section>
+                <section class="focus-strip" id="players-strip" aria-label="Players in the game" hidden></section>
                 <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
                   <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
                   <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>

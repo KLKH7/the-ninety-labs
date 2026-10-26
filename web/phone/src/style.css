@@ -1013,3 +1013,15 @@ body[data-focus="players"][data-mode="casual"] #key-moments { order: 3; }
 .group.persona { display: grid; gap: 10px; padding: 12px; }
 body[data-us="away"] .mini-score .crest.away { order: -1; }
 body[data-us="away"] .mini-score .crest.home { order: 3; }
+/* The focus strips above the pitch: two to four large cards side by side, scrolled sideways. */
+.focus-strip:not([hidden]) { display: none; gap: 10px; overflow-x: auto; padding: 0 0 4px; scroll-snap-type: x mandatory; order: -1; }
+body[data-focus="tactics"] #tactics-strip:not([hidden]),
+body[data-focus="players"] #players-strip:not([hidden]) { display: flex; }
+.focus-card { flex: 0 0 72%; scroll-snap-align: start; padding: 16px 18px; border-radius: 22px; background: var(--surface); border: 0; text-align: left; color: var(--text); border-top: 3px solid var(--home); }
+.focus-card.away { border-top-color: var(--away); }
+.focus-card.neutral { border-top-color: var(--text-3); }
+.focus-card h3 { margin: 4px 0 8px; font-size: 24px; font-weight: 700; line-height: 1.2; }
+.focus-kind { margin: 0; font-size: 15px; font-weight: 600; color: var(--accent-ink, var(--text-2)); text-transform: none; }
+.focus-num { margin: 0; font-size: 17px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.player-card { flex-basis: 46%; }
+.player-card h3 { font-size: 20px; }

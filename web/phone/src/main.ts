@@ -1329,7 +1329,7 @@ function applyFan(rerender = false) {
   document.body.dataset.club = f?.club ?? "";
   for (const [id, v] of [["persona-mode", f?.mode], ["persona-club", f?.club]] as const)
     ($(id) as HTMLElement & { value: string }).value = v ?? "";
-  if (rerender) { statsKey = ""; spottedKey = ""; if (state.match) showMatch(viewTime()); renderJustNow(); }
+  if (rerender) { statsKey = ""; spottedKey = ""; squadKey = ""; if (state.match) showMatch(viewTime()); renderJustNow(); renderSquad(); }
   $("ask-start").dataset.focus = f?.focus ?? "";
   if (f && !storyTouched) {
     const mode = fans.storyMode(f);
@@ -2086,7 +2086,74 @@ async function refreshInsights(force = false) {
 }
 
 /** Live's "Just now": the newest Story moment, its sentence, chip and minute. */
+/** The tactics focus: the latest card of each tactical kind (overload, line break, passing options,
+ * shape), newest first, as large cards above the pitch; each opens How we know. */
+const TACTICAL: Record<string, string> = { overload: "Overload", line_break: "Line break", pass_options: "Passing options", team_shape: "Shape", shape: "Shape" };
+function renderTacticsStrip() {
+  const seen = new Set<string>();
+  const latest = state.insights.filter((c) => TACTICAL[c.kind] && !seen.has(c.kind) && !!seen.add(c.kind)).slice(0, 3);
+  $("tactics-strip").hidden = latest.length === 0;
+  $("tactics-strip").replaceChildren(
+    ...latest.map((c) => {
+      const card = document.createElement("article");
+      card.className = `focus-card ${sideUnsure(c.team ?? "") || !c.team ? "neutral" : c.team}`;
+      const kind = document.createElement("p");
+      kind.className = "focus-kind";
+      kind.textContent = `${TACTICAL[c.kind]} · ${c.minute}′`;
+      const head = document.createElement("h3");
+      head.textContent = ours(named(c.headline || c.text, c.names));
+      card.append(kind, head, howButton({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }));
+      return card;
+    }),
+  );
+}
+
+/** The players focus: the players most in the game (the Scout's per-player numbers), named as the
+ * radar names them (the ID feed's name, shirt and position where it has a row); a tap opens his card,
+ * with Compare. */
+function renderPlayersStrip(ps: PlayerStats[]) {
+  const most = ps.filter((p) => typeof p.involvements === "number").sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
+  // No per-player numbers yet: your club's team sheet (match.json `sheets`), shirt, name and position;
+  // a tap opens Players. Pre-match facts only, no number of play.
+  const sheets = (state.match as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets;
+  const side = usSide() ?? "home";
+  if (!most.length && sheets?.[side]?.length) {
+    $("players-strip").hidden = false;
+    $("players-strip").replaceChildren(
+      ...sheets[side].map((p) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `focus-card player-card ${side}`;
+        b.innerHTML = '<p class="focus-kind"></p><h3></h3>';
+        b.querySelector(".focus-kind")!.textContent = `#${p.number} · ${p.position.charAt(0).toUpperCase()}${p.position.slice(1)}`;
+        b.querySelector("h3")!.textContent = p.name;
+        b.addEventListener("click", () => showPane("players"));
+        return b;
+      }),
+    );
+    return;
+  }
+  $("players-strip").hidden = most.length === 0;
+  $("players-strip").replaceChildren(
+    ...most.map((p) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `focus-card player-card ${sideUnsure(p.id) ? "neutral" : team(p.id)}`;
+      const row = tacticalSheet[p.id];
+      const d = distinctName(p.id); // "London player, left of the pitch": where he plays, when unnamed
+      const shirt = row?.name ? [row.number !== undefined ? `#${row.number}` : "", row.position ?? ""].filter(Boolean).join(" · ") : d.includes(", ") ? d.slice(d.indexOf(", ") + 2) : "";
+      b.innerHTML = '<p class="focus-kind"></p><h3></h3><p class="focus-num"></p>';
+      b.querySelector(".focus-kind")!.textContent = shirt;
+      b.querySelector("h3")!.textContent = playerName(p.id);
+      b.querySelector(".focus-num")!.textContent = `${Math.round(p.involvements!)} involvements`;
+      b.addEventListener("click", () => select(p.id));
+      return b;
+    }),
+  );
+}
+
 function renderJustNow() {
+  renderTacticsStrip();
   const c = state.insights[0];
   $("just-now").hidden = !c;
   if (!c) return;
@@ -2680,9 +2747,10 @@ function renderSquad() {
   const sheet = Object.entries(teamSheet);
   const net0 = m?.pass_network?.[networkSide];
   const sheetsN = ((m0 as { sheets?: Record<string, unknown[]> } | null)?.sheets?.home?.length ?? 0);
-  const key = `${sheet.length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  const key = `${sheet.length}|${Object.keys(tacticalSheet).length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
   if (key === squadKey) return;
   squadKey = key;
+  renderPlayersStrip(m?.player_stats ?? []);
   // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
   const rows = (["home", "away"] as const).map((side) => {
     // The team sheet's shirts (match.json `sheets`), else the line-up's.

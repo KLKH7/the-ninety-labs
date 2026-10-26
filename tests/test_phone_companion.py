@@ -928,7 +928,9 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
 
 def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_section(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
+    # Without a persona (#362's choices) the focus strips are no cards; the feed is Apple Sports' order.
+    sections = "#pane-pitch > section:not(.focus-strip)"
+    js = f"[...document.querySelectorAll('{sections}')].map(s => s.id || s.className)"
     order = page.evaluate(js)
     assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
                      "lineups-teaser"]
@@ -1595,7 +1597,7 @@ def test_the_shot_map_is_no_card_while_it_draws_no_shot(browser, site):  # noqa:
     ctx.close()
 
 
-def persona_phone(browser, site, fan, goals=None):  # noqa: F811
+def persona_phone(browser, site, fan, goals=None, more=None):  # noqa: F811
     """The cut clip's phone as London v Lisbon, with #362's stored choices (`fan`) set before it loads."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
     ctx.add_init_script(f"localStorage.setItem('ninety.fan', {json.dumps(json.dumps(fan))})")
@@ -1609,6 +1611,7 @@ def persona_phone(browser, site, fan, goals=None):  # noqa: F811
         body = route.fetch().json()
         if goals is not None:
             body["goals"] = goals
+        body.update(more or {})
         route.fulfill(json=body)
 
     ctx.route("**/bundle/manifest.json", manifest)
@@ -1683,5 +1686,36 @@ def test_the_persona_switches_in_one_tap_from_the_more_sheet(browser, site):  # 
 def test_a_moment_is_said_from_the_fan_s_side_and_never_changes_a_number(browser, site, club, said, ours):  # noqa: F811
     ctx, page, errors = persona_phone(browser, site, {"club": club, "mode": "casual", "focus": "moments"})
     assert page.evaluate("t => window.ninetyPhone.ours(t)", said) == ours
+    assert not errors
+    ctx.close()
+
+
+def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_cards(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: two analysts must not look alike. Tactics: the latest overload, line break
+    and shape as large cards above the pitch. Players: the players most in the game, named by the ID
+    feed, above the pitch; a tap opens his card."""
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "tactics"})
+    page.wait_for_selector("#tactics-strip .focus-card")
+    assert page.is_hidden("#players-strip")
+    assert top(page, "#tactics-strip") < top(page, ".pitch-card")
+    kinds = page.locator("#tactics-strip .focus-kind").all_inner_texts()
+    assert len({k.split(" · ")[0] for k in kinds}) == len(kinds) <= 3, kinds  # one card a kind
+    assert not errors
+    ctx.close()
+    more = {"lineup_tactical": [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "Striker",
+                                 "confident": True, "source": "id_feed"}],
+            "player_stats": [{"id": "a-t3", "involvements": 12}, {"id": "h-t4", "involvements": 7}]}
+    fan = {"club": "LON", "mode": "analyst", "focus": "players"}
+    ctx, page, errors = persona_phone(browser, site, fan, more=more)
+    page.wait_for_selector("#players-strip .player-card")
+    assert page.is_hidden("#tactics-strip")
+    assert top(page, "#players-strip") < top(page, ".pitch-card")
+    first = page.locator("#players-strip .player-card").first
+    assert first.locator("h3").inner_text() == "Tac Named"
+    assert first.locator(".focus-kind").inner_text() == "#9 · Striker"
+    assert first.locator(".focus-num").inner_text() == "12 involvements"
+    first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    assert page.inner_text("#player-title").startswith("Tac Named, #9 · Striker")
     assert not errors
     ctx.close()
