@@ -205,6 +205,62 @@ def keeper_of(tracks: list[Track], frame: int, defending: str | None) -> list[Tr
     return out
 
 
+# Amendment 7 (docs/eval/shot-outcomes/saves-pixel-plan.md): a ball drawn inside the keeper's box on
+# this many path points running is in his hands. events.OUT_FRAMES, the rules' count for a sustained
+# condition: a ball flying past in front of him is over his box for a frame or two.
+HOLD_FRAMES = 3
+
+
+@dataclass(frozen=True)
+class Hold:
+    keeper: Track
+    k: int  # index into the path of the hold's first point
+    attacker: str  # the side attacking the keeper's goal
+
+
+def _in_box(row: dict | None, t: Track, p: BallPoint) -> bool:
+    """Whether the ball at p is drawn with its box centre inside track t's box at p's frame (the
+    definition `BallPoint.on_player` uses). A track's place is its detection's, so the two match."""
+    xy = t.at(p.frame)
+    if row is None or xy is None or p.u is None:
+        return False
+    return any(d.get("x") is not None and (d["x"], d["y"]) == xy
+               and d["bbox"][0] <= p.u <= d["bbox"][2] and d["bbox"][1] <= p.v <= d["bbox"][3]
+               for d in row["players"])
+
+
+def holds(path: list[BallPoint], start: int, end: int, tracks: list[Track],
+          rows_by_frame: dict[int, dict]) -> list[Hold]:
+    """Amendment 7, rule 1: each hold on path[start:end], in order: HOLD_FRAMES points on consecutive
+    frames, all drawn inside the box of one keeper candidate (`keeper_of`) for the side defending the
+    goal he stands within PENALTY_AREA_X of."""
+    out = []
+    k = start
+    while k + HOLD_FRAMES <= end:
+        run = path[k:k + HOLD_FRAMES]
+        found = None
+        running = all(b.frame - a.frame == 1 for a, b in zip(run, run[1:], strict=False))
+        if running and all(q.on_player for q in run):
+            f = run[0].frame
+            for defending in ("home", "away"):
+                line = PITCH_X if not attacks_right(defending) else 0.0
+                for t in keeper_of(tracks, f, defending):
+                    xy = t.at(f)
+                    if abs(xy[0] - line) > PENALTY_AREA_X:
+                        continue
+                    if all(_in_box(rows_by_frame.get(q.frame), t, q) for q in run):
+                        found = Hold(t, k, "away" if defending == "home" else "home")
+                        break
+                if found:
+                    break
+        if found:
+            out.append(found)
+            k += HOLD_FRAMES
+        else:
+            k += 1
+    return out
+
+
 def toucher(tracks: list[Track], p: BallPoint, team: str) -> str | None:
     """Who the ball turned at: 'keeper', 'defender', 'mate' or None (nobody within CONTROL_M)."""
     defending = "away" if team == "home" else "home"
