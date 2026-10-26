@@ -40,6 +40,7 @@ import {
   teamSheet,
   type SheetEntry,
   unnamedTrack,
+  eventName,
 } from "./types";
 import { describeVisual, drawVisual, drawable, fromScout, headline, title } from "./visual";
 
@@ -427,7 +428,7 @@ async function loadBundle() {
     // The team sheet: names, shirts and positions the line-up tool is confident of (never a guess).
     for (const k of Object.keys(teamSheet)) delete teamSheet[k];
     for (const e of ((match as { lineup?: (SheetEntry & { id: string; confident?: boolean })[] } | null)?.lineup ?? [])) {
-      if (e.confident !== false) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
+      if (e.confident === true) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
     }
     $("match-card").hidden = !state.match;
     renderChips(); // the Ask grid's player questions come from the match's numbers
@@ -648,6 +649,16 @@ function renderRoster(roster: string[]) {
     b.addEventListener("click", () => select(id));
     return b;
   };
+  // The team sheet, when the bundle carries one (match.json `sheets`, names-by-role): each club's
+  // eleven as the line-up, never a tracked fragment. Without one, only players with a real shirt
+  // (the simulator's); a tracked player is never listed as a player (demo audit, Oct 25).
+  const sheets = (state.match as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets;
+  if (sheets?.home?.length || sheets?.away?.length) {
+    renderSheets(sheets);
+    return;
+  }
+  roster = roster.filter((id) => !isTrack(id));
+  $("roster-box").hidden = roster.length === 0;
   // One card per club, home first (Apple Sports and FotMob line-ups): crest and full name, the
   // club's players at their average positions on a small pitch, then #, name and where he plays.
   $("roster").replaceChildren(
@@ -688,6 +699,73 @@ function renderRoster(roster: string[]) {
       row.className = "roster-row";
       row.append(...ids.map(button));
       card.append(head, pitch, cols, row);
+      return card;
+    }),
+  );
+}
+
+/** A team-sheet player (match.json `sheets`): pre-match facts, no track id. */
+interface SheetPlayer {
+  number: number;
+  name: string;
+  position: string;
+  line: "goalkeeper" | "defender" | "midfielder" | "forward";
+}
+/** Where a line stands on the line-up pitch, for a club attacking to the right (x, 0..105). */
+const LINE_X: Record<SheetPlayer["line"], number> = { goalkeeper: 6, defender: 26, midfielder: 52, forward: 78 };
+
+/** The line-ups from the team sheet: per club its crest and name, its eleven on a small pitch by
+ * line (the sheet lists each line right to left), then #, name and position. Pre-match facts, so no
+ * tracked number is attached to anyone unless the line-up names the track (none on the demo). */
+function renderSheets(sheets: Record<"home" | "away", SheetPlayer[]>) {
+  $("roster-box").hidden = false;
+  const svgNS = "http://www.w3.org/2000/svg";
+  $("roster").replaceChildren(
+    ...(["home", "away"] as const).map((side) => {
+      const xi = sheets[side] ?? [];
+      const card = document.createElement("section");
+      card.className = "card roster-card";
+      const head = document.createElement("h3");
+      head.className = "card-title roster-team";
+      head.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
+      head.append(fullName(teams[side]));
+      const pitch = document.createElementNS(svgNS, "svg");
+      pitch.setAttribute("viewBox", "-2 -2 109 72");
+      pitch.setAttribute("class", "lineup-pitch");
+      pitch.setAttribute("aria-hidden", "true");
+      pitch.innerHTML =
+        '<rect x="0" y="0" width="105" height="68" rx="2" class="turf"/><rect x="0" y="0" width="105" height="68" class="line"/>' +
+        '<line x1="52.5" y1="0" x2="52.5" y2="68" class="line"/><circle cx="52.5" cy="34" r="9.15" class="line"/>' +
+        '<rect x="0" y="13.84" width="16.5" height="40.32" class="line"/><rect x="88.5" y="13.84" width="16.5" height="40.32" class="line"/>';
+      for (const line of Object.keys(LINE_X) as SheetPlayer["line"][]) {
+        const men = xi.filter((p) => p.line === line);
+        men.forEach((p, k) => {
+          // Facing the goal it attacks (to the right), a team's right is the bottom of the pitch.
+          const y = (68 * (k + 1)) / (men.length + 1);
+          const g = document.createElementNS(svgNS, "g");
+          g.setAttribute("transform", `translate(${LINE_X[line]} ${(68 - y).toFixed(1)})`);
+          g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
+          g.querySelector("text")!.textContent = String(p.number);
+          pitch.append(g);
+        });
+      }
+      const cols = document.createElement("p");
+      cols.className = "roster-cols";
+      cols.setAttribute("aria-hidden", "true");
+      cols.innerHTML = "<span>#</span><span>Name</span><span></span>";
+      const rows = document.createElement("ul");
+      rows.className = "roster-row sheet-rows";
+      rows.setAttribute("aria-label", `${fullName(teams[side])} line-up`);
+      for (const p of xi) {
+        const li = document.createElement("li");
+        li.className = `who sheet ${side}`;
+        li.innerHTML = '<span class="num"></span><span class="name"></span><span class="where pos"></span>';
+        li.querySelector(".num")!.textContent = String(p.number);
+        li.querySelector(".name")!.textContent = p.name;
+        li.querySelector(".where")!.textContent = p.position.charAt(0).toUpperCase() + p.position.slice(1);
+        rows.append(li);
+      }
+      card.append(head, pitch, cols, rows);
       return card;
     }),
   );
@@ -1270,11 +1348,18 @@ const METRIC_WORDS: Record<string, string> = {
 
 /** The API names players by id (a7); fans read "Lisbon 7", or the name the answer carries. Only
  * the names change, never a number. */
+/** An answer's or a card's text, its player ids said as the payload names them (tactical ids: never
+ * the team sheet's line-up, which names broadcast tracks; names-by-role, Oct 25). */
 function named(text: string, names?: Record<string, string>): string {
-  // The team sheet names a player the payload does not (only players the line-up tool is sure of).
+  return nameIds(text, teams, names);
+}
+
+/** A detected event's text (broadcast track ids): the team sheet names a track the line-up is sure
+ * of. */
+function eventNamed(text: string): string {
   const sheet: Record<string, string> = {};
   for (const [id, e] of Object.entries(teamSheet)) if (e.name) sheet[id] = e.name;
-  return nameIds(text, teams, { ...sheet, ...names });
+  return nameIds(text, teams, sheet);
 }
 
 async function ask(text: string) {
@@ -1806,15 +1891,15 @@ function playSentence(e: DetectedEvent): string | null {
   const side = sureSide(e);
   // A tracked player nobody has named is "a London player", never the tracker's number; a pass
   // between two of them reaches "a teammate".
-  const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
+  const who = (id?: string | null) => (id ? cap(eventNamed(id)) : side ? teams[side] : "A player");
   const low = (t: string) => t.replace(/^A /, "a "); // named() capitalises a sentence's first word
   // "a teammate" only when both sides are vouched for: the id letters are the tracker's votes.
   const mates = (id: string) => !!e.player && isTrack(id) && isTrack(e.player) && !sideUnsure(id) && !sideUnsure(e.player);
-  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(named(id)));
+  const to = (id: string) => (mates(id) && team(id) === team(e.player!) ? "a teammate" : low(eventNamed(id)));
   switch (e.type) {
     case "pass":
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
-      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(named(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
+      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(eventNamed(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
       // A shot vision could not tell the end of (outcome null, #368: saves are not read from video)
       // says only that it was taken, never "wide".
@@ -1971,7 +2056,7 @@ function renderSpotted(m: MatchData, t: number) {
     for (const g of mine) {
       const who = bundleEvents.get(g.event)?.player;
       // The scorer's name only where the team sheet names him; else his club's goal (never a track id).
-      const label = who && !unnamedTrack(who) ? playerName(who) : side ? `${teams[side]} goal` : "Goal";
+      const label = who && !unnamedTrack(who, undefined, true) ? eventName(who) : side ? `${teams[side]} goal` : "Goal";
       lines.set(label, [...(lines.get(label) ?? []), g]);
     }
     $(side ? `goals-${side}` : "goals-unsure").replaceChildren(
@@ -2185,7 +2270,7 @@ function renderShots(t: number) {
     ...shown.map((s) => {
       const li = document.createElement("li");
       // Who and where only on a sure side: the zone is read from that side's direction of attack.
-      const who = s.player ? playerName(s.player) : s.sure ? teams[s.team] : "A shot";
+      const who = s.player ? eventName(s.player) : s.sure ? teams[s.team] : "A shot";
       li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
@@ -2239,12 +2324,15 @@ function renderSquad() {
   const m = m0 ? { ...m0, player_stats: m0.insight_stats?.player_stats ?? m0.player_stats, pass_network: m0.insight_stats?.pass_network ?? m0.pass_network } : null;
   const sheet = Object.entries(teamSheet);
   const net0 = m?.pass_network?.[networkSide];
-  const key = `${sheet.length}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  const sheetsN = ((m0 as { sheets?: Record<string, unknown[]> } | null)?.sheets?.home?.length ?? 0);
+  const key = `${sheet.length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
   if (key === squadKey) return;
   squadKey = key;
   // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
   const rows = (["home", "away"] as const).map((side) => {
-    const shirts = sheet.filter(([id, e]) => team(id) === side && e.number !== undefined).map(([, e]) => e.number!).sort((a, b) => a - b);
+    // The team sheet's shirts (match.json `sheets`), else the line-up's.
+    const xi = (m as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets?.[side];
+    const shirts = (xi?.length ? xi.map((p) => p.number) : sheet.filter(([id, e]) => team(id) === side && e.number !== undefined).map(([, e]) => e.number!)).sort((a, b) => a - b);
     const row = document.createElement("div");
     row.className = `teaser ${side}`;
     row.innerHTML = `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>`;
