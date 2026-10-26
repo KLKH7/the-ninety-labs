@@ -526,6 +526,12 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
         # One hand up (scene: a fouler owning up to the foul, fouls.signal_at), put there as a hold's
         # hands are.
         angles = _blend(angles, _signal(angles, pose, signal, heading, height_m), float(signal["w"]))
+    brace = pose.get("brace")
+    if brace and brace.get("w", 0.0) > 0.0:
+        # A fouled player's hands out to break his fall (fouls.fall_at), each put where it reaches.
+        for side in ("l", "r"):
+            reached = _signal(angles, pose, {"side": side, "at": brace[side]}, heading, height_m)
+            angles = _blend(angles, reached, float(brace["w"]))
     return angles
 
 

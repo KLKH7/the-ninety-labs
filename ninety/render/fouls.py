@@ -15,6 +15,8 @@ the engine's `heading`, a truth field, which the drawing never contradicts.
 from __future__ import annotations
 
 import math
+import random
+import zlib
 
 
 def drawn_fall(player: dict) -> tuple[float, float]:
@@ -32,6 +34,170 @@ def drawn_fall(player: dict) -> tuple[float, float]:
 def apply_fall(gait, player: dict) -> None:
     """Put the engine's fall on the gait this frame. A frame with no fall stands him up."""
     gait.fall, gait.fall_dir = drawn_fall(player)
+    gait.brace = None
+
+
+# How a fall is drawn inside the engine's spell down (lesson 280, *design*: chosen by eye on seed
+# 8324's fouls, not fitted to any check). The engine says when he is down and for how long; the
+# drawing gives the body a stumble, a topple that gathers pace, a settle on the grass, and arms out
+# to break it, and keeps the get-up the engine's. Each spell draws its own from a generator seeded by
+# the player and the engine frame it starts on, so the same foul falls the same way in every clip.
+FALL_DOWN_S = (0.55, 0.85)  # contact to the body on the grass, standing still
+FALL_MOMENTUM_MPS = 7.0  # a run this fast or faster carries him down quickest
+FALL_QUICKER = 0.25  # the share of FALL_DOWN_S a full-pace run takes off it
+STUMBLE_SHARE = (0.35, 0.55)  # of the way down, the stumble before the topple
+STUMBLE_DEG = (8.0, 16.0)  # how far over the stumble takes him, standing; more with pace
+STUMBLE_PACE_DEG = 6.0
+LAND_SHARE = (0.92, 1.0)  # of the engine's deepest angle, where he comes to rest (never deeper)
+SETTLE_S = 0.2  # the body gives a little as it lands, and rests
+SETTLE_DEG = 3.0
+FALL_JITTER = math.radians(20.0)  # either side of the engine's way down
+MOMENTUM_SHARE = 0.6  # at full pace, the weight of his run in the way he goes down
+MOMENTUM_MIN_MPS = 1.0  # slower than this, no run to carry him
+BRACE_FROM = 0.3  # of the stumble, when the arms start out (the reflex, after the contact)
+SHOULDER_Z = 0.82  # shoulder height, of his height (the asset's: meshpose)
+SHOULDER_SIDE_M = 0.19
+ARM_M = 0.36  # of his height, shoulder to hand
+ARM_REACH = 0.9  # of ARM_M: the hand reaches near the arm's length, the elbow soft
+ARM_DROP = 0.7  # of the reach, how far below the shoulder the hand goes: forward and down
+HAND_GRASS_M = 0.06  # the lowest a hand goes: on the grass
+SPREAD = (0.25, 0.6)  # radians each hand goes out either side of the way he falls
+
+
+def _stable_seed(pid: str, frame: int) -> int:
+    return zlib.crc32(f"{pid}:{frame}".encode())
+
+
+def falls(frames: list[dict], fps: int) -> dict[str, list[dict]]:
+    """Per player, each spell down in `frames` (a run of frames with the engine's fall) and how it
+    is drawn. A spell that is already under way on the first frame is drawn as the engine has it."""
+    out: dict[str, list[dict]] = {}
+    open_: dict[str, dict] = {}
+    for i, fr in enumerate(frames):
+        down = set()
+        for pl in fr["players"]:
+            deg = pl.get("fall")
+            if type(deg) not in (int, float) or deg <= 0:
+                continue
+            down.add(pl["id"])
+            sp = open_.get(pl["id"])
+            if sp is None:
+                sp = open_[pl["id"]] = {"i0": i, "deg": [], "pl0": pl, "prev": None}
+                if i > 0:
+                    sp["prev"] = next((q for q in frames[i - 1]["players"] if q["id"] == pl["id"]), None)
+            sp["deg"].append(float(deg))
+        for pid in [p for p in open_ if p not in down]:
+            out.setdefault(pid, []).append(_plan(open_.pop(pid), frames, fps))
+    for pid, sp in open_.items():
+        out.setdefault(pid, []).append(_plan(sp, frames, fps))
+    return out
+
+
+def _plan(sp: dict, frames: list[dict], fps: int) -> dict:
+    i0, deg = sp["i0"], sp["deg"]
+    pl, prev = sp["pl0"], sp["prev"] or sp["pl0"]
+    peak = max(deg)
+    i_peak = i0 + deg.index(peak)  # the engine's body reaches its deepest
+    i_rise = i0 + len(deg) - 1 - deg[::-1].index(peak)  # and leaves it: the get-up
+    plan = {"i0": i0, "i1": i0 + len(deg) - 1, "i_rise": i_rise, "peak": peak, "drawn": i0 > 0}
+    if not plan["drawn"]:
+        return plan
+    rng = random.Random(_stable_seed(pl["id"], int(frames[i0].get("frame", i0))))
+    way = float(pl.get("fall_dir") or 0.0)
+    vx, vy = float(prev.get("vx") or 0.0), float(prev.get("vy") or 0.0)  # his run into the contact
+    speed = math.hypot(vx, vy)
+    pace = min(speed / FALL_MOMENTUM_MPS, 1.0)
+    run = math.atan2(vy, vx) if speed > MOMENTUM_MIN_MPS else way
+    w = MOMENTUM_SHARE * pace
+    final = _between(way, run, w)
+    final += rng.uniform(-FALL_JITTER, FALL_JITTER)
+    # One frame in at the contact, as the engine has it; on the grass no later than the get-up.
+    first = 1.0 / fps
+    latest = max((i_rise - i0 + 1) / fps, (i_peak - i0 + 1) / fps)
+    down_s = min(rng.uniform(*FALL_DOWN_S) * (1.0 - FALL_QUICKER * pace), latest)
+    plan.update({
+        "start_dir": run, "dir": final, "down_s": max(down_s, first),
+        "stumble_s": max(down_s, first) * rng.uniform(*STUMBLE_SHARE),
+        "stumble": math.radians(rng.uniform(*STUMBLE_DEG) + STUMBLE_PACE_DEG * pace),
+        "land": math.radians(peak * rng.uniform(*LAND_SHARE)),
+        "spread": (rng.uniform(*SPREAD), rng.uniform(*SPREAD)),
+    })
+    return plan
+
+
+def _between(a: float, b: float, w: float) -> float:
+    """The direction `w` of the way from `a` to `b` (radians, the short way round)."""
+    return math.atan2((1 - w) * math.sin(a) + w * math.sin(b), (1 - w) * math.cos(a) + w * math.cos(b))
+
+
+def _smooth(u: float) -> float:
+    u = min(max(u, 0.0), 1.0)
+    return u * u * (3.0 - 2.0 * u)
+
+
+def drawn_spell(plan: dict, i: int, engine_deg: float, fps: int) -> tuple[float, float, float]:
+    """(radians over, direction, the arms' weight) at clip frame `i` of a spell."""
+    if not plan.get("drawn"):
+        return math.radians(engine_deg), None, 0.0
+    t = (i - plan["i0"] + 1) / fps  # the contact frame is one frame into the fall (engine)
+    s_t, d_t, land = plan["stumble_s"], plan["down_s"], plan["land"]
+    if i > plan["i_rise"]:
+        # The get-up is the engine's, from where he lies: up by the time the engine has him up.
+        angle = land * engine_deg / plan["peak"]
+        arms = 1.0 - _smooth((i - plan["i_rise"]) / max(plan["i1"] - plan["i_rise"], 1) * 1.6)
+        return angle, plan["dir"], arms
+    if t < s_t:
+        u = t / s_t
+        angle = plan["stumble"] * math.sin(0.5 * math.pi * u)  # caught off balance, slowing
+        way = plan["start_dir"]
+    elif t < d_t:
+        u = (t - s_t) / max(d_t - s_t, 1e-6)
+        angle = plan["stumble"] + (land - plan["stumble"]) * u * u  # the topple gathers pace
+        mix = _smooth(u)
+        way = _between(plan["start_dir"], plan["dir"], mix)
+    else:
+        v = (t - d_t) / SETTLE_S
+        angle = land - math.radians(SETTLE_DEG) * math.sin(math.pi * min(v, 1.0)) * (1.0 - min(v, 1.0))
+        way = plan["dir"]
+    arms = _smooth((t / s_t - BRACE_FROM) / (1.0 - BRACE_FROM)) if t < d_t else 1.0
+    return angle, way, arms
+
+
+def brace_targets(x: float, y: float, heading: float, height_m: float, angle: float, way: float,
+                  spread: tuple[float, float]) -> dict[str, list[float]]:
+    """Where each hand reaches, untipped world metres: put so that, once the body is tipped by
+    `angle` toward `way`, the hand is ahead of its shoulder and down toward the grass."""
+    lx, ly = -math.sin(heading), math.cos(heading)  # his left
+    out = {}
+    for side, sign, out_by in (("l", 1.0, spread[0]), ("r", -1.0, spread[1])):
+        sh = (x + sign * SHOULDER_SIDE_M * lx, y + sign * SHOULDER_SIDE_M * ly, SHOULDER_Z * height_m)
+        sx, sy, sz = tip(sh, x, y, angle, way)
+        reach = ARM_REACH * ARM_M * height_m
+        hz = max(HAND_GRASS_M, sz - reach * ARM_DROP)
+        flat = math.sqrt(max(reach * reach - (sz - hz) ** 2, 0.0))
+        # out to his own side of the way he falls: the left hand to the left of it
+        across = (sh[0] - x) * -math.sin(way) + (sh[1] - y) * math.cos(way)
+        d = way + (out_by if across >= 0 else -out_by)
+        hand = (sx + flat * math.cos(d), sy + flat * math.sin(d), hz)
+        out[side] = [round(v, 4) for v in tip(hand, x, y, -angle, way)]
+    return out
+
+
+def fall_at(gait, mine: list[dict], player: dict, i: int, fps: int, height_m: float) -> None:
+    """The fall this frame on the gait: the engine's spell, drawn (drawn_spell), and the arms out
+    (gait.brace). Standing when the engine has him standing; x and y are never moved."""
+    angle, way = drawn_fall(player)
+    gait.brace = None
+    plan = next((p for p in mine if p["i0"] <= i <= p["i1"]), None) if angle else None
+    if plan is None:
+        gait.fall, gait.fall_dir = angle, way
+        return
+    angle, drawn_way, arms = drawn_spell(plan, i, player["fall"], fps)
+    way = way if drawn_way is None else drawn_way
+    gait.fall, gait.fall_dir = angle, way
+    if arms > 0.0 and plan.get("drawn"):
+        gait.brace = {"w": round(arms, 4), **brace_targets(player["x"], player["y"], gait.heading, height_m,
+                                                            angle, way, plan["spread"])}
 
 
 def tip(point: tuple[float, float, float], x: float, y: float, angle: float, direction: float):
@@ -48,10 +214,16 @@ def tip(point: tuple[float, float, float], x: float, y: float, angle: float, dir
     return (x + along * ux - side * uy, y + along * uy + side * ux, z)
 
 
-def row(player: dict, angle: float) -> dict:
-    """The player's frame row with `fall`, the degrees his drawn body is over, while he is down; the
-    row unchanged while he stands (render-check judges a lying body's box by it)."""
-    return {**player, "fall": round(math.degrees(angle), 1)} if angle else player
+def row(player: dict, angle: float, direction: float | None = None) -> dict:
+    """The player's frame row with `fall`, the degrees his drawn body is over, and `fall_dir`, the
+    way it is drawn going, while he is down; the row unchanged while he stands (render-check judges
+    a lying body's box by it)."""
+    if not angle:
+        return player
+    out = {**player, "fall": round(math.degrees(angle), 1)}
+    if direction is not None:
+        out["fall_dir"] = round(direction, 4)
+    return out
 
 
 # How the reactions are drawn (*design*, kept short: a beat a viewer reads, not a performance).

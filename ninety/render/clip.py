@@ -353,6 +353,7 @@ def render_clip(
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
         reacts = fouls.reactions(frames, match.events)  # hands up, heads turned at a foul (lesson 234)
+        spells = fouls.falls(frames, FPS)  # how each fall is drawn: stumble, topple, arms out (lesson 280)
         held = holds(frames)
         thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
@@ -385,7 +386,7 @@ def render_clip(
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
-                fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
+                fouls.fall_at(g, spells.get(pl["id"], []), pl, fi, FPS, h)  # the engine's spell down, drawn
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
                 fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
@@ -450,7 +451,7 @@ def render_clip(
                         "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
-                row_players.append(fouls.row(pl, g.fall))
+                row_players.append(fouls.row(pl, g.fall, g.fall_dir))
             bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)

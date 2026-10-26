@@ -1318,6 +1318,14 @@ function upperAngles(player, pose, heading, height) {
   }
   const signal = pose.signal;
   if (signal && signal.w > 0) angles = blendPose(angles, signalPose(player, angles, pose, signal, heading, height), signal.w);
+  const brace = pose.brace;
+  if (brace && brace.w > 0) {
+    // A fouled player's hands out to break his fall (meshpose._upper, fouls.fall_at).
+    for (const side of ['l', 'r']) {
+      const reached = signalPose(player, angles, pose, { side, at: brace[side] }, heading, height);
+      angles = blendPose(angles, reached, brace.w);
+    }
+  }
   return angles;
 }
 

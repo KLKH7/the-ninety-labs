@@ -410,6 +410,7 @@ class Gait:
     roll: float = 0.0  # the trunk tipped into a turn (radians, to his left +, pace)
     fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
     signal: dict | None = None  # one hand up: side, at (world), w (fouls.signal_at)
+    brace: dict | None = None  # a fouled player's hands out as he falls: l, r (world), w (fouls.fall_at)
     look: dict | None = None  # the head turned: yaw (radians from his facing), w (fouls.look_at)
     fall_dir: float = 0.0  # the way he falls, pitch radians
     look_yaw: float = 0.0  # where his head is turned to watch the ball, from his facing (watch_ball)
@@ -1420,6 +1421,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "fall": round(g.fall, 4),
         "fall_dir": round(g.fall_dir, 4),
         "signal": g.signal,
+        "brace": g.brace,
         "look": g.look,
     }
 
@@ -1468,7 +1470,7 @@ def body_parts(
     # for a chest control, reaching for a held ball (meshpose.arm_points). The gait's own capsule
     # arms stay: standing they fill the engine's body outline (P11).
     mesh_arms = None
-    if hold is not None or touch is not None or g.action in MESH_ARM_ACTIONS:
+    if hold is not None or touch is not None or g.action in MESH_ARM_ACTIONS or g.brace is not None:
         mesh_arms = arm_points(mesh_pose(g, x, y, 0.0), g.heading, look.height_m)
 
     def at(f: float, side: float, z: float) -> list[float]:
