@@ -29,6 +29,7 @@ from pathlib import Path
 
 from ninety import footage
 from ninety.agents.factcheck import side_known
+from ninety.intel.stats import goal_moments
 
 PITCH_X, CENTRE_Y = 105.0, 34.0
 # Law 1: the penalty area is 16.5 m deep and reaches 16.5 m beyond each post (3.66 + 16.5 across
@@ -265,13 +266,20 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
     says whether the broadcast cut between two match times (condensed.py passes the clip's)."""
     verdict = verdict or Verdict()
     moments, left_out = [], 0
+    # Each goal once (stats.goal_moments): found at its shot, or at the goal event when its strike
+    # was not seen; the goal event tells its side.
+    goal_at = {(shot or goal)["id"]: (goal, shot) for goal, shot in goal_moments(events)}
     for e in sorted(events, key=lambda e: (e["t"], e["id"])):
-        kind = kind_of(e)
-        if kind is None:
+        if e["id"] in goal_at:
+            kind, (goal, shot) = "goal", goal_at[e["id"]]
+        elif kind_of(e) == "save":
+            kind, goal, shot = "save", e, e
+        else:
             continue
-        d = distance_m(e["x"], e["y"])
-        v = e.get("ball_speed_kmh")
-        T = flight_time_s(d, v)
+        # Where it was struck, how fast and how long it flew: the shot's, none without one.
+        d = None if shot is None else distance_m(shot["x"], shot["y"])
+        v = None if shot is None else shot.get("ball_speed_kmh")
+        T = None if d is None else flight_time_s(d, v)
         if kind == "goal":
             why = "goal"
         elif not verdict.save_filter:
@@ -281,16 +289,19 @@ def reel(events: list[dict], verdict: Verdict | None = None, cut=lambda t0, t1: 
         else:
             left_out += 1
             continue
-        tag = label(kind, e["x"], e["y"], d, v, T, verdict)
-        sure = side_known(e)
+        tag = None if shot is None else label(kind, shot["x"], shot["y"], d, v, T, verdict)
+        sure = side_known(goal)
+        # The scorer is the shooter of the goal's side (I24's scorer); a goal with no shot names none.
+        shooter = shot.get("player") if shot is not None and shot.get("team") == goal.get("team") else None
         moments.append({
             # A side, and so a player's track (`h-t12`), is named only when it was told surely
             # (factcheck.side_known); origin still compares the detector's sides.
-            "event": e["id"], "t": e["t"], "team": e.get("team") if sure else None,
-            "player": e.get("player") if sure else None,
-            "kind": kind, "why": why, "origin": origin(e, events, cut) if verdict.origins else None,
+            "event": e["id"], "t": e["t"], "team": goal.get("team") if sure else None,
+            "player": shooter if sure else None,
+            "kind": kind, "why": why,
+            "origin": origin(shot, events, cut) if verdict.origins and shot is not None else None,
             "label": tag[0] if tag else kind.upper(), "label_detail": tag[1] if tag else None,
-            "d_m": round(d, 1), "v_kmh": v, "T_s": None if T is None else round(T, 2),
+            "d_m": None if d is None else round(d, 1), "v_kmh": v, "T_s": None if T is None else round(T, 2),
             "clip": [round(max(0.0, e["t"] - BEFORE_S), 2), round(e["t"] + AFTER_S, 2)],
         })
     saves = sorted((m for m in moments if m["kind"] == "save"),

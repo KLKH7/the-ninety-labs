@@ -63,7 +63,10 @@ CSP = (b"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:;
 # with <style> elements it writes at run time, which `default-src 'self'` refuses, leaving lists and
 # headers unstyled. The phone's pages alone may apply inline styles; scripts stay 'self' only, and
 # nothing a viewer types is ever put into the page as markup (main.ts writes text, never HTML).
-PHONE_CSP = CSP + b"; style-src 'self' 'unsafe-inline'"
+# The big screen embeds the phone app in its companion panel (web/viewer/src/dock.ts), so the
+# phone's pages may be framed by this origin's own pages; never by another site's.
+PHONE_CSP = (CSP.replace(b"frame-ancestors 'none'", b"frame-ancestors 'self'")
+             + b"; style-src 'self' 'unsafe-inline'")
 SECURITY_HEADERS = [
     (b"content-security-policy", CSP),
     (b"x-content-type-options", b"nosniff"),

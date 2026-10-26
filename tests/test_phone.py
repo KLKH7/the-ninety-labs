@@ -124,6 +124,9 @@ def mock_site(browser):
 
 def watch(page) -> list[str]:
     errors: list[str] = []
+    # The test clips hold a few events a team, under the phone's MIN_ROW_EVENTS: draw their rows anyway
+    # (main.ts reads this seam; test_phone_companion checks the threshold itself without it).
+    page.add_init_script("window.__ninetyMinRowEvents = 0")
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("dialog", lambda d: (errors.append(f"dialog: {d.message}"), d.dismiss()))
     return errors
@@ -371,7 +374,7 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     evidence = phone.locator("#how-body")
     evidence.locator(".evidence").wait_for()
     assert "Lisbon 7's top speed" in evidence.inner_text()
-    assert "Checked by code before it was shown" in evidence.inner_text()
+    assert "Computed from tracking" in evidence.inner_text()
     evidence.get_by_text("Facts cited").click()
     assert re.search(r"peak_speed:player_a7_window_0\.00-\d+\.\d\d", evidence.inner_text())
     assert "Lisbon 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
@@ -859,7 +862,8 @@ def test_an_answer_says_fact_checked_only_when_the_judge_saw_it(browser, prod_si
     answer.locator(".how").click()
     page.locator("#how-body .evidence").wait_for()
     said = page.locator("#how-body").inner_text()
-    assert ("checked by code and the Judge" in said) == (source == "model")
+    assert ("Answered by our agents, checked by the fact-checker" in said) == (source == "model")
+    assert ("Computed from tracking" in said) == (source != "model")
     assert not errors
 
 
@@ -883,3 +887,54 @@ def test_the_apis_own_answer_to_an_injection_is_shown_as_refused(browser, api_si
     assert "cheated" not in answer.locator(".said").inner_text()
     assert answer.locator(".figure").count() == 0 and answer.locator("img").count() == 0
     assert page.evaluate("window.pwned") is None and not errors
+
+
+def test_with_the_demo_passcode_ask_is_the_agents_and_a_refused_one_falls_back_to_code(browser, prod_site):
+    """Coordinator, Oct 26: Ask is model-backed when the phone holds the demo passcode
+    (x-ninety-passcode, ninety/api/companion.py). It comes once from ?pass= (then struck from the
+    address bar) or the ••• sheet; a refused one (401) answers in code, marked "Model off"."""
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    sent: list[str | None] = []
+    tracked = {**MOCK_MINIMAP, "source": "tracked", "clip": "demo"}
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"),
+                         lambda ws: ws.send(json.dumps({"type": "clock", "t": 30.0, "playing": False})))
+    ctx.route(re.compile(r".*/api/minimap\b.*"), lambda r: r.fulfill(content_type="application/json",
+                                                                      body=json.dumps(tracked)))
+
+    def ask(route, request):
+        key = request.headers.get("x-ninety-passcode")
+        sent.append(key)
+        if key is not None and key != "right-one":
+            refused = '{"error": "wrong passcode"}'
+            return route.fulfill(status=401, content_type="application/json", body=refused)
+        source = "model" if key == "right-one" else "code"
+        route.fulfill(content_type="application/json",
+                      body=json.dumps({"type": "answer", "answer": VERIFIED, "source": source}))
+
+    ctx.route(re.compile(r".*/api/ask\b.*"), ask)
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo&pass=right-one")
+    page.wait_for_selector("body[data-state=live]")
+    assert "pass" not in page.url and "right-one" not in page.url  # struck from the address bar
+    page.wait_for_function("document.querySelector('#map').dataset.dots === '22'", timeout=10_000)
+    answer = answered(page, "How fast is Away 7 now?")
+    assert sent[-1] == "right-one" and answer.locator(".badge").text_content() == "Fact-checked"
+    answer.locator(".how").click()
+    page.locator("#how-body .evidence").wait_for()
+    assert "Answered by our agents, checked by the fact-checker" in page.inner_text("#how-body")
+    page.click("#close-how")
+    page.evaluate("""() => { const f = document.getElementById('passcode'); f.value = 'stale';
+      f.dispatchEvent(new Event('change')); }""")
+    page.click("#tab-button-radar")
+    answered(page, "How fast is Away 7 now?")
+    page.wait_for_function("document.querySelectorAll('#answers .answer:not(.pending)').length === 2")
+    answer = page.locator("#answers .answer:not(.pending)").last
+    assert sent[-2:] == ["stale", None]  # refused, then asked again without it
+    assert answer.locator(".badge").text_content() == "Computed from tracked positions"
+    answer.locator(".how").click()
+    page.locator("#how-body .evidence").wait_for()
+    said = page.inner_text("#how-body")
+    assert "Model off" in said and "Computed from tracking" in said
+    assert not errors
+    ctx.close()

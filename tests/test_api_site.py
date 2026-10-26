@@ -42,7 +42,8 @@ def test_the_phone_companion_is_served_beside_the_viewer(site):
     for path in ("/phone/", "/phone"):
         r = site.get(path)
         assert r.status_code == 200 and "<title>phone</title>" in r.text, path
-    assert "frame-ancestors 'none'" in site.get("/phone/").headers["content-security-policy"]
+    # Framed only by this origin's big screen (its companion panel), never by another site.
+    assert "frame-ancestors 'self'" in site.get("/phone/").headers["content-security-policy"]
     assert site.get("/phone/../secret.txt").status_code == 404
     assert "immutable" in site.get("/phone/assets/index-def.js").headers["cache-control"]
 
@@ -132,7 +133,7 @@ def test_only_the_phones_pages_may_apply_inline_styles_and_scripts_stay_self_eve
     for path in ("/phone/", "/phone", "/phone/assets/index-def.js"):
         csp = site.get(path).headers["content-security-policy"]
         assert "style-src 'self' 'unsafe-inline'" in csp, path
-        assert "frame-ancestors 'none'" in csp and "connect-src 'self'" in csp, path
+        assert "frame-ancestors 'self'" in csp and "connect-src 'self'" in csp, path
     for path in ("/", "/bundle/manifest.json", "/api/health", "/phoney", "/assets/index-abc.js"):
         assert "style-src" not in site.get(path).headers["content-security-policy"], path
     for path in ("/", "/phone/"):
