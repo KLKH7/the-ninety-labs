@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
 from ninety.agents.factcheck import side_known
@@ -59,6 +60,46 @@ def grade(tactical: dict, broadcast: dict, events: list[dict], owner_v, owner_b,
     return {"track_names": score(named_t), "events": len(actors), "event_names": score(named_e),
             "event_coverage": round(len(named_e) / len(actors), 3) if actors else None,
             "tracks_named": len(tracks)}
+
+
+def direct_path(args, frames, association, events, owner_v, owner_b, eid, tv, assoc: float,
+                held) -> tuple[dict, bool]:
+    """The broadcast's tracks matched to the feed directly, combined with the join (pre-registered:
+    docs/eval/identity-direct-plan.md): graded once, with every unnamed event's reason."""
+    b_frames = identity.broadcast_frames(args.vision)
+    feed_b = identity.load_for(args.feed, [*frames, *b_frames], load_fixture(args.clip / "clip.json"))
+    direct = identity.tactical(b_frames, feed_b, any_side=True)
+    via = identity.broadcast(association, tv, {"association": assoc})
+    comb = identity.combined(identity.event_ids(events, association), via, direct, association)
+    report = {"plan": "docs/eval/identity-direct-plan.md", "direct_tracks": len(direct),
+              "held_out": grade(tv, comb, events, owner_v, owner_b, held, eid),
+              "all": grade(tv, comb, events, owner_v, owner_b, lambda t: True, eid),
+              "paths": dict(Counter(w["path"] for w in comb.values()))}
+    # Why each event is unnamed, the first reason that holds (the plan's order).
+    seen = {identity._number(p["id"]) for f in b_frames for p in f["players"]}
+    loose = identity.assign(b_frames, feed_b, any_side=True, one_at_a_time=False)
+    majority = {identity._number(t) for t in loose}
+    calibrated = {f["frame"] for f in b_frames}
+    reasons = Counter()
+    for e in events:
+        who = e.get("player")
+        if who and who in comb:
+            reasons["named"] += 1
+        elif not who:
+            reasons["no_player_attributed"] += 1
+        elif identity._number(who) not in seen:
+            reasons["calibration_withheld"] += 1
+        elif identity._number(who) not in majority:
+            reasons["no_feed_majority"] += 1
+        else:
+            reasons["name_held_by_another_track"] += 1
+    report["events"] = len(events)
+    report["reasons"] = dict(reasons)
+    report["events_on_withheld_frames"] = sum(e["frame"] not in calibrated for e in events)
+    sided = identity.sided(events, comb)
+    report["events_side_sure"] = sum(map(side_known, sided))
+    h = report["held_out"]["event_names"]
+    return report, (h["precision"] or 0) >= TARGET
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -112,15 +153,20 @@ def main(argv: list[str] | None = None) -> None:
         out["events_side_sure"] = {"without_feed": sum(map(side_known, events)),
                                    "with_feed": sum(map(side_known, sided))}
         out["events_side_changed"] = sum(a["team"] != b["team"] for a, b in zip(events, sided, strict=True))
+    direct_met = None
+    if chosen:
+        out["direct"], direct_met = direct_path(args, frames, association, events, owner_v, owner_b, eid, tv,
+                                                chosen["association"], held)
     args.out.write_text(json.dumps(out, indent=1) + "\n")
     # The gate is used only if the held-out half also meets the target on both units.
     h = out.get("held_out") or {}
     met = bool(h) and all((h[u]["precision"] or 0) >= TARGET for u in ("track_names", "event_names"))
     args.calibration.write_text(json.dumps({"association": chosen and chosen["association"],
                                             "target": TARGET, "held_out_met": met,
+                                            "direct_held_out_met": bool(direct_met),
                                             "source": "docs/eval/identity.json"}, indent=1) + "\n")
     shown = ("chosen", "held_out", "all", "frame_coverage", "tracks", "id_corrections", "events_sided",
-             "events_total", "events_side_sure", "events_side_changed")
+             "events_total", "events_side_sure", "events_side_changed", "direct")
     print(json.dumps({k: out.get(k) for k in shown},
                      indent=1))
 
