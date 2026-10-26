@@ -533,8 +533,10 @@ def test_on_the_encoded_video_the_phone_gets_match_time_after_every_seek_across_
     page = ctx.new_page()
     page.goto(site + "?bundle=video/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    # The poster frame's media fragment (#390: "video.mp4#t=0.34") is not part of the file.
-    assert page.evaluate("document.querySelector('video').src").split("#")[0].endswith("video.mp4")
+    # The poster frame's media fragment (#390: "video.mp4#t=0.34") is not part of the file. Where Media
+    # Source Extensions run the viewer plays the HLS ladder through hls.js (#401), whose src is a blob:.
+    src = page.evaluate("document.querySelector('video').src").split("#")[0]
+    assert src.endswith("video.mp4") or src.startswith("blob:"), src
     # Image k is match frame 1500 + k before the cut (40 images), 1550 + (k - 40) after it.
     for image in (60, 10, 45, 30, 70, 0):
         seek(page, image)
