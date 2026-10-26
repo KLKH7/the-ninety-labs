@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety import condensed, highlights, radar
-from ninety.agents import live, onair, telemetry
+from ninety.agents import factcheck, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import (
@@ -752,6 +752,8 @@ async def run(args: argparse.Namespace) -> dict:
     # (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
     cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta))
     claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
+    # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
+    cues, claims = onair.gate_speeds(cues, claims, events)
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
@@ -866,6 +868,13 @@ async def run(args: argparse.Namespace) -> dict:
         # The track ids a screen may name by club (`sides_known`); every other one is "a player".
         "sides_known": sides_known(events),
         "min_team_confidence": MIN_TEAM_CONFIDENCE,  # the phone names an event's side only above it
+        # Whether vision's ball speed is measured, and its band: the screens say a speed only with it
+        # (web/viewer/src/speed.ts); the bundle's words state only the speeds it covers.
+        # Measured only when one of its speeds is one vision's error covers: the screens' gate opens
+        # for the whole bundle, so it stays shut while none is.
+        "speed": {"measured": any(factcheck.measured_speed(e) and factcheck.plausible_speed(e)
+                                  for e in events),
+                  "error_kmh": factcheck.SPEED_ERROR_KMH},
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
