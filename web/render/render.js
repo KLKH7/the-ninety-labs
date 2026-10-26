@@ -382,7 +382,7 @@ function boardTexture(p, rand) {
 const BROADCAST_BRANDS = [
   ['VANTIRO', 'MOBILE'], ['QELMORA', 'BANKING'], ['BRISKEL', 'SPORTS DRINK'], ['OSTRAVEN', 'AIRWAYS'],
   ['PALMIRU', 'TYRES'], ['ZENTHA', 'ENERGY'], ['THE NINETY LABS', 'MATCH INSIGHTS'], ['QUIVRANT', 'INSURANCE'],
-  ['ZOLBEK', 'BEER'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
+  ['ZOLBEK', 'SPORTSWEAR'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
   ['KESTRIX', 'BETTING-FREE ZONE'], ['OLVENSTA', 'FREIGHT'], ['DRAVELLO', 'COFFEE'], ['BRAXITO', 'BOOTS'],
 ];
 // One advert is this many metres of board (design: a pitch-side LED advert is a few metres long).
