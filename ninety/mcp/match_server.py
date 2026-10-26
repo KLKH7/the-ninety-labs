@@ -27,7 +27,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from ninety.intel import shape
-from ninety.intel.match_insights import MatchInsights, load_fixture
+from ninety.intel.match_insights import MatchInsights, load_fixture, score_reads
 from ninety.intel.windows import agent_rows
 from ninety.match import detected, tracking
 from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
@@ -126,6 +126,10 @@ def fixture_path(clip: str) -> Path:
     return tracking.FIXTURES / f"fixture-{clip}.json"  # its seed and club codes, from its clip.json
 
 
+def scorebug_path(clip: str) -> Path:
+    return detected.FIXTURES / f"scorebug-{clip}.jsonl"  # the scorebug's readings, when it was read
+
+
 @lru_cache(maxsize=4)
 def insights_of(match: str) -> MatchInsights | None:
     """A match's insight facts: precomputed in NINETY_MATCH_DIR/insights when the image has them,
@@ -143,7 +147,10 @@ def insights_of(match: str) -> MatchInsights | None:
     except tracking.NotTracked:
         return None
     events = detected.load(DETECTED[match]())
-    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)))
+    # The scorebug's readings, beside the detected events when the clip has them: the first holds the
+    # score before any change (ninety/intel/scoring.py), as the offline build's --scorebug does.
+    reads = score_reads(scorebug_path(match)) if scorebug_path(match).exists() else []
+    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)), score_reads=reads)
 
 
 def _insight(match: str, tool: str, *args) -> dict:

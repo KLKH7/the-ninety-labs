@@ -419,3 +419,26 @@ def test_the_scorebug_files_readings_give_the_score_before_any_change():
     clubs = fixture.clubs
     assert f"{clubs['home']} 2 goals" in answer.text and f"{clubs['away']} 1 goal" in answer.text
     assert MatchInsights.build("x", frames, [], fixture, {}).facts["scorebug"] == []
+
+
+def test_the_served_match_reads_its_scorebug_too(monkeypatch, tmp_path):
+    # The MCP and live server build a clip's insights here: they read its scorebug file as the
+    # offline build's --scorebug does, so a match joined at 2-1 has a score before any change.
+    import json
+
+    from ninety.mcp import match_server
+
+    clip = match_server.detected.M1_CLIP
+    match_server.insights_of.cache_clear()  # it is cached per match: each case builds afresh
+    read = {"id": "r1", "t": 0.0, "type": "score_read", "score": {"home": 2, "away": 1}, "x": 52.5,
+            "y": 34.0, "source": "vision", "confidence": 0.99}
+    path = tmp_path / f"scorebug-{clip}.jsonl"
+    path.write_text(json.dumps(read) + "\n")
+    monkeypatch.setattr(match_server, "MATCH_DIR", "")  # computed, not a stored copy
+    monkeypatch.setattr(match_server, "scorebug_path", lambda c: path)
+    mi = match_server.insights_of(clip)
+    assert [(r["home"], r["away"]) for r in mi.facts["scorebug"]] == [(2, 1)]
+    monkeypatch.setattr(match_server, "scorebug_path", lambda c: tmp_path / "none.jsonl")
+    match_server.insights_of.cache_clear()
+    assert match_server.insights_of(clip).facts["scorebug"] == []
+    match_server.insights_of.cache_clear()  # leave no patched build behind for other tests

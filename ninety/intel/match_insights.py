@@ -571,6 +571,12 @@ def load_fixture(path: Path) -> Fixture:
     return Fixture(int(body["seed"]), params["home_code"], params["away_code"])
 
 
+def score_reads(path: Path) -> list[dict]:
+    """A clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score, the vision ones."""
+    rows = (json.loads(line) for line in path.read_text().splitlines() if line.strip())
+    return [r for r in rows if r.get("type") in scoring.SCORE_TYPES and r.get("source") == "vision"]
+
+
 def main(argv: list[str] | None = None) -> None:
     from ninety.match import detected, tracking
 
@@ -589,10 +595,7 @@ def main(argv: list[str] | None = None) -> None:
     frames = [f for f in body["frames"] if f.get("source") == tracking.TRACKED]
     if len(frames) != len(body["frames"]):
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
-    reads = []
-    if args.scorebug is not None:
-        rows = (json.loads(line) for line in args.scorebug.read_text().splitlines() if line.strip())
-        reads = [r for r in rows if r.get("type") in scoring.SCORE_TYPES and r.get("source") == "vision"]
+    reads = score_reads(args.scorebug) if args.scorebug is not None else []
     mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
                              score_reads=reads)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
