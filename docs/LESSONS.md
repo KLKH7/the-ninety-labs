@@ -3250,7 +3250,7 @@ short and actionable. This file is public: no research sources, product names or
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
 
-### 279. Watch the frames before naming the cause
+### 273. Watch the frames before naming the cause
 - **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
   frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
   at P16's rate and the stride already follows distance. Crops of seed 8080's carriers showed the
