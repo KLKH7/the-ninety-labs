@@ -18,7 +18,7 @@ import * as fans from "./fan";
 import { mountOnboarding } from "./onboarding";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { CLUBS, DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, short, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -1319,6 +1319,16 @@ const onboard = mountOnboarding($("onboard"), (picked, editing) => {
 function applyFan(rerender = false) {
   const f = chosen();
   $("fan-value").textContent = f ? fans.summary(f) : "";
+  // The persona (Kian, Oct 26: "make personalisation more visible"): the fan's club, mode and focus
+  // lay Live out (style.css, body[data-mode], [data-focus], [data-us]); no number changes.
+  const us = usSide();
+  document.body.dataset.mode = f?.mode ?? "";
+  document.body.dataset.focus = f?.focus ?? "";
+  document.body.dataset.us = us ?? "";
+  document.body.dataset.club = f?.club ?? "";
+  for (const [id, v] of [["persona-mode", f?.mode], ["persona-club", f?.club]] as const)
+    ($(id) as HTMLElement & { value: string }).value = v ?? "";
+  if (rerender) { statsKey = ""; spottedKey = ""; squadKey = ""; if (state.match) showMatch(viewTime()); renderJustNow(); renderSquad(); }
   $("ask-start").dataset.focus = f?.focus ?? "";
   if (f && !storyTouched) {
     const mode = fans.storyMode(f);
@@ -1329,6 +1339,31 @@ function applyFan(rerender = false) {
   syncAsk();
   if (rerender) renderChips();
 }
+
+/** The side of this match the fan supports, when it is one of its two clubs. */
+function usSide(): "home" | "away" | null {
+  const f = chosen();
+  if (!f) return null;
+  const us = short(CLUBS[f.club]);
+  return teams.home === us ? "home" : teams.away === us ? "away" : null;
+}
+
+/** The one-tap persona switch in the ••• sheet: the mode and the club, kept as #362's choices. */
+function setPersona(change: Partial<fans.Fan>) {
+  const base: fans.Fan = chosen() ?? { club: "LON", mode: "casual", focus: "moments" };
+  fan = { ...base, ...change };
+  fans.save(fan);
+  storyTouched = false;
+  applyFan(true);
+}
+$("persona-mode").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "casual" || v === "analyst") && v !== chosen()?.mode) setPersona({ mode: v });
+});
+$("persona-club").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "LON" || v === "LIS") && v !== chosen()?.club) setPersona({ club: v });
+});
 
 $("fan-edit").addEventListener("click", () => {
   void settingsSheet.dismiss();
@@ -2030,7 +2065,83 @@ async function refreshInsights(force = false) {
 }
 
 /** Live's "Just now": the newest Story moment, its sentence, chip and minute. */
+/** The tactics focus: the latest card of each tactical kind (overload, line break, passing options,
+ * shape), newest first, as large cards above the pitch; each opens How we know. */
+const TACTICAL: Record<string, string> = { overload: "Overload", line_break: "Line break", pass_options: "Passing options", team_shape: "Shape", shape: "Shape" };
+function renderTacticsStrip() {
+  const seen = new Set<string>();
+  const latest = state.insights.filter((c) => TACTICAL[c.kind] && !seen.has(c.kind) && !!seen.add(c.kind)).slice(0, 3);
+  $("tactics-strip").hidden = latest.length === 0;
+  $("tactics-strip").replaceChildren(
+    focusList(latest.map((c) => {
+      const row = focusRow(`${TACTICAL[c.kind]} · ${c.minute}′`, named(c.headline || c.text, c.names), c.team);
+      row.addEventListener("click", () => void openHow({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }));
+      return row;
+    })),
+  );
+}
+
+/** One rounded group of rows, hairlines between them (Apple Sports' lists). */
+function focusList(rows: HTMLElement[]): HTMLUListElement {
+  const ul = document.createElement("ul");
+  ul.className = "focus-list";
+  ul.append(...rows.map((r) => { const li = document.createElement("li"); li.append(r); return li; }));
+  return ul;
+}
+/** A row: a small grey label (a club's dot where its side is sure) over one line of text, a chevron. */
+function focusRow(label: string, text: string, side: string | null, lead?: HTMLElement): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "focus-row";
+  const body = document.createElement("span");
+  body.className = "focus-body";
+  const small = document.createElement("span");
+  small.className = `focus-label ${side === "home" || side === "away" ? side : ""}`;
+  small.textContent = label;
+  const line = document.createElement("span");
+  line.className = "focus-text";
+  line.textContent = text;
+  body.append(small, line);
+  const chev = document.createElement("span");
+  chev.className = "focus-chev";
+  chev.setAttribute("aria-hidden", "true");
+  chev.textContent = "›";
+  b.append(...(lead ? [lead] : []), body, chev);
+  return b;
+}
+const shirtCircle = (n: number | undefined, side: string) => {
+  const c = document.createElement("span");
+  c.className = `shirt-dot ${side}`;
+  c.setAttribute("aria-hidden", "true");
+  c.textContent = n !== undefined ? String(n) : "";
+  return c;
+};
+
+/** The players focus: the players most in the game (the Scout's per-player numbers), named as the
+ * radar names them (the ID feed's name, shirt and position where it has a row); a tap opens his card,
+ * with Compare. Never the team sheet: line-ups are the Players tab's alone (Kian, Oct 26). */
+function renderPlayersStrip(ps: PlayerStats[]) {
+  const most = ps.filter((p) => typeof p.involvements === "number").sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  let rows: HTMLButtonElement[] = [];
+  if (most.length) {
+    rows = most.map((p) => {
+      const row = tacticalSheet[p.id];
+      const d = distinctName(p.id); // "London player, left of the pitch": where he plays, when unnamed
+      const where = row?.name ? cap(row.position ?? "") : d.includes(", ") ? d.slice(d.indexOf(", ") + 2) : "";
+      const s = sideUnsure(p.id) ? "neutral" : team(p.id);
+      const r = focusRow(where ? `${where} · ${Math.round(p.involvements!)} involvements` : `${Math.round(p.involvements!)} involvements`, playerName(p.id), s, shirtCircle(row?.name ? row.number : undefined, s));
+      r.classList.add("player-row");
+      r.addEventListener("click", () => select(p.id));
+      return r;
+    });
+  }
+  $("players-strip").hidden = rows.length === 0;
+  $("players-strip").replaceChildren(...(rows.length ? [focusList(rows)] : []));
+}
+
 function renderJustNow() {
+  renderTacticsStrip();
   const c = state.insights[0];
   $("just-now").hidden = !c;
   if (!c) return;
@@ -2172,6 +2283,7 @@ function renderInsights() {
     const scorer = who && !unnamedTrack(who, undefined, true) ? eventName(who) : "";
     const { li, body } = storyItem(side, scorer ? `${goalLine(g)} · ${scorer}` : goalLine(g), g.t);
     li.classList.add("goal-card");
+    if (side && side === usSide()) li.classList.add("ours");
     li.dataset.goal = g.event;
     const head = document.createElement("h3");
     head.className = "goal-head";
@@ -2212,7 +2324,10 @@ function renderInsights() {
     list.replaceChildren(li);
     return;
   }
-  list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
+  // In Key plays the fan's club's moments come first (newest first within each), then the rest.
+  const us = key ? usSide() : null;
+  const mine = (r: Row) => (us && r.el.classList.contains(us) ? 1 : 0);
+  list.replaceChildren(...rows.sort((a, b) => mine(b) - mine(a) || b.t - a.t).map((r) => r.el));
 }
 
 $("story-mode").addEventListener("ionChange", (e) => {
@@ -2238,11 +2353,57 @@ function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
   // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
   const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
-  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}|${scorebugGoals(t)?.length ?? -1}`;
   if (key === spottedKey) return;
   spottedKey = key;
   const minute = (g: { t: number }) => `${momentum.minuteOf(g.t)}′`;
   const sideOf = goalSide;
+  // With the scorebug's readings, every goal it counted, under its club (Coordinator, Oct 26: the
+  // score and the lines agree): each rise in a side's count is a goal at that minute; a scorer only
+  // where a goal vision spotted beside it is named by the team sheet.
+  const bug = scorebugGoals(t);
+  if (bug) {
+    for (const side of ["home", "away"] as const) {
+      const mine = bug.filter((g) => g.side === side);
+      // Each goal by its scorer's surname where the player-ID feed names him (#389, through the
+      // line-up of broadcast tracks), else by the club ("Rondell 38′", "London 22′ 68′").
+      // One spotted goal a scorebug goal, the nearest within SCOREBUG_MATCH_S, each used once.
+      const used = new Set<(typeof goals)[number]>();
+      const nearOf = new Map(mine.map((g) => {
+        const near = goals
+          .filter((v) => !used.has(v) && sideOf(v) === side && Math.abs(v.t - g.t) <= SCOREBUG_MATCH_S)
+          .sort((a, b) => Math.abs(a.t - g.t) - Math.abs(b.t - g.t))[0];
+        if (near) used.add(near);
+        return [g, near] as const;
+      }));
+      const label = (g: (typeof mine)[number]) => {
+        const near = nearOf.get(g);
+        const who = near ? bundleEvents.get(near.event)?.player : undefined;
+        const name = who ? teamSheet[who]?.name : undefined; // the line-up's (the ID feed's), never a label
+        return name ? name.split(" ").slice(-1)[0] : teams[side];
+      };
+      const lines = new Map<string, typeof mine>();
+      for (const g of mine) lines.set(label(g), [...(lines.get(label(g)) ?? []), g]);
+      $(`goals-${side}`).replaceChildren(
+        ...[...lines].map(([who, gs]) => {
+          const li = document.createElement("li");
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "side-goal";
+          b.textContent = `${who} ${gs.map(minute).join(" ")}`;
+          const named = who !== teams[side];
+          b.addEventListener("click", () => {
+            void openHow({ t: gs[gs.length - 1].t, visual: null, source: "code", evidence: [],
+              why: { question: "", text: `${teams[side]}'s goals, read from the broadcast's score graphic: ${gs.map(minute).join(", ")}.${named && identity ? ` The scorer's name is from the ${identity.label}.` : ""}` } });
+          });
+          li.append(b);
+          return li;
+        }),
+      );
+    }
+    $("goals-unsure").replaceChildren();
+    return;
+  }
   for (const side of ["home", "away", null] as const) {
     const mine = goals.filter((g) => sideOf(g) === side);
     // One line per scorer, his goals' minutes in order.
@@ -2271,6 +2432,21 @@ function renderSpotted(m: MatchData, t: number) {
       }),
     );
   }
+}
+
+/** Each goal the scorebug counted up to t: a rise in a side's count between readings (one goal a rise
+ * of one); null when the bundle carries no readings that pass the gate. */
+function scorebugGoals(t: number): { t: number; side: "home" | "away" }[] | null {
+  const reads = scorebugEvents.filter((e) => (e.type === "score_change" || e.type === "score_read") && e.score && e.t <= t + 1e-6);
+  if (!reads.length) return null;
+  const out: { t: number; side: "home" | "away" }[] = [];
+  let prev = { home: 0, away: 0 };
+  for (const e of [...reads].sort((a, b) => a.t - b.t)) {
+    const now = e.score!;
+    for (const side of ["home", "away"] as const) for (let k = prev[side]; k < now[side]; k++) if (e.type === "score_change") out.push({ t: e.t, side });
+    prev = { home: Math.max(prev.home, now.home), away: Math.max(prev.away, now.away) };
+  }
+  return out;
 }
 
 /** A goal's club: its own side, or else the side whose count the broadcast's scorebug raised within
@@ -2393,6 +2569,18 @@ interface TeamStatsFacts {
   possession?: Record<"home" | "away", { share: number }>;
 }
 const shownStats = new Map<string, [number, number]>();
+/** A row's label with its unit, unless the unit says nothing new: a count of what the label names
+ * ("Corners", not "Corners (corners)") or one of the plain counting units. */
+function withUnit(label: string, unit: string | null): string {
+  if (!unit || /^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(unit)) return label;
+  const stem = (w: string) => w.toLowerCase().replace(/s$/, "");
+  return label.toLowerCase().split(/[^a-z-]+/).some((w) => w && stem(w) === stem(unit)) ? label : `${label} (${unit})`;
+}
+
+/** Events a row of counts must rest on before it shows (Coordinator, Oct 26: counted only on sides told
+ * surely, a row of 0 and 1 says nothing; design): fewer, and the row is not drawn. */
+const MIN_ROW_EVENTS = (window as { __ninetyMinRowEvents?: number }).__ninetyMinRowEvents ?? 10; // tests' seam: tests/test_phone.py watch()
+const enough = (total: number) => total >= MIN_ROW_EVENTS;
 function renderStats(st: MatchData["stats"][number]) {
   type Row = [string, number, number];
   const pct = (n: number, d: number) => (d > 0 ? Math.round((100 * n) / d) : NaN);
@@ -2404,14 +2592,16 @@ function renderStats(st: MatchData["stats"][number]) {
       ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
       // Counted from what vision saw: it can miss a shot or a goal the broadcast showed, so the
       // label says so (video-prep, Oct 25: 3 goals seen under a 4-1 scorebug).
-      ["Shots seen", st.home.shots, st.away.shots],
-      ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ...(enough(st.home.shots + st.away.shots) ? [
+        ["Shots seen", st.home.shots, st.away.shots],
+        ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ] as Row[] : []),
     ]],
-    ["Passing", [
+    ["Passing", enough(st.home.passes_attempted + st.away.passes_attempted) ? [
       ["Passes completed", st.home.passes_completed, st.away.passes_completed],
       ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
       ["Pass accuracy %", pct(st.home.passes_completed, st.home.passes_attempted), pct(st.away.passes_completed, st.away.passes_attempted)],
-    ]],
+    ] : []],
     ["Pressing", []],
     ["Shape", []],
     ["Physical", ts?.distance ? [["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]] : []],
@@ -2425,7 +2615,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const v = [...r.series].reverse().find((x) => x.minute_to <= minute);
     if (!v || v.home === null || v.away === null || v.home === undefined || v.away === undefined) continue;
     if (r.key === "distance_km" && groups.some(([, rows]) => rows.some(([l]) => l === "Distance (km)"))) continue;
-    const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+    const label = withUnit(r.label, r.unit);
     if (!v.confident) unsure.add(label);
     groups.find(([g]) => g === r.group)?.[1].push([label, round1(v.home), round1(v.away)]);
   }
@@ -2487,7 +2677,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
     for (const r of half.rows) {
       if (r.home === null || r.away === null) continue;
-      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      const label = withUnit(r.label, r.unit);
       if (!r.confident) unsure.add(label);
       byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
     }
@@ -2495,7 +2685,8 @@ function renderStats(st: MatchData["stats"][number]) {
   } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
-  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
+  // An analyst's Live carries every row (a dense strip); everyone else the first four.
+  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, chosen()?.mode === "analyst" ? undefined : 4).map((li) => li.cloneNode(true) as HTMLLIElement);
   $("summary-rows").replaceChildren(...summary);
   $("live-summary").hidden = summary.length === 0;
 }
@@ -2619,9 +2810,10 @@ function renderSquad() {
   const sheet = Object.entries(teamSheet);
   const net0 = m?.pass_network?.[networkSide];
   const sheetsN = ((m0 as { sheets?: Record<string, unknown[]> } | null)?.sheets?.home?.length ?? 0);
-  const key = `${sheet.length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  const key = `${sheet.length}|${Object.keys(tacticalSheet).length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
   if (key === squadKey) return;
   squadKey = key;
+  renderPlayersStrip(m?.player_stats ?? []);
   // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
   const rows = (["home", "away"] as const).map((side) => {
     // The team sheet's shirts (match.json `sheets`), else the line-up's.

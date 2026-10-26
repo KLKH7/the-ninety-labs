@@ -36,7 +36,10 @@ MINUTES = 5  # every served match is a five-minute clip, as the slice and the ev
 # Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
 MATCHES = {"seed7": 7, "seed21": 21, "seed33": 33}  # the demo match and the held-out evaluation seeds
 # Detected matches: the live path from Milestone 1, read from vision's detected events only.
-DETECTED = {detected.M1_CLIP: detected.m1_path}
+DETECTED = {detected.M1_CLIP: detected.m1_path,
+            # The deployment's packaged clips (tracking.SERVED_DIR): their own detected events.
+            **{c: (lambda c=c: tracking.package(c) / "detected.jsonl")
+               for c in tracking.TRACKED_CLIPS if tracking.package(c) is not None}}
 MATCH_DIR = os.environ.get("NINETY_MATCH_DIR", "")
 MAX_EVENTS = 60
 # Each match's window stats are stored under their own folder: the top level holds one file per
@@ -123,10 +126,16 @@ def match_info(match: str) -> dict:
 
 
 def fixture_path(clip: str) -> Path:
+    served = tracking.package(clip)
+    if served is not None:
+        return served / "clip.json"  # load_fixture reads a clip.json's seed and club codes
     return tracking.FIXTURES / f"fixture-{clip}.json"  # its seed and club codes, from its clip.json
 
 
 def scorebug_path(clip: str) -> Path:
+    served = tracking.package(clip)
+    if served is not None:
+        return served / "scorebug.jsonl"
     return detected.FIXTURES / f"scorebug-{clip}.jsonl"  # the scorebug's readings, when it was read
 
 

@@ -964,3 +964,66 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 .side-score[hidden] { display: none; }
 .side-score { cursor: pointer; }
 body[data-scorebug="read"] .band .side .crest { width: 38px; height: 44px; }
+
+/* ===== The persona (Kian, Oct 26: "make personalisation more visible"): #362's choices lay Live out.
+   Club: its crest and name on the left of the band and its colour as a quiet accent. Mode: a casual
+   fan's Live leads with moments in words, the pitch small at the foot; an analyst's with the pitch at
+   full size and every number. Focus: what comes first. Nothing here changes a number. ===== */
+body[data-club="LON"] { --accent: #1B2F5B; --accent-ink: #8FA8E0; }
+body[data-club="LIS"] { --accent: #E63942; --accent-ink: #FF8A90; }
+body[data-us="away"] .band .fixture > .side:first-child { order: 3; }
+body[data-us="away"] .band .fixture > .centre { order: 2; }
+body[data-us="away"] .band .fixture > .side:last-child { order: 1; }
+body[data-club] .live-tabs button[aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--accent-ink); }
+body[data-club] ion-tab-button.tab-selected { --color-selected: var(--accent-ink); }
+.insight.goal-card.ours { box-shadow: inset 0 0 0 2px var(--accent); }
+.insight.goal-card.ours .goal-head { color: var(--accent-ink); }
+
+#pane-pitch:not([hidden]) { display: flex; flex-direction: column; }
+/* Casual: the moments in words first, big; the pitch small at the foot; fewer numbers. */
+body[data-mode="casual"] #pitch-mode,
+body[data-mode="casual"] #momentum,
+body[data-mode="casual"] #live-summary,
+body[data-mode="casual"] #live-shots { display: none; }
+/* Kian, Oct 26: Live always leads with the pitch, for every persona and focus; what the persona
+   chose comes under it. Line-ups and team sheets live in the Players tab only. */
+#lineups-teaser { display: none !important; }
+#pane-pitch #pitch-mode { order: -3; }
+#pane-pitch .pitch-card { order: -2; }
+.focus-strip:not([hidden]) { order: -1; }
+body[data-mode="casual"] #key-moments { order: 3; }
+body[data-mode="casual"] #just-now { order: 4; }
+body[data-mode="casual"] #key-moments .moment-row { font-size: 20px; padding: 10px 0; }
+body[data-mode="casual"] #key-moments .moment-row.goal .text { font-size: 22px; font-weight: 700; }
+body[data-mode="casual"] #just-now .just-text { font-size: 22px; line-height: 1.3; }
+body[data-mode="analyst"] #live-summary { order: 3; }
+body[data-mode="analyst"] #momentum { order: 4; }
+body[data-mode="analyst"] #just-now { order: 5; }
+body[data-mode="analyst"] #live-shots { order: 6; }
+body[data-mode="analyst"] #key-moments { order: 7; }
+body[data-mode="analyst"] #live-summary .stat-row { min-height: 0; padding: 2px 0; }
+body[data-mode="analyst"] #live-summary .stat-row .v { font-size: 22px; }
+/* Focus: what comes first under the pitch. */
+body[data-focus="moments"] #key-moments { order: 0; }
+body[data-focus="tactics"][data-mode="casual"] #just-now { order: 3; }
+/* The persona switch in the ••• sheet: two segments, one tap each. */
+.group.persona { display: grid; gap: 10px; padding: 12px; }
+body[data-us="away"] .mini-score .crest.away { order: -1; }
+body[data-us="away"] .mini-score .crest.home { order: 3; }
+/* The focus strips above the pitch (Kian, Oct 26: Apple Sports' restraint): one rounded group of
+   single rows, hairlines between them, a 13 pt grey label over 17 pt regular text and a chevron; the
+   club shows only as a small dot. */
+.focus-strip:not([hidden]) { display: none; }
+body[data-focus="tactics"] #tactics-strip:not([hidden]),
+body[data-focus="players"] #players-strip:not([hidden]) { display: block; }
+.focus-list { list-style: none; margin: 0; padding: 0 0 0 16px; border-radius: 18px; background: var(--surface); }
+.focus-list li + li .focus-row { border-top: 0.5px solid var(--hairline); }
+.focus-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 16px 10px 0; border: 0; background: none; color: var(--text); text-align: left; font: inherit; }
+.focus-body { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.focus-label { font-size: 13px; color: var(--text-2); }
+.focus-label.home::before, .focus-label.away::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--home); vertical-align: middle; }
+.focus-label.away::before { background: var(--away); }
+.focus-text { font-size: 17px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.focus-chev { color: var(--text-3); font-size: 22px; }
+.shirt-dot { flex: 0 0 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--text); background: rgba(118, 118, 128, 0.24); font-variant-numeric: tabular-nums; }
+.player-row .focus-label::before { display: none; }
