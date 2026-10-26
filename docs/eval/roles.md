@@ -78,3 +78,11 @@ The rule is now one man per slot at a time (Hungarian within a window, and acros
 slot's tracks in a segment, the set that never overlap and together won the most frames keeps
 it (weighted interval scheduling), and the others are unnamed. Target, floor, grid and selection
 unchanged; the held-out half is scored once.
+
+**Amendment 3 (Oct 25, the Coordinator's decision, before the held-out was scored).** With
+amendment 2, development names were right 0.94 to 1.0 of the time, and at most 25 events were
+named against a floor of 30. The floor cannot be met on development: it has 131 events with an
+actor, and the side check withholds 63 of them (their segments' sides are in doubt). So the
+events floor is dropped. Everything else stands: names must be right at least 0.95 of the time
+on both units, with at least 30 named tracks, and the setting that names the most events is
+chosen. The held-out half is scored once with it. If it misses 0.95, nothing is named.

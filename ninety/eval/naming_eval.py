@@ -130,9 +130,10 @@ def main(argv: list[str] | None = None) -> None:
         rows.append({"gate": gate, "dev": grade(tv, bp, events, owner_v, owner_b, role, dev)})
 
     def passes(r):
+        # Amendment 3 (docs/eval/roles.md): the floor is on tracks only; events keep the target.
         d = r["dev"]
-        return all(d[u]["named"] >= MIN_NAMED and d[u]["precision"] >= TARGET
-                   for u in ("track_names", "event_names"))
+        return (d["track_names"]["named"] >= MIN_NAMED and d["track_names"]["precision"] >= TARGET
+                and d["event_names"]["named"] > 0 and d["event_names"]["precision"] >= TARGET)
 
     ok = [r for r in rows if passes(r)]
     # The most events named on development; ties go to the stricter gate.

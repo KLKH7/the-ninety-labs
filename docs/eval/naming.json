@@ -1,5 +1,5 @@
 {
- "commit": "becbcd38368e48669a831ee0be4805e704ff665c",
+ "commit": "e4255f967df40f623538a2aef00a1088aceb87ac",
  "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-match",
  "truth": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-friendly-satoshi-58a337/f0944a04-a1d3-4240-9c94-7b1fe56ea87e/scratchpad/truth8080",
  "target": 0.95,
@@ -14,26 +14,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 154,
-     "right": 143,
-     "precision": 0.929,
+     "named": 205,
+     "right": 193,
+     "precision": 0.941,
      "ci": [
-      0.88,
-      0.96
+      0.9,
+      0.97
      ]
     },
-    "track_coverage": 0.172,
+    "track_coverage": 0.23,
     "events": 131,
     "event_names": {
-     "named": 14,
-     "right": 13,
-     "precision": 0.929,
+     "named": 25,
+     "right": 24,
+     "precision": 0.96,
      "ci": [
-      0.69,
+      0.8,
       0.99
      ]
     },
-    "event_coverage": 0.107
+    "event_coverage": 0.191
    }
   },
   {
@@ -45,26 +45,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 154,
-     "right": 143,
-     "precision": 0.929,
+     "named": 205,
+     "right": 193,
+     "precision": 0.941,
      "ci": [
-      0.88,
-      0.96
+      0.9,
+      0.97
      ]
     },
-    "track_coverage": 0.172,
+    "track_coverage": 0.23,
     "events": 131,
     "event_names": {
-     "named": 14,
-     "right": 13,
-     "precision": 0.929,
+     "named": 22,
+     "right": 21,
+     "precision": 0.955,
      "ci": [
-      0.69,
+      0.78,
       0.99
      ]
     },
-    "event_coverage": 0.107
+    "event_coverage": 0.168
    }
   },
   {
@@ -76,54 +76,23 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 154,
-     "right": 143,
-     "precision": 0.929,
-     "ci": [
-      0.88,
-      0.96
-     ]
-    },
-    "track_coverage": 0.172,
-    "events": 131,
-    "event_names": {
-     "named": 12,
-     "right": 11,
-     "precision": 0.917,
-     "ci": [
-      0.65,
-      0.99
-     ]
-    },
-    "event_coverage": 0.092
-   }
-  },
-  {
-   "gate": {
-    "share": 0.5,
-    "seconds": 5.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 156,
-     "right": 148,
-     "precision": 0.949,
+     "named": 205,
+     "right": 193,
+     "precision": 0.941,
      "ci": [
       0.9,
       0.97
      ]
     },
-    "track_coverage": 0.175,
+    "track_coverage": 0.23,
     "events": 131,
     "event_names": {
      "named": 16,
-     "right": 16,
-     "precision": 1.0,
+     "right": 15,
+     "precision": 0.938,
      "ci": [
-      0.81,
-      1.0
+      0.72,
+      0.99
      ]
     },
     "event_coverage": 0.122
@@ -133,82 +102,51 @@
    "gate": {
     "share": 0.5,
     "seconds": 5.0,
-    "association": 0.9
+    "association": 0.75
    },
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 156,
-     "right": 148,
-     "precision": 0.949,
+     "named": 191,
+     "right": 182,
+     "precision": 0.953,
      "ci": [
-      0.9,
-      0.97
+      0.91,
+      0.98
      ]
     },
-    "track_coverage": 0.175,
+    "track_coverage": 0.214,
     "events": 131,
     "event_names": {
-     "named": 13,
-     "right": 13,
+     "named": 24,
+     "right": 24,
      "precision": 1.0,
      "ci": [
-      0.77,
+      0.86,
       1.0
      ]
     },
-    "event_coverage": 0.099
+    "event_coverage": 0.183
    }
   },
   {
    "gate": {
     "share": 0.5,
     "seconds": 5.0,
-    "association": 1.0
+    "association": 0.9
    },
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 156,
-     "right": 148,
-     "precision": 0.949,
+     "named": 191,
+     "right": 182,
+     "precision": 0.953,
      "ci": [
-      0.9,
-      0.97
+      0.91,
+      0.98
      ]
     },
-    "track_coverage": 0.175,
-    "events": 131,
-    "event_names": {
-     "named": 11,
-     "right": 11,
-     "precision": 1.0,
-     "ci": [
-      0.74,
-      1.0
-     ]
-    },
-    "event_coverage": 0.084
-   }
-  },
-  {
-   "gate": {
-    "share": 0.5,
-    "seconds": 10.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 146,
-     "right": 145,
-     "precision": 0.993,
-     "ci": [
-      0.96,
-      1.0
-     ]
-    },
-    "track_coverage": 0.163,
+    "track_coverage": 0.214,
     "events": 131,
     "event_names": {
      "named": 21,
@@ -225,548 +163,641 @@
   {
    "gate": {
     "share": 0.5,
-    "seconds": 10.0,
-    "association": 0.9
+    "seconds": 5.0,
+    "association": 1.0
    },
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 146,
-     "right": 145,
-     "precision": 0.993,
+     "named": 191,
+     "right": 182,
+     "precision": 0.953,
      "ci": [
-      0.96,
-      1.0
+      0.91,
+      0.98
      ]
     },
-    "track_coverage": 0.163,
+    "track_coverage": 0.214,
     "events": 131,
     "event_names": {
-     "named": 18,
-     "right": 18,
+     "named": 15,
+     "right": 15,
      "precision": 1.0,
      "ci": [
-      0.82,
+      0.8,
       1.0
      ]
     },
-    "event_coverage": 0.137
+    "event_coverage": 0.115
    }
   },
   {
    "gate": {
     "share": 0.5,
     "seconds": 10.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 146,
-     "right": 145,
-     "precision": 0.993,
-     "ci": [
-      0.96,
-      1.0
-     ]
-    },
-    "track_coverage": 0.163,
-    "events": 131,
-    "event_names": {
-     "named": 14,
-     "right": 14,
-     "precision": 1.0,
-     "ci": [
-      0.78,
-      1.0
-     ]
-    },
-    "event_coverage": 0.107
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 2.0,
     "association": 0.75
    },
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 150,
-     "right": 139,
-     "precision": 0.927,
-     "ci": [
-      0.87,
-      0.96
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 14,
-     "right": 13,
-     "precision": 0.929,
-     "ci": [
-      0.69,
-      0.99
-     ]
-    },
-    "event_coverage": 0.107
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 2.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 139,
-     "precision": 0.927,
-     "ci": [
-      0.87,
-      0.96
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 14,
-     "right": 13,
-     "precision": 0.929,
-     "ci": [
-      0.69,
-      0.99
-     ]
-    },
-    "event_coverage": 0.107
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 2.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 139,
-     "precision": 0.927,
-     "ci": [
-      0.87,
-      0.96
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 12,
-     "right": 11,
-     "precision": 0.917,
-     "ci": [
-      0.65,
-      0.99
-     ]
-    },
-    "event_coverage": 0.092
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 5.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 151,
-     "right": 143,
-     "precision": 0.947,
-     "ci": [
-      0.9,
-      0.97
-     ]
-    },
-    "track_coverage": 0.169,
-    "events": 131,
-    "event_names": {
-     "named": 16,
-     "right": 16,
-     "precision": 1.0,
-     "ci": [
-      0.81,
-      1.0
-     ]
-    },
-    "event_coverage": 0.122
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 5.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 151,
-     "right": 143,
-     "precision": 0.947,
-     "ci": [
-      0.9,
-      0.97
-     ]
-    },
-    "track_coverage": 0.169,
-    "events": 131,
-    "event_names": {
-     "named": 13,
-     "right": 13,
-     "precision": 1.0,
-     "ci": [
-      0.77,
-      1.0
-     ]
-    },
-    "event_coverage": 0.099
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 5.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 151,
-     "right": 143,
-     "precision": 0.947,
-     "ci": [
-      0.9,
-      0.97
-     ]
-    },
-    "track_coverage": 0.169,
-    "events": 131,
-    "event_names": {
-     "named": 11,
-     "right": 11,
-     "precision": 1.0,
-     "ci": [
-      0.74,
-      1.0
-     ]
-    },
-    "event_coverage": 0.084
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 10.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 144,
-     "right": 143,
-     "precision": 0.993,
-     "ci": [
-      0.96,
-      1.0
-     ]
-    },
-    "track_coverage": 0.161,
-    "events": 131,
-    "event_names": {
-     "named": 21,
-     "right": 21,
-     "precision": 1.0,
-     "ci": [
-      0.85,
-      1.0
-     ]
-    },
-    "event_coverage": 0.16
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 10.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 144,
-     "right": 143,
-     "precision": 0.993,
-     "ci": [
-      0.96,
-      1.0
-     ]
-    },
-    "track_coverage": 0.161,
-    "events": 131,
-    "event_names": {
-     "named": 18,
-     "right": 18,
-     "precision": 1.0,
-     "ci": [
-      0.82,
-      1.0
-     ]
-    },
-    "event_coverage": 0.137
-   }
-  },
-  {
-   "gate": {
-    "share": 0.6,
-    "seconds": 10.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 144,
-     "right": 143,
-     "precision": 0.993,
-     "ci": [
-      0.96,
-      1.0
-     ]
-    },
-    "track_coverage": 0.161,
-    "events": 131,
-    "event_names": {
-     "named": 14,
-     "right": 14,
-     "precision": 1.0,
-     "ci": [
-      0.78,
-      1.0
-     ]
-    },
-    "event_coverage": 0.107
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 2.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 146,
-     "precision": 0.973,
-     "ci": [
-      0.93,
-      0.99
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 16,
-     "right": 16,
-     "precision": 1.0,
-     "ci": [
-      0.81,
-      1.0
-     ]
-    },
-    "event_coverage": 0.122
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 2.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 146,
-     "precision": 0.973,
-     "ci": [
-      0.93,
-      0.99
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 16,
-     "right": 16,
-     "precision": 1.0,
-     "ci": [
-      0.81,
-      1.0
-     ]
-    },
-    "event_coverage": 0.122
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 2.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 146,
-     "precision": 0.973,
-     "ci": [
-      0.93,
-      0.99
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 11,
-     "right": 11,
-     "precision": 1.0,
-     "ci": [
-      0.74,
-      1.0
-     ]
-    },
-    "event_coverage": 0.084
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 5.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 148,
-     "precision": 0.987,
-     "ci": [
-      0.95,
-      1.0
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 17,
-     "right": 17,
-     "precision": 1.0,
-     "ci": [
-      0.82,
-      1.0
-     ]
-    },
-    "event_coverage": 0.13
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 5.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 148,
-     "precision": 0.987,
-     "ci": [
-      0.95,
-      1.0
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 16,
-     "right": 16,
-     "precision": 1.0,
-     "ci": [
-      0.81,
-      1.0
-     ]
-    },
-    "event_coverage": 0.122
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 5.0,
-    "association": 1.0
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 150,
-     "right": 148,
-     "precision": 0.987,
-     "ci": [
-      0.95,
-      1.0
-     ]
-    },
-    "track_coverage": 0.168,
-    "events": 131,
-    "event_names": {
-     "named": 11,
-     "right": 11,
-     "precision": 1.0,
-     "ci": [
-      0.74,
-      1.0
-     ]
-    },
-    "event_coverage": 0.084
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 10.0,
-    "association": 0.75
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 144,
-     "right": 144,
-     "precision": 1.0,
+     "named": 158,
+     "right": 157,
+     "precision": 0.994,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.161,
+    "track_coverage": 0.177,
+    "events": 131,
+    "event_names": {
+     "named": 23,
+     "right": 23,
+     "precision": 1.0,
+     "ci": [
+      0.86,
+      1.0
+     ]
+    },
+    "event_coverage": 0.176
+   }
+  },
+  {
+   "gate": {
+    "share": 0.5,
+    "seconds": 10.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 158,
+     "right": 157,
+     "precision": 0.994,
+     "ci": [
+      0.97,
+      1.0
+     ]
+    },
+    "track_coverage": 0.177,
+    "events": 131,
+    "event_names": {
+     "named": 20,
+     "right": 20,
+     "precision": 1.0,
+     "ci": [
+      0.84,
+      1.0
+     ]
+    },
+    "event_coverage": 0.153
+   }
+  },
+  {
+   "gate": {
+    "share": 0.5,
+    "seconds": 10.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 158,
+     "right": 157,
+     "precision": 0.994,
+     "ci": [
+      0.97,
+      1.0
+     ]
+    },
+    "track_coverage": 0.177,
+    "events": 131,
+    "event_names": {
+     "named": 14,
+     "right": 14,
+     "precision": 1.0,
+     "ci": [
+      0.78,
+      1.0
+     ]
+    },
+    "event_coverage": 0.107
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 2.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 200,
+     "right": 188,
+     "precision": 0.94,
+     "ci": [
+      0.9,
+      0.97
+     ]
+    },
+    "track_coverage": 0.224,
+    "events": 131,
+    "event_names": {
+     "named": 25,
+     "right": 24,
+     "precision": 0.96,
+     "ci": [
+      0.8,
+      0.99
+     ]
+    },
+    "event_coverage": 0.191
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 2.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 200,
+     "right": 188,
+     "precision": 0.94,
+     "ci": [
+      0.9,
+      0.97
+     ]
+    },
+    "track_coverage": 0.224,
+    "events": 131,
+    "event_names": {
+     "named": 22,
+     "right": 21,
+     "precision": 0.955,
+     "ci": [
+      0.78,
+      0.99
+     ]
+    },
+    "event_coverage": 0.168
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 2.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 200,
+     "right": 188,
+     "precision": 0.94,
+     "ci": [
+      0.9,
+      0.97
+     ]
+    },
+    "track_coverage": 0.224,
+    "events": 131,
+    "event_names": {
+     "named": 16,
+     "right": 15,
+     "precision": 0.938,
+     "ci": [
+      0.72,
+      0.99
+     ]
+    },
+    "event_coverage": 0.122
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 5.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 186,
+     "right": 177,
+     "precision": 0.952,
+     "ci": [
+      0.91,
+      0.97
+     ]
+    },
+    "track_coverage": 0.208,
+    "events": 131,
+    "event_names": {
+     "named": 24,
+     "right": 24,
+     "precision": 1.0,
+     "ci": [
+      0.86,
+      1.0
+     ]
+    },
+    "event_coverage": 0.183
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 5.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 186,
+     "right": 177,
+     "precision": 0.952,
+     "ci": [
+      0.91,
+      0.97
+     ]
+    },
+    "track_coverage": 0.208,
+    "events": 131,
+    "event_names": {
+     "named": 21,
+     "right": 21,
+     "precision": 1.0,
+     "ci": [
+      0.85,
+      1.0
+     ]
+    },
+    "event_coverage": 0.16
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 5.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 186,
+     "right": 177,
+     "precision": 0.952,
+     "ci": [
+      0.91,
+      0.97
+     ]
+    },
+    "track_coverage": 0.208,
+    "events": 131,
+    "event_names": {
+     "named": 15,
+     "right": 15,
+     "precision": 1.0,
+     "ci": [
+      0.8,
+      1.0
+     ]
+    },
+    "event_coverage": 0.115
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 10.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 156,
+     "right": 155,
+     "precision": 0.994,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.175,
+    "events": 131,
+    "event_names": {
+     "named": 23,
+     "right": 23,
+     "precision": 1.0,
+     "ci": [
+      0.86,
+      1.0
+     ]
+    },
+    "event_coverage": 0.176
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 10.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 156,
+     "right": 155,
+     "precision": 0.994,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.175,
+    "events": 131,
+    "event_names": {
+     "named": 20,
+     "right": 20,
+     "precision": 1.0,
+     "ci": [
+      0.84,
+      1.0
+     ]
+    },
+    "event_coverage": 0.153
+   }
+  },
+  {
+   "gate": {
+    "share": 0.6,
+    "seconds": 10.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 156,
+     "right": 155,
+     "precision": 0.994,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.175,
+    "events": 131,
+    "event_names": {
+     "named": 14,
+     "right": 14,
+     "precision": 1.0,
+     "ci": [
+      0.78,
+      1.0
+     ]
+    },
+    "event_coverage": 0.107
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 2.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 188,
+     "right": 184,
+     "precision": 0.979,
+     "ci": [
+      0.95,
+      0.99
+     ]
+    },
+    "track_coverage": 0.211,
+    "events": 131,
+    "event_names": {
+     "named": 23,
+     "right": 23,
+     "precision": 1.0,
+     "ci": [
+      0.86,
+      1.0
+     ]
+    },
+    "event_coverage": 0.176
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 2.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 188,
+     "right": 184,
+     "precision": 0.979,
+     "ci": [
+      0.95,
+      0.99
+     ]
+    },
+    "track_coverage": 0.211,
+    "events": 131,
+    "event_names": {
+     "named": 22,
+     "right": 22,
+     "precision": 1.0,
+     "ci": [
+      0.85,
+      1.0
+     ]
+    },
+    "event_coverage": 0.168
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 2.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 188,
+     "right": 184,
+     "precision": 0.979,
+     "ci": [
+      0.95,
+      0.99
+     ]
+    },
+    "track_coverage": 0.211,
+    "events": 131,
+    "event_names": {
+     "named": 15,
+     "right": 15,
+     "precision": 1.0,
+     "ci": [
+      0.8,
+      1.0
+     ]
+    },
+    "event_coverage": 0.115
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 5.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 176,
+     "right": 174,
+     "precision": 0.989,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.197,
+    "events": 131,
+    "event_names": {
+     "named": 23,
+     "right": 23,
+     "precision": 1.0,
+     "ci": [
+      0.86,
+      1.0
+     ]
+    },
+    "event_coverage": 0.176
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 5.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 176,
+     "right": 174,
+     "precision": 0.989,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.197,
+    "events": 131,
+    "event_names": {
+     "named": 22,
+     "right": 22,
+     "precision": 1.0,
+     "ci": [
+      0.85,
+      1.0
+     ]
+    },
+    "event_coverage": 0.168
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 5.0,
+    "association": 1.0
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 176,
+     "right": 174,
+     "precision": 0.989,
+     "ci": [
+      0.96,
+      1.0
+     ]
+    },
+    "track_coverage": 0.197,
+    "events": 131,
+    "event_names": {
+     "named": 15,
+     "right": 15,
+     "precision": 1.0,
+     "ci": [
+      0.8,
+      1.0
+     ]
+    },
+    "event_coverage": 0.115
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 10.0,
+    "association": 0.75
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 153,
+     "right": 153,
+     "precision": 1.0,
+     "ci": [
+      0.98,
+      1.0
+     ]
+    },
+    "track_coverage": 0.171,
+    "events": 131,
+    "event_names": {
+     "named": 20,
+     "right": 20,
+     "precision": 1.0,
+     "ci": [
+      0.84,
+      1.0
+     ]
+    },
+    "event_coverage": 0.153
+   }
+  },
+  {
+   "gate": {
+    "share": 0.7,
+    "seconds": 10.0,
+    "association": 0.9
+   },
+   "dev": {
+    "tracks": 893,
+    "track_names": {
+     "named": 153,
+     "right": 153,
+     "precision": 1.0,
+     "ci": [
+      0.98,
+      1.0
+     ]
+    },
+    "track_coverage": 0.171,
     "events": 131,
     "event_names": {
      "named": 19,
@@ -784,51 +815,20 @@
    "gate": {
     "share": 0.7,
     "seconds": 10.0,
-    "association": 0.9
-   },
-   "dev": {
-    "tracks": 893,
-    "track_names": {
-     "named": 144,
-     "right": 144,
-     "precision": 1.0,
-     "ci": [
-      0.97,
-      1.0
-     ]
-    },
-    "track_coverage": 0.161,
-    "events": 131,
-    "event_names": {
-     "named": 18,
-     "right": 18,
-     "precision": 1.0,
-     "ci": [
-      0.82,
-      1.0
-     ]
-    },
-    "event_coverage": 0.137
-   }
-  },
-  {
-   "gate": {
-    "share": 0.7,
-    "seconds": 10.0,
     "association": 1.0
    },
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 144,
-     "right": 144,
+     "named": 153,
+     "right": 153,
      "precision": 1.0,
      "ci": [
-      0.97,
+      0.98,
       1.0
      ]
     },
-    "track_coverage": 0.161,
+    "track_coverage": 0.171,
     "events": 131,
     "event_names": {
      "named": 14,
@@ -851,26 +851,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 140,
-     "right": 139,
-     "precision": 0.993,
+     "named": 164,
+     "right": 163,
+     "precision": 0.994,
      "ci": [
-      0.96,
+      0.97,
       1.0
      ]
     },
-    "track_coverage": 0.157,
+    "track_coverage": 0.184,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 20,
+     "right": 20,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.84,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.153
    }
   },
   {
@@ -882,26 +882,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 140,
-     "right": 139,
-     "precision": 0.993,
+     "named": 164,
+     "right": 163,
+     "precision": 0.994,
      "ci": [
-      0.96,
+      0.97,
       1.0
      ]
     },
-    "track_coverage": 0.157,
+    "track_coverage": 0.184,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 20,
+     "right": 20,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.84,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.153
    }
   },
   {
@@ -913,26 +913,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 140,
-     "right": 139,
-     "precision": 0.993,
+     "named": 164,
+     "right": 163,
+     "precision": 0.994,
      "ci": [
-      0.96,
+      0.97,
       1.0
      ]
     },
-    "track_coverage": 0.157,
+    "track_coverage": 0.184,
     "events": 131,
     "event_names": {
-     "named": 11,
-     "right": 11,
+     "named": 13,
+     "right": 13,
      "precision": 1.0,
      "ci": [
-      0.74,
+      0.77,
       1.0
      ]
     },
-    "event_coverage": 0.084
+    "event_coverage": 0.099
    }
   },
   {
@@ -944,26 +944,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 137,
-     "right": 137,
+     "named": 153,
+     "right": 153,
      "precision": 1.0,
      "ci": [
-      0.97,
+      0.98,
       1.0
      ]
     },
-    "track_coverage": 0.153,
+    "track_coverage": 0.171,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 20,
+     "right": 20,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.84,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.153
    }
   },
   {
@@ -975,26 +975,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 137,
-     "right": 137,
+     "named": 153,
+     "right": 153,
      "precision": 1.0,
      "ci": [
-      0.97,
+      0.98,
       1.0
      ]
     },
-    "track_coverage": 0.153,
+    "track_coverage": 0.171,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 20,
+     "right": 20,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.84,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.153
    }
   },
   {
@@ -1006,26 +1006,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 137,
-     "right": 137,
+     "named": 153,
+     "right": 153,
      "precision": 1.0,
      "ci": [
-      0.97,
+      0.98,
       1.0
      ]
     },
-    "track_coverage": 0.153,
+    "track_coverage": 0.171,
     "events": 131,
     "event_names": {
-     "named": 11,
-     "right": 11,
+     "named": 13,
+     "right": 13,
      "precision": 1.0,
      "ci": [
-      0.74,
+      0.77,
       1.0
      ]
     },
-    "event_coverage": 0.084
+    "event_coverage": 0.099
    }
   },
   {
@@ -1037,26 +1037,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 122,
-     "right": 122,
+     "named": 130,
+     "right": 130,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.137,
+    "track_coverage": 0.146,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 17,
+     "right": 17,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.82,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.13
    }
   },
   {
@@ -1068,26 +1068,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 122,
-     "right": 122,
+     "named": 130,
+     "right": 130,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.137,
+    "track_coverage": 0.146,
     "events": 131,
     "event_names": {
-     "named": 16,
-     "right": 16,
+     "named": 17,
+     "right": 17,
      "precision": 1.0,
      "ci": [
-      0.81,
+      0.82,
       1.0
      ]
     },
-    "event_coverage": 0.122
+    "event_coverage": 0.13
    }
   },
   {
@@ -1099,15 +1099,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 122,
-     "right": 122,
+     "named": 130,
+     "right": 130,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.137,
+    "track_coverage": 0.146,
     "events": 131,
     "event_names": {
      "named": 12,
@@ -1130,26 +1130,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 112,
-     "right": 111,
-     "precision": 0.991,
+     "named": 120,
+     "right": 119,
+     "precision": 0.992,
      "ci": [
       0.95,
       1.0
      ]
     },
-    "track_coverage": 0.125,
+    "track_coverage": 0.134,
     "events": 131,
     "event_names": {
-     "named": 7,
-     "right": 7,
+     "named": 8,
+     "right": 8,
      "precision": 1.0,
      "ci": [
-      0.65,
+      0.68,
       1.0
      ]
     },
-    "event_coverage": 0.053
+    "event_coverage": 0.061
    }
   },
   {
@@ -1161,26 +1161,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 112,
-     "right": 111,
-     "precision": 0.991,
+     "named": 120,
+     "right": 119,
+     "precision": 0.992,
      "ci": [
       0.95,
       1.0
      ]
     },
-    "track_coverage": 0.125,
+    "track_coverage": 0.134,
     "events": 131,
     "event_names": {
-     "named": 7,
-     "right": 7,
+     "named": 8,
+     "right": 8,
      "precision": 1.0,
      "ci": [
-      0.65,
+      0.68,
       1.0
      ]
     },
-    "event_coverage": 0.053
+    "event_coverage": 0.061
    }
   },
   {
@@ -1192,15 +1192,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 112,
-     "right": 111,
-     "precision": 0.991,
+     "named": 120,
+     "right": 119,
+     "precision": 0.992,
      "ci": [
       0.95,
       1.0
      ]
     },
-    "track_coverage": 0.125,
+    "track_coverage": 0.134,
     "events": 131,
     "event_names": {
      "named": 6,
@@ -1223,26 +1223,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 109,
-     "right": 109,
+     "named": 113,
+     "right": 113,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.122,
+    "track_coverage": 0.127,
     "events": 131,
     "event_names": {
-     "named": 7,
-     "right": 7,
+     "named": 8,
+     "right": 8,
      "precision": 1.0,
      "ci": [
-      0.65,
+      0.68,
       1.0
      ]
     },
-    "event_coverage": 0.053
+    "event_coverage": 0.061
    }
   },
   {
@@ -1254,26 +1254,26 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 109,
-     "right": 109,
+     "named": 113,
+     "right": 113,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.122,
+    "track_coverage": 0.127,
     "events": 131,
     "event_names": {
-     "named": 7,
-     "right": 7,
+     "named": 8,
+     "right": 8,
      "precision": 1.0,
      "ci": [
-      0.65,
+      0.68,
       1.0
      ]
     },
-    "event_coverage": 0.053
+    "event_coverage": 0.061
    }
   },
   {
@@ -1285,15 +1285,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 109,
-     "right": 109,
+     "named": 113,
+     "right": 113,
      "precision": 1.0,
      "ci": [
       0.97,
       1.0
      ]
     },
-    "track_coverage": 0.122,
+    "track_coverage": 0.127,
     "events": 131,
     "event_names": {
      "named": 6,
@@ -1316,15 +1316,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 94,
-     "right": 94,
+     "named": 96,
+     "right": 96,
      "precision": 1.0,
      "ci": [
       0.96,
       1.0
      ]
     },
-    "track_coverage": 0.105,
+    "track_coverage": 0.108,
     "events": 131,
     "event_names": {
      "named": 7,
@@ -1347,15 +1347,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 94,
-     "right": 94,
+     "named": 96,
+     "right": 96,
      "precision": 1.0,
      "ci": [
       0.96,
       1.0
      ]
     },
-    "track_coverage": 0.105,
+    "track_coverage": 0.108,
     "events": 131,
     "event_names": {
      "named": 7,
@@ -1378,15 +1378,15 @@
    "dev": {
     "tracks": 893,
     "track_names": {
-     "named": 94,
-     "right": 94,
+     "named": 96,
+     "right": 96,
      "precision": 1.0,
      "ci": [
       0.96,
       1.0
      ]
     },
-    "track_coverage": 0.105,
+    "track_coverage": 0.108,
     "events": 131,
     "event_names": {
      "named": 5,
