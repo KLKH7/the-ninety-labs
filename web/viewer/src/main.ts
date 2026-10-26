@@ -7,6 +7,7 @@ import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
+import { airSpeeds } from "./speed";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -238,7 +239,9 @@ async function start() {
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
   setSidesKnown(m.sides_known);  // a tracked player on an unsure side is "a player", not a club
-  b.cues = b.cues.map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  // A ball speed airs only once its error is measured, with its band, and never above P3 (src/speed.ts).
+  b.cues = airSpeeds(b.cues, m.speed).map((c) => ({ ...c, text: nameIds(c.text, teams) }));
+  (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
   const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
