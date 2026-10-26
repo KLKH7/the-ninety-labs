@@ -27,6 +27,7 @@ from tests.test_phone import (  # noqa: F401
     PHONE_SIZE,
     browser,
     open_ask,
+    open_story,
     tap_player,
     turn_on_read_aloud,
     unavailable,
@@ -354,7 +355,7 @@ def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browse
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     cards = page.evaluate("window.ninetyPhone.state.insights")
     assert cards and all(c["t"] <= 50.2 for c in cards)  # never a card from later in the replay
-    page.click("#tab-button-insights")
+    open_story(page)
     assert page.get_attribute("#tab-button-insights", "aria-selected") == "true"
     page.wait_for_selector("#insights-title")
     first = page.locator("#insights .moment").first
@@ -484,7 +485,7 @@ def test_the_phone_shows_the_bundles_cards_up_to_the_clock_with_their_pictures(b
     laptop, page, errors = phone(browser, url, laptop_t=61)
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert [c["id"] for c in page.evaluate("window.ninetyPhone.state.insights")] == ["c1"]  # c2 is at 62.5
-    page.click("#tab-button-insights")
+    open_story(page)
     card = page.locator("#insights .moment").first
     assert card.locator("h3").inner_text() == "Crowmere overload early"
     figure = card.locator(".story-body > figure")
@@ -886,7 +887,7 @@ def test_the_play_by_play_names_a_club_only_for_a_side_told_surely(browser, site
     # Merge-queue review of #319: an event with no player was said as its club from its own team
     # field, whatever its side confidence. Now only above the fact-checker's threshold.
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play")
     plays = {li.get_attribute("data-event"): (li.inner_text(), li.get_attribute("class"))
              for li in page.locator("#insights .play").all()}
@@ -902,7 +903,7 @@ def test_a_bundle_that_does_not_carry_the_threshold_names_no_detected_side(brows
     page.context.route("**/bundle/manifest.json", lambda route: route.fulfill(json=manifest))
     page.reload()
     page.wait_for_selector("body[data-state=live]")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play")
     told = page.locator("#insights .play[data-event=e5]").inner_text()
     assert "A player completes a pass." in told  # fail closed: e5's 0.99 counts for nothing without it
@@ -1133,8 +1134,8 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
         for text in page.evaluate(js):
             hit = SCORELINE.search(text or "")
             assert not hit, (tab, pane, hit.group(0), (text or "")[max(0, hit.start() - 60):hit.end() + 60])
-    page.click("#tab-button-insights")
-    assert page.locator("#insights .play.goal").count() >= 1  # goals are in Story, with no running score
+    open_story(page)
+    assert page.locator("#insights .goal-card, #insights .play.goal").count() >= 1  # no running score
     assert not errors
     ctx.close()
 
@@ -1195,6 +1196,7 @@ def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(b
     chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
     bare = {"A player", "Crowmere player", "Dunhollow player"}
     assert chips and not bare & set(chips), chips
+    assert len(set(chips)) == len(chips), chips  # one chip a label (UI inventory #11)
     assert not errors
 
 
@@ -1318,7 +1320,7 @@ def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browse
     page.click("#lt-stats")
     page.wait_for_selector("#shots circle.shot.open", state="attached")  # a small mark
     assert page.locator("#shots circle.shot.off").count() == 0  # e2 is the clip's one sure shot
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e2]")
     said = page.inner_text("#insights .play[data-event=e2]")
     assert "takes a shot." in said and "wide" not in said
@@ -1344,7 +1346,7 @@ def test_a_saved_shot_by_a_player_vision_cannot_name_reads_lower_case_mid_senten
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("body[data-state=live]")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e2]")
     assert "Shot saved, from a player." in page.inner_text("#insights .play[data-event=e2]")
     assert not errors
@@ -1357,7 +1359,7 @@ def test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track(browser
     position. Without one, a tracked player is never listed as a player."""
     # The bundle now carries team sheets (ninety-e2e writes fictional ones, #374): drop them here.
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS, match=lambda b: b.pop("sheets", None))
-    page.click("#lt-players")
+    page.wait_for_selector("#lt-players", state="hidden")  # nothing to list: no tab (audit 2, row 1)
     assert page.locator("#roster .who").count() == 0  # the cut clip has tracks only and no sheet
     page.context.close()
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
@@ -1413,7 +1415,7 @@ def test_a_line_up_name_labels_the_event_s_track_never_the_radar_s_same_string(b
     page.wait_for_function("window.ninetyPhone.state.match !== null")  # the line-up has loaded
     assert page.evaluate("window.ninetyPhone.name('a-t3')") == "Dunhollow player"  # the radar's a-t3
     laptop.fill("#seek", "63")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e4]")
     assert "Dee Named" in page.inner_text("#insights .play[data-event=e4]")  # the event's a-t3
     assert not errors
@@ -1443,9 +1445,151 @@ def test_a_sheet_never_names_an_event_and_a_line_up_entry_without_confident_name
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("body[data-state=live]")
     page.wait_for_function("window.ninetyPhone.state.match !== null")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e4]")
     said = page.inner_text("#insights .play[data-event=e4]")
     assert "Dee Named" not in said and "Player" not in said.replace("player", ""), said
+    assert not errors
+    ctx.close()
+
+
+def test_story_opens_on_key_plays_and_each_goal_is_a_larger_card_with_its_club_and_minute(browser, site):  # noqa: F811
+    """Demo audit 2, rows 8 and 10: goals had a pass's weight in Story, and the shot list said
+    "A player, goal". Story opens on Key plays; each of the match's goals (match.json, reconciled with
+    the scorebug) is a card with the club's crest, "Goal" and "Crowmere · 2′"; its shot is not told
+    twice; and the shot list names the club and minute, a goal vision saw no shot for among them."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def goals(route):  # e2 (home, told surely) went in; an away goal vision saw no shot for
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.3, "team": "home", "event": "e2"},
+                             {"t": 62.5, "team": "away", "event": "e4"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal"} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", goals)
+    ctx.route("**/bundle/events.jsonl", goals)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#goals-away .side-goal")
+    page.click("#tab-button-insights")
+    assert page.get_attribute("#insights", "data-mode") == "key"
+    page.wait_for_selector("#insights .goal-card")
+    cards = page.locator("#insights .goal-card")
+    assert cards.count() == 2
+    newest, first = cards.nth(0), cards.nth(1)
+    assert newest.locator(".goal-head").inner_text().endswith("Goal")  # after the crest
+    assert newest.locator(".goal-head svg").count() == 1
+    assert "Dunhollow · 2′" in newest.inner_text() and "Crowmere · 2′" in first.inner_text()
+    assert page.locator("#insights .play.goal").count() == 0  # e2's goal card tells it
+    assert page.evaluate("getComputedStyle(document.querySelector('.goal-head')).fontSize") == "28px"
+    page.click("#tab-button-radar")
+    page.click("#lt-stats")
+    shots = page.locator("#shot-list li").all_inner_texts()
+    assert any(s.startswith("Crowmere · 2′, goal") for s in shots), shots
+    assert "Dunhollow · 2′, goal" in shots, shots
+    assert not errors
+    ctx.close()
+
+
+def test_live_s_team_stats_follow_the_clock_after_a_seek_made_while_on_another_tab(browser, site):  # noqa: F811
+    """Demo audit 2, row 4: Live's Team Stats read 20/24 against 0 at 45′ while Stats read 67/80."""
+    laptop, page, errors = phone(browser, site, laptop_t=60.4)
+    page.wait_for_selector("#summary-rows .stat-row")
+    rows = "s => [...document.querySelectorAll(s + ' .stat-row')].map((l) => l.getAttribute('aria-label'))"
+    before = page.evaluate(rows, "#summary-rows")
+    moved = f"({rows})('#summary-rows').join() !== {json.dumps(','.join(before))}"
+    page.click("#tab-button-ask")
+    laptop.fill("#seek", "63")
+    page.wait_for_timeout(1500)
+    page.click("#tab-button-radar")
+    page.click("#lt-pitch")
+    page.wait_for_function(moved)
+    live = page.evaluate(rows, "#summary-rows")
+    assert live == page.evaluate(rows, "#stat-rows")[: len(live)]
+    assert not errors
+
+
+def test_names_from_the_player_id_feed_label_tactical_tracks_and_say_their_source(browser, site):  # noqa: F811
+    """Lesson 269 (identity-feed, Oct 26): `lineup_tactical` names the radar's, the card's and the
+    answers' tracks; `lineup` the events'. The same string in the other space stays unnamed; a name
+    says it came from the Player ID feed, never vision; a scorebug answer says so."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def match(route):
+        body = route.fetch().json()
+        body["lineup"] = []
+        body["lineup_tactical"] = [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "Striker",
+                                    "confident": True, "source": "id_feed"},
+                                   {"id": "h-t4", "name": "Not Sure", "number": 4, "source": "id_feed"}]
+        body["identity"] = {"source": "id_feed", "label": "Player ID feed", "provider": "sim",
+                            "note": "Names come from a simulated tracking-provider ID feed."}
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    assert page.evaluate("window.ninetyPhone.name('a-t3')") == "Tac Named"  # the radar's a-t3
+    assert page.evaluate("window.ninetyPhone.name('h-t4')") != "Not Sure"  # a row not marked confident
+    open_story(page)
+    page.wait_for_selector("#insights .play[data-event=e4]")
+    assert "Tac Named" not in page.inner_text("#insights .play[data-event=e4]")  # the event's a-t3
+    page.click("#tab-button-ask")
+    page.evaluate("""() => window.ninetyPhone.answer("Who has the ball most?", {status: "verified",
+      text: "a-t3 has been on the ball most.", headline: "Tac Named", metric: null, value: null, unit: null,
+      evidence: ["involvements:player_a-t3"], t_from: 0, t_to: 63})""")
+    named = page.locator("#answers .answer:not(.pending)").last
+    named.wait_for()
+    assert named.locator(".badge").text_content() == "Player ID feed"
+    assert "Tac Named" in named.inner_text()
+    named.locator(".how").click()
+    page.wait_for_selector("#how-body .stepper")
+    how = page.inner_text("#how-body")
+    assert "Who the players are" in how and "Player ID feed" in how
+    page.click("#close-how")
+    page.evaluate("""() => window.ninetyPhone.answer("What's the score?", {status: "verified",
+      text: "The broadcast's scorebug shows London 1, Lisbon 0.", metric: "scorebug", value: null, unit: null,
+      evidence: ["scorebug:sb-3"], t_from: 0, t_to: 63})""")
+    badges = page.locator("#answers .answer:not(.pending) .badge")
+    page.wait_for_function("document.querySelectorAll('#answers .answer:not(.pending) .badge').length >= 2")
+    assert badges.last.text_content() == "Read from the broadcast's scorebug"
+    assert not errors
+    ctx.close()
+
+
+def test_the_shot_map_is_no_card_while_it_draws_no_shot(browser, site):  # noqa: F811
+    """UI inventory #8: a shot is placed only on a side told surely; with none, the card was empty."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def unsure(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "team_confidence": 0.3} if r["type"] == "shot" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", unsure)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.click("#lt-stats")
+    page.wait_for_selector("#live-stats:not([hidden])")
+    assert page.is_hidden("#shot-map") and page.is_hidden("#live-shots")
     assert not errors
     ctx.close()
