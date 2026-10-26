@@ -3143,3 +3143,20 @@ short and actionable. This file is public: no research sources, product names or
   (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
   #369's phone test (a null outcome never reads "wide").
 
+
+### 260. A pre-registered run starts after its plan's review, not before
+- **What happened:** the ablation's third arm was started live on the day's plan while the plan's own
+  pull request was still in review. The review then found the plan's reading rule let two outcomes
+  hold at once ("the graph wins" and "arm 2 matches"), its seeds were ones the other two arms had
+  already been run and committed on, and it had no exclusion rule or cost stop. The run was stopped
+  before it finished, its output unread and never scored, and rerun on the fixed plan with fresh seeds.
+  The stopped run's calls were billed anyway.
+- **Rule:** a run that a plan pre-registers starts only once the plan's review has passed. A reading
+  rule's outcomes are mutually exclusive and checked in a stated order, shown by a test over every
+  count in a range. Its seeds are ones no compared arm or tuned prompt has been run on. The plan
+  states its exclusions, its cost stop and what it does not claim, and records every run started,
+  scored or not.
+- **Check:** `tests/test_agent_ablation.py::test_no_two_outcomes_hold_at_once`,
+  `::test_the_cost_stop_starts_no_further_minute`,
+  `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
+  `docs/eval/ablation-third-arm-plan.md`.
