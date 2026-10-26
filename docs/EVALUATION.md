@@ -705,13 +705,13 @@ pre-registered grid (0.75, 0.9, 1.0) at its 0.95 target, then the odd segments s
 
 | Demo seed 8080 | Tracks named, right | Event actors named, right | Event actors named |
 |---|---|---|---|
-| Held-out (odd segments), association 0.75 | 466 / 469 (0.994, 95% 0.98 to 1.00) | 56 / 56 (1.000, 0.94 to 1.00) | 56 of 122 |
-| Whole match | 868 / 878 (0.989) | 110 / 111 (0.991) | 111 of 253 |
+| Held-out (odd segments), association 0.75 | 465 / 468 (0.994, 95% 0.98 to 1.00) | 56 / 56 (1.000, 0.94 to 1.00) | 56 of 122 |
+| Whole match | 868 / 877 (0.990) | 110 / 111 (0.991) | 111 of 253 |
 
-878 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
-club. 111 of the match's 345 detected events take their player's side from the feed, so 113 have
-a side sure enough to air (5 before); the others have no join pairing at the gate and keep
-vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
+877 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
+club. 111 of the match's 345 detected events take their player's side from the feed (1 of them a
+different side from vision's), so 113 have a side sure enough to air (5 without the feed); the
+others have no join pairing at the gate and keep vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
 (no change to `ninety/sim/engine.py` or its modules since `1d0390be`).
 
 ### Tracked positions for the phone

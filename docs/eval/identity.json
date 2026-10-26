@@ -1,8 +1,8 @@
 {
- "commit": "cd5c3550c7b0b2f7e861e8cf4bc2525ab3dc9d34",
+ "commit": "5ccacaf65ca783f79a1dc3a018f718c0cf4795b2",
  "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-match",
  "truth": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-friendly-satoshi-58a337/f0944a04-a1d3-4240-9c94-7b1fe56ea87e/scratchpad/truth8080",
- "feed": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-infallible-gates-f4e517/e8bdacb3-0a9d-4bd6-95e7-933eda1173a1/scratchpad/feed2.jsonl",
+ "feed": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-infallible-gates-f4e517/e8bdacb3-0a9d-4bd6-95e7-933eda1173a1/scratchpad/identity_feed.jsonl",
  "target": 0.95,
  "gate_m": 1.26,
  "grid": [
@@ -11,8 +11,8 @@
    "dev": {
     "track_names": {
      "named": 409,
-     "right": 402,
-     "precision": 0.983,
+     "right": 403,
+     "precision": 0.985,
      "ci": [
       0.97,
       0.99
@@ -37,8 +37,8 @@
    "dev": {
     "track_names": {
      "named": 409,
-     "right": 402,
-     "precision": 0.983,
+     "right": 403,
+     "precision": 0.985,
      "ci": [
       0.97,
       0.99
@@ -63,8 +63,8 @@
    "dev": {
     "track_names": {
      "named": 409,
-     "right": 402,
-     "precision": 0.983,
+     "right": 403,
+     "precision": 0.985,
      "ci": [
       0.97,
       0.99
@@ -88,8 +88,8 @@
  "chosen": 0.75,
  "held_out": {
   "track_names": {
-   "named": 469,
-   "right": 466,
+   "named": 468,
+   "right": 465,
    "precision": 0.994,
    "ci": [
     0.98,
@@ -107,13 +107,13 @@
    ]
   },
   "event_coverage": 0.459,
-  "tracks_named": 469
+  "tracks_named": 468
  },
  "all": {
   "track_names": {
-   "named": 878,
+   "named": 877,
    "right": 868,
-   "precision": 0.989,
+   "precision": 0.99,
    "ci": [
     0.98,
     0.99
@@ -130,11 +130,16 @@
    ]
   },
   "event_coverage": 0.439,
-  "tracks_named": 878
+  "tracks_named": 877
  },
- "frame_coverage": 0.734,
+ "frame_coverage": 0.73,
  "tracks": 1945,
  "id_corrections": 20,
  "events_sided": 111,
- "events_total": 345
+ "events_total": 345,
+ "events_side_sure": {
+  "without_feed": 5,
+  "with_feed": 113
+ },
+ "events_side_changed": 1
 }
