@@ -87,7 +87,46 @@ save is a flat-footed catch, mostly with the ball over the keeper's head (z ≈ 
 the scorer keeps all of those out. It also flags 65 bad moments across the 90 minutes. Clean footage
 is scarce. That is an engine finding, not one an edit can fix.
 
-## Result
+## v2 (Oct 26, after Kian's notes on the first re-cut)
+
+Three changes, all in `scripts/footage_hunt.py`; the engine is not touched.
+
+1. **Never cut mid-action.**
+   - A window opens only where no pass or shot is in flight. A flight runs from the strike to the
+     first touch by anyone (the engine's possessor) or the next event. The one exception is the
+     moment a side receives a ball it has won.
+   - A window closes only once the play has resolved: a pass has arrived and nobody plays the ball
+     on for 2.5 s; a shot is over (2.5 s after its first touch); the ball is dead (+1.5 s); or a
+     goal's celebration has run (+12 s).
+   - The first cut's 12:49 example was h8's 54 m ball at 103 km/h, cut away in flight. It was hit to
+     nobody: the keeper collected it and then kicked it out. The re-cut leaves that whole stretch out.
+2. **Spectacular passing**, for a completed pass:
+   - long (30 m or more): +1.5;
+   - a switch of play (30 m or more across): +1.5;
+   - through the lines (5 or more opponents between the passer and the target; +1 for 4): +2;
+   - in behind (it lands beyond the second-last defender, gaining 8 m or more): +2.5.
+3. **Carries and take-ons.** A carry is the stretch where one player touched the ball last, until
+   it is struck or touched by someone else (the engine names a possessor only on touch frames).
+   - A carry of 10 m or more: +1, plus 0.1 a metre beyond 10 (up to +3).
+   - A take-on: a defender within 2 m and goal-side, then more than 1 m behind the carrier, who still
+     has the ball and has gone forward: +3 each.
+   - A carry into the box: +2.
+   - **Must-show moments:** diving saves, take-ons and through balls each get their best clean
+     window if no pick already covers them.
+
+**What 8080 has** (`carries.json`), over 90 minutes:
+- 23 carries of 10 m or more, 2 of them over 20 m;
+- 9 take-ons;
+- no carry into the box.
+
+Kian's "they only pass" is the engine, not the edit. v2 shows 5 of the 9 take-ons; the other 4 sit
+next to a flagged moment.
+
+**v2 on 8080:** 64 candidates (21.3 min), with an auto-pick of 42 segments (16.1 min). It is not
+rendered yet: the final demo may move to an engine-v2 seed. The script and the Mac kit
+(~/ninety-notes/footage-hunt/kit) take any seed.
+
+## Result (v1)
 
 **Rendered.** All 73 candidates were rendered on two RunPod RTX PRO 4500 pods at main `6b275a4b`,
 with the same renderer bytes as `eb6bd41d` (renderer 0.5.19), and all 73 passed `check_clip`. The

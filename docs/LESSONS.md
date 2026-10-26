@@ -3297,3 +3297,23 @@ short and actionable. This file is public: no research sources, product names or
   building on it.
 - **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
   or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 276. An edit that windows events shows whatever surrounds them
+- **What happened:**
+  - demo-match.md's condense rule gave every shot, save and set piece a fixed window. On seed 8080
+    those windows also showed the aimless long balls, lost keeper passes and overhead catches next
+    to them, and Kian called the demo unwatchable.
+  - One window closed at 12:50 with a 54 m ball still in the air.
+  - The match had only one diving save, so a rule that counted saves kept choosing flat-footed
+    catches.
+- **Rule:**
+  - An edit scores what is on screen across the whole window, not the event it is built around. A
+    window holding a flagged moment is never picked.
+  - A window never opens or closes while a pass or shot is in flight. It ends once the play has
+    resolved: the pass has arrived and possession has held for 2.5 s, the shot is over, the ball is
+    dead, or the goal has been celebrated.
+  - Choosing from the answer key is editorial and is stated as such; it never feeds the live path.
+- **Check:** `uv run python scripts/footage_hunt.py <90-min run> <out>`: no `picked` window in
+  `picks.json` contains a flagged moment except a goal's own build-up. The script refuses to start or
+  end a window in flight (`in_flight`). `carries.json` counts the match's long carries and take-ons,
+  so a missing kind of play can be traced to the engine or to the edit.
