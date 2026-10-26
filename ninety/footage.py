@@ -5,12 +5,15 @@
 
 Why H.264 and HLS (Oct 26, lesson 272): the VP9 file before this froze in real Chrome. Hardware
 VP9 decode failed on the all-keyframe, full-range file, and again on a standard one. H.264 is the
-codec every browser and phone decodes in hardware. HLS lets a judge on a slow connection drop to a
-smaller rung instead of freezing.
+codec every browser and phone decodes in hardware. HLS is meant to let a judge on a slow connection
+drop to a smaller rung instead of freezing: planned, as nothing plays the ladder yet (the viewer's
+hls.js player is desktop-companion's, in progress); today the viewer and phone play video.mp4.
 
-- **Encoder:** Apple's VideoToolbox H.264 encoder (`h264_videotoolbox`), part of macOS, not GPL.
-  libx264, the usual encoder, is GPL, which AGENTS.md's licence rule does not allow. The bundle is
-  built on a Mac; where the encoder is missing, `can_encode` says so and e2e ships the JPEG frames.
+- **Encoder:** the producer's system ffmpeg, run as an external program on their Mac and never
+  shipped (THIRD_PARTY_NOTICES.md, "Tools run, not shipped"), with Apple's VideoToolbox H.264 encoder
+  (`h264_videotoolbox`, part of macOS), never libx264, which is GPL (AGENTS.md's licence rule). The
+  encode is macOS only: on Linux, CI and the Azure image there is no such encoder, `can_encode` says
+  so and e2e ships the JPEG frames.
 - **Picture:** high profile, level 4.0, yuv420p. The renderer's full-range BT.601 JPEGs are
   converted to TV-range BT.709 and tagged so (`setparams`: the encoder writes no primaries or
   transfer from the output options alone).
@@ -20,7 +23,7 @@ smaller rung instead of freezing.
   fMP4 segments start at time 0: HLS's currentTime is the MP4's, the video time the viewer maps to
   match time (ninety/match/timeline.py).
 - **Sound:** any track ffmpeg reads (the render's crowd bed) is muxed into the MP4 and every rung as
-  AAC (ffmpeg's own encoder), cut to the picture. The frame count and duration are the images' own.
+  AAC (ffmpeg's own `aac` encoder, not a third-party library), cut to the picture. The frame count and duration are the images' own.
 """
 
 from __future__ import annotations
