@@ -2569,6 +2569,14 @@ interface TeamStatsFacts {
   possession?: Record<"home" | "away", { share: number }>;
 }
 const shownStats = new Map<string, [number, number]>();
+/** A row's label with its unit, unless the unit says nothing new: a count of what the label names
+ * ("Corners", not "Corners (corners)") or one of the plain counting units. */
+function withUnit(label: string, unit: string | null): string {
+  if (!unit || /^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(unit)) return label;
+  const stem = (w: string) => w.toLowerCase().replace(/s$/, "");
+  return label.toLowerCase().split(/[^a-z-]+/).some((w) => w && stem(w) === stem(unit)) ? label : `${label} (${unit})`;
+}
+
 /** Events a row of counts must rest on before it shows (Coordinator, Oct 26: counted only on sides told
  * surely, a row of 0 and 1 says nothing; design): fewer, and the row is not drawn. */
 const MIN_ROW_EVENTS = (window as { __ninetyMinRowEvents?: number }).__ninetyMinRowEvents ?? 10; // tests' seam: tests/test_phone.py watch()
@@ -2607,7 +2615,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const v = [...r.series].reverse().find((x) => x.minute_to <= minute);
     if (!v || v.home === null || v.away === null || v.home === undefined || v.away === undefined) continue;
     if (r.key === "distance_km" && groups.some(([, rows]) => rows.some(([l]) => l === "Distance (km)"))) continue;
-    const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+    const label = withUnit(r.label, r.unit);
     if (!v.confident) unsure.add(label);
     groups.find(([g]) => g === r.group)?.[1].push([label, round1(v.home), round1(v.away)]);
   }
@@ -2669,7 +2677,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
     for (const r of half.rows) {
       if (r.home === null || r.away === null) continue;
-      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      const label = withUnit(r.label, r.unit);
       if (!r.confident) unsure.add(label);
       byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
     }
