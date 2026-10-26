@@ -1,10 +1,10 @@
 # Active perception, "ask the other camera": the plan
 
-Written 2026-10-26, before any of it is built or run. Kian approved the work for 2026-10-27 (timebox 45 minutes). Nothing below changes once a measurement has started; a change after that is an amendment, dated, with its reason.
+Written 2026-10-25 (the date was given as 10-26 at first, a mistake), before any of it is built or run. Kian approved the work for 10-27 and later pulled it forward to the evening of 10-25 (timebox 45 minutes). Nothing below changes once a measurement has started; a change after that is an amendment, dated, with its reason.
 
 ## Why
 Today's re-perception ([re-perceive.md](re-perceive.md)) resolved 0 of 81 held claims. Most were held on their side: a track whose side was told under the gate (`factcheck.MIN_TEAM_CONFIDENCE`, 0.96). Looking again through the same kind of camera gave the same answer. Two things have changed:
-- the broadcast now tells sides near-perfectly on the kit-fixed 8080 render;
+- the broadcast's kit reading improved: the two-colour reader (R4, #283) tells sides at 0.894 of track-frames on 13 graded validation clips ([kit-colour.md](kit-colour.md)), against 0.815 before;
 - #285's association maps each tactical-view track to a broadcast track, with a measured wrong-pair rate.
 
 So a claim held on a view track's side can ask the broadcast what side it saw that player on.
@@ -39,7 +39,7 @@ Mode `broadcast_side` goes into the agents' tools (`perceive.MODES`, and the wor
 
 Either short, it stays off, and the demo keeps the honest framing: claims on an unsure side stay quiet. With 10 resolved and 0 wrong, the 95% upper bound on the wrong rate is about 28%. The report states that bound, and claims no more than it.
 
-## Outcome (2026-10-26, validation; `re-perceive-broadcast.json`)
+## Outcome (2026-10-25 ET, validation; `re-perceive-broadcast.json`)
 
 Run on the association's validation clips that have a broadcast run (`runs/tactical1/join/runs`:
 seeds 108, 109, 110, 113, 114, 115, 116; 112 has none), graded offline against their answer keys:
@@ -59,4 +59,18 @@ quiet. The demo's held claims were not run: the mode is not enabled, so it would
 At today's main the two-colour kit reader (R4, #283) needs the second shirt colour these older
 observations do not carry, and every broadcast track's confidence reads 0.0; read that way nothing
 could resolve either. The track ids agree exactly with the association's under both.
+
+**Disclosed after the run, from the review of this plan (none of it changes the result):**
+- The enable bar is weak. At the association's measured 2.8% wrong-pair rate, "at least 10 resolved,
+  none wrong" still passes about 75% of the time (0.972^10), and the 10 was not derived. A bar that
+  could catch that rate needs more resolutions (0 wrong of 30 bounds the rate at about 11%, 95%). It
+  did not matter here: nothing resolved.
+- The clip list was not fixed beforehand ("validation clips"); the run used the 7 clips that have a
+  broadcast run and an association, which are the clips the association's threshold was tuned on
+  (3 of its 4 wrong pairs on seed 113), so they are optimistic for this mode, and errors cluster by
+  clip (the Wilson intervals assume independent pairs).
+- "Asking" is a code lookup, not a model call; a resolved claim would still pass the whole
+  fact-checker. A wrong contradiction only holds back a true claim (safe), reported, not gated.
+- Not claimed: anything on clips without an association, or on the sealed test seeds, which this mode
+  never ran on.
 
