@@ -144,7 +144,15 @@ def test_visions_speed_airs_only_for_a_pass_it_marks_on_the_ground(monkeypatch):
               second=10, clock="00:10")
     claim = Claim("h-t1 plays it 19 m to h-t2, at 60 km/h.", ["p1"])
     gate = factcheck.confidence_gate
+    # Today vision's ground mark is not measured (the band was split by the true height): held.
+    held = gate(claim, {"p1": seen | {"lofted": False}})
+    assert status_for(held) == "held" and "ground mark is not measured" in held.reasons[0]
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
     assert gate(claim, {"p1": seen | {"lofted": False}}).ok  # measured: a pass along the ground
+    # In digits with km/h only: any other form would air with no band on screen.
+    for other in ("h-t1 plays it 19 m to h-t2, at sixty km/h.", "h-t1 plays it 19 m to h-t2, at 60 kmh."):
+        verdict = gate(Claim(other, ["p1"]), {"p1": seen | {"lofted": False}})
+        assert status_for(verdict) == "held" and "digits" in verdict.reasons[-1], other
     for unmeasured, why in ((seen, "not marked on the ground"), (seen | {"lofted": True}, "in the air"),
                             (seen | {"lofted": False, "type": "shot"}, "not a pass")):
         verdict = gate(claim, {"p1": unmeasured})
@@ -173,13 +181,16 @@ def test_the_speed_band_is_the_measured_p90_for_ground_passes_rounded_up():
     assert not report["pooled"]["event_speed"]["shot"]["enough"]
 
 
-def test_a_graphic_shows_a_measured_speed_and_the_schema_and_facts_carry_lofted():
+def test_a_graphic_shows_a_measured_speed_and_the_schema_and_facts_carry_lofted(monkeypatch):
     from jsonschema import validate
 
+    from ninety.agents import factcheck
     from ninety.match.facts import compact
 
     ground = ev("p1", 10.0, "pass", "h-t1", "h-t2", "success", ball_speed_kmh=60.0, distance_m=19,
                 lofted=False)
+    assert "km/h" not in cues._text(ground, "analyst")  # the ground mark is not measured yet
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
     assert "60.0 km/h" in cues._text(ground, "analyst")
     assert "km/h" not in cues._text(ground | {"lofted": True}, "analyst")
     assert "km/h" not in cues._text(ground | {"ball_speed_kmh": 150.0}, "analyst")  # never above the cap
@@ -275,3 +286,21 @@ def test_a_shot_graphic_never_shows_visions_speed_until_it_is_measured():
     shot = ev("s1", 100.0, "shot", "h-t9", outcome="on_target", ball_speed_kmh=100.0)
     assert "km/h" not in cues._text(shot, "analyst")
     assert "100.0 km/h" in cues._text(shot | {"confidence": None}, "analyst")
+
+
+def test_onair_keeps_only_the_speeds_a_cited_event_may_state_and_leaves_tidy_text():
+    from ninety.agents import onair
+
+    sim = {"id": "p1", "type": "pass", "ball_speed_kmh": 61.4, "confidence": None}  # the simulator's
+    shot = {"id": "s1", "type": "shot", "ball_speed_kmh": 101.0, "confidence": 0.9}  # vision's, held
+    assert onair.speeds("it went at 61 km/h, then 61.4 km/h", [sim]) == "it went at 61 km/h, then 61.4 km/h"
+    assert onair.speeds("Shot speed: 101 km/h.", [shot]) == "Shot speed."
+    assert onair.speeds("h1 shot (101 km/h) wide.", [shot]) == "h1 shot wide."
+    assert onair.speeds("h1 shoots at 101 kmh.", [shot]) == "h1 shoots."
+    assert onair.speeds("h1 shoots, 101 k.p.h., on target.", [shot]) == "h1 shoots, on target."
+    cue_rows = [{"id": "c1", "text": "h1 shoots at 101 km/h.", "evidence": ["s1"]}]
+    claims = [{"id": "m1", "text": "h1 shoots at 101 km/h.", "evidence": ["s1"],
+               "steps": [{"detail": "'h1 shoots at 101 km/h.' evidence=['s1']"}]}]
+    rows, traced = onair.gate_speeds(cue_rows, claims, [shot])
+    assert rows[0]["text"] == "h1 shoots." and traced[0]["text"] == "h1 shoots."
+    assert "101" not in traced[0]["steps"][0]["detail"]

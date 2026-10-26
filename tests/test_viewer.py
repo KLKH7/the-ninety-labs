@@ -306,10 +306,15 @@ def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tr
 
 @pytest.fixture(scope="module")
 def ground_site(browser, tmp_path_factory):
-    # The tracked clip with its pass marked along the ground by vision (`lofted` false): the one speed
-    # vision's measured error covers (factcheck.measured_speed), so the bundle's manifest.speed opens.
-    yield from serve_site(browser, tmp_path_factory,
-                          events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
+    # The tracked clip with its pass marked along the ground by vision (`lofted` false), and that mark
+    # taken as measured, as it will be (factcheck.LOFTED_FLAG_MEASURED): the one speed vision's measured
+    # error covers, so the bundle's manifest.speed opens.
+    from ninety.agents import factcheck
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
+        yield from serve_site(browser, tmp_path_factory,
+                              events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
 
 
 def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, ground_site):
