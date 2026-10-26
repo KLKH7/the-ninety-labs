@@ -1137,41 +1137,56 @@ def test_an_answer_about_the_score_never_shows_a_count(browser, site):  # noqa: 
 
 
 
-def test_the_score_shows_only_as_read_off_the_broadcast_scorebug_never_from_goal_counts(browser, site):  # noqa: F811
-    """#356: a scoreline only from `score_change` events (the scorebug read from the pixels). Three
-    detected goals here, but the scorebug says 1-1 from 61.5 s (0-0 from kick-off): the band shows
-    0 and 0, then 1 and 1, never 3 or 2."""
+def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # noqa: F811
+    """The cut clip's bundle with the scorebug's readings (#356's scorebug.jsonl, behind the
+    manifest's gate, as ninety-e2e --scorebug writes it) and these detected goals."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
 
-    def bundle(route):
-        if route.request.url.endswith("match.json"):
-            body = route.fetch().json()
-            body["goals"] = [{"t": 61.2, "team": "home", "event": "e2"},
-                             {"t": 61.3, "team": "home", "event": "e2"},
-                             {"t": 61.4, "team": "away", "event": "e4"}]
-            return route.fulfill(json=body)
-        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
-        base = {"type": "score_change", "team": None, "x": 52.5, "y": 34.0, "source": "vision",
-                "confidence": 0.99}
-        rows += [{**base, "id": "s00001", "t": 60.0, "frame": 1500, "score": {"home": 0, "away": 0}},
-                 {**base, "id": "s00002", "t": 61.5, "frame": 1537, "team": "away",
-                  "score": {"home": 1, "away": 1}}]
-        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+    def manifest(route):
+        body = route.fetch().json()
+        body["scorebug"] = {"readings": len(readings), "measured": measured, "min_confidence": 0.5}
+        route.fulfill(json=body)
 
-    ctx.route("**/bundle/match.json", bundle)
-    ctx.route("**/bundle/events.jsonl", bundle)
+    def match(route):
+        body = route.fetch().json()
+        body["goals"] = goals
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", manifest)
+    ctx.route("**/bundle/match.json", match)
+    body = "".join(json.dumps(e) + "\n" for e in readings)
+    ctx.route("**/bundle/scorebug.jsonl", lambda r: r.fulfill(body=body))
     laptop = ctx.new_page()
     laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
-    laptop.fill("#seek", "61")
+    laptop.fill("#seek", at)
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    return ctx, laptop, page, errors
+
+
+def reading(t, kind, home, away, team=None, confidence=0.95):
+    """One line of #356's scorebug.jsonl: a start reading (score_read) or a change (score_change, +1
+    on its side)."""
+    return {"id": f"s{int(t * 100):06d}", "t": t, "frame": int(t * 25), "type": kind, "team": team,
+            "player": None, "x": 52.5, "y": 34.0, "source": "vision", "confidence": confidence,
+            "score": {"home": home, "away": away}}
+
+
+def test_the_score_shows_only_as_read_off_the_broadcast_scorebug_never_from_goal_counts(browser, site):  # noqa: F811
+    """#356: a scoreline only from the scorebug's readings. Three goals detected (two home, one away),
+    but the scorebug reads 0-0 from kick-off and 0-1 from 61.5 s: the band shows 0 0, then 0 1."""
+    goals = [{"t": 61.2, "team": "home", "event": "e2"}, {"t": 61.3, "team": "home", "event": "e2"},
+             {"t": 61.4, "team": "away", "event": "e4"}]
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.5, "score_change", 0, 1, team="away")]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, goals)
     page.wait_for_selector("#score-home:visible")
     page.wait_for_function("document.querySelector('#score-home').textContent === '0'")
     assert page.text_content("#score-away") == "0"  # two goals detected by 61 s; the scorebug says 0-0
     laptop.fill("#seek", "63")
-    page.wait_for_function("document.querySelector('#score-home').textContent === '1'")
-    assert page.text_content("#score-away") == "1"
+    page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
+    assert page.text_content("#score-home") == "0"  # never 2, the count of detected home goals
     assert "read from the broadcast's score graphic" in page.text_content("#score-read")
     page.click("#score-home")
     page.wait_for_function("(document.querySelector('#how-body')?.textContent || '').includes('graphic')")
@@ -1183,26 +1198,9 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     """Demo audit row 3: every detected goal had team null and sat under neither club. The scorebug
     (the broadcast's own graphic, read from pixels) changed for one side 0.2 to 1.6 s after each:
     the goal goes under that club, and the numerals follow the scorebug, from its 0-0 start reading."""
-    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
-
-    def match(route):
-        body = route.fetch().json()
-        body["goals"] = [{"t": 61.2, "team": None, "event": "e6"}]
-        route.fulfill(json=body)
-
-    base = {"player": None, "x": 52.5, "y": 34.0, "source": "vision", "confidence": 0.95}
-    sb = [{**base, "id": "s00001", "t": 60.0, "frame": 1500, "type": "score_read", "team": None,
-           "score": {"home": 0, "away": 0}},
-          {**base, "id": "s00001", "t": 61.9, "frame": 1547, "type": "score_change", "team": "away",
-           "score": {"home": 0, "away": 1}}]
-    ctx.route("**/bundle/match.json", match)
-    ctx.route("**/bundle/scorebug.jsonl", lambda r: r.fulfill(body="".join(json.dumps(e) + "\n" for e in sb)))
-    laptop = ctx.new_page()
-    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
-    laptop.fill("#seek", "61.6")
-    page = ctx.new_page()
-    errors = watch(page)
-    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 0, 1, team="away")]
+    sideless = [{"t": 61.2, "team": None, "event": "e6"}]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, sideless, at="61.6")
     page.wait_for_selector("#goals-away .side-goal")
     assert page.inner_text("#goals-away .side-goal") == "Dunhollow goal 2′"
     assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
@@ -1210,6 +1208,32 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     laptop.fill("#seek", "63")
     page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
     assert page.text_content("#score-home") == "0"
+    assert not errors
+    ctx.close()
+
+
+def test_an_unmeasured_scorebug_reader_shows_no_score_and_places_no_goal(browser, site):  # noqa: F811
+    """The Companion's gate (scoring.SCOREBUG_MEASURED), carried by the bundle: until the reader is
+    measured, no numerals, and a sideless goal stays under the clock."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 0, 1, team="away")]
+    sideless = [{"t": 61.2, "team": None, "event": "e6"}]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, sideless, measured=False, at="63")
+    page.wait_for_selector("#goals-unsure .side-goal")
+    assert page.locator("#score-home:visible, #score-away:visible").count() == 0
+    assert page.locator("#goals-away .side-goal").count() == 0
+    assert not errors
+    ctx.close()
+
+
+def test_a_low_confidence_or_falling_scorebug_reading_is_never_shown(browser, site):  # noqa: F811
+    """A reading below the fact-checker's confidence is skipped, and so is one that takes a goal away
+    (a misread): the band stays at the last sound reading."""
+    readings = [reading(60.0, "score_read", 0, 0),
+                reading(60.8, "score_change", 1, 0, team="home", confidence=0.2),
+                reading(61.2, "score_change", 0, 1, team="away"), reading(62.0, "score_read", 0, 0)]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="63")
+    page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
+    assert page.text_content("#score-home") == "0"  # never the 0.2 reading's 1, never back to 0-0
     assert not errors
     ctx.close()
 

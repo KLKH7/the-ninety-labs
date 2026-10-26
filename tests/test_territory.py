@@ -122,3 +122,21 @@ def test_team_stats_carry_how_close_distance_is_measured(tmp_path, within):
     path.write_text(json.dumps({"team_stats": {**body, "within_pct": 0}}))
     with pytest.raises(SystemExit):
         e2e.read_team_stats(path)
+
+
+def test_the_scorebug_readings_are_kept_in_time_order_and_a_change_without_a_side_stops_the_bundle(tmp_path):
+    from ninety import e2e
+
+    path = tmp_path / "scorebug.jsonl"
+    read = {"id": "s1", "t": 0.0, "frame": 0, "type": "score_read", "team": None,
+            "score": {"home": 0, "away": 0}}
+    change = {"id": "s2", "t": 40.0, "frame": 1000, "type": "score_change", "team": "away",
+              "score": {"home": 0, "away": 1}}
+    path.write_text(json.dumps(change) + "\n" + json.dumps(read) + "\n")
+    assert [r["id"] for r in e2e.read_scorebug(path)] == ["s1", "s2"]
+    path.write_text(json.dumps({**change, "team": None}) + "\n")
+    with pytest.raises(SystemExit):
+        e2e.read_scorebug(path)
+    path.write_text(json.dumps({**read, "type": "goal"}) + "\n")
+    with pytest.raises(SystemExit):
+        e2e.read_scorebug(path)

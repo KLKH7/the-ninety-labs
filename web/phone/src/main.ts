@@ -333,6 +333,8 @@ interface BundleManifest {
   teams?: unknown;
   sides_known?: unknown;
   min_team_confidence?: unknown;
+  /** scorebug.jsonl (ninety-e2e --scorebug): shown only once the reader is measured. */
+  scorebug?: { readings: number; measured: boolean; min_confidence: number } | null;
   radar?: unknown;
   match?: unknown;
   cards?: unknown;
@@ -425,13 +427,22 @@ async function loadBundle() {
       }
       // The scorebug's own readings (vision's, from the broadcast's graphic: ninety/vision/
       // scorebug.py), when the bundle carries them: a start reading and each change of score.
-      const sb = await fetch(new URL("scorebug.jsonl", base)).catch(() => null);
+      // One gate with the Companion (ninety/intel/scoring.py, SCOREBUG_MEASURED, which the bundle
+      // carries): nothing from the scorebug until its reader is measured; then only readings at or
+      // above the fact-checker's confidence, and never one that takes a goal away (a misread).
       scorebugEvents = [];
-      if (sb?.ok) {
+      const gate = m.scorebug;
+      const sb = gate?.measured ? await fetch(new URL("scorebug.jsonl", base)).catch(() => null) : null;
+      if (gate && sb?.ok) {
+        let last = { home: 0, away: 0 };
         for (const line of (await sb.text()).split("\n")) {
           if (!line.trim()) continue;
           const e = JSON.parse(line) as DetectedEvent;
-          if ((e.type === "score_read" || e.type === "score_change") && e.score) scorebugEvents.push(e);
+          if ((e.type !== "score_read" && e.type !== "score_change") || !e.score) continue;
+          if ((e.confidence ?? 1) < gate.min_confidence) continue;
+          if (e.score.home < last.home || e.score.away < last.away) continue;
+          last = e.score;
+          scorebugEvents.push(e);
         }
       }
     }
@@ -1970,7 +1981,7 @@ function renderSpotted(m: MatchData, t: number) {
   // within SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels).
   const sideOf = (g: { t: number; team?: string | null }): "home" | "away" | null => {
     if (g.team === "home" || g.team === "away") return g.team;
-    const change = [...bundleEvents.values(), ...scorebugEvents].find(
+    const change = scorebugEvents.find(
       (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
     );
     return change ? (change.team as "home" | "away") : null;
@@ -2017,7 +2028,7 @@ export function scorebugAt(events: Iterable<{ type: string; t: number; score?: {
 }
 let scorebugKey = "";
 function renderScorebug(t: number) {
-  const read = scorebugAt([...bundleEvents.values(), ...scorebugEvents], t);
+  const read = scorebugAt(scorebugEvents, t);
   const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
   if (key === scorebugKey) return;
   scorebugKey = key;
@@ -2025,7 +2036,8 @@ function renderScorebug(t: number) {
   for (const side of ["home", "away"] as const) {
     const el = $(`score-${side}`);
     el.hidden = !read;
-    if (read) tickTo(el, read.score[side]);
+    // The first reading is set, not counted up from 0; a change after it ticks.
+    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
   }
   const btn = $("score-read");
   btn.hidden = !read;
@@ -2034,7 +2046,7 @@ function renderScorebug(t: number) {
 }
 for (const id of ["score-home", "score-away", "score-read"]) {
   $(id).addEventListener("click", () => {
-    const read = scorebugAt([...bundleEvents.values(), ...scorebugEvents], viewTime());
+    const read = scorebugAt(scorebugEvents, viewTime());
     if (!read) return;
     void openHow({ t: read.t, visual: null, source: "code", evidence: [],
       why: { question: "", text: `${teams.home} ${read.score.home}, ${teams.away} ${read.score.away}: read from the broadcast's score graphic at ${clock(read.t)}, never counted from the goals vision spotted.` } });
