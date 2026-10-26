@@ -456,7 +456,8 @@ def test_the_bundle_lists_the_tracks_it_vouches_for(tmp_path):
 
 def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
     # The 8080 demo's vision read passes at 251 and 919 km/h; the engine's balls never exceed
-    # 40 m/s (GROUNDING P3, a design bound). The event stays; its speed is dropped, so no graphic, line or claim says it.
+    # 40 m/s (GROUNDING P3, a design bound). The event stays; its speed is dropped, so no graphic, line
+    # or claim says it.
     from ninety.match import detected
 
     fast = {**EVENTS[0], "ball_speed_kmh": 251.3}
