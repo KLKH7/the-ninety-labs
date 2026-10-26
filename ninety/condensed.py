@@ -1,4 +1,4 @@
-"""Match mode: a condensed match's chapters, scoreline and team stats, from the detected events.
+"""Match mode: a condensed match's chapters, goals and team stats, from the detected events.
 
     uv run ninety-e2e <clip> --out <bundle> --match        # writes match.json into the bundle
 
@@ -11,13 +11,17 @@ The viewer's match mode (web/viewer/src/match.ts) shows what this computes:
   a shot, then a set piece or kick-off; with none of those it is build-up. The segments are the
   broadcast's own timecode; what a chapter is called comes only from the detected events, never
   from the answer key.
-- `goals`: the scoreline over time, one entry per confident detected goal (a shot whose outcome is
-  a goal, as ninety/intel/stats.py counts goals).
+- `goals`: one entry per confident detected goal (a `goal` event, merged with the shot that scored
+  it: stats.goal_moments, GROUNDING I24), in time order, each with the goal event's side only when
+  told surely. What
+  vision saw, never a scoreline: vision misses goals, so a count of these would contradict the
+  scorebug; the score is the scorebug's reading (ninety/intel/scoring.py, GROUNDING I24).
 - `highlights`: the reel (ninety/highlights.py): every confident detected goal, the saves that
   beat a keeper's dive once that filter is measured, and a fan's label for each once vision's
   errors are measured.
 - `stats`: each team's passes, shots and goals so far, from the footage shown: after every confident
-  event, the same team facts the agents read (ninety/intel/stats.py), over the events up to it.
+  event on a side told surely, the same team facts the agents read (ninety/intel/stats.py), over
+  those events up to it.
 
 Confident means at or above the fact-checker's MIN_CONFIDENCE, the gate every graphic passes
 (ninety/agents/cues.py): a number on screen never rests on a detection the agents would hold.
@@ -27,9 +31,11 @@ Reads the detected events and the clip's segments only; nothing here opens the a
 from __future__ import annotations
 
 from ninety import highlights
-from ninety.agents.factcheck import MIN_CONFIDENCE, side_known
-from ninety.intel.stats import pass_facts, shot_facts
+from ninety.agents.factcheck import MIN_CONFIDENCE, SCOREBUG_SIDE, side_known
+from ninety.intel.scoring import SCOREBUG_MEASURED
+from ninety.intel.stats import goal_moments, pass_facts, shot_facts
 from ninety.match.timeline import Timeline
+from ninety.vision.scorebug import W_S  # the reconciler's window: how far a score change may be from its goal
 
 FORMAT = 1
 TEAMS = ("home", "away")
@@ -47,7 +53,8 @@ def confident(events: list[dict]) -> list[dict]:
 
 
 def is_goal(e: dict) -> bool:
-    return e["type"] == "shot" and e.get("outcome") == "goal"
+    """A goal event, or a shot that went in (stats.goal_moments merges the two into one goal)."""
+    return e["type"] == "goal" or (e["type"] == "shot" and e.get("outcome") == "goal")
 
 
 def kind_of(e: dict) -> str | None:
@@ -81,14 +88,19 @@ def chapters(timeline: Timeline, events: list[dict]) -> list[dict]:
         best = None
         for e in inside:
             k = kind_of(e)
-            if k and (best is None or KINDS.index(k) < KINDS.index(best[0])):
-                best = (k, e)
-        kind, event = best if best else ("build_up", None)
+            # A goal's own event, not its shot, names the chapter: it carries the goal's side.
+            rank = None if k is None else (KINDS.index(k), e["type"] != "goal")
+            if rank is not None and (best is None or rank < best[0]):
+                best = (rank, k, e)
+        kind, event = best[1:] if best else ("build_up", None)
         label = LABEL[kind]
-        if event is not None and event.get("team") in TEAMS:
+        # A chapter names a side only when it was told surely (factcheck.side_known, lesson 245), as
+        # match.json's goals do: the scrubber never says a club the goal list leaves out.
+        sided = event is not None and event.get("team") in TEAMS and side_known(event)
+        if sided:
             label += f", {event['team']}"
         if event is not None and event["type"] == "kickoff":
-            label = f"Kick-off, {event['team']}" if event.get("team") in TEAMS else "Kick-off"
+            label = f"Kick-off, {event['team']}" if sided else "Kick-off"
         out.append({
             "n": n + 1,
             "index": seg.index,  # the clip image it starts on
@@ -117,18 +129,48 @@ def cut_between(timeline: Timeline):
     return lambda t0, t1: seg(t0) != seg(t1)
 
 
-def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None) -> dict:
+def scorebug_sides(events: list[dict], readings: list[dict] | None) -> list[dict]:
+    """The events with each goal that a score change confirms sided by the scorebug: the club whose
+    digit changed, `team_source` "scorebug", which factcheck.side_known accepts as told surely.
+
+    Why that is sure: on the scorebug's validation (docs/eval/scorebug-validation.json, #356) the
+    reader found 16 of 16 goals with no false change and every change on the right side: precision
+    16/16, Wilson 95% interval 0.81 to 1.0 (the lower bound is under the tracker's 0.96 side gate;
+    16 goals cannot show more). Only while the reader is measured (scoring.SCOREBUG_MEASURED) and
+    only from a change at or above the fact-checker's confidence gate, as the phone shows the score.
+    Every other event keeps the tracker's side and its 0.96 gate."""
+    if not readings or not SCOREBUG_MEASURED:
+        return events
+    changes = [c for c in readings if c["type"] == "score_change" and c.get("team") in TEAMS
+               and (c.get("confidence") or 0.0) >= MIN_CONFIDENCE]
+    sided, used = {}, set()
+    for goal, _ in goal_moments(events):
+        near = sorted((c for c in changes if c["id"] not in used and abs(c["t"] - goal["t"]) <= W_S),
+                      key=lambda c: abs(c["t"] - goal["t"]))
+        if near:
+            used.add(near[0]["id"])
+            sided[goal["id"]] = {**goal, "team": near[0]["team"], "team_source": SCOREBUG_SIDE}
+    return [sided.get(e["id"], e) for e in events]
+
+
+def build(clip_meta: dict, events: list[dict], verdict: highlights.Verdict | None = None,
+          scorebug: list[dict] | None = None) -> dict:
     """match.json for a clip (its clip.json) and its detected events; `verdict` is what the
-    highlights measurement decided (ninety/highlights.py), none until it has run."""
+    highlights measurement decided (ninety/highlights.py), none until it has run; `scorebug` the
+    broadcast scorebug's readings (scorebug.jsonl), which side the goals they confirm."""
     timeline = Timeline.of_clip(clip_meta)
+    events = scorebug_sides(events, scorebug)
     sure = confident(events)
     # A goal counts for a side only when that side was told surely (factcheck.side_known, lesson
     # 245); otherwise it is a goal with no team, in no club's score.
-    goals = [{"t": e["t"], "team": e.get("team") if side_known(e) else None, "event": e["id"]}
-             for e in sure if is_goal(e)]
+    goals = [{"t": g["t"], "team": g.get("team") if side_known(g) else None, "event": g["id"]}
+             for g, _ in goal_moments(events) if (g.get("confidence") or 0.0) >= MIN_CONFIDENCE]
+    # A club's stats count only the events whose side was told surely (the same gate, UI inventory #7):
+    # an event on an unsure side is in no club's numbers, as it is under no club's name.
+    sided = [e for e in sure if side_known(e)]
     stats = [{"t": round(timeline.segs[0].frame / timeline.fps, 2), "event": None, **team_stats([])}]
-    for i, e in enumerate(sure):
-        now = team_stats(sure[: i + 1])
+    for i, e in enumerate(sided):
+        now = team_stats(sided[: i + 1])
         if any(now[team] != stats[-1][team] for team in TEAMS):
             stats.append({"t": e["t"], "event": e["id"], **now})
     return {

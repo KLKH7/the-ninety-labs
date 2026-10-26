@@ -86,4 +86,8 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.19: broadcast kits are told apart as seen (lesson 246): the shirt's colour mixed with its
 # pattern's by area. A broadcast seed whose kits looked alike (8080) has them redrawn from their own
 # stream; every other seed, and every training or test kit (normal, low), is drawn as before.
-RENDERER_VERSION = "0.5.19"
+# 0.5.20: the broadcast look (web/render/look.js) on a stadium=broadcast clip's broadcast stream: a
+# filmic tone curve, sky fill light, the crowd muted and in shade, haze on the scenery, gentler
+# sharpening, a warm grade. Light and colour only; plain renders and the tactical views keep their
+# pixels. Vision gate: docs/eval/render-look-gate.md.
+RENDERER_VERSION = "0.5.20"

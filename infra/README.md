@@ -229,6 +229,17 @@ which shortens the start-up share, and the live smoke test fails a first request
 Most of the start-up is imports the phone companion pulls in at load (the Foundry, OpenAI and Blob
 SDKs, about 3.6 of 4.6 s on a laptop); loading them on first use would shorten it further.
 
+### Which clips the phone and the MCP server serve
+
+The served clips are config, not code. Besides the M1 clip (`tests/fixtures`), every folder under
+`NINETY_SERVED_DIR` that holds a match package is served under the folder's name: `tracked.json`
+(tracked positions), `detected.jsonl` (detected events) and `clip.json` (seed and club codes), plus
+`scorebug.jsonl` when the scorebug was read. These are the files an e2e run leaves in `runs/<match>/`.
+The wind map, the player card and Ask then work for that clip (`ninety/match/tracking.py`,
+`served_clips`). The demo match's package is about 30 MB (its `tracked.json`), so the image is meant to
+take it as a pinned release asset, unpacked to `NINETY_SERVED_DIR`, the way it takes the replay. That
+change to the image is a deploy, and waits for its approval.
+
 ## The MCP key
 
 The key is created once and kept in Key Vault. To create or rotate it, pass a new one for a single

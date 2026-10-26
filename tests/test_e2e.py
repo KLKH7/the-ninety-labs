@@ -55,7 +55,10 @@ def test_bundle_has_every_stage(tmp_path):
         validate(cue, CUE_SCHEMA)
     kinds = [(c["kind"], c["persona"]) for c in cues(out)]
     assert kinds.count(("pass_arc", "casual")) == 2 and kinds.count(("shot_speed", "analyst")) == 1
-    assert kinds.count(("insight", "analyst")) == 1
+    # The agents' claim restates the shot: it is in the trace, never on the INSIGHT bar (no insights
+    # file here, so the bar is empty: it never restates one event).
+    assert kinds.count(("insight", "analyst")) == 0
+    assert json.loads((out / "trace.json").read_text())["claims"]
 
 
 def test_the_answer_key_is_never_opened(tmp_path, monkeypatch):
@@ -91,33 +94,43 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     out, manifest = run(tmp_path)
     claim = only_claim(out)
     assert claim["status"] == "accepted" and claim["verdict"] == "verified" and claim["evidence"] == ["e2"]
-    assert claim["text"] == "h8 shoots at 101 km/h, on target."
+    # Its first draft said vision's speed of a shot ("at 101 km/h"), which is not measured: only a pass
+    # along the ground is (factcheck.measured_speed). Held, sent back, and said again without it.
+    assert claim["text"] == "h8 shoots, on target."
     assert claim["mode"] == "graph offline" and manifest["agents"]["mode"] == "graph offline"
-    assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 1}
+    assert claim["author"] == "tactician" and claim["attempts"] == {"tactician": 2}
     # The graph ran: the Analyst picked, the Tactician wrote, the Challenger read it, the checker
-    # verified, the Producer aired.
+    # held its speed, the Tactician rewrote it, the checker verified, the Producer aired.
     roles = [s["role"] for s in claim["steps"]]
-    assert roles == ["analyst", "tactician", "challenger", "judge", "fact_checker", "producer"]
+    assert roles == ["analyst", "tactician", "challenger", "fact_checker", "tactician", "judge",
+                     "fact_checker", "producer"]
+    (held,) = [s for s in claim["steps"] if s["action"] == "hold"]
+    # The trace keeps why it was held; the draft's speed itself is out of the bundle's words, as no cited
+    # event may state it (onair.gate_speeds), so no screen can band it as if it were measured.
+    assert "not a pass" in held["detail"] and "km/h" not in claim["steps"][1]["detail"]
     # Offline the Judge never ran; the trace must not say it did.
     judge = [s for s in claim["steps"] if s["role"] == "judge"]
     assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
-    (insight,) = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight["text"] == claim["text"] and insight["verified"] and insight["evidence"] == ["e2"]
-    assert insight["replaces"] == "cue-e2-analyst"  # it takes the template's place on screen
+    # It only restates the shot: verified in the trace and said by the audio description, never on the
+    # INSIGHT bar (ninety/agents/insight_bar.py), where the shot's own graphic stays.
+    assert not [c for c in cues(out) if c["kind"] == "insight"]
+    said = [s["text"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    assert claim["text"] in said
     assert manifest["agents"]["fallbacks"] == []
 
 
 def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     out, manifest = run(tmp_path, "--plant")
     claim = only_claim(out)
-    assert claim["drafts"] == 2 and claim["status"] == "accepted" and claim["planted"]
+    assert claim["drafts"] == 3 and claim["status"] == "accepted" and claim["planted"]
     assert [s["action"] for s in claim["steps"]] == [
-        "pick", "tamper", "draft", "agree", "reject", "rewrite", "skip", "verify", "air"]
+        "pick", "tamper", "draft", "agree", "reject", "rewrite", "hold", "rewrite", "skip", "verify", "air"]
     (rejected,) = [s for s in claim["steps"] if s["action"] == "reject"]
-    assert "143" in rejected["detail"] and "143" in claim["steps"][2]["detail"]
+    # The planted number is named in the rejection; the draft that stated it as a speed shows it no more.
+    assert "143" in rejected["detail"] and "143" not in claim["steps"][2]["detail"]
     assert rejected["detail"].startswith("back to the tactician")
-    insight = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight and all("143" not in c["text"] for c in insight)
+    assert "143" not in claim["text"]  # what was verified carries the fixed number, not the planted one
+    assert not [c for c in cues(out) if c["kind"] == "insight"]  # a restatement: never on the bar
     assert manifest["agents"]["planted"]
 
 
@@ -125,7 +138,8 @@ def test_the_single_analyst_path_still_runs_on_request(tmp_path):
     out, manifest = run(tmp_path, "--single-analyst", "--plant")
     claim = only_claim(out)
     assert manifest["agents"]["mode"] == "single analyst offline" and claim["mode"] == "offline"
-    assert [s["action"] for s in claim["steps"]] == ["draft", "reject", "draft", "skip", "verify"]
+    steps = [s["action"] for s in claim["steps"]]
+    assert steps == ["draft", "reject", "draft", "hold", "draft", "skip", "verify"]
 
 
 def test_a_claim_the_fact_checker_never_accepts_never_airs(tmp_path, monkeypatch):
@@ -161,8 +175,9 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert fell == {"minute": 2, "error": "RuntimeError"}  # the type only: no service text on screen
     claim = only_claim(out)
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
-    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots at 101 km/h, on target."
-    assert [c for c in cues(out) if c["kind"] == "insight"]
+    # The single Analyst, too, was held for vision's speed and said it again without it.
+    assert claim["status"] == "accepted" and claim["text"] == "h8 shoots, on target."
+    assert claim["status"] == "accepted"  # in the trace; a restatement never reaches the bar
 
 
 def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_path, monkeypatch):
@@ -417,9 +432,9 @@ def test_the_commentary_hears_the_clips_clubs_and_timeline_and_never_the_audio_c
     seen = []
     real = commentary.commentary
 
-    def spy(events, cues, clubs=None, timeline=None):
+    def spy(events, cues, clubs=None, timeline=None, names=None, scores=None):
         seen.append((cues, clubs, timeline))
-        return real(events, cues, clubs, timeline)
+        return real(events, cues, clubs, timeline, names, scores)
 
     monkeypatch.setattr(commentary, "commentary", spy)
     monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
@@ -469,3 +484,113 @@ def test_a_ball_speed_no_ball_can_reach_is_never_said(tmp_path):
     out, _ = run(tmp_path, events=[fast])
     said = "".join((out / f).read_text() for f in ("cues.jsonl", "audio.json", "commentary.json"))
     assert "251" not in said
+
+
+def _tracked(events: list[dict]) -> list[dict]:
+    """The clip's events with every player as a tracked one ("h8" -> "h-t8"), as vision names them."""
+    import re
+
+    def track(v):
+        return re.sub(r"^([ha])(\d+)$", r"\1-t\2", v) if isinstance(v, str) else v
+
+    people = ("player", "receiver", "intended", "interceptor", "deflected_by")
+    return [{**e, **{k: track(e[k]) for k in people if e.get(k)}} for e in events]
+
+
+@pytest.mark.parametrize("sure", [0.99, 0.5])  # each side told surely, and not
+def test_no_raw_track_id_reaches_anything_aired(tmp_path, sure):
+    # A track id is the tracker's label: checked, never shown or said (ninety/agents/onair.py). Every
+    # aired text in the bundle: the graphics and insights, the claim trace, the commentary, the audio
+    # description and its captions.
+    from ninety.agents.onair import TRACK_ID
+
+    events = [{**e, "team_confidence": sure} for e in _tracked(EVENTS)]
+    out, _ = run(tmp_path, events=events)
+    raw = json.loads((out / "events.jsonl").read_text().splitlines()[0])
+    assert TRACK_ID.search(json.dumps(raw)), "the events must carry track ids, or this proves nothing"
+    aired = [c["text"] for c in cues(out)]
+    for claim in json.loads((out / "trace.json").read_text())["claims"]:
+        aired += [claim["text"], *(s["detail"] for s in claim["steps"])]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    # Every text audio.json holds, not only what is said: a screen or a caption may show any of them.
+    def texts(node, key=None):
+        if isinstance(node, dict):
+            skip = ("evidence", "event", "id", "file")
+            return [t for k, v in node.items() if k not in skip for t in texts(v, k)]
+        if isinstance(node, list):
+            return [t for v in node for t in texts(v, key)]
+        return [node] if isinstance(node, str) and " " in node else []
+
+    audio = texts(json.loads((out / "audio.json").read_text()))
+    assert any("player" in t for t in audio), "no line about a player: this would prove nothing"
+    aired += audio
+    aired.append((out / "description.vtt").read_text())
+    assert aired and not [t for t in aired if TRACK_ID.search(t)]
+    import re
+
+    shown = " ".join(c["text"] for c in cues(out))
+    club = re.compile(r"\b[Aa] [A-Z]\w+ player\b")  # "a Crowmere player": a side named
+    assert "player" in shown and bool(club.search(shown)) is (sure > 0.96)
+
+
+def test_the_bundle_carries_the_scorebug_readings_behind_the_companion_s_gate(tmp_path):
+    """--scorebug: the readings go in as scorebug.jsonl, and the manifest carries the one gate every
+    screen uses, scoring.SCOREBUG_MEASURED, with the fact-checker's confidence."""
+    from ninety.agents.factcheck import MIN_CONFIDENCE
+    from ninety.intel import scoring
+
+    sb = tmp_path / "sb.jsonl"
+    sb.write_text(json.dumps({"id": "s1", "t": 60.0, "frame": 1500, "type": "score_read", "team": None,
+                              "score": {"home": 0, "away": 0}, "confidence": 0.99}) + "\n")
+    out, manifest = run(tmp_path, "--scorebug", str(sb))
+    assert manifest["scorebug"] == {"readings": 1, "measured": scoring.SCOREBUG_MEASURED,
+                                    "min_confidence": MIN_CONFIDENCE}
+    assert (out / "scorebug.jsonl").read_text().count("score_read") == 1
+    assert "scorebug.jsonl" in manifest["files"]
+
+
+def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_band(tmp_path, monkeypatch):
+    # web/viewer/src/speed.ts opens its gate from this (#378): a speed on screen only with its band.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)  # as it will be once measured
+    # No event here is marked along the ground, so nothing vision read is covered: the gate stays shut.
+    _, manifest = run(tmp_path / "a")
+    assert manifest["speed"] == {"measured": False, "error_kmh": factcheck.SPEED_ERROR_KMH}
+    # A pass vision marks along the ground: its speed shows (the screens band it); the shot's
+    # held draft does not keep its speed in the trace, so the band can't vouch for it.
+    ground = [{**e, "lofted": False} if e["type"] == "pass" else e for e in EVENTS]
+    out, manifest = run(tmp_path / "b", events=ground)
+    assert manifest["speed"]["measured"] is True
+    shown = [c["text"] for c in cues(out) if c["kind"] != "insight"]
+    passes = [e for e in ground if e["type"] == "pass" and e.get("ball_speed_kmh")]
+    assert passes and any("km/h" in t for t in shown)
+    claim = only_claim(out)
+    assert all("101" not in s["detail"] for s in claim["steps"]) and "101" not in claim["text"]
+
+
+def test_a_tactical_camera_name_never_names_a_broadcast_track_with_the_same_id_string(tmp_path):
+    """Lesson 259 in the bundle: the events and cues name BROADCAST tracks, and the insights hold the
+    tactical camera's names under ids numbered from 1 as well. "h-t8" in the events is not the tactical
+    "h-t8": only the association's names (identity_broadcast) may reach an event's text."""
+    from tests.test_companion_match import insights
+
+    events = [{**e, "team_confidence": 0.99} for e in _tracked(EVENTS)]
+    actors = sorted({e[k] for e in events for k in ("player", "receiver") if e.get(k)})
+    assert actors, "the events must name players, or this proves nothing"
+    mi = insights()
+    mi.identity_source = {"source": "id_feed", "label": "Player ID feed", "provider": "sim", "note": "test",
+                          "id_corrections": 0}
+    mi.identity = {actors[0]: {"name": "Tactical Wrongname", "number": 7, "position": "striker",
+                                "confident": True, "source": "id_feed"}}
+    mi.identity_broadcast = {actors[-1]: {"name": "Broadcast Rightname", "number": 9, "position": "striker",
+                                          "confident": True, "source": "id_feed"}}
+    path = tmp_path / "insights.json"
+    path.write_text(json.dumps(mi.as_dict()))
+    out, _ = run(tmp_path, "--insights", str(path), events=events)
+    aired = [c["text"] for c in cues(out) if c["kind"] != "insight"]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    blob = " ".join(aired)
+    assert "Wrongname" not in blob
+    assert "Rightname" in blob

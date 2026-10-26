@@ -8,7 +8,7 @@ The same planted claims and seeds through four variants. *False on air* is a pla
 
 | Variant | False on air | True on air | Unmeasured |
 |---|---|---|---|
-| full | 0/175 (0.0%) | 114/121 (94.2%) | 0 |
+| full | 0/175 (0.0%) | 110/121 (90.9%) | 0 |
 | no fact-checker | 175/175 (100.0%) | 121/121 (100.0%) | 0 |
 | no confidence gate | 16/175 (9.1%) | 114/121 (94.2%) | 0 |
 | no typed facts | 24/175 (13.7%) | 114/121 (94.2%) | 0 |
@@ -20,7 +20,7 @@ The same planted claims and seeds through four variants. *False on air* is a pla
 | recorded, true | 105 | 98 | 105 | 98 | 98 |
 | recorded, false | 127 | 0 | 127 | 0 | 8 |
 | phantom detection | 16 | 0 | 16 | 16 | 16 |
-| confident detection | 16 | 16 | 16 | 16 | 16 |
+| confident detection | 16 | 12 | 16 | 16 | 16 |
 | viewer input | 32 | 0 | 32 | 0 | 0 |
 
 ## False claims each removal puts on air

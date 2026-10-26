@@ -25,12 +25,6 @@
             <button type="submit" class="primary" id="connect" disabled>Connect</button>
             <p id="pair-error" class="error" role="alert"></p>
           </form>
-          <h2 class="section-title">How to find the code</h2>
-          <ol class="how-to">
-            <li>Look at the big screen at kick-off or at a chapter break.</li>
-            <li>The code is in the bottom corner, beside a small QR code.</li>
-            <li>Scan the QR code with your camera, or type the six letters here.</li>
-          </ol>
         </ion-content>
       </div>
 
@@ -41,26 +35,30 @@
             <ion-header>
               <ion-toolbar class="band-bar" id="live-bar">
                 <ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen scroll-events="true" id="live-content">
-              <!-- No score here (Kian, Oct 25): the broadcast's scorebug carries it; a scoreline from
-                   detected goals could contradict it. The crests and names, each club's scorers under it. -->
+              <!-- The score only as vision read it off the broadcast's scorebug (`score_change` events, #356),
+                   never counted from detected goals (Kian, Oct 25): with no reading, crests and names alone.
+                   Each club's scorers under it. -->
               <section class="band" aria-label="Match">
                 <p class="league">Ninety League</p>
                 <div class="fixture">
                   <div class="side">
+                    <span class="side-score" id="score-home" aria-hidden="true" hidden></span>
                     <span class="crest home" aria-hidden="true"></span>
                     <span class="club-name home-name">London</span>
                     <ul class="side-goals" id="goals-home" aria-label="Home goals"></ul>
                   </div>
                   <div class="centre">
                     <output id="clock" aria-live="off">0:00</output>
+                    <button type="button" class="sr-only score-read" id="score-read" hidden></button>
                     <p class="status" id="status" role="status" data-state="off">Not connected</p>
                     <ul class="side-goals" id="goals-unsure" aria-label="Goals on a side not told surely"></ul>
                   </div>
                   <div class="side">
+                    <span class="side-score" id="score-away" aria-hidden="true" hidden></span>
                     <span class="crest away" aria-hidden="true"></span>
                     <span class="club-name away-name">Lisbon</span>
                     <ul class="side-goals" id="goals-away" aria-label="Away goals"></ul>
@@ -77,6 +75,10 @@
                 <button type="button" role="tab" id="lt-players" aria-controls="pane-players" aria-selected="false" tabindex="-1">Players</button>
               </div>
               <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
+                <!-- The fan's focus (#362's choices): the latest of each tactical moment, or the players most
+                     in the game, above the pitch. Shown only for that focus (style.css). -->
+                <section class="focus-strip" id="tactics-strip" aria-label="Shape" hidden></section>
+                <section class="focus-strip" id="players-strip" aria-label="Players in the game" hidden></section>
                 <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
                   <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
                   <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
@@ -230,11 +232,12 @@
           <div class="ion-page">
             <ion-header>
               <ion-toolbar class="band-bar"><ion-title><span class="mini-score score-line"><span class="crest home" aria-hidden="true"></span><span class="mc" aria-hidden="true">–:––</span><span class="crest away" aria-hidden="true"></span></span></ion-title>
-                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
+                <ion-buttons slot="end"><button type="button" class="settings-open more" aria-label="More: personalise, read aloud, voice, text size"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></button></ion-buttons>
               </ion-toolbar>
             </ion-header>
             <ion-content fullscreen id="ask-content">
               <h1 class="sr-only" id="ask-title">Ask</h1><span class="sr-only">About <span id="ask-who">the match</span></span>
+              <section class="onboard" id="onboard" aria-labelledby="onboard-title" hidden></section>
               <section class="ask-start" id="ask-start" aria-labelledby="ask-start-title">
                 <h2 class="section-title" id="ask-start-title">Ask about the match</h2>
                 <div class="chip-grid" id="ask-grid" role="group" aria-labelledby="ask-start-title"></div>
@@ -248,8 +251,10 @@
               <div class="chips" id="ask-chips" role="group" aria-label="Suggested questions"></div>
               <form id="ask-form">
                 <label for="question" class="sr-only">Your question</label>
-                <span class="ask-pill"><input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask about the match…" /></span>
-                <button type="submit" class="ask-send" id="ask-button" aria-label="Ask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+                <div class="ask-pill">
+                  <textarea id="question" rows="1" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask anything"></textarea>
+                  <button type="submit" class="ask-send" id="ask-button" aria-label="Ask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+                </div>
               </form>
             </ion-footer>
           </div>
@@ -263,11 +268,11 @@
             <ion-content fullscreen>
               <h1 class="sr-only" id="insights-title">Story</h1><p class="sr-only" id="insights-note"></p>
               <!-- Apple Sports' play-by-play: every detected play, or only the key ones with their pictures. -->
-              <ion-segment value="all" id="story-mode" class="seg story-seg" aria-label="Which plays">
+              <ion-segment value="key" id="story-mode" class="seg story-seg" aria-label="Which plays">
                 <ion-segment-button value="all"><ion-label>All plays</ion-label></ion-segment-button>
                 <ion-segment-button value="key"><ion-label>Key plays</ion-label></ion-segment-button>
               </ion-segment>
-              <ol id="insights" class="insights" data-mode="all"></ol>
+              <ol id="insights" class="insights" data-mode="key"></ol>
             </ion-content>
           </div>
         </ion-tab>
@@ -344,19 +349,36 @@
             <h2 id="settings-title" tabindex="-1">Listening and text</h2>
             <button type="button" class="close" id="close-settings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
+          <div class="group group-first persona">
+            <ion-segment value="" id="persona-mode" class="seg" aria-label="How you watch">
+              <ion-segment-button value="casual"><ion-label>Casual</ion-label></ion-segment-button>
+              <ion-segment-button value="analyst"><ion-label>Analyst</ion-label></ion-segment-button>
+            </ion-segment>
+            <ion-segment value="" id="persona-club" class="seg" aria-label="Your club">
+              <ion-segment-button value="LON"><ion-label>London</ion-label></ion-segment-button>
+              <ion-segment-button value="LIS"><ion-label>Lisbon</ion-label></ion-segment-button>
+            </ion-segment>
+          </div>
           <div class="group group-first">
+            <label class="setting-row"><span class="row-title">Demo passcode</span>
+              <input type="password" id="passcode" class="passcode" autocomplete="off" spellcheck="false" enterkeyhint="done" /></label>
+          </div>
+          <div class="group group-first">
+            <button type="button" class="setting-row row-link" id="fan-edit"><span class="row-title">Personalise</span><span class="row-value" id="fan-value"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+          </div>
+          <div class="group group-first listening">
             <label class="setting-row"><span><span class="row-title">Read aloud</span></span>
               <button type="button" class="speak switch-button" role="switch" aria-checked="false" aria-pressed="false" aria-label="Read new answers and moments aloud"><span class="knob"></span></button></label>
           </div>
-          <h3 class="group-title" id="voice-title">Voice</h3>
-          <ul class="group" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>
-          <h3 class="group-title">Transcript</h3>
-          <div class="group">
+          <h3 class="group-title listening" id="voice-title">Voice</h3>
+          <ul class="group listening" id="voices" role="radiogroup" aria-labelledby="voice-title"></ul>
+          <h3 class="group-title listening">Transcript</h3>
+          <div class="group listening">
             <label class="setting-row"><span><span class="row-title">Show what is read aloud</span></span>
               <input type="checkbox" role="switch" class="switch" id="transcript-on" /></label>
           </div>
-          <h3 class="group-title" id="rate-title">Speaking rate</h3>
-          <div class="group rate-group">
+          <h3 class="group-title listening" id="rate-title">Speaking rate</h3>
+          <div class="group rate-group listening">
             <input type="range" id="rate" aria-labelledby="rate-title" />
             <output id="rate-value" for="rate"></output>
           </div>

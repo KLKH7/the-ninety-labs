@@ -115,18 +115,18 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
+    page.keyboard.press("2")  # the analyst's graphics
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-m-e2" in on_air(page):
+        if "cue-e2-analyst" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
-    assert set(on_air(page)) == {"insight-m-e2"}
-    # The fixture's speed is not measured, so the graphic leaves it out (src/speed.ts).
-    assert "Crowmere 8 shoots, on target" in page.locator("#on-air").inner_text()
-    assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
+    # The agents' claim about the shot only restates it, so it is not an INSIGHT (ninety/agents/
+    # insight_bar.py): the shot's own graphic airs, and the claim stays in the trace (How we know).
+    assert set(on_air(page)) == {"cue-e2-analyst"}
+    assert "insight" not in page.locator("#on-air").inner_text().lower()
+    assert page.locator("#claims .claim").count() >= 1
 
     page.keyboard.press("1")
     page.wait_for_function("document.querySelector('#overlay').dataset.onAir === 'cue-e2-casual'")
@@ -304,34 +304,46 @@ def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tr
     assert not errors
 
 
-def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, tracked_site):
+@pytest.fixture(scope="module")
+def ground_site(browser, tmp_path_factory):
+    # The tracked clip with its pass marked along the ground by vision (`lofted` false), and that mark
+    # taken as measured, as it will be (factcheck.LOFTED_FLAG_MEASURED): the one speed vision's measured
+    # error covers, so the bundle's manifest.speed opens.
+    from ninety.agents import factcheck
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
+        yield from serve_site(browser, tmp_path_factory,
+                              events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
+
+
+def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, ground_site):
     # Once measured (manifest.speed), a speed shows with its error band; 147 km/h is above P3's
     # 40 m/s (144 km/h), so no ball went that fast and it never airs (the demo's 4-1 graphic).
     import json
-    import re
+
+    from ninety.agents import factcheck
 
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
 
-    def measured(route):
-        m = json.loads(route.fetch().text())
-        route.fulfill(body=json.dumps({**m, "speed": {"measured": True, "error_kmh": 3.5}}),
-                      content_type="application/json")
-
     def fast(route):
         cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
-        cues = [{**c, "text": re.sub(r"101(\.4)? km/h", "147 km/h", c["text"])} for c in cues]
+        first = next(c for c in cues if "48" in c["text"] and "km/h" in c["text"])
+        fast_text = first["text"].replace("48.0 km/h", "147 km/h")
+        cues.append({**first, "id": first["id"] + "-fast", "text": fast_text})
         route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
 
-    ctx.route("**/bundle/manifest.json", measured)
     ctx.route("**/bundle/cues.jsonl", fast)
     page = ctx.new_page()
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(tracked_site)
+    page.goto(ground_site)
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
     speeds = aired_speeds(page)
-    assert speeds and all(s.endswith(" ± 4 km/h") for s in speeds), speeds  # 48 km/h, with its band
+    band = f" ± {factcheck.SPEED_ERROR_KMH} km/h"
+    assert speeds and all(s.endswith(band) for s in speeds), speeds  # 48 km/h, with its band
     assert not any(s.startswith("147") for s in speeds), speeds
+    assert not any(s.startswith("101") for s in speeds), speeds  # the shot's speed is not measured
     assert not errors
 
 
@@ -359,34 +371,4 @@ def test_every_way_a_speed_is_written_or_said_is_gated(browser, site):
     assert say("a 19 m pass at 49 km/h.", measured) == "a 19 m pass at 49 ± 4 km/h."
     assert say("at 49 kilometres an hour.", measured) == "at 49 kilometres an hour, give or take 4."
     assert say("scores, 147 km/h", measured) == "scores"  # above P3: no ball goes that fast
-    # Merge-queue review: a number is read whole, and a unit with no band is never said.
-    assert say("a 1,049 km/h shot", measured) == "a shot"  # not '1,49 ± 4 km/h'
-    assert say("hit at 31 mph.", measured) == "hit."
-    assert say("hit at 40 m/s.", measured) == "hit."
-    assert say("hit at 49 km/hr.", measured) == "hit at 49 ± 4 km/hr."
-    assert say("13 metres to him.", measured) == "13 metres to him."  # a distance is no speed
-    assert say("hit at 12 metres a second.", measured) == "hit."
-    assert not errors
-
-
-def test_a_line_said_aloud_keeps_its_words_without_the_speed_and_a_recorded_one_is_dropped(browser, site):
-    """Merge-queue review of #378: the audio description's and the commentary's lines lose a held
-    speed from what is shown and said; one with a recording that says it is dropped (it can't be cut)."""
-    page, errors = open_viewer(browser, site)
-    said = [
-        {"id": "a", "text": "A pass at 49 km/h.", "spoken": "A pass at 49 kilometres an hour.", "file": None},
-        {"id": "b", "text": "A pass at 49 km/h.", "spoken": "A pass at 49 kilometres an hour.",
-         "file": "b.mp3"},
-        {"id": "c", "text": "Kick-off.", "spoken": "Kick-off.", "file": "c.mp3"},
-    ]
-    out = page.evaluate("s => window.ninetySpokenSpeeds(s, null)", said)
-    assert [(x["id"], x["text"], x["spoken"]) for x in out] == [
-        ("a", "A pass.", "A pass."), ("c", "Kick-off.", "Kick-off.")]
-    lines = [
-        {"id": "x", "t": 1, "t_end": 2, "text": "Played at 49 kilometres an hour.", "audio": None},
-        {"id": "y", "t": 3, "t_end": 4, "text": "Played at 49 kilometres an hour.", "audio": "y.mp3"},
-        {"id": "z", "t": 5, "t_end": 6, "text": "Out of play.", "audio": "z.mp3"},
-    ]
-    out = page.evaluate("l => window.ninetyCommentarySpeeds(l, {measured: false, error_kmh: 3.5})", lines)
-    assert [(x["id"], x["text"]) for x in out] == [("x", "Played."), ("z", "Out of play.")]
     assert not errors

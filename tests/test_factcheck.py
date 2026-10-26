@@ -676,3 +676,47 @@ def test_a_claim_about_the_play_needs_a_cited_fact_that_shows_it(text, evidence,
 ])
 def test_play_words_with_their_fact_cited_still_pass(text, evidence):
     assert check(Claim(text, evidence), PLAY).ok, check(Claim(text, evidence), PLAY).reasons
+
+
+# -- The plausibility gate: a stated speed must be one the ball can reach (GROUNDING P3) ----------
+
+
+def _kicked(kind: str, speed: float, i: str = "v1") -> dict:
+    return {"id": i, "type": kind, "minute": 2, "second": 5, "clock": "01:05", "team": "home",
+            "player": "h4", "receiver": "h8", "outcome": "success", "ball_speed_kmh": speed, "distance_m": 19}
+
+
+@pytest.mark.parametrize("kind, speed, ok", [
+    ("pass", 144, True),     # at the bound: P3's 40 m/s, the live path's own cap (detected.MAX_BALL_KMH)
+    ("pass", 145, False),    # beyond it: vision's misreading, refused
+    ("pass", 251, False),
+    ("shot", 144, True),
+    ("shot", 145, False),
+])
+def test_a_stated_ball_speed_the_ball_cannot_reach_is_rejected(kind, speed, ok):
+    from ninety.agents.contracts import status_for
+    from ninety.agents.factcheck import MAX_BALL_KMH
+    from ninety.match import detected
+
+    assert MAX_BALL_KMH is detected.MAX_BALL_KMH and MAX_BALL_KMH == 144.0
+    event = _kicked(kind, speed)
+    verdict = check(Claim(f"h4 strikes it at {speed} km/h.", ["v1"]), {"v1": event})
+    assert verdict.ok is ok, verdict.reasons
+    if not ok:
+        assert status_for(verdict) == "rejected" and verdict.reasons[0].startswith("implausible speed")
+
+
+def test_the_gate_reads_only_the_speed_a_claim_states():
+    fast = _kicked("pass", 200)
+    assert check(Claim("h4 plays it 19 m to h8.", ["v1"]), {"v1": fast}).ok  # the pass happened
+    # Two cited events with the stated speed: one the ball can reach is enough.
+    both = {"v1": fast, "v2": _kicked("shot", 200, "v2") | {"ball_speed_kmh": 140}}
+    assert not check(Claim("A ball at 200 km/h.", ["v1"]), both).ok
+    assert check(Claim("A ball at 140 km/h.", ["v2"]), both).ok
+
+
+def test_plausible_speed():
+    from ninety.agents.factcheck import plausible_speed
+
+    assert plausible_speed(_kicked("pass", 144.0)) and not plausible_speed(_kicked("pass", 144.1))
+    assert not plausible_speed({"type": "pass"})

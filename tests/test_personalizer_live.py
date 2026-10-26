@@ -26,13 +26,25 @@ URL = "http://personalizer.test/"
 # The stand-in carries no side confidence, so every side in it is unsure (factcheck.side_known) and
 # no club variant would be written. These tests are about variants on a side told surely: 0.99 is
 # above MIN_TEAM_CONFIDENCE. The unsure case is pinned below.
-EVENTS = [{**e, "team_confidence": 0.99}
+# Each pass is marked as along the ground (`lofted` false), the only detected speed vision's measured
+# error covers (factcheck.measured_speed): the claim's speed is the number each variant must keep.
+EVENTS = [{**e, "team_confidence": 0.99, **({"lofted": False} if e["type"] == "pass" else {})}
           for e in detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")]
 SURE = next(e for e in EVENTS if e["type"] == "pass" and e.get("receiver") and e["confidence"] >= 0.8
             and compact(e)["minute"] == 2 and e.get("ball_speed_kmh"))
 ROW = compact(SURE)
 CLAIM = Claim(f"{ROW['player']} finds {ROW['receiver']} at {ROW['ball_speed_kmh']} km/h.", [ROW["id"]])
 SPANISH = translate.translated(verified_text, translate.mock)
+
+
+@pytest.fixture(autouse=True)
+def ground_mark_measured(monkeypatch):
+    # The claim states the pass's speed, the number each variant must keep: these tests are about the
+    # Personalizer, not the speed hold (tests/test_spoken_variety.py pins that), so vision's ground mark
+    # is taken as measured here.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
 ALL = {(p, lang) for p in ("analyst", "casual", "club", "player_focus") for lang in ("en", "es")}
 
 
