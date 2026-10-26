@@ -33,6 +33,16 @@ SURE = next(e for e in EVENTS if e["type"] == "pass" and e.get("receiver") and e
 ROW = compact(SURE)
 CLAIM = Claim(f"{ROW['player']} finds {ROW['receiver']} at {ROW['ball_speed_kmh']} km/h.", [ROW["id"]])
 SPANISH = translate.translated(verified_text, translate.mock)
+
+
+@pytest.fixture(autouse=True)
+def speed_measured(monkeypatch):
+    # These tests check variants of a claim that states a detected pass's speed, the number each
+    # variant must keep. They are about the Personalizer, not the speed hold (tests/test_factcheck.py
+    # pins that): vision's speed is taken as measured here.
+    from ninety.agents import factcheck
+
+    monkeypatch.setattr(factcheck, "SPEED_MEASURED", True)
 ALL = {(p, lang) for p in ("analyst", "casual", "club", "player_focus") for lang in ("en", "es")}
 
 

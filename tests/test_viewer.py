@@ -319,7 +319,10 @@ def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, tr
 
     def fast(route):
         cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
-        cues = [{**c, "text": re.sub(r"101(\.4)? km/h", "147 km/h", c["text"])} for c in cues]
+        # The producer holds vision's speeds while they are unmeasured (#375), so the bundle's cues carry
+        # none: put the two this test needs on each cue, one a ball could throw and one it could not.
+        cues = [{**c, "text": re.sub(r" ?\d+(\.\d+)? km/h", "", c["text"]) + ", 48 km/h, 147 km/h"}
+                for c in cues]
         route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
 
     ctx.route("**/bundle/manifest.json", measured)
