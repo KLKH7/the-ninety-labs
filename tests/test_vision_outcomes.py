@@ -482,3 +482,16 @@ def test_no_save_when_the_line_to_the_keeper_misses_the_goal_or_he_stands_outsid
     assert [s["outcome"] for s in run(caught(keeper=wide))[0]] != ["on_target"]
     out = (105.0 - oc.PENALTY_AREA_X - 1.0, 34.0)  # a keeper-coloured player beyond his area
     assert [s["outcome"] for s in run(caught(keeper=out, lands=(out[0] + 5.0, 36.0)))[0]] != ["on_target"]
+
+
+def test_the_keeper_picking_up_a_ball_at_his_own_feet_is_no_save():
+    # His own spell (the ball a metre in front of him, toward the pitch) ends as he lifts it into his
+    # hands: the line from there to him meets his goal line between the posts, but he struck nothing.
+    rows = []
+    for f in range(40):
+        people = crowd(f) + [(60.0, 10.0, BLUE), (103.0, 34.0, GREEN_KEEPER)]  # him the 10th
+        r = row(f, people, (102.0, 34.0) if f <= KICK else (108.0, 36.0))
+        if f > KICK:
+            r["ball"][0]["bbox"] = list(KEEPER_BOX)
+        rows.append(r)
+    assert [s["outcome"] for s in run(rows)[0]] == []
