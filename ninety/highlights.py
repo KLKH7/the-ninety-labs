@@ -142,7 +142,7 @@ def label(kind: str, x: float, y: float, d: float, v: float | None, T: float | N
 #               side defending it; free kick, throw-in and kick-off, the side of the player at the ball
 #   team_confidence  the taker's side score, null when no player of that side is within reach;
 #               name the side only where factcheck.side_known holds
-#   t, frame    the kick (the last frame the ball lay still); the answer key's comes 1 to 2.3 s earlier
+#   t, frame    the kick (the last frame the ball lay still); the answer key's comes about 1 to 3 s earlier (kick-offs 1 to 2.3 s, set pieces 1.6 to 2.9 s)
 #   cause       free kicks and penalties, optional and not on the live path yet; not read here
 ORIGINS = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play")
 RESTART_KINDS = frozenset({"corner", "throw_in", "goal_kick", "free_kick", "penalty_kick"})

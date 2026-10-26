@@ -378,8 +378,8 @@ The same rule over the answer key's events gives each true shot its true origin.
 sets give one, else from the fallback rules. On the matched
 shots of the measurement above (validation, then the test split once): how often the detected origin
 equals the true one, per origin, with Wilson intervals, each disagreement listed, and how often the
-detected origin is null where the truth has one. The answer key's `set_piece` comes 1 to 2.3 s
-before the kick (when the taker stands set), and the detector times a restart at the kick; origin is
+detected origin is null where the truth has one. The answer key's `set_piece` comes about 1 to 3 s
+before the kick (kick-offs 1 to 2.3 s, GROUNDING S15; set pieces 1.6 to 2.9 s in the set-piece validation) (when the taker stands set), and the detector times a restart at the kick; origin is
 compared per shot, so this moves no origin, but a grader matching restart events to the truth's
 compares them at the kick (ninety/eval/restart_score.py does).
 
