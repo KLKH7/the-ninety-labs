@@ -46,6 +46,15 @@ reaches a page. Pinned in `web/viewer/package-lock.json` and `web/phone/package-
 | source-map-js (through vite) | source maps | BSD-3-Clause |
 | picocolors (through vite) | coloured terminal output | ISC |
 
+## Broadcast renderer (`web/render`)
+
+The renderer runs in Chromium through Playwright. One package reaches the page, pinned in
+`web/package-lock.json`.
+
+| Package | Used for | Licence |
+|---|---|---|
+| three 0.170.0 (in the page) | the WebGL renderer, and from its `examples/jsm` the physical sky (`objects/Sky.js`, the Preetham daylight model) that lights the broadcast look's fill (`web/render/look.js`) | MIT |
+
 ## Sound
 
 The referee's whistle on the broadcast's mp4 is synthesised by our own code

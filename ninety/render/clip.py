@@ -334,6 +334,8 @@ def render_clip(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
+        if info.get("look"):  # the broadcast look (web/render/look.js): stadium=broadcast only
+            clip["renderer"]["look"] = info["look"]
         # Each tactical lens films the same scene in a page of its own: the same seed, looks and
         # per-frame spec as the broadcast, its own camera and picture size, and no graphics.
         vpages = {}

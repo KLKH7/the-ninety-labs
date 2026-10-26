@@ -80,6 +80,14 @@ datasets and beating them on motion blur).
   LED ribbon under each upper tier, grass on to the stands, and softer mowing. No seed draws it, so
   no dataset changes look. The crowd is scenery in the id pass: never labelled, and it hides
   a ball among the fans exactly where the picture does (`tests/test_render_stadium.py`)
+- the broadcast look (`web/render/look.js`): a `stadium=broadcast` clip's broadcast stream, and only
+  that, is lit and graded as television: a filmic (ACES) tone curve instead of a hard clip, fill light
+  from a physical sky (three.js `Sky`), the crowd muted and in the roof's shade, haze on the scenery
+  (never on a player or the ball), gentler sharpening and a warm-highlight grade. Light and colour
+  only: no label moves, and nothing is drawn from the seed. Training, validation and test renders
+  (`stadium=plain`) and the tactical views keep their pixels. Adopted after the vision gate in the
+  pull request that added it: our frozen detector's player and ball recall on validation windows
+  rendered both ways, within 2 points
 
 Log every choice in the frame metadata. Never randomize something you cannot label.
 
