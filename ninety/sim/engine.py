@@ -66,8 +66,8 @@ PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre betwee
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
-PLACE_SMOOTH_S = 0.2  # V8 (design): a place's velocity is smoothed over this long
-PLACE_JUMP_MPS = 10.0  # V8 (design): a place moving faster than any player runs has jumped
+PLACE_BLEND_S = 0.5  # V9 (design): an unhurried place that jumps is moved to over this long
+PLACE_JUMP_MPS = 10.0  # V9 (design): a place moving faster than any player runs has jumped
 TOUCH_POSE_S = 0.30  # design (P14): how long the body shows the part that met the ball
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a touch it beats, or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
@@ -676,8 +676,7 @@ def net_room(x: float, y: float, vx: float, vy: float) -> float | None:
     return best
 
 
-def steer(p: Player, tx: float, ty: float, want_speed: float, unhurried: bool = False,
-          target_v: tuple[float, float] = (0.0, 0.0)) -> None:
+def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     """Move toward a target within the player's own body: force-velocity acceleration, braking,
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py). Near a goal's net
     he runs toward it no faster than he could stop before it, as the fetcher does before the boards
@@ -686,8 +685,7 @@ def steer(p: Player, tx: float, ty: float, want_speed: float, unhurried: bool = 
     room = net_room(p.x, p.y, p.vx, p.vy)  # the way he is running
     if room is not None:  # to his body's edge, not his centre: half a shoulder, its widest (P11)
         want_speed = min(want_speed, stopping_speed(room - shape.SHOULDER_BREADTH_M / 2))
-    x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT, unhurried,
-                                 target_v)
+    x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
     # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
     # them, and then they also stop the part of the run that goes into them.
@@ -832,7 +830,7 @@ class Engine:
         self.netted: float | None = None  # the goal line whose net holds the dead ball after a goal
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
-        self.place_track: dict[str, tuple] = {}  # V8: each player's place last frame and its velocity
+        self.places: dict[str, tuple[int, float, float]] = {}  # V9: each unhurried player's place last frame
         # P18: a fouled player -> (contact t, upright t, the way his head goes, radians)
         self.fallen: dict[str, tuple[float, float, float]] = {}
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
@@ -2641,7 +2639,9 @@ class Engine:
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
         be, so far from the ball he walks and near it he bursts; his body caps it."""
-        return math.hypot(tx - p.x, ty - p.y) / max(self.ball_eta(tx, ty), DT)
+        d = math.hypot(tx - p.x, ty - p.y)
+        need = d / max(self.ball_eta(tx, ty), DT)
+        return need if d < 0.5 else max(WALK_MPS, need)  # V10 (tried): unhurried, at least a walk (L4)
 
     def shape_target(self, p: Player) -> tuple[float, float, float]:
         """Where a player off the ball wants to be, and how fast they go there."""
@@ -3192,7 +3192,10 @@ class Engine:
                 steer(p, p.x + p.vx * 0.5, p.y + p.vy * 0.5, DRIBBLE)
                 continue
             tx, ty, top = self.shape_target(p)
-            tv = self.place_velocity(p, tx, ty)
+            if top <= p.physique.cs:  # V9: going there unhurried (below his critical speed, P10)
+                tx, ty = self.blend_place(p, tx, ty)
+            else:
+                self.places.pop(p.id, None)
             place = self.stand_off(p, tx, ty)[0]
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
@@ -3206,26 +3209,25 @@ class Engine:
                 ux, uy = (tx - p.x) / dist + ax, (ty - p.y) / dist + ay
                 u = math.hypot(ux, uy) or 1.0
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
-            # V7: going to his place at a jog (below his critical speed, P10), he stops gently
-            steer(p, tx, ty, top, unhurried=top <= p.physique.cs, target_v=tv)
+            steer(p, tx, ty, top)
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
                                                                  *self.looks_at(p)))
         self.separate()
 
-    def place_velocity(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
-        """V8 (demo engine v2): how fast the place he is going to is itself moving, from where it was
-        the frame before, smoothed over PLACE_SMOOTH_S (*design*): a place that jumps (a new job, a new
-        look) is a new place, not a fast one (PLACE_JUMP_MPS, *design*: faster than anyone runs), and
-        starts from rest. Off the ball in open play only: at a restart places are walked to."""
-        last = self.place_track.get(p.id)
-        tv = (0.0, 0.0)
+    def blend_place(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """V9 (demo engine v3): an unhurried place that jumps (a new job when the ball changes feet, a
+        new look) is moved to over PLACE_BLEND_S (*design*), not snapped to: he bends toward the new
+        place rather than braking through a stop to turn for it. A place moving no faster than a player
+        runs (PLACE_JUMP_MPS, *design*) is followed as it is. In open play only; hurried runs (pressing,
+        marking, chasing, the pass's receiver at speed) are not blended."""
+        last = self.places.get(p.id)
         if last and last[0] == self.frame - 1 and self.restart is None:
-            rvx, rvy = (tx - last[1]) / DT, (ty - last[2]) / DT
-            if math.hypot(rvx, rvy) <= PLACE_JUMP_MPS:
-                k = min(1.0, DT / PLACE_SMOOTH_S)
-                tv = (last[3] + (rvx - last[3]) * k, last[4] + (rvy - last[4]) * k)
-        self.place_track[p.id] = (self.frame, tx, ty, *tv)
-        return tv
+            jump = math.hypot(tx - last[1], ty - last[2])
+            if jump > PLACE_JUMP_MPS * DT:
+                k = min(1.0, DT / PLACE_BLEND_S)
+                tx, ty = last[1] + (tx - last[1]) * k, last[2] + (ty - last[2]) * k
+        self.places[p.id] = (self.frame, tx, ty)
+        return tx, ty
 
     def round_the_ball(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
         """Lesson 207: nobody walks over a set ball (Law 13: stationary until kicked). While a
