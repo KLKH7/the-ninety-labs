@@ -1,0 +1,171 @@
+{
+ "mode": "broadcast_side",
+ "clips": [
+  "seed108",
+  "seed109",
+  "seed110",
+  "seed113",
+  "seed114",
+  "seed115",
+  "seed116"
+ ],
+ "broadcast_sides_from": "716014c (runs/tactical1/join/code)",
+ "summary": {
+  "held": 13,
+  "held_on_side": 13,
+  "held_on_detection": 0,
+  "resolved": 0,
+  "resolved_right": 0,
+  "resolved_wrong": 0,
+  "resolved_false_event": 0,
+  "contradicted": 0,
+  "contradicted_right": 0,
+  "contradicted_wrong": 0,
+  "unresolved": 13
+ },
+ "rows": [
+  {
+   "clip": "seed108",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": true,
+   "right": true,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed108",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": true,
+   "right": true,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed109",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": true,
+   "right": true,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed110",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "the broadcast's vote on h-t3 is not sure"
+  },
+  {
+   "clip": "seed110",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "the broadcast's vote on h-t2 is not sure"
+  },
+  {
+   "clip": "seed110",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": true,
+   "right": true,
+   "why": "the broadcast's vote on a-t7 is not sure"
+  },
+  {
+   "clip": "seed110",
+   "event": "v00004",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed110",
+   "event": "v00005",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed113",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": true,
+   "right": true,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed115",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed115",
+   "event": "v00002",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed115",
+   "event": "v00003",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": true,
+   "side_right": false,
+   "right": false,
+   "why": "no single broadcast track paired with the actor"
+  },
+  {
+   "clip": "seed116",
+   "event": "v00001",
+   "type": "pass",
+   "outcome": "unresolved",
+   "held_on": "side",
+   "matched": false,
+   "side_right": null,
+   "right": null,
+   "why": "no single broadcast track paired with the actor"
+  }
+ ]
+}

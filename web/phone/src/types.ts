@@ -1,4 +1,4 @@
-import { DEFAULT_TEAMS, type TeamNames, playerLabel } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, type TeamNames, playerLabel, sideUnsure } from "../../viewer/src/teams";
 
 // The shapes the phone reads, mirroring schemas/companion_message.schema.json,
 // schemas/minimap.schema.json, schemas/viewer_question.schema.json and viewer_answer.schema.json.
@@ -237,9 +237,17 @@ export interface SheetEntry {
 }
 export const teamSheet: Record<string, SheetEntry> = {};
 
+/** A tracked player no payload and no team sheet names: the tracker's number is all we have, and it
+ * is not a shirt, so it is never shown (video-prep, Oct 25: "Player 7240"). */
+export function unnamedTrack(player: string, names?: Record<string, string>): boolean {
+  return isTrack(player) && !names?.[player] && !teamSheet[player]?.name;
+}
+
 /** How a fan reads a player (viewer/src/teams.ts, `playerLabel`): the name or role a payload
- * gives, else the team sheet's name, else the club and shirt, or the club and the tracker's number. */
+ * gives, else the team sheet's name, else the club and shirt; a tracked player nobody names is his
+ * club's ("London player"), or "A player" on a side not told surely: never the tracker's number. */
 export function playerName(player: string, names?: Record<string, string>): string {
+  if (unnamedTrack(player, names)) return sideUnsure(player) ? "A player" : `${teams[team(player)]} player`;
   const sheet = teamSheet[player]?.name;
   return playerLabel(player, teams, sheet && !names?.[player] ? { ...names, [player]: sheet } : names);
 }

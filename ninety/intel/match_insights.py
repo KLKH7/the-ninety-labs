@@ -68,6 +68,7 @@ class MatchInsights:
         events: Sequence[Mapping],
         fixture: Fixture,
         gate: Mapping | None = None,
+        score_reads: Sequence[Mapping] = (),
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
@@ -122,6 +123,9 @@ class MatchInsights:
         # Goals as vision detected them: what "why did that goal happen?" is asked about.
         facts["goal"] = scoring.goals(events)  # who scored, from whose pass (GROUNDING I24)
         facts["save"] = scoring.saves(events)
+        # The score as the broadcast shows it: the changes among the events, and the scorebug file's
+        # readings (`score_reads`), whose first holds the score before any change.
+        facts["scorebug"] = scoring.scorebug([*events, *score_reads])
         facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
         for rows in facts.values():
             for r in rows:
@@ -371,12 +375,16 @@ class MatchInsights:
         return {"facts": [], "summary": summary}
 
     def score(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """The score after minute_to (said only when no goal's side is in doubt), each goal up to then
-        with its scorer and assist, oldest first, and each club's saves over the minutes."""
+        """Each goal up to minute_to with its scorer and assist, oldest first, and each club's saves
+        over the minutes; the score's own counts are bookkeeping, never said (option B)."""
         team = self.team(club)
         clubs = self.fixture.clubs
         goals = [g for g in self.facts.get("goal", ()) if g["minute"] <= minute_to]
-        summary = [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
+        shown = [r for r in self.facts.get("scorebug", ()) if r["minute"] <= minute_to]
+        # The latest reading, its two numbers each bound to its club (lesson 221), as the score's are.
+        summary = [{**shown[-1], "value": shown[-1]["home"], "unit": "goals", "clubs": clubs, "club": None,
+                    "also": [[shown[-1]["away"], "goals", rf"\b{clubs['away']}\b[^.\d]*$"]]}] if shown else []
+        summary += [{**scoring.score(goals, minute_to, clubs), "clubs": clubs, "club": None}]
         summary += [
             {**r, "club": clubs[t]}
             for t, r in scoring.save_counts(self.facts.get("save", ()), minute_from, minute_to).items()
@@ -563,6 +571,12 @@ def load_fixture(path: Path) -> Fixture:
     return Fixture(int(body["seed"]), params["home_code"], params["away_code"])
 
 
+def score_reads(path: Path) -> list[dict]:
+    """A clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score, the vision ones."""
+    rows = (json.loads(line) for line in path.read_text().splitlines() if line.strip())
+    return [r for r in rows if r.get("type") in scoring.SCORE_TYPES and r.get("source") == "vision"]
+
+
 def main(argv: list[str] | None = None) -> None:
     from ninety.match import detected, tracking
 
@@ -574,12 +588,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("fixture", type=Path, help="the clip's clip.json, or {seed, home_code, away_code}")
     ap.add_argument("--clip", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--scorebug", type=Path, default=None,
+                    help="the clip's scorebug.jsonl (ninety/vision/scorebug.py): its readings of the score")
     args = ap.parse_args(argv)
     body = json.loads(args.tracked.read_text())
     frames = [f for f in body["frames"] if f.get("source") == tracking.TRACKED]
     if len(frames) != len(body["frames"]):
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
-    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture))
+    reads = score_reads(args.scorebug) if args.scorebug is not None else []
+    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
+                             score_reads=reads)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 

@@ -283,6 +283,7 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .half-pitch .shot.off { fill: none; stroke-width: 0.45; }
 .half-pitch .shot.off.home { stroke: color-mix(in srgb, var(--home) 40%, #fff); }
 .half-pitch .shot.off.away { stroke: color-mix(in srgb, var(--away) 40%, #fff); }
+.half-pitch .shot.open { fill: rgba(235, 235, 245, 0.45); stroke-width: 0.35; } /* outcome not read */
 
 /* ===== Apple Sports, matched (Coordinator, Oct 24: exact match of mobbin/live-applesports-1..3,
    mobbin2/live-applesports-teamstats-1 and mobbin/story-applesports-1). Measured off the 1179 px
@@ -949,3 +950,9 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 .onboard-back svg { width: 20px; height: 20px; stroke-width: 2.6; margin-left: -1px; }
 .onboard-skip { height: 32px; padding: 0 14px !important; border-radius: 16px; }
 .onboard .nav-link:active { background: rgba(118, 118, 128, 0.36); }
+
+/* The score read off the broadcast's scorebug (#356): Apple Sports' numerals over smaller crests;
+   with no reading, the crests stand alone where the numerals were (1A). A tap says how we know. */
+.side-score[hidden] { display: none; }
+.side-score { cursor: pointer; }
+body[data-scorebug="read"] .band .side .crest { width: 38px; height: 44px; }
