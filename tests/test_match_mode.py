@@ -32,7 +32,7 @@ META = {"fps": FPS, "t_start": 60.0, "frames": 75, "segments": SEGMENTS}
 def event(eid, t, kind, team, outcome=None, confidence=0.9, **more):
     e = {"id": eid, "t": t, "frame": round(t * FPS), "type": kind, "team": team, "x": 60.0, "y": 34.0,
          "end_x": 100.0, "end_y": 34.0, "player": None, "outcome": outcome, "ball_speed_kmh": 60.0,
-         "source": "vision", "confidence": confidence}
+         "source": "vision", "confidence": confidence, "team_confidence": 0.99}
     if kind == "pass":
         e.update(receiver=None, intended=None, interceptor=None, deflected_by=None)
     return {**e, **more}
@@ -145,6 +145,14 @@ def test_the_scoreline_counts_only_confident_detected_goals():
     body = condensed.build(META, EVENTS)
     assert body["goals"] == [{"t": 61.0, "team": "home", "event": "v2"}]
     assert body["min_confidence"] == MIN_CONFIDENCE
+
+
+def test_an_event_on_a_side_not_told_surely_is_in_no_club_s_stats():
+    """UI inventory #7: Team Stats split by the tracker's side vote; an unsure side counts for no one."""
+    unsure = [event("p", 60.5, "pass", "away", "success", team_confidence=0.3),
+              event("s", 61.0, "shot", "away", "off_target", team_confidence=0.3)]
+    last = condensed.build(META, unsure)["stats"][-1]
+    assert last["away"] == last["home"] == dict.fromkeys(condensed.STATS, 0)
 
 
 def test_the_stats_are_the_agents_team_facts_over_the_confident_events_so_far():

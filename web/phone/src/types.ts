@@ -236,20 +236,28 @@ export interface SheetEntry {
   position?: string;
 }
 export const teamSheet: Record<string, SheetEntry> = {};
+/** The same feed's rows for TACTICAL track ids (match.json `lineup_tactical`): the radar's dots, the
+ * player card and answers. Kept apart from `teamSheet`: a string in one id space is another man in the
+ * other (lesson 259). Names come from the player-ID feed, never from vision (`identity`). */
+export const tacticalSheet: Record<string, SheetEntry> = {};
 
 /** A tracked player nothing names: the tracker's number is all we have, and it is not a shirt, so it
  * is never shown (video-prep, Oct 25: "Player 7240"). `events`: the id is a BROADCAST track (an
  * event's or a highlight's), the only id space the team sheet's line-up names (names-by-role). */
 export function unnamedTrack(player: string, names?: Record<string, string>, events = false): boolean {
-  return isTrack(player) && !names?.[player] && !(events && teamSheet[player]?.name);
+  return isTrack(player) && !names?.[player] && !(events ? teamSheet : tacticalSheet)[player]?.name;
 }
+
+/** A tracked player nothing names: his club's player, or "A player" on a side not told surely. */
+const unnamed = (player: string) => (sideUnsure(player) ? "A player" : `${teams[team(player)]} player`);
 
 /** How a fan reads a player on the radar, a player card or an answer (TACTICAL track ids): the name
  * or role a payload gives, else the club and shirt; a tracked player nobody names is his club's
  * ("London player"), or "A player" on a side not told surely: never the tracker's number. Never the
  * team sheet's line-up, which names broadcast tracks: the same string can be another man here. */
 export function playerName(player: string, names?: Record<string, string>): string {
-  if (unnamedTrack(player, names)) return sideUnsure(player) ? "A player" : `${teams[team(player)]} player`;
+  if (unnamedTrack(player, names)) return unnamed(player);
+  if (isTrack(player) && !names?.[player]) return tacticalSheet[player]!.name!; // the ID feed's name
   return playerLabel(player, teams, names);
 }
 
@@ -257,7 +265,8 @@ export function playerName(player: string, names?: Record<string, string>): stri
  * the line-up names the track, else as playerName says him. */
 export function eventName(player: string): string {
   const sheet = teamSheet[player]?.name;
-  return sheet ? sheet : playerName(player);
+  if (sheet) return sheet;
+  return isTrack(player) ? unnamed(player) : playerLabel(player, teams); // never the tactical feed's row
 }
 
 /** Match time as m:ss. */
