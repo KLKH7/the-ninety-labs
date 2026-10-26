@@ -870,3 +870,42 @@ ion-modal { --backdrop-opacity: 0.45; }
 .ask-start[data-focus="players"] #ask-players { order: -1; }
 .ask-start[data-focus="players"] #ask-start-title { margin-top: 22px; }
 .ask-start[data-focus="players"][hidden] { display: none; }
+
+/* ---- Ask, Perplexity / ChatGPT style (Kian, Oct 25): one raised pill composer with the send
+   button inside it, dimmed until there is text; the empty state and the onboarding sit low, near
+   the thumb, above the composer; starter questions as a two-column card grid with a glyph. */
+ion-footer.composer { padding: 8px 0 14px; }
+#ask-form { display: block; padding: 0 16px; }
+.ask-pill { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 18px; border-radius: 26px;
+  background: #1c1c1e; border: 1px solid rgba(84, 84, 88, 0.65); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); }
+.ask-pill:focus-within { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); border-color: rgba(142, 142, 147, 0.8); }
+#question { flex: 1; min-width: 0; min-height: 40px; max-height: 128px; padding: 9px 0; border: 0; border-radius: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: 17px; line-height: 22px; resize: none; overflow-y: auto; }
+#question::placeholder { color: rgba(235, 235, 245, 0.45); }
+#question:focus, #question:focus-visible { outline: none; }
+.ask-send { flex: none; width: 36px; height: 36px; min-height: 36px; padding: 0; margin: 0 0 2px; border-radius: 18px; background: #0a84ff; color: #fff; opacity: 1;
+  display: grid; place-items: center; transition: background-color 0.15s, color 0.15s; }
+.ask-send svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.ask-pill:has(#question:placeholder-shown) .ask-send { background: #3a3a3c; color: rgba(235, 235, 245, 0.45); opacity: 1; }
+/* The empty state and the onboarding fill the page and sit at its foot, above the composer. */
+#ask-content::part(scroll) { display: flex; flex-direction: column; }
+#ask-content .ask-start, #ask-content .onboard { margin-top: auto; }
+.ask-start { padding: 24px 16px 12px; }
+#ask-start-title { margin: 0 4px 14px; font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
+.ask-start #ask-players-title { margin: 22px 4px 12px; font-size: 20px; }
+.chip-grid { gap: 8px; margin-top: 0; }
+#panel-ask .q-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px;
+  min-height: 92px; padding: 12px 14px 13px; border: 0; border-radius: 18px; background: #1c1c1e;
+  font-size: 15px; line-height: 20px; font-weight: 500; text-align: left; white-space: normal; cursor: pointer; }
+#panel-ask .q-card:active { background: #2c2c2e; }
+.q-glyph { width: 22px; height: 22px; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ask-start[data-focus="players"] #ask-players-title { margin-top: 0; }
+.ask-start[data-focus="players"] #ask-start-title { margin-top: 22px; font-size: 20px; }
+/* The onboarding fills the page: its page dots and Skip at the top, the question and the choices
+   at the foot, near the thumb. */
+#ask-content .onboard:not([hidden]) { margin-top: 0; flex: 1; display: flex; flex-direction: column; padding: 4px 0 20px; }
+.onboard-title { margin: auto 20px 18px; }
+#ask-button { min-height: 36px; padding: 0; border-radius: 18px; }
+/* Ask's footer (composer and tab bar) is already in ion-content's offset: no extra clearance, so
+   the empty state sits just above the composer. */
+ion-tab #ask-content { --padding-bottom: 12px; }

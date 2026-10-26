@@ -109,6 +109,15 @@ export function questions(fan: Fan, teams: TeamNames): string[] {
   return [...new Set(groups.flatMap((g) => BANK[g]).map(fill))];
 }
 
+export type Kind = "moments" | "tactics" | "players" | "numbers";
+/** A question's kind, for its glyph on the starter cards: by the words it uses. */
+export function kindOf(q: string): Kind {
+  if (/missed|shots|moments|corners|goal/i.test(q)) return "moments";
+  if (/overload|lines|options|shape|compact|ball back|set up|moving/i.test(q)) return "tactics";
+  if (/player|run|fastest|linking|speed|far/i.test(q)) return "players";
+  return "numbers";
+}
+
 /** The Story feed's starting filter: a casual fan opens on the key plays, an analyst on every play. */
 export const storyMode = (fan: Fan): "key" | "all" => (fan.mode === "casual" ? "key" : "all");
 

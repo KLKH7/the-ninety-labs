@@ -1234,6 +1234,24 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** A starter card: the question under a small glyph for its kind (fan.ts, `kindOf`). */
+const GLYPHS: Record<fans.Kind, string> = {
+  moments: '<path d="M12 3.5 14.5 9l6 .5-4.6 3.9 1.4 5.9L12 16.2l-5.3 3.1 1.4-5.9L3.5 9.5l6-.5z"/>',
+  tactics: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.6"/>',
+  players: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/>',
+  numbers: '<path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/>',
+};
+function card(q: string) {
+  const b = chip(q, null);
+  b.classList.add("q-card");
+  b.textContent = "";
+  const text = document.createElement("span");
+  text.textContent = q;
+  b.insertAdjacentHTML("afterbegin", `<svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true">${GLYPHS[fans.kindOf(q)]}</svg>`);
+  b.append(text);
+  return b;
+}
+
 /** Questions this fan has already asked: never suggested back to them. */
 const asked = new Set<string>();
 
@@ -1261,13 +1279,13 @@ function renderChips() {
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
   // An empty conversation opens on a grid of questions (never a blank page), then the answers.
-  $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
+  $("ask-grid").replaceChildren(...all.slice(0, 6).map(card));
   // And about the players most in the game (the Scout's per-player numbers), when there are any.
   const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
   const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
   const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
   const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
-  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").replaceChildren(...theirs.map(card));
   $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
@@ -1337,7 +1355,10 @@ async function ask(text: string) {
   } finally {
     button.removeAttribute("aria-disabled");
   }
-  if (input.value.trim() === q) input.value = "";
+  if (input.value.trim() === q) {
+    input.value = "";
+    fitQuestion();
+  }
   pending.replaceWith(renderAnswer(q, at, answer, failed));
   // The new question at the top, whole, with its answer under it (Messages scrolls a new thread
   // turn into view; it never leaves the question cut under the bar).
@@ -1549,6 +1570,20 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
 $("ask-form").addEventListener("submit", (e) => {
   e.preventDefault();
   void ask($<HTMLInputElement>("question").value);
+});
+// The composer grows with the question, up to five lines, then scrolls; Return sends, as in
+// Messages (Shift-Return for a new line).
+function fitQuestion() {
+  const q = $<HTMLTextAreaElement>("question");
+  q.style.height = "auto";
+  q.style.height = `${Math.min(q.scrollHeight, 22 * 5 + 18)}px`;
+}
+$("question").addEventListener("input", fitQuestion);
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    $<HTMLFormElement>("ask-form").requestSubmit();
+  }
 });
 
 // --- "How do we know?": what the cameras saw, what was measured, what checked it ---------------

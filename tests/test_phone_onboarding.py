@@ -183,3 +183,29 @@ def test_a_match_without_the_favourite_club_keeps_its_own_two_clubs(browser, sit
     assert not any("Lisbon" in q for q in grid(page))
     assert not errors
     ctx.close()
+
+
+def test_the_composer_is_one_pill_with_send_inside_centred_and_return_sends(browser, site):  # noqa: F811
+    ctx, page, errors = open_phone(browser, site)
+    page.click("#tab-button-ask")
+    page.click(".onboard-skip")
+    pill = page.locator(".ask-pill").bounding_box()
+    send = page.locator("#ask-button").bounding_box()
+    assert pill["x"] < send["x"] and send["x"] + send["width"] <= pill["x"] + pill["width"]  # inside
+    gap_top = send["y"] - pill["y"]
+    gap_bottom = pill["y"] + pill["height"] - (send["y"] + send["height"])
+    assert abs(gap_top - gap_bottom) <= 1  # vertically centred on one line
+    empty = page.eval_on_selector("#ask-button", "b => getComputedStyle(b).backgroundColor")
+    page.fill("#question", "Who has more of the ball? " * 5)
+    tall = page.locator(".ask-pill").bounding_box()["height"]
+    assert tall > pill["height"] + 15  # the field grows with the question
+    lit = "getComputedStyle(document.querySelector('#ask-button')).backgroundColor === 'rgb(10, 132, 255)'"
+    page.wait_for_function(lit)  # blue once there is text
+    assert empty != "rgb(10, 132, 255)"  # grey while empty
+    page.fill("#question", "Who has more of the ball?")
+    page.press("#question", "Enter")  # Return sends
+    page.wait_for_selector("#answers .answer:not(.pending)")
+    assert page.input_value("#question") == ""
+    assert abs(page.locator(".ask-pill").bounding_box()["height"] - pill["height"]) <= 1  # back to one line
+    assert not errors
+    ctx.close()

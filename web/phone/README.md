@@ -21,7 +21,9 @@ code; everything else is here. The phone pairs with the big screen, then has thr
   Ask's suggested questions (the fan's club and focus first; every one reaches a Companion tool,
   `tests/test_phone_onboarding.py`) and set Story's starting filter (Key plays for a casual fan,
   All plays for an analyst). They stay in this browser (guarded localStorage, `ninety.fan`), and
-  the settings sheet's Personalise row changes them;
+  the settings sheet's Personalise row changes them. The empty state and the choices sit low, near
+  the thumb, above one pill composer (send inside it, dimmed until there is text; it grows to five
+  lines; Return sends);
 - **Insights**: the Insight Scout's hidden-stat cards (`cards.json` in the bundle, written by
   `ninety-e2e --cards`; schemas/insight_card.schema.json) up to the big screen's clock, newest first,
   each with its picture. "Why?" opens the card's precomputed, fact-checked answer in place: no
