@@ -359,4 +359,34 @@ def test_every_way_a_speed_is_written_or_said_is_gated(browser, site):
     assert say("a 19 m pass at 49 km/h.", measured) == "a 19 m pass at 49 ± 4 km/h."
     assert say("at 49 kilometres an hour.", measured) == "at 49 kilometres an hour, give or take 4."
     assert say("scores, 147 km/h", measured) == "scores"  # above P3: no ball goes that fast
+    # Merge-queue review: a number is read whole, and a unit with no band is never said.
+    assert say("a 1,049 km/h shot", measured) == "a shot"  # not '1,49 ± 4 km/h'
+    assert say("hit at 31 mph.", measured) == "hit."
+    assert say("hit at 40 m/s.", measured) == "hit."
+    assert say("hit at 49 km/hr.", measured) == "hit at 49 ± 4 km/hr."
+    assert say("13 metres to him.", measured) == "13 metres to him."  # a distance is no speed
+    assert say("hit at 12 metres a second.", measured) == "hit."
+    assert not errors
+
+
+def test_a_line_said_aloud_keeps_its_words_without_the_speed_and_a_recorded_one_is_dropped(browser, site):
+    """Merge-queue review of #378: the audio description's and the commentary's lines lose a held
+    speed from what is shown and said; one with a recording that says it is dropped (it can't be cut)."""
+    page, errors = open_viewer(browser, site)
+    said = [
+        {"id": "a", "text": "A pass at 49 km/h.", "spoken": "A pass at 49 kilometres an hour.", "file": None},
+        {"id": "b", "text": "A pass at 49 km/h.", "spoken": "A pass at 49 kilometres an hour.",
+         "file": "b.mp3"},
+        {"id": "c", "text": "Kick-off.", "spoken": "Kick-off.", "file": "c.mp3"},
+    ]
+    out = page.evaluate("s => window.ninetySpokenSpeeds(s, null)", said)
+    assert [(x["id"], x["text"], x["spoken"]) for x in out] == [
+        ("a", "A pass.", "A pass."), ("c", "Kick-off.", "Kick-off.")]
+    lines = [
+        {"id": "x", "t": 1, "t_end": 2, "text": "Played at 49 kilometres an hour.", "audio": None},
+        {"id": "y", "t": 3, "t_end": 4, "text": "Played at 49 kilometres an hour.", "audio": "y.mp3"},
+        {"id": "z", "t": 5, "t_end": 6, "text": "Out of play.", "audio": "z.mp3"},
+    ]
+    out = page.evaluate("l => window.ninetyCommentarySpeeds(l, {measured: false, error_kmh: 3.5})", lines)
+    assert [(x["id"], x["text"]) for x in out] == [("x", "Played."), ("z", "Out of play.")]
     assert not errors

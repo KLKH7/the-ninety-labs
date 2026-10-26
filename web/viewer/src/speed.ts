@@ -17,13 +17,17 @@ export interface SpeedGate {
 
 // "49 km/h" on screen, "49 kilometres an hour" spoken, with what joins it to the sentence
 // (", " or " at "), which goes with it.
-const SPEED = /(,\s*|\s+at\s+|\s+)?(\d+(?:\.\d+)?)\s*(km\/h|kph|kilomet(?:re|er)s?\s+(?:an|per)\s+hour)/gi;
+// The number is whole ("1,049" is one number, not 49); km/h is the unit a band is given in, and any
+// other speed unit (mph, m/s, metres a second) is never said.
+const SPEED =
+  /(,\s*|\s+at\s+|\s+)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(km\/hr?|kph|kmh|kilomet(?:re|er)s?\s+(?:an|per)\s+hour|mph|miles\s+(?:an|per)\s+hour|m\/s|met(?:re|er)s?\s+(?:a|per)\s+second)(?![a-z])/gi;
+const KMH = /^(km\/hr?|kph|kmh|kilomet)/i;
 
 /** The text with each ball speed it may not say taken out, and each one it may say given its band. */
 export function airSpeed(text: string, gate?: SpeedGate | null): string {
   const band = gate?.measured === true && gate.error_kmh != null ? Math.round(gate.error_kmh) : null;
   const out = text.replace(SPEED, (_whole, lead: string | undefined, v: string, unit: string) => {
-    if (band === null || Number(v) > BALL_CAP_KMH) return "";
+    if (band === null || !KMH.test(unit) || Number(v.replace(/,/g, "")) > BALL_CAP_KMH) return "";
     const spoken = /hour/i.test(unit);
     return `${lead ?? ""}${v} ${spoken ? `${unit}, give or take ${band}` : `± ${band} ${unit}`}`;
   });

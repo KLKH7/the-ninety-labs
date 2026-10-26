@@ -244,7 +244,8 @@ async function start() {
   b.claims = claimSpeeds(b.claims, m.speed);
   if (b.audio) b.audio = { ...b.audio, said: spokenSpeeds(b.audio.said, m.speed) };
   (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
-  (window as unknown as { ninetySpeed: typeof airSpeed }).ninetySpeed = airSpeed; // read by tests/test_viewer.py
+  // read by tests/test_viewer.py: the gate on a string, and on lines the viewer says aloud
+  Object.assign(window, { ninetySpeed: airSpeed, ninetySpokenSpeeds: spokenSpeeds, ninetyCommentarySpeeds: commentarySpeeds });
   const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
