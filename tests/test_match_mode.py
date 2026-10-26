@@ -226,6 +226,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     manifest = json.loads((www / "commentary" / "manifest.json").read_text())
     (www / "commentary" / "manifest.json").write_text(json.dumps({**manifest, "commentary": {"count": 2},
                                                                   "stadium": "stadium.wav"}))
+    _hls_bundle(www, "hls")  # the same match as an HLS ladder, where ffmpeg is installed
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -378,7 +379,9 @@ def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, s
     for hidden in (".bar", "#persona", "#reduce-motion", ".chapter-bar", ".keys"):
         assert not page.is_visible(hidden), hidden
     stage = page.locator("#stage").bounding_box()
-    assert stage["width"] == 1280 or stage["height"] == 900  # full-bleed: it fills the screen one way
+    # Full-bleed beside the companion (src/dock.ts, open by default): it fills what is left one way.
+    assert page.locator("#companion").bounding_box()["width"] == 380
+    assert stage["width"] == 1280 - 380 or stage["height"] == 900
     # The score is the broadcast's own scorebug; our title row is only for a screen reader.
     assert page.locator("#match").bounding_box()["width"] <= 1
     # The controls are on the picture: play, the clock and the scrubber with the chapters on it.
@@ -386,7 +389,8 @@ def test_the_big_screen_is_the_picture_alone_with_a_player_s_controls(browser, s
         assert page.is_visible(shown), shown
     assert page.locator("#ticks i").count() == 1  # the second chapter's start (the first is 0)
     assert page.locator("#ticks i.goal").count() == 0  # chapter 2 is a save; chapter 1 holds the goal
-    assert page.is_hidden("#hud-volume")  # the clip has no sound track: no dead control
+    # No sound track and no stadium file: the bed is the placeholder murmur, so the control is live.
+    assert page.is_visible("#hud-volume")
     assert not page.is_visible("#phone-panel") and page.locator("#pair-card").count() == 1
     assert not page.is_checked("#show-boxes")  # the detector's boxes are not broadcast graphics
     page.keyboard.press("d")
@@ -419,6 +423,8 @@ def test_the_qr_button_opens_and_closes_the_pairing_card(browser, site):  # noqa
     ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
         content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
     ctx.route_web_socket(re.compile(r".*/api/pair/.*"), lambda ws: None)
+    # The card is for a screen without the companion beside it (src/dock.ts): a viewer who closed it.
+    ctx.add_init_script("localStorage.setItem('ninety.dock', 'closed')")
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("#pair-card:not([hidden])")  # up at kick-off
@@ -465,8 +471,13 @@ def test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    page.wait_for_selector("#pair-card")  # no click: the TV's pairing card is up at kick-off
-    assert page.inner_text("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
+    # No click: paired at once. The companion beside the picture is the phone app on this code, and
+    # its "Take it to your phone" carries the same code (the picture's own card stays down for it).
+    page.wait_for_function(
+        "(document.querySelector('#companion-frame').getAttribute('src') || '').includes('code=K7MP3Q')")
+    assert "embed=1" in page.get_attribute("#companion-frame", "src")
+    assert page.text_content("#companion-code") == "K7M P3Q"
+    assert page.text_content("#pair-code") == "K7M P3Q"  # read off a TV in two groups of three
     assert page.locator("#pair-qr svg").count() == 1
     link = page.get_attribute("#phone-link", "href")
     assert "code=K7MP3Q" in link and "bundle=%2Fmatch%2F" in link
@@ -498,12 +509,14 @@ def test_the_score_carries_each_demo_clubs_crest_and_no_crest_for_another_club(b
     assert not errors
 
 
-def test_the_audio_menu_offers_stadium_or_commentary_off_by_default_with_optional_subtitles(browser, site):  # noqa: F811
+def test_the_audio_menu_offers_stadium_or_commentary_on_by_default_with_optional_subtitles(browser, site):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=commentary/")
     assert page.is_visible("#hud-audio") and page.is_visible("#hud-volume")  # the bundle has sound
     page.click("#hud-audio")
-    assert page.is_checked("input[name=track][value=stadium]")  # off by default
+    assert page.is_checked("input[name=track][value=commentary]")  # on by default (Kian, Oct 26)
     assert page.is_checked("input[name=subs][value=off]")
+    assert page.get_attribute("body", "data-bed-source") == "stadium"  # the bundle's bed file
+    page.check("input[name=track][value=stadium]")
     seek(page, 20)  # 60.82 s: inside the first line
     assert page.get_attribute("body", "data-commentary") == ""  # stadium only: no line plays
     page.check("input[name=track][value=commentary]")
@@ -530,7 +543,8 @@ def test_audio_description_stays_reachable_from_the_big_screen_through_the_audio
     """No commentary in this bundle: the menu offers Stadium and the audio description persona, by
     keyboard as by pointer, and no subtitles (they are the commentary's)."""
     page, errors = open_viewer(browser, site + "?bundle=match/", silent=True)
-    assert page.is_visible("#hud-audio") and page.is_hidden("#hud-volume")
+    assert page.is_visible("#hud-audio") and page.is_visible("#hud-volume")  # the murmur bed
+    assert page.get_attribute("body", "data-bed-source") == "murmur"
     page.focus("#hud-audio")
     page.keyboard.press("Enter")
     assert page.is_visible("#audio-menu")
@@ -594,7 +608,7 @@ def test_the_audio_menu_takes_focus_when_opened_and_gives_it_back_on_escape(brow
     page.focus("#hud-audio")
     page.keyboard.press("Enter")
     focused = page.evaluate("document.activeElement.name + ':' + document.activeElement.value")
-    assert focused == "track:stadium"
+    assert focused == "track:commentary"  # the track that plays
     page.keyboard.press("Tab")  # out of the Audio group into Subtitles (a radio group is one stop)
     assert page.evaluate("document.activeElement.name") == "subs"
     page.keyboard.press("Escape")
@@ -603,3 +617,206 @@ def test_the_audio_menu_takes_focus_when_opened_and_gives_it_back_on_escape(brow
     assert page.get_attribute("#hud-audio", "aria-expanded") == "false"
     assert not errors
     page.context.close()
+
+
+def test_the_big_screen_docks_the_companion_and_shows_the_ask_pill_once(browser, site):  # noqa: F811
+    """The phone app beside the picture on a computer (src/dock.ts): open by default, closed by its
+    own button or the control bar's, remembered; the first-run pill opens it and never returns."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    assert page.get_attribute("body", "data-dock") == "open" and page.is_visible("#companion-frame")
+    assert page.is_visible("#ask-hint")
+    assert page.inner_text("#ask-hint").startswith("Ask anything about this match")
+    page.click("#companion-toggle")
+    assert page.get_attribute("body", "data-dock") == "closed" and page.is_hidden("#companion")
+    assert page.locator("#stage").bounding_box()["width"] == 1280  # the picture takes the room back
+    page.click("#ask-hint")  # opens it and is used up
+    assert page.get_attribute("body", "data-dock") == "open" and page.is_hidden("#ask-hint")
+    page.click("#companion-qr")
+    assert page.is_visible("#companion-pair")  # "Take it to your phone": the QR code a tap away
+    page.reload()
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert page.is_hidden("#ask-hint")  # first run only
+    page.click("#hud-companion")
+    assert page.get_attribute("body", "data-dock") == "closed"
+    page.reload()
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert page.get_attribute("body", "data-dock") == "closed"  # remembered
+    assert not errors
+    page.context.close()
+
+
+def test_below_1000_px_the_companion_is_a_sheet_under_the_picture(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page.set_viewport_size({"width": 800, "height": 1000})
+    stage, sheet = page.locator("#stage").bounding_box(), page.locator("#companion").bounding_box()
+    assert stage["width"] == 800 and sheet["width"] == 800 and sheet["y"] >= stage["y"] + stage["height"]
+    page.click("#companion-toggle")
+    assert page.locator("#companion").bounding_box()["height"] == 52  # its handle only
+    assert not errors
+    page.context.close()
+
+
+def test_full_screen_is_the_player_and_its_companion_with_the_picture_alone_at_first(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    page.click("#hud-full")
+    page.wait_for_function("document.body.dataset.full === 'on'")
+    assert page.evaluate("document.fullscreenElement.classList.contains('layout')")
+    assert page.get_attribute("body", "data-dock") == "closed"  # the picture alone at first
+    page.click("#hud-companion")
+    assert page.get_attribute("body", "data-dock") == "open"  # docked beside it, never over the controls
+    page.evaluate("document.exitFullscreen()")
+    page.wait_for_function("document.body.dataset.full === 'off'")
+    assert page.get_attribute("body", "data-dock") == "open"  # as it was before full screen
+    assert not errors
+    page.context.close()
+
+
+def test_after_a_server_restart_the_big_screen_claims_its_same_code_back(browser, site):  # noqa: F811
+    """A restart loses the rooms (in memory): the relay answers 4404 for the code on screen. The
+    big screen asks for that code back (POST /api/pair with it), so its phones rejoin unscanned."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    posts: list[dict] = []
+    laptops: list = []
+
+    def pair(route):
+        posts.append(json.loads(route.request.post_data or "{}"))
+        route.fulfill(status=201, content_type="application/json",
+                      body=json.dumps({"code": "K7MP3Q", "clip": "seed42", "expires_in": 7200}))
+
+    def relay(ws):  # closed from the test, not here: a close inside the handler never returns
+        if "role=laptop" in ws.url:
+            laptops.append(ws)
+
+    ctx.route(re.compile(r".*/api/pair$"), pair)
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), relay)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_function("document.querySelector('#companion-code').textContent === 'K7M P3Q'")
+    page.wait_for_timeout(300)
+    assert len(laptops) == 1 and "code" not in posts[0]
+    laptops[0].close(code=4404)  # the server restarted: it does not know the code
+    page.wait_for_timeout(1000)
+    assert {"clip": "seed42", "code": "K7MP3Q"} in posts[1:]  # the same code, claimed back
+    assert len(laptops) == 2  # and the relay joined again
+    assert "code=K7MP3Q" in page.get_attribute("#companion-frame", "src")
+    ctx.close()
+
+
+def _hls_bundle(www, out: str) -> bool:
+    """The match bundle with an H.264 HLS ladder and MP4 (as #397 writes them), made by ffmpeg."""
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        return False
+    dst = www / out
+    if dst.exists():
+        return True
+    shutil.copytree(www / "match", dst)
+    x264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "50", "-keyint_min", "50", "-sc_threshold", "0"]
+    src = ["-f", "lavfi", "-i", "testsrc=size=320x180:rate=25", "-t", "12"]
+    rungs = []
+    for h in (360, 180):
+        (dst / "hls" / f"{h}p").mkdir(parents=True)
+        hls = ["-f", "hls", "-hls_time", "2", "-hls_segment_type", "fmp4", "-hls_playlist_type", "vod"]
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *src, "-vf", f"scale=-2:{h}", *x264, *hls,
+                        str(dst / "hls" / f"{h}p" / "index.m3u8")], check=True, timeout=120)
+        rungs.append(f"#EXT-X-STREAM-INF:BANDWIDTH={h * 4000},RESOLUTION={h * 16 // 9}x{h},"
+                     f'CODECS="avc1.640028"\n{h}p/index.m3u8\n')
+    (dst / "hls" / "master.m3u8").write_text("#EXTM3U\n#EXT-X-VERSION:7\n" + "".join(rungs))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *src, *x264, "-movflags", "+faststart",
+                    str(dst / "video.mp4")], check=True, timeout=120)
+    m = json.loads((dst / "manifest.json").read_text())
+    m["footage"] = {"kind": "video", "src": "video.mp4", "mp4": "video.mp4", "hls": "hls/master.m3u8",
+                    "frames": m["footage"]["frames"], "audio": None}
+    (dst / "manifest.json").write_text(json.dumps(m))
+    return True
+
+
+def test_hls_playback_starts_low_and_survives_a_forced_media_error(browser, site):  # noqa: F811
+    """src/player.ts in Chrome (H.264 needs the branded build; Playwright's Chromium has no
+    H.264): hls.js plays the ladder from its lowest rendition, and a fatal media error is
+    recovered with the picture playing on, the spinner down."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(site + "hls/manifest.json").close()
+    except urllib.error.HTTPError:
+        pytest.skip("no ffmpeg to encode the ladder")
+    try:
+        chrome = browser.browser_type.launch(channel="chrome", headless=True)
+    except Exception:
+        pytest.skip("no Chrome here (Playwright's Chromium cannot play H.264)")
+    page = chrome.new_page(viewport={"width": 1280, "height": 900})
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site + "?bundle=hls/")
+    page.wait_for_selector("body[data-state=ready]")
+    page.wait_for_function("window.ninetyPlayer && document.querySelector('#video').readyState >= 2")
+    assert page.evaluate("window.ninetyPlayer.state.source") == "hls.js"
+    # The lowest rung first, for a fast first frame; ABR climbs from it.
+    assert page.evaluate("(h => h.levels[h.startLevel].height)(window.ninetyPlayer.hls())") == 180
+    page.click("#play")
+    page.wait_for_function("document.querySelector('#video').currentTime > 1")
+    # recoverMediaError detaches and re-attaches the media: without the player holding on to what
+    # the viewer wanted, the picture stops here (it did, before want()).
+    page.evaluate("window.ninetyPlayer.fail()")
+    at = page.evaluate("document.querySelector('#video').currentTime")
+    page.wait_for_function(f"document.querySelector('#video').currentTime > {at} + 1")  # it plays on
+    assert page.evaluate("window.ninetyPlayer.state.recoveries") >= 1
+    assert page.is_hidden("#spinner")
+    assert not errors
+    chrome.close()
+
+
+def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site):  # noqa: F811
+    """?pass= is taken off the address at once and kept on the device; the ••• menu sets or clears
+    it; each value is posted to the embedded companion only, and never written into the page."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.route(re.compile(r".*/api/pair$"), lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"code": "K7MP3Q", "expires_in": 7200})))
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), lambda ws: None)
+    # A stand-in companion that keeps what its parent posts.
+    ctx.route(re.compile(r".*/phone/\?.*"), lambda route: route.fulfill(content_type="text/html", body=(
+        "<script>window.got=[];addEventListener('message',e=>{if(e.origin===location.origin)"
+        "window.got.push(e.data)})</script>")))
+    # Every postMessage the big screen sends into a frame, with its target origin.
+    ctx.add_init_script("""(() => { if (window !== window.top) return;
+      const get = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get;
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', { get() {
+        const w = get.call(this);
+        return w && { postMessage(m, t) {
+          (window.__sent ||= []).push([m, typeof t === 'string' ? t : t && t.targetOrigin]);
+          return w.postMessage(m, t); } }; } }); })()""")
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/&pass=s3cret-pass")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    assert "pass=" not in page.url and "bundle=match" in page.url  # stripped, the rest kept
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == "s3cret-pass"
+    page.wait_for_function("document.querySelector('#companion-frame').getAttribute('src')")
+    companion = page.frame_locator("#companion-frame").owner.element_handle().content_frame()
+
+    def last(passcode):  # postMessage is delivered asynchronously
+        companion.wait_for_function(f"(window.got || []).at(-1)?.passcode === {json.dumps(passcode)}")
+        assert companion.evaluate("window.got.at(-1)") == {"type": "ninety-passcode", "passcode": passcode}
+
+    last("s3cret-pass")
+    page.mouse.move(400, 300)
+    page.click("#hud-more")
+    page.click("#passcode-clear")
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == ""
+    last(None)
+    page.fill("#passcode", "other-pass")
+    page.keyboard.press("Enter")
+    last("other-pass")
+    assert page.input_value("#passcode") == ""  # not left in the field
+    html = page.content()
+    assert "s3cret-pass" not in html and "other-pass" not in html  # never written into the page
+    assert "pass" not in page.get_attribute("#companion-frame", "src")  # nor into the panel's address
+    page.click("#passcode-save")  # an empty Save keeps it: only Clear wipes it
+    assert page.evaluate("localStorage.getItem('ninety.passcode')") == "other-pass"
+    # Posted to this origin only: never '*', which any page the frame held could read.
+    sent = [s for s in page.evaluate("window.__sent || []") if s[0].get("type") == "ninety-passcode"]
+    origin = page.evaluate("location.origin")
+    assert len(sent) >= 3 and all(target == origin for _, target in sent), sent
+    ctx.close()
