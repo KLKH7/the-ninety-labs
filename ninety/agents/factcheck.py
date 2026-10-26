@@ -291,6 +291,10 @@ TEAM_NAMED = re.compile(
     r"\b(?:home|away|hosts?|visit(?:ors?|ing)|local(?:es)?|visitantes?|de\s+casa)\b", re.I)
 
 
+# A goal's side read from which of the broadcast scorebug's digits changed (condensed.scorebug_sides).
+SCOREBUG_SIDE = "scorebug"
+
+
 def side_known(event: Mapping) -> bool:
     """Whether a team may be named from this event: a ground-truth event (no detection confidence),
     or a detected one whose side was told above MIN_TEAM_CONFIDENCE. Every writer that names a side
@@ -301,6 +305,8 @@ def side_known(event: Mapping) -> bool:
         side = event.get("team_confidence")
         return side is not None and side > MIN_TEAM_CONFIDENCE
     if event.get("confidence") is None:
+        return True
+    if event.get("team_source") == SCOREBUG_SIDE:  # a goal sided by its score change (condensed.py)
         return True
     side = event.get("team_confidence")
     return side is not None and side > MIN_TEAM_CONFIDENCE

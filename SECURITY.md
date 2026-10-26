@@ -25,7 +25,10 @@ Please do not open a public issue. Use GitHub's
   budget; when the budget is spent the demo serves cached results. An Azure budget alert fires at
   $20.
 - **Expensive routes are gated.** Live generation (agent runs, speech) needs a demo passcode;
-  replaying a cached match does not.
+  replaying a cached match does not. On the big screen the passcode is typed in the ••• menu (or
+  given once as `?pass=`, taken off the address at once) and kept on that device only, in
+  localStorage `ninety.passcode`; it is never logged or written into the page, and is posted only
+  to the embedded companion, with this origin as the target (`web/viewer/src/dock.ts`).
 - **Rate limits** on every API route, by IP and by session.
 - **Strict CORS and input validation.** Every request body is validated against a schema; unknown
   fields are rejected.

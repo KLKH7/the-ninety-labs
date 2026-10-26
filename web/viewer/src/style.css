@@ -202,9 +202,9 @@ body[data-screen="big"] .audio-note,
 body[data-screen="big"] .controls { display: none !important; }
 /* The score and chapter stay for a screen reader (announced), not on screen: the scorebug says it. */
 body[data-screen="big"] .match { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
-body[data-screen="big"] .layout { display: block; padding: 0; max-width: none; height: 100vh; }
-body[data-screen="big"] .player { height: 100vh; display: grid; place-items: center; }
-body[data-screen="big"] .stage { width: min(100vw, calc(100vh * var(--ar, 1.7778))); border-radius: 0; }
+body[data-screen="big"] .layout { display: flex; padding: 0; max-width: none; height: 100vh; gap: 0; background: #000; }
+body[data-screen="big"] .player { flex: 1; min-width: 0; height: 100%; display: grid; place-items: center; position: relative; }
+body[data-screen="big"] .stage { width: min(100%, calc(100vh * var(--ar, 1.7778))); border-radius: 0; }
 
 body[data-screen="big"] .hud { display: grid; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 64px 3% 2.2%;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0)); color: #fff;
@@ -263,3 +263,85 @@ body[data-screen="big"][data-ui="on"] #overlay { transform: translateY(-9%); }
 .captions[hidden] { display: none; }
 body[data-screen="big"][data-ui="on"] .captions { bottom: calc(23% + 40px); }
 .audio-menu [hidden] { display: none; }
+
+/* ---- The companion on the computer (src/dock.ts, Kian Oct 26): the phone app docked right of
+   the picture, open by default; a bottom sheet below 1000 px; an overlay in full screen. */
+.companion { display: none; }
+body[data-screen="big"] .companion { display: flex; flex-direction: column; flex: none; width: 380px; height: 100%; position: relative;
+  background: #000; border-left: 0.5px solid rgba(84, 84, 88, 0.65); color: #fff; }
+body[data-screen="big"][data-dock="closed"] .companion { display: none; }
+.companion-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; padding: 0 12px 0 6px; flex: none; }
+.companion-grab { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; color: #fff; font: 600 17px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.companion-grab:hover { background: rgba(255, 255, 255, 0.08); }
+.companion-grab .chev { width: 18px; height: 18px; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.companion-phone { display: inline-flex; align-items: center; gap: 6px; background: #1c1c1e; color: #fff; border: 0; border-radius: 999px; padding: 7px 13px 7px 10px;
+  font: 500 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
+.companion-phone:hover, .companion-phone[aria-expanded="true"] { background: #2c2c2e; }
+.companion-phone svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.companion-pair { display: flex; gap: 14px; align-items: center; margin: 0 12px 12px; padding: 12px; background: #1c1c1e; border-radius: 14px; flex: none; }
+.companion-pair[hidden] { display: none; }
+.companion-qr { width: 112px; flex: none; background: #fff; border-radius: 8px; line-height: 0; }
+.companion-qr svg { width: 100%; height: auto; }
+.companion-pair p { margin: 0; font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: rgba(235, 235, 245, 0.6); }
+.companion-pair b { color: #fff; font-weight: 600; overflow-wrap: anywhere; }
+.companion-body { position: relative; flex: 1; min-height: 0; }
+.companion-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; color-scheme: dark; }
+.companion-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: rgba(235, 235, 245, 0.6); font: 400 15px -apple-system, system-ui, sans-serif; pointer-events: none; }
+.companion-wait[hidden] { display: none; }
+.hud #hud-companion[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+
+/* The first-run pill, under the broadcast's scorebug: one quiet line, gone after first use. */
+.ask-hint { display: none; }
+body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 11.5%; z-index: 3;
+  padding: 6px 14px; border-radius: 999px; border: 0.5px solid rgba(255, 255, 255, 0.14); background: rgba(28, 28, 30, 0.72); color: #fff;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font: 500 clamp(12px, 1vw, 15px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
+body[data-screen="big"] .ask-hint:hover { background: rgba(44, 44, 46, 0.86); }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] body[data-screen="big"] .ask-hint:not([hidden]) { animation: pair-in 0.5s ease-out 1s both; }
+}
+
+/* Below 1000 px: the picture on top, the companion a sheet under it; closed, only its handle. */
+@media (max-width: 999px) {
+  body[data-screen="big"] .layout { flex-direction: column; }
+  body[data-screen="big"] .player { flex: none; height: auto; }
+  body[data-screen="big"] .stage { width: 100%; }
+  body[data-screen="big"] .companion,
+  body[data-screen="big"][data-dock="closed"] .companion { display: flex; width: auto; height: auto; flex: 1; min-height: 52px; border-left: 0; border-radius: 14px 14px 0 0; background: #1c1c1e; margin-top: 4px; }
+  body[data-screen="big"][data-dock="closed"] .companion { flex: none; }
+  body[data-screen="big"][data-dock="closed"] .companion-body,
+  body[data-screen="big"][data-dock="closed"] .companion-pair { display: none; }
+  .companion-grab .chev { transform: rotate(90deg); }
+  body[data-dock="closed"] .companion-grab .chev { transform: rotate(-90deg); }
+  .companion-pair { background: #2c2c2e; }
+  .companion-phone { background: #2c2c2e; }
+}
+
+/* Full screen (hud.ts): the picture alone, the companion closed; the control bar's button docks it
+   beside the picture again, never over the controls. */
+body[data-screen="big"] .layout:fullscreen { width: 100vw; height: 100vh; }
+body[data-screen="big"] .layout:fullscreen .ask-hint { display: none; }
+/* The kick-off QR card is for a screen with no companion beside it, and never under the audio menu. */
+body[data-screen="big"][data-dock="open"] .pair-card,
+body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: none; }
+
+/* The picture waiting for data (src/player.ts): a quiet ring, never a silent black frame. */
+.spinner { position: absolute; left: 50%; top: 50%; z-index: 2; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22); border-top-color: #fff; pointer-events: none; }
+.spinner[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: spin 0.9s linear infinite; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The ••• menu: the demo passcode, as the audio menu is drawn. */
+/* Every control is a 44 pt target (Apple's HIG). */
+.more-menu input[type="password"] { -webkit-appearance: none; appearance: none; width: 15em; height: auto; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 10px;
+  background: rgba(118, 118, 128, 0.24); color: #fff; font: inherit; }
+.more-row { display: flex; gap: 8px; }
+.more-row button { border: 0; border-radius: 999px; min-height: 44px; padding: 6px 18px; font: inherit; font-weight: 600; cursor: pointer; background: rgba(118, 118, 128, 0.24); color: #fff; }
+.more-row button[type="submit"] { background: #fff; color: #000; }
+.more-state { margin: 0; font-size: 0.85em; color: rgba(235, 235, 245, 0.6); }
+.hud #hud-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.24); }
+/* The control bar's buttons keep a 44 pt target on a narrow window: the ring stays its size, the
+   hit area does not shrink below 44 px. */
+.hud .icon { position: relative; }
+.hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }

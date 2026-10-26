@@ -124,6 +124,9 @@ def mock_site(browser):
 
 def watch(page) -> list[str]:
     errors: list[str] = []
+    # The test clips hold a few events a team, under the phone's MIN_ROW_EVENTS: draw their rows anyway
+    # (main.ts reads this seam; test_phone_companion checks the threshold itself without it).
+    page.add_init_script("window.__ninetyMinRowEvents = 0")
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("dialog", lambda d: (errors.append(f"dialog: {d.message}"), d.dismiss()))
     return errors
