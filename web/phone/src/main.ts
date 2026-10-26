@@ -1234,20 +1234,38 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
-/** A starter card: the question under a small glyph for its kind (fan.ts, `kindOf`). */
-const GLYPHS: Record<fans.Kind, string> = {
+/** A starter card's glyph: its topic's (SF Symbols' shapes, drawn here), else its kind's
+ * (fan.ts, `kindOf`), so a grid of one kind still reads as six different questions. */
+const KIND_GLYPHS: Record<fans.Kind, string> = {
   moments: '<path d="M12 3.5 14.5 9l6 .5-4.6 3.9 1.4 5.9L12 16.2l-5.3 3.1 1.4-5.9L3.5 9.5l6-.5z"/>',
   tactics: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.6"/>',
   players: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/>',
   numbers: '<path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/>',
 };
+const TOPIC_GLYPHS: [RegExp, string][] = [
+  [/overload/i, '<circle cx="7" cy="9" r="2.4"/><circle cx="12" cy="15" r="2.4"/><circle cx="17" cy="9" r="2.4"/><path d="M4 20h16" stroke-dasharray="2 2.5"/>'], // three round the ball
+  [/lines/i, '<path d="M4 8h16M4 16h16" stroke-dasharray="2.5 2.5"/><path d="M8 20 16 4M16 4h-4.5M16 4v4.5"/>'], // a pass through two lines
+  [/options/i, '<circle cx="5.5" cy="12" r="2"/><path d="M7.5 12h11M7 10.5l10-5.5M7 13.5l10 5.5"/>'], // three passes from one man
+  [/shape/i, '<path d="M5 6h.01M12 6h.01M19 6h.01M5 12h.01M12 12h.01M19 12h.01M8.5 18h.01M15.5 18h.01" stroke-width="3.6"/>'], // a formation
+  [/ball back/i, '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17.5 3v4h-4"/>'], // the ball won back
+  [/compact/i, '<path d="M3 12h6M21 12h-6M6.5 9.5 9 12l-2.5 2.5M17.5 9.5 15 12l2.5 2.5M12 4v16"/>'], // squeezed together
+  [/missed/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>'],
+  [/shots/i, '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>'],
+  [/corners/i, '<path d="M6 21V3l11 4.5L6 12"/>'],
+  [/furthest|run/i, '<path d="M5 19c3 0 3-6 7-6s4-6 7-6"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="7" r="1.6"/>'],
+  [/fastest|speed/i, '<path d="M13.5 3 6 13.5h5.5L10.5 21 18 10.5h-5.5z"/>'],
+  [/linking/i, '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'],
+  [/more of the ball/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/>'],
+  [/halves/i, '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14M7 12h.01M17 12h.01" stroke-width="2"/>'],
+];
+const glyphFor = (q: string) => TOPIC_GLYPHS.find(([re]) => re.test(q))?.[1] ?? KIND_GLYPHS[fans.kindOf(q)];
 function card(q: string) {
   const b = chip(q, null);
   b.classList.add("q-card");
   b.textContent = "";
   const text = document.createElement("span");
   text.textContent = q;
-  b.insertAdjacentHTML("afterbegin", `<svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true">${GLYPHS[fans.kindOf(q)]}</svg>`);
+  b.insertAdjacentHTML("afterbegin", `<svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true">${glyphFor(q)}</svg>`);
   b.append(text);
   return b;
 }

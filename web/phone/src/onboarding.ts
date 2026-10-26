@@ -9,6 +9,14 @@ import { CHOICES, type Club, type Fan, type Focus, type Mode } from "./fan";
 
 type Step = "club" | "mode" | "focus";
 const STEPS: Step[] = ["club", "mode", "focus"];
+/** The mode and focus tiles' glyphs (SF Symbols' shapes, drawn here). */
+const GLYPHS: Record<string, string> = {
+  casual: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8.2l3.2 2.3-1.2 3.8h-4l-1.2-3.8zM12 3.5v4.7M15.2 10.5l4.4-1.4M14 14.3l2.6 3.6M10 14.3l-2.6 3.6M8.8 10.5 4.4 9.1"/>',
+  analyst: '<path d="M4 20h16M6.5 17v-5M11 17V7M15.5 17v-8M20 17V4.5"/>',
+  moments: '<path d="M12 3.5 14.5 9l6 .5-4.6 3.9 1.4 5.9L12 16.2l-5.3 3.1 1.4-5.9L3.5 9.5l6-.5z"/>',
+  tactics: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.6"/>',
+  players: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/>',
+};
 const TITLES: Record<Step, string> = { club: "Your club", mode: "How do you watch?", focus: "What matters most?" };
 
 export interface Onboarding {
@@ -29,25 +37,30 @@ export function mountOnboarding(root: HTMLElement, done: (fan: Fan | null, editi
       <span class="page-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <button type="button" class="nav-link onboard-skip">Skip</button>
     </div>
-    <h2 class="onboard-title" id="onboard-title" tabindex="-1"></h2>
-    <p class="sr-only" id="onboard-step"></p>
-    <ul class="group onboard-list" role="radiogroup" aria-labelledby="onboard-title"></ul>`;
+    <div class="onboard-body">
+      <h2 class="onboard-title" id="onboard-title" tabindex="-1"></h2>
+      <p class="sr-only" id="onboard-step"></p>
+      <ul class="onboard-tiles" role="radiogroup" aria-labelledby="onboard-title"></ul>
+    </div>`;
   const back = root.querySelector<HTMLButtonElement>(".onboard-back")!;
   const skip = root.querySelector<HTMLButtonElement>(".onboard-skip")!;
   const title = root.querySelector<HTMLElement>(".onboard-title")!;
-  const list = root.querySelector<HTMLUListElement>(".onboard-list")!;
+  const list = root.querySelector<HTMLUListElement>(".onboard-tiles")!;
   const dots = [...root.querySelectorAll<HTMLElement>(".page-dots i")];
 
+  /** A choice as a large tile: the club's crest, or a glyph, over its name. */
   function row(key: string, label: string, on: boolean, crest: string | null): HTMLLIElement {
     const li = document.createElement("li");
-    li.className = "setting-row radio";
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "radio-main onboard-option";
+    b.className = "onboard-option";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(on));
     b.dataset.value = key;
-    b.innerHTML = `${crest ? `<span class="onboard-crest" aria-hidden="true">${crest}</span>` : ""}<span class="row-title"></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>`;
+    const art = crest
+      ? `<span class="onboard-crest" aria-hidden="true">${crest}</span>`
+      : `<svg class="onboard-glyph" viewBox="0 0 24 24" aria-hidden="true">${GLYPHS[key]}</svg>`;
+    b.innerHTML = `${art}<span class="row-title"></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>`;
     b.querySelector(".row-title")!.textContent = label;
     b.addEventListener("click", () => choose(key));
     li.append(b);
@@ -64,6 +77,7 @@ export function mountOnboarding(root: HTMLElement, done: (fan: Fan | null, editi
     skip.textContent = editing ? "Cancel" : "Skip";
     dots.forEach((d, i) => d.classList.toggle("on", i === step));
     const chosen = draft[s];
+    list.dataset.step = s;
     list.replaceChildren(
       ...CHOICES[s].map(([key, label]) => row(key, label, chosen === key, s === "club" ? crestOf(short(CLUBS[key as Club])) : null)),
     );
