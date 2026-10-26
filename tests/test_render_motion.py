@@ -1681,7 +1681,9 @@ def test_a_tapping_foot_meets_the_ball_late_in_its_swing_on_its_own_side():
         t = p["touch"]
         if not t or t["w"] <= 0.5:
             continue
-        assert abs(_wrap(p["phase"] - STANCE_CENTRE[t["side"]])) > half * 0.5, p["phase"]
+        air = 2 * math.pi - 2 * half
+        into = ((p["phase"] - (STANCE_CENTRE[t["side"]] + half)) % (2 * math.pi)) / air
+        assert 0.5 < into < 1.0, (p["phase"], into)  # in the swing's second half: late, not in stance
         lateral = t["at"][1] - 30.0  # he runs along y = 30 facing +x: left is +y
         assert (lateral > 0) == (t["side"] == "l"), (t, lateral)
 
@@ -1737,6 +1739,15 @@ def test_a_runner_leans_into_a_turn(turn):
     head_side = rel["head"][0] * left[0] + rel["head"][1] * left[1]
     assert turn * pose["roll"] > math.radians(5), pose["roll"]
     assert turn * head_side > 0.05, head_side
+    g = Gait(action="run", speed=v, heading=h, roll=pose["roll"])  # the label tips with the mesh
+    parts = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, g)}
+    flat = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action="run", speed=v, heading=h))}
+    moved = [parts["head"]["a"][i] - flat["head"]["a"][i] for i in range(2)]
+    assert turn * (moved[0] * left[0] + moved[1] * left[1]) > 0.05, moved
+    for still in ("dive", "hands"):  # poses the mesh draws whole are not tipped, nor their labels
+        a = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action=still, heading=h, roll=0.2))}
+        b = {p["n"]: p for p in body_parts(0.0, 0.0, LOOK, Gait(action=still, heading=h))}
+        assert a["head"]["a"] == b["head"]["a"], still
 
 
 def test_the_head_turns_to_the_ball_no_faster_than_a_body_turns():

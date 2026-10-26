@@ -764,9 +764,14 @@ def carry_at(g: Gait, frame: dict, pid: str, x: float, y: float, height_m: float
 
 
 # A player watches the ball: his head turns toward it on the neck, no further than LOOK_MAX (fouls.py,
-# *design*), no faster than P16's 350 degrees a second, which the source says also bounds where he
-# looks. Drawn only: the body faces the engine's heading.
+# *design*), no faster than P16's 350 degrees a second, which P16 applies to where he looks too (the
+# source measures the body's turn, not the head's: *design*). Drawn only: the body faces the engine's
+# heading. A ball nearer than LOOK_NEAR_M is at his feet or on him: he looks the way he faces (*design*).
 LOOK_RATE = math.radians(350.0)
+LOOK_NEAR_M = 0.5
+# The contact poses the mesh draws whole (meshpose._CONTACT less _FEET): no lean into a turn on them.
+ROLL_FREE = ("chest", "head", "hands", "dive", "shield")
+ROLL_HEAD = 1.2  # the label's head goes 1.2 times the shoulders' way (*design*, measured near the mesh's)
 
 
 def watch_ball(g: Gait, x: float, y: float, ball: tuple[float, float, float]) -> None:
@@ -776,7 +781,8 @@ def watch_ball(g: Gait, x: float, y: float, ball: tuple[float, float, float]) ->
         g.look_yaw = g.look["yaw"]
         return
     want = 0.0
-    if g.action not in ("dive", "throw") and not g.fall and math.hypot(ball[0] - x, ball[1] - y) > 0.5:
+    far = math.hypot(ball[0] - x, ball[1] - y) > LOOK_NEAR_M
+    if g.action not in ("dive", "throw") and not g.fall and far:
         want = max(-LOOK_MAX, min(LOOK_MAX, _wrap(math.atan2(ball[1] - y, ball[0] - x) - g.heading)))
     step = LOOK_RATE * FRAME_S
     g.look_yaw += max(-step, min(step, want - g.look_yaw))
@@ -1445,10 +1451,11 @@ def body_parts(
     s = math.sin(g.phase)
     dive = g.dive if g.action == "dive" else 0.0
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
-    roll_m = 0.0
     if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
         lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
-        roll_m = math.sin(g.roll) * TRUNK_M * k  # and across, into a turn (pace)
+    # Across, into a turn (pace), in the poses the mesh tips it in (meshpose._upper): not one of its
+    # own whole-body contact poses.
+    roll_m = 0.0 if g.action in ROLL_FREE else math.sin(g.roll) * TRUNK_M * k
     if g.action == "chest":
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":
@@ -1470,8 +1477,9 @@ def body_parts(
             side += dive * (0.25 + 0.7 * min(z / 1.5, 1.0)) * k
             z -= abs(dive) * 0.42 * k * min((z - 0.35) / 1.2, 1.0)
         if roll_m:
-            # Tipped from the hips up, as far as the shoulders: the label goes with the drawn trunk.
-            side += roll_m * min(max((z - HIP_PIVOT_Z * k) / (TRUNK_M * k), 0.0), 1.2)
+            # Tipped from the hips up in proportion to height, the head (above the TRUNK_M of hips
+            # to shoulders) a little further: the label goes with the drawn trunk.
+            side += roll_m * min(max((z - HIP_PIVOT_Z * k) / (TRUNK_M * k), 0.0), ROLL_HEAD)
         return [
             round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(max(z + lift, 0.02), 4)
         ]
