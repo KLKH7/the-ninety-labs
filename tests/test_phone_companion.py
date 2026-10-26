@@ -976,8 +976,9 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
-    page.wait_for_selector("#lineups-teaser:not([hidden])")  # Live's teaser: the shirts the sheet is sure of
-    assert page.inner_text("#teaser-rows .teaser.home .teaser-shirts") == "4"
+    page.wait_for_selector("#teaser-rows .teaser", state="attached")
+    # Line-ups are the Players tab's alone (Kian, Oct 26): Live draws no teaser of the shirts.
+    assert page.is_hidden("#lineups-teaser")
     page.click("#lt-players")
     page.wait_for_selector("#top-players:not([hidden])")
     lists = page.locator("#top-lists .top-list")
@@ -1651,13 +1652,14 @@ def top(page, sel):
 
 
 def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_every_number(browser, site):  # noqa: F811
-    """Kian, Oct 26 ("make personalisation more visible"): the same moment, two layouts at a glance."""
+    """Kian, Oct 26 ("make personalisation more visible"): the same moment, two layouts at a glance;
+    the pitch leads Live for every persona."""
     goals = [{"t": 61.3, "team": "away", "event": "e2"}]
     fan = {"club": "LIS", "mode": "casual", "focus": "moments"}
     ctx, page, errors = persona_phone(browser, site, fan, goals)
     page.wait_for_selector("#key-moments:not([hidden])")
     assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
-    assert top(page, "#key-moments") < top(page, ".pitch-card")  # moments first, the pitch at the foot
+    assert top(page, ".pitch-card") < top(page, "#key-moments")  # the pitch leads, then the moments
     assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
     assert "Lisbon goal" in page.inner_text("#key-rows")  # the club, in the third person (Kian, Oct 26)
     sides = page.locator(".band .fixture > .side")
@@ -1697,7 +1699,7 @@ def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_ca
     ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "tactics"})
     page.wait_for_selector("#tactics-strip .focus-row")
     assert page.is_hidden("#players-strip")
-    assert top(page, "#tactics-strip") < top(page, ".pitch-card")
+    assert top(page, ".pitch-card") < top(page, "#tactics-strip") < top(page, "#live-summary")
     kinds = page.locator("#tactics-strip .focus-label").all_inner_texts()
     assert len({k.split(" · ")[0] for k in kinds}) == len(kinds) <= 3, kinds  # one card a kind
     assert not errors
@@ -1709,7 +1711,7 @@ def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_ca
     ctx, page, errors = persona_phone(browser, site, fan, more=more)
     page.wait_for_selector("#players-strip .player-row")
     assert page.is_hidden("#tactics-strip")
-    assert top(page, "#players-strip") < top(page, ".pitch-card")
+    assert top(page, ".pitch-card") < top(page, "#players-strip")
     first = page.locator("#players-strip .player-row").first
     assert first.locator(".focus-text").inner_text() == "Tac Named"
     assert first.locator(".shirt-dot").inner_text() == "9"
@@ -1758,5 +1760,21 @@ def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser
     page.wait_for_function("document.querySelector('#score-home').textContent === '2'")
     lines = page.locator("#goals-home .side-goal").all_inner_texts()
     assert lines == ["Rondell 2′", "Crowmere 2′"], lines  # e2's scorer h8 by name; the other by club
+    assert not errors
+    ctx.close()
+
+
+def test_live_never_lists_the_team_sheet_whatever_the_focus(browser, site):  # noqa: F811
+    """Kian, Oct 26: line-ups and team sheets only in the Players tab. A players focus with no
+    per-player numbers adds nothing under the pitch, never the sheet."""
+    lines = ["goalkeeper"] + ["defender"] * 4 + ["midfielder"] * 3 + ["forward"] * 3
+    row = lambda side, n, line: {"number": n + 1, "name": f"{side.title()} Player{n + 1}", "position": line,  # noqa: E731
+                                 "line": line}
+    sheets = {side: [row(side, n, line) for n, line in enumerate(lines)] for side in ("home", "away")}
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "players"},
+                                      more={"sheets": sheets, "player_stats": []})
+    page.wait_for_timeout(500)
+    assert page.is_hidden("#players-strip") and page.is_hidden("#lineups-teaser")
+    assert "Home Player1" not in page.inner_text("#pane-pitch")
     assert not errors
     ctx.close()
