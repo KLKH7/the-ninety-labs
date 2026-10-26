@@ -23,6 +23,7 @@ export class Narrator {
   private last = Number.NaN;
   private ctx: AudioContext | null = null;
   private current: AudioBufferSourceNode | null = null;
+  private speaking = false; // the browser's voice is ours: stop() never cuts the commentary's line
 
   constructor(
     private readonly lines: AudioLine[],
@@ -59,9 +60,10 @@ export class Narrator {
   stop() {
     this.current?.stop();
     this.current = null;
-    if (typeof speechSynthesis !== "undefined" && (speechSynthesis.speaking || speechSynthesis.pending)) {
+    if (this.speaking && typeof speechSynthesis !== "undefined" && (speechSynthesis.speaking || speechSynthesis.pending)) {
       speechSynthesis.cancel();
     }
+    this.speaking = false;
   }
 
   private audio(): AudioContext | null {
@@ -103,6 +105,7 @@ export class Narrator {
   }
 
   private speak(line: AudioLine) {
+    this.speaking = true;
     speakAloud(line.spoken, { lang: "en-GB", rate: 1.1 });
   }
 }

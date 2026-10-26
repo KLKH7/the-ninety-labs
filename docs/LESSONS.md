@@ -3250,6 +3250,26 @@ short and actionable. This file is public: no research sources, product names or
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
 
+### 270. A goal is the goal event, not the shot that went in
+- **What happened:** match mode (`ninety/condensed.py`), the highlight reel and the team goal
+  count (`ninety/intel/stats.py`) counted a goal only as a shot whose outcome was a goal. GROUNDING
+  I24 already said a goal is a detected `goal` event (Law 10). On the demo match (seed 8080) vision
+  logged 5 goal events. Two had no shot before them, so match.json, its chapters (the scrubber's
+  ticks) and the reel showed 3 goals. Those 3 took their side from the shot, whose side confidence
+  (0.16 to 0.65) is under the fact-checker's gate, so all 3 showed no club. The goal events' own
+  side confidence was 0.94 to 1.0. The demo audit found it, not a test: every test built goals as
+  shots.
+- **Rule:** one function says what a goal is (`stats.goal_moments`), and every screen and fact
+  reads it. A `goal` event is the goal. The shot just before it, if that shot went in, is the same
+  goal (the pairing `scoring.goals` already uses, so no new time window). The goal event's side and
+  confidence decide the goal's club and whether it counts; the shot gives where it was struck and
+  how fast. A shot that went in with no goal event after it still counts. A goal with no shot has no
+  distance, so no distance is said.
+- **Check:** `uv run pytest tests/test_match_mode.py -k goal tests/test_captioner.py -k strike`.
+  `test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts`
+  fails if a goal event without a shot is dropped, if a pair counts twice, or if the club comes from
+  the shot. On a bundle, match.json's `goals` and its goal chapters each match the goal events.
+
 ### 271. A name that reaches events through one bridge is capped by that bridge
 - **What happened:** #389 named the broadcast's tracks, which events name, only through the camera
   join to the tactical tracks. Its precision was high, but 232 of 345 events stayed unnamed and
@@ -3263,3 +3283,17 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
   fails if the direct path is on without its gate met.
 
+### 273. Watch the frames before naming the cause
+- **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
+  frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
+  at P16's rate and the stride already follows distance. Crops of seed 8080's carriers showed the
+  real causes: a first touch on the move stood the other foot on the grass for 0.76 s while the body
+  ran on at 3.5 m/s (he skated stiff-legged), a ball in close control rode at his shins with no foot
+  ever playing it, and a carried ball jumped 0.4 m round him in a frame with no foot on it. The first
+  fix tried (taps in close control) changed no box in the test window: every carry there sat inside
+  the engine's own touch windows, so the stance was the glitch.
+- **Rule:** diagnose a look problem from per-frame engine data and crops of the drawn frames, and
+  check that a fix changes the frames it is meant to (diff the labels before and after) before
+  building on it.
+- **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
+  or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
