@@ -454,15 +454,8 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
     lead = pose.get("lead") or 0.0
     if action in poses and action in _CONTACT and action not in _FEET:
         base = dict_angles(poses[action])
-        if action == "dive":
-            dive = pose.get("dive") or 0.0
-            mag = min(1.0, abs(dive))
-            base = mirror(base) if dive < 0 else base
-            # From standing to full stretch and back, so the dive grows and he gets up from it
-            # (scene.keeper_dive) without a pose snapping in a frame.
-            angles = _blend(dict_angles(poses["stand"]), base, mag)
-        else:
-            angles = base
+        # A dive is the straight body tipped over (scene.dive_pose), not a bent spine.
+        angles = dict_angles(poses["stand"]) if action == "dive" else base
     elif speed < STAND_BLEND[0] or (action == "stand" and speed < data["standSpeed"]):
         angles = dict_angles(poses["stand"])
     else:
@@ -482,12 +475,6 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             # Setting off and pulling up, the stride grows out of the stance and back into it.
             t = (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
             angles = _blend(dict_angles(poses["stand"]), angles, t)
-    up = pose.get("dive_up") or 0.0
-    if up:
-        # Getting up from a dive, what he does next is drawn with the dive fading out of it.
-        full = dict_angles(poses["dive"])
-        full = mirror(full) if up < 0 else full
-        angles = _blend(angles, {**angles, **full}, min(1.0, abs(up)))
     lean = pose.get("lean") or 0.0
     if lean and not (action in poses and action in _CONTACT and action not in _FEET):
         # Speeding up the trunk leans into it, slowing it comes up (scene.pace).
@@ -526,6 +513,12 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
         # One hand up (scene: a fouler owning up to the foul, fouls.signal_at), put there as a hold's
         # hands are.
         angles = _blend(angles, _signal(angles, pose, signal, heading, height_m), float(signal["w"]))
+    crouch = pose.get("crouch")
+    if crouch and crouch.get("w", 0.0) > 0.0:
+        # On one knee getting up from the grass (fouls.get_up).
+        from ninety.render.fouls import crouch_angles
+
+        angles = crouch_angles(angles, float(crouch["w"]), crouch.get("lead", "l"))
     brace = pose.get("brace")
     if brace and brace.get("w", 0.0) > 0.0:
         # A fouled player's hands out to break his fall (fouls.fall_at), each put where it reaches.

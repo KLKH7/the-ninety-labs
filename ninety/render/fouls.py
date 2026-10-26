@@ -37,6 +37,7 @@ def apply_fall(gait, player: dict) -> None:
     """Put the engine's fall on the gait this frame. A frame with no fall stands him up."""
     gait.fall, gait.fall_dir = drawn_fall(player)
     gait.brace = None
+    gait.crouch = None
 
 
 # How a fall is drawn inside the engine's spell down (lesson 280, *design*: chosen by eye on seed
@@ -64,6 +65,13 @@ ARM_REACH = 0.9  # of ARM_M: the hand reaches near the arm's length, the elbow s
 ARM_DROP = 0.7  # of the reach, how far below the shoulder the hand goes: forward and down
 HAND_GRASS_M = 0.06  # the lowest a hand goes: on the grass
 SPREAD = (0.25, 0.6)  # radians each hand goes out either side of the way he falls
+GET_UP_S = 1.5  # getting up takes this long, starting before the engine's own get-up, never before
+GET_UP_AFTER_S = 0.4  # he has been on the grass this long
+GET_UP_PUSH = 0.35  # of the get-up: pushing up on his hands, the knees coming under him
+GET_UP_KNEE = 0.2  # then a beat on one knee
+GET_UP_PUSHED = 0.55  # of the way over he lies, after the push
+GET_UP_KNELT = 0.35  # and on the knee
+GET_UP_CROUCH = 0.6  # how far into the kneel after the push
 
 
 def _stable_seed(pid: str, frame: int) -> int:
@@ -117,7 +125,10 @@ def _plan(sp: dict, frames: list[dict], fps: int) -> dict:
     first = 1.0 / fps
     latest = max((i_rise - i0 + 1) / fps, (i_peak - i0 + 1) / fps)
     down_s = min(rng.uniform(*FALL_DOWN_S) * (1.0 - FALL_QUICKER * pace), latest)
+    on_grass = i0 - 1 + round((max(down_s, first) + GET_UP_AFTER_S) * fps)
     plan.update({
+        "i_up": min(plan["i1"], max(on_grass, plan["i1"] + 1 - round(GET_UP_S * fps))),
+        "lead": "l" if rng.random() < 0.5 else "r",
         "start_dir": run, "dir": final, "down_s": max(down_s, first),
         "stumble_s": max(down_s, first) * rng.uniform(*STUMBLE_SHARE),
         "stumble": math.radians(rng.uniform(*STUMBLE_DEG) + STUMBLE_PACE_DEG * pace),
@@ -128,8 +139,8 @@ def _plan(sp: dict, frames: list[dict], fps: int) -> dict:
 
 
 def _between(a: float, b: float, w: float) -> float:
-    """The direction `w` of the way from `a` to `b` (radians, the short way round)."""
-    return math.atan2((1 - w) * math.sin(a) + w * math.sin(b), (1 - w) * math.cos(a) + w * math.cos(b))
+    """The direction `w` of the way from `a` to `b` (radians, turning the short way round)."""
+    return a + w * ((b - a + math.pi) % (2 * math.pi) - math.pi)
 
 
 def _smooth(u: float) -> float:
@@ -137,17 +148,33 @@ def _smooth(u: float) -> float:
     return u * u * (3.0 - 2.0 * u)
 
 
-def drawn_spell(plan: dict, i: int, engine_deg: float, fps: int) -> tuple[float, float, float]:
-    """(radians over, direction, the arms' weight) at clip frame `i` of a spell."""
+def get_up(lie: float, u: float) -> tuple[float, float, float]:
+    """(radians over, the arms' weight, the crouch) `u` of the way through getting up from `lie`
+    radians over: pushed up on the hands with the knees coming under him, a beat on one knee, then
+    up and standing (*design*: no straight-legged pivot back up)."""
+    u = min(max(u, 0.0), 1.0)
+    a, b = GET_UP_PUSH, GET_UP_PUSH + GET_UP_KNEE
+    if u < a:
+        v = _smooth(u / a)
+        return lie * (1.0 - (1.0 - GET_UP_PUSHED) * v), 1.0, GET_UP_CROUCH * v
+    if u < b:
+        v = (u - a) / GET_UP_KNEE
+        return lie * (GET_UP_PUSHED - (GET_UP_PUSHED - GET_UP_KNELT) * v), 1.0 - _smooth(v), \
+            GET_UP_CROUCH + (1.0 - GET_UP_CROUCH) * _smooth(v)
+    v = _smooth((u - b) / (1.0 - b))
+    return lie * GET_UP_KNELT * (1.0 - v), 0.0, 1.0 - v
+
+
+def drawn_spell(plan: dict, i: int, engine_deg: float, fps: int) -> tuple[float, float, float, float]:
+    """(radians over, direction, the arms' weight, the crouch) at clip frame `i` of a spell."""
     if not plan.get("drawn"):
-        return math.radians(engine_deg), None, 0.0
+        return math.radians(engine_deg), None, 0.0, 0.0
     t = (i - plan["i0"] + 1) / fps  # the contact frame is one frame into the fall (engine)
     s_t, d_t, land = plan["stumble_s"], plan["down_s"], plan["land"]
-    if i > plan["i_rise"]:
-        # The get-up is the engine's, from where he lies: up by the time the engine has him up.
-        angle = land * engine_deg / plan["peak"]
-        arms = 1.0 - _smooth((i - plan["i_rise"]) / max(plan["i1"] - plan["i_rise"], 1) * 1.6)
-        return angle, plan["dir"], arms
+    if i >= plan["i_up"]:
+        # The get-up (get_up), ending as the engine has him up: its last frame is short of standing.
+        angle, arms, crouch = get_up(land, (i - plan["i_up"] + 1) / (plan["i1"] - plan["i_up"] + 2))
+        return angle, plan["dir"], arms, crouch
     if t < s_t:
         u = t / s_t
         angle = plan["stumble"] * math.sin(0.5 * math.pi * u)  # caught off balance, slowing
@@ -162,20 +189,21 @@ def drawn_spell(plan: dict, i: int, engine_deg: float, fps: int) -> tuple[float,
         angle = land - math.radians(SETTLE_DEG) * math.sin(math.pi * min(v, 1.0)) * (1.0 - min(v, 1.0))
         way = plan["dir"]
     arms = _smooth((t / s_t - BRACE_FROM) / (1.0 - BRACE_FROM)) if t < d_t else 1.0
-    return angle, way, arms
+    return angle, way, arms, 0.0
 
 
 def brace_targets(x: float, y: float, heading: float, height_m: float, angle: float, way: float,
-                  spread: tuple[float, float]) -> dict[str, list[float]]:
+                  spread: tuple[float, float], drop: float = ARM_DROP) -> dict[str, list[float]]:
     """Where each hand reaches, untipped world metres: put so that, once the body is tipped by
-    `angle` toward `way`, the hand is ahead of its shoulder and down toward the grass."""
+    `angle` toward `way`, the hand is ahead of its shoulder and down toward the grass (`drop` of
+    the arm's reach below the shoulder; 1 pushes on the grass wherever it reaches)."""
     lx, ly = -math.sin(heading), math.cos(heading)  # his left
     out = {}
     for side, sign, out_by in (("l", 1.0, spread[0]), ("r", -1.0, spread[1])):
         sh = (x + sign * SHOULDER_SIDE_M * lx, y + sign * SHOULDER_SIDE_M * ly, SHOULDER_Z * height_m)
         sx, sy, sz = tip(sh, x, y, angle, way)
         reach = ARM_REACH * ARM_M * height_m
-        hz = max(HAND_GRASS_M, sz - reach * ARM_DROP)
+        hz = max(HAND_GRASS_M, sz - reach * drop)
         flat = math.sqrt(max(reach * reach - (sz - hz) ** 2, 0.0))
         # out to his own side of the way he falls: the left hand to the left of it
         across = (sh[0] - x) * -math.sin(way) + (sh[1] - y) * math.cos(way)
@@ -189,17 +217,21 @@ def fall_at(gait, mine: list[dict], player: dict, i: int, fps: int, height_m: fl
     """The fall this frame on the gait: the engine's spell, drawn (drawn_spell), and the arms out
     (gait.brace). Standing when the engine has him standing; x and y are never moved."""
     angle, way = drawn_fall(player)
-    gait.brace = None
+    gait.brace = gait.crouch = None
     plan = next((p for p in mine if p["i0"] <= i <= p["i1"]), None) if angle else None
     if plan is None:
         gait.fall, gait.fall_dir = angle, way
         return
-    angle, drawn_way, arms = drawn_spell(plan, i, player["fall"], fps)
+    angle, drawn_way, arms, crouch = drawn_spell(plan, i, player["fall"], fps)
     way = way if drawn_way is None else drawn_way
     gait.fall, gait.fall_dir = angle, way
+    if crouch > 0.0:
+        gait.crouch = {"w": round(crouch, 4), "lead": plan["lead"]}
+        gait.lift = crouch_lift(crouch, plan["lead"], height_m)
     if arms > 0.0 and plan.get("drawn"):
+        drop = 1.0 if i >= plan["i_up"] else ARM_DROP  # getting up, he pushes on the grass
         gait.brace = {"w": round(arms, 4), **brace_targets(player["x"], player["y"], gait.heading, height_m,
-                                                            angle, way, plan["spread"])}
+                                                            angle, way, plan["spread"], drop)}
 
 
 def tip(point: tuple[float, float, float], x: float, y: float, angle: float, direction: float):
@@ -298,3 +330,35 @@ def look_at(gait, mine: list[dict], fi: int, fps: int, x: float, y: float, frame
     want = math.atan2(him["y"] - y, him["x"] - x)
     yaw = (want - gait.heading + math.pi) % (2 * math.pi) - math.pi
     gait.look = {"yaw": round(max(-LOOK_MAX, min(LOOK_MAX, yaw)), 4), "w": round(best[0], 4)}
+
+
+# On one knee (meshpose._upper's crouch, *design*): the lead leg's thigh forward and up, its foot
+# planted, the other knee down with its shin behind. Thigh and calf angles in the asset's convention
+# (a thigh forward is negative, a knee bent positive).
+KNEEL_LEAD = (-1.5, 1.6)
+KNEEL_BACK = (-0.2, 1.9)
+
+
+def crouch_lift(w: float, lead: str, height_m: float) -> float:
+    """Metres the body is lowered so the crouch's lead foot is on the grass (negative)."""
+    from ninety.render.meshpose import _markers, asset, dict_angles, to_world
+
+    def foot_z(c: float) -> float:
+        a = dict_angles(asset()["poses"]["stand"])
+        a = crouch_angles(a, c, lead)
+        return to_world(0.0, 0.0, 0.0, height_m, _markers(a)[f"foot_{lead}"])[2]
+
+    return -round(max(foot_z(w) - foot_z(0.0), 0.0), 4)
+
+
+def crouch_angles(angles: dict, w: float, lead: str) -> dict:
+    """`angles` with the legs `w` of the way into the kneel, `lead` the leg whose foot is planted."""
+    back = "r" if lead == "l" else "l"
+    out = dict(angles)
+    for side, (th, ca) in ((lead, KNEEL_LEAD), (back, KNEEL_BACK)):
+        t0, c0 = out.get(f"thigh_{side}", 0.0), out.get(f"calf_{side}", 0.0)
+        t0 = t0 if isinstance(t0, float) else 0.0
+        c0 = c0 if isinstance(c0, float) else 0.0
+        out[f"thigh_{side}"] = t0 + (th - t0) * w
+        out[f"calf_{side}"] = c0 + (ca - c0) * w
+    return out

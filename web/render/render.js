@@ -1250,12 +1250,8 @@ function upperAngles(player, pose, heading, height) {
   let angles;
   if (poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action)) {
     angles = copyPose(poses[action]);
-    if (action === 'dive') {
-      const mag = Math.min(1, Math.abs(pose.dive || 0));
-      if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
-      // From standing to full stretch and back (meshpose._upper, scene.keeper_dive).
-      angles = blendPose(copyPose(poses.stand), angles, mag);
-    }
+    // A dive is the straight body tipped over (scene.dive_pose, meshpose._upper), not a bent spine.
+    if (action === 'dive') angles = copyPose(poses.stand);
   } else if (speed < STAND_BLEND[0] || (action === 'stand' && speed < player.standSpeed)) {
     angles = copyPose(poses.stand);
   } else {
@@ -1274,13 +1270,6 @@ function upperAngles(player, pose, heading, height) {
     if (action !== 'run' && speed < STAND_BLEND[1]) {
       angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
-  }
-  const up = pose.dive_up || 0;
-  if (up) {
-    // Getting up from a dive, what he does next is drawn with the dive fading out of it (meshpose._upper).
-    let full = copyPose(poses.dive);
-    if (up < 0) full = mirrorPose(full);
-    angles = blendPose(angles, Object.assign({}, angles, full), Math.min(1, Math.abs(up)));
   }
   const lean = pose.lean || 0;
   if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
@@ -1318,6 +1307,8 @@ function upperAngles(player, pose, heading, height) {
   }
   const signal = pose.signal;
   if (signal && signal.w > 0) angles = blendPose(angles, signalPose(player, angles, pose, signal, heading, height), signal.w);
+  const crouch = pose.crouch;
+  if (crouch && crouch.w > 0) angles = crouchPose(angles, crouch.w, crouch.lead);
   const brace = pose.brace;
   if (brace && brace.w > 0) {
     // A fouled player's hands out to break his fall (meshpose._upper, fouls.fall_at).
@@ -1327,6 +1318,21 @@ function upperAngles(player, pose, heading, height) {
     }
   }
   return angles;
+}
+
+// On one knee getting up (fouls.crouch_angles, KNEEL_LEAD, KNEEL_BACK).
+const KNEEL_LEAD = [-1.5, 1.6];
+const KNEEL_BACK = [-0.2, 1.9];
+function crouchPose(angles, w, lead) {
+  const out = Object.assign({}, angles);
+  const back = lead === 'l' ? 'r' : 'l';
+  for (const [side, [th, ca]] of [[lead, KNEEL_LEAD], [back, KNEEL_BACK]]) {
+    const t0 = typeof out['thigh_' + side] === 'number' ? out['thigh_' + side] : 0;
+    const c0 = typeof out['calf_' + side] === 'number' ? out['calf_' + side] : 0;
+    out['thigh_' + side] = t0 + (th - t0) * w;
+    out['calf_' + side] = c0 + (ca - c0) * w;
+  }
+  return out;
 }
 
 // One hand up at signal.at (meshpose._signal), put there as a hold's hands are.
@@ -1724,7 +1730,11 @@ class Body {
       // A fouled player down (fouls.py, tip): the whole body tipped over its feet toward fall_dir.
       const d = pose.fall_dir || 0;
       const axis = new THREE.Vector3(-Math.sin(d), Math.cos(d), 0);
-      this.group.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, pose.fall));
+      const tilt = new THREE.Quaternion().setFromAxisAngle(axis, pose.fall);
+      this.group.quaternion.premultiply(tilt);
+      // About the grass under his feet, as fouls.tip has it, wherever lift puts the body.
+      const off = new THREE.Vector3(0, 0, (pose.lift || 0) + (pose.bob || 0)).applyQuaternion(tilt);
+      this.group.position.set(x + off.x, y + off.y, off.z);
     }
     const placed = Object.assign({}, pose, { x, y });
     const angles = anglesFor(this.player, placed, face, this.heightM);

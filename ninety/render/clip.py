@@ -50,6 +50,7 @@ from ninety.render.scene import (
     carry_at,
     contacts,
     crowded_start,
+    dive_pose,
     drawn_ball,
     hold_at,
     holds,
@@ -387,6 +388,7 @@ def render_clip(
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
                 fouls.fall_at(g, spells.get(pl["id"], []), pl, fi, FPS, h)  # the engine's spell down, drawn
+                dive_pose(g, pl["x"], pl["y"], h)  # a keeper's dive: the straight body tipped, arms on
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
                 fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)

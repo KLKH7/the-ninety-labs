@@ -410,6 +410,7 @@ class Gait:
     roll: float = 0.0  # the trunk tipped into a turn (radians, to his left +, pace)
     fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
     signal: dict | None = None  # one hand up: side, at (world), w (fouls.signal_at)
+    crouch: dict | None = None  # getting up on one knee: w, lead (fouls.get_up)
     brace: dict | None = None  # a fouled player's hands out as he falls: l, r (world), w (fouls.fall_at)
     look: dict | None = None  # the head turned: yaw (radians from his facing), w (fouls.look_at)
     fall_dir: float = 0.0  # the way he falls, pitch radians
@@ -1010,6 +1011,51 @@ def keeper_dive(g: Gait) -> None:
     g.dive_up = g.dive_side * g.dive_drawn
 
 
+# A keeper's dive is drawn as a person dives (lesson 280, *design*): the body straight, tipped over
+# his feet toward the side he dives (the engine's side), as far as DIVE_TIP at full stretch, with the
+# arms reaching on past his head; off the grass while it grows, in free fall (a flight of the
+# DIVE_IN_FRAMES the dive takes to grow rises g t^2 / 8); getting up, the get-up of a fall
+# (fouls.get_up). The engine's position stays his feet. The stored dive pose bent the spine
+# 1.7 rad sideways over straight legs: it read as a lean and twisted the skinned body.
+DIVE_TIP = math.radians(80.0)
+DIVE_LIFT_M = 9.81 * (DIVE_IN_FRAMES * FRAME_S) ** 2 / 8.0
+DIVE_ARMS_OUT = 0.15  # metres the hands go toward his dive side, past the head
+
+
+def dive_pose(g: Gait, x: float, y: float, height_m: float) -> None:
+    """After fouls.fall_at: a keeper's drawn dive (g.dive, or g.dive_up getting up) as the body
+    tipped over his feet (g.fall, g.fall_dir), his jump (g.lift) and his arms (g.brace)."""
+    from ninety.render import fouls
+
+    m = g.dive if g.action == "dive" else g.dive_up
+    if not m:
+        return
+    side = 1.0 if m > 0 else -1.0
+    mag = min(abs(m), 1.0)
+    way = g.heading + side * math.pi / 2  # his left is +
+    rising = g.action == "dive" and g.dive_drawn < 1.0
+    if g.action == "dive":
+        g.fall, arms, crouch = DIVE_TIP * mag, 1.0, 0.0
+        if rising:
+            g.lift = max(g.lift, round(4.0 * DIVE_LIFT_M * mag * (1.0 - mag), 4))
+    else:
+        g.fall, arms, crouch = fouls.get_up(DIVE_TIP, 1.0 - mag)
+        g.crouch = None  # his feet are planted again: the lowered body bends the knees (lift)
+        g.lift = min(g.lift, fouls.crouch_lift(crouch, "l", height_m))
+    g.fall_dir = way
+    lx, ly = -math.sin(g.heading), math.cos(g.heading)
+    if g.action == "dive":
+        hands = {}
+        top = (fouls.SHOULDER_Z + fouls.ARM_M * fouls.ARM_REACH) * height_m
+        for s_, sign in (("l", 1.0), ("r", -1.0)):
+            off = sign * fouls.SHOULDER_SIDE_M + side * DIVE_ARMS_OUT
+            hands[s_] = [round(x + off * lx, 4), round(y + off * ly, 4), round(top + g.lift, 4)]
+        g.brace = {"w": 1.0, **hands}
+    elif arms > 0.0:
+        g.brace = {"w": round(arms, 4), **fouls.brace_targets(x, y, g.heading, height_m, g.fall, way,
+                                                                (0.4, 0.4), 1.0)}
+
+
 def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
     """Which foot the ball is on: 1 is his left, -1 his right. 0 if the pose does not pick a side."""
     if g.action not in ("strike", "foot", "thigh"):
@@ -1422,6 +1468,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "fall_dir": round(g.fall_dir, 4),
         "signal": g.signal,
         "brace": g.brace,
+        "crouch": g.crouch,
         "look": g.look,
     }
 
@@ -1451,7 +1498,7 @@ def body_parts(
     else:
         amp = 0.0
     s = math.sin(g.phase)
-    dive = g.dive if g.action == "dive" else 0.0
+    dive = 0.0  # a dive is the body tipped over his feet (dive_pose), not bent
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
     if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
         lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
