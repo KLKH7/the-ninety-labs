@@ -62,6 +62,7 @@ from ninety.render.scene import (
     throw_at,
     throws,
     touch_at,
+    watch_ball,
 )
 from ninety.render.splits import split_of
 from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
@@ -386,6 +387,7 @@ def render_clip(
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)
                 fouls.look_at(g, mine, fi, FPS, pl["x"], pl["y"], fr)
+                watch_ball(g, pl["x"], pl["y"], ball)  # his head turned to the ball
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.

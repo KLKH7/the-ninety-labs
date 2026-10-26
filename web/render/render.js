@@ -1286,6 +1286,11 @@ function upperAngles(player, pose, heading, height) {
     // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
     for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, lean * share, 0, 0);
   }
+  const roll = pose.roll || 0;
+  if (roll && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
+    // Into a turn the trunk tips the same way, across (scene.pace, meshpose._upper).
+    for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, 0, -roll * share, 0);
+  }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
     // turns the chest back to where the engine has it face.

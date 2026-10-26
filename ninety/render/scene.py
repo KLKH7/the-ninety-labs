@@ -16,7 +16,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
-from ninety.render.fouls import tip
+from ninety.render.fouls import LOOK_MAX, tip
 from ninety.render.meshpose import (
     ASSET_STATURE_M,
     BROW_Y,
@@ -238,14 +238,15 @@ FOUL_SHIN_M = 0.25
 # over TOUCH_RECOVER_S: a body does not snap back upright in two frames.
 TOUCH_RECOVER_S = 0.28
 # A ball in close control (engine.tick_carrier, D6: the softest push is not his, so it stays at his
-# feet) rides against his body and is moved by no touch of the engine's. Drawn, a foot plays it
-# once a stride, the foot on its side meeting it late in that foot's swing, as it comes through low
-# to land (V5), so the stride's feet do not run through it (*design*: one touch a stride is what keeps
-# a ball the engine holds within a step of him; the share of the swing is *design*).
+# feet) rides against his body and is moved by no touch of the engine's. Drawn, the swinging foot
+# plays it every step, left and right in turn, late in its swing as it comes through low to land
+# (V5), so the stride's feet do not run through it (*design*: a touch a step is what keeps a ball
+# the engine holds against his body there; the share of the swing is *design*).
 CARRY_M = 0.4  # the ball's centre this near his tracked point, on the grass, is at his feet (design)
 CARRY_GROUND_M = 0.05  # and no higher than this off it (design: a rolling ball, not a bounce)
 TAP_AT = 0.75  # how far through the foot's swing it meets the ball (design)
 TAP_HALF = 0.2  # the touch is drawn over this share of the swing either side of it (design)
+TAP_ACROSS = 0.5  # a tapping foot meets the ball this share of its radius to its own side (design)
 # The engine settles a carried ball to his feet on the side it wants it (engine.tick_carrier, D8:
 # shielding, a strike's turn), up to BALL_TO_FEET a second, with no touch of its own. A move this far
 # against his body in a frame is drawn as a foot rolling it there (*design*: twice the 4 to 5 cm a
@@ -405,10 +406,13 @@ class Gait:
     vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
     accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
+    accel_lat: float = 0.0  # his acceleration across the way he faces (m/s^2, to his left +, pace)
+    roll: float = 0.0  # the trunk tipped into a turn (radians, to his left +, pace)
     fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
     signal: dict | None = None  # one hand up: side, at (world), w (fouls.signal_at)
     look: dict | None = None  # the head turned: yaw (radians from his facing), w (fouls.look_at)
     fall_dir: float = 0.0  # the way he falls, pitch radians
+    look_yaw: float = 0.0  # where his head is turned to watch the ball, from his facing (watch_ball)
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -439,12 +443,17 @@ def pace(g: Gait, vx: float, vy: float, heading: float, dt: float, ahead: list |
         ax = (sum(v[0] for v in future) - sum(v[0] for v in g.vel)) / (n * n * dt)
         ay = (sum(v[1] for v in future) - sum(v[1] for v in g.vel)) / (n * n * dt)
         g.accel = ax * math.cos(heading) + ay * math.sin(heading)
+        g.accel_lat = -ax * math.sin(heading) + ay * math.cos(heading)
     g.vel.append((vx, vy))
     del g.vel[:-ACCEL_BOX]
     v = math.hypot(vx, vy)
     target = LEAN_DRAWN * math.atan(min(g.accel, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
     g.lean += (target - g.lean) * LEAN_EASE
     g.lean = max(g.lean, -_stride_lean(v))  # slowing, back to upright and no further
+    # Into a turn, as into a change of pace: the body leans the way it is accelerated, across as
+    # along (Kugler and Janshen 2010: the ground force follows the lean), drawn by the same share.
+    across = max(-ACCEL_MAX, min(ACCEL_MAX, g.accel_lat))
+    g.roll += (LEAN_DRAWN * math.atan(across / GRAVITY) - g.roll) * LEAN_EASE
 
 
 def _stride_lean(speed: float) -> float:
@@ -713,8 +722,9 @@ def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int,
 
 
 def carry_at(g: Gait, frame: dict, pid: str, x: float, y: float, height_m: float) -> None:
-    """A ball in close control (CARRY_M): once a stride the foot on its side plays it (g.touch), late
-    in that foot's swing (TAP_AT), taken in stride like any touch on the move (_feet). Leaves
+    """A ball in close control (CARRY_M): each step the swinging foot plays it (g.touch), left and
+    right in turn, late in its swing (TAP_AT), on the ball's back on that foot's side, taken in
+    stride like any touch on the move (_feet). Leaves
     g.touch alone when the engine's own touch, a hold or a throw is drawn, or he is not carrying it."""
     if g.touch is not None or g.hold is not None or frame.get("possessor") != pid:
         return
@@ -726,23 +736,51 @@ def carry_at(g: Gait, frame: dict, pid: str, x: float, y: float, height_m: float
         return
     k = height_m / ASSET_STATURE_M
     hx, hy = math.cos(g.heading), math.sin(g.heading)
-    side = "l" if rx * -hy + ry * hx >= 0 else "r"
     stride = _stride(g.speed)
     reach = (PLANT_AHEAD_MAX + STANCE_BEHIND_MAX) * k
     half = min(_duty(g.speed) * math.pi, math.pi * reach / stride)  # as _stride_feet has the stance
     air = 2 * math.pi - 2 * half
-    at = STANCE_CENTRE[side] + half + TAP_AT * air  # where its swing meets the ball, in phase
-    off = abs(_wrap(g.phase - at)) / (TAP_HALF * air)
+
+    def off_for(side: str) -> float:  # how far, in its touch's half-widths, from its swing meeting the ball
+        return abs(_wrap(g.phase - (STANCE_CENTRE[side] + half + TAP_AT * air))) / (TAP_HALF * air)
+
+    side = min(("l", "r"), key=off_for)
+    off = off_for(side)
     if off >= 1.0:
         return
+    sign = 1.0 if side == "l" else -1.0
     # The foot behind the ball, the way he carries it (touch_at's foot, with no kick in it).
     n = math.hypot(rx, ry) or 1.0
     dx, dy = (rx / n, ry / n) if math.hypot(rx, ry) > BALL_RADIUS else (hx, hy)
     bx, by, bz = b["x"], b["y"], b["z"] + BALL_RADIUS
-    px, py = bx - dx * (BALL_RADIUS + 0.02), by - dy * (BALL_RADIUS + 0.02)
+    # On that foot's side of the ball's back (*design*: half the radius across, so a left and a right
+    # foot do not both meet it dead centre).
+    across = TAP_ACROSS * BALL_RADIUS * sign
+    px = bx - dx * (BALL_RADIUS + 0.02) - dy * across
+    py = by - dy * (BALL_RADIUS + 0.02) + dx * across
     g.touch = {"part": "foot", "side": side, "soft": True,
                "at": [round(px, 4), round(py, 4), round(max(bz - 0.07, 0.03), 4)],
                "w": round(_ease(1.0 - off), 4)}
+
+
+# A player watches the ball: his head turns toward it on the neck, no further than LOOK_MAX (fouls.py,
+# *design*), no faster than P16's 350 degrees a second, which the source says also bounds where he
+# looks. Drawn only: the body faces the engine's heading.
+LOOK_RATE = math.radians(350.0)
+
+
+def watch_ball(g: Gait, x: float, y: float, ball: tuple[float, float, float]) -> None:
+    """Turn the head toward the ball (g.look) unless a foul's look is drawn (fouls.look_at), or he is
+    diving, throwing or down, when the head stays with the body."""
+    if g.look is not None:
+        g.look_yaw = g.look["yaw"]
+        return
+    want = 0.0
+    if g.action not in ("dive", "throw") and not g.fall and math.hypot(ball[0] - x, ball[1] - y) > 0.5:
+        want = max(-LOOK_MAX, min(LOOK_MAX, _wrap(math.atan2(ball[1] - y, ball[0] - x) - g.heading)))
+    step = LOOK_RATE * FRAME_S
+    g.look_yaw += max(-step, min(step, want - g.look_yaw))
+    g.look = {"yaw": round(g.look_yaw, 4), "w": 1.0} if abs(g.look_yaw) > 1e-3 else None
 
 
 def _kick_path(c: dict, u: float, contact: tuple, d: tuple, heading: float, xy: tuple,
@@ -1367,6 +1405,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "lift": round(g.lift, 4),
         "bob": round(g.bob, 4),
         "lean": round(g.lean, 4),
+        "roll": round(g.roll, 4),
         "pump": round(_pump(g.speed), 4),
         "touch": g.touch,
         "hold": g.hold,
@@ -1406,8 +1445,10 @@ def body_parts(
     s = math.sin(g.phase)
     dive = g.dive if g.action == "dive" else 0.0
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
+    roll_m = 0.0
     if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
         lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
+        roll_m = math.sin(g.roll) * TRUNK_M * k  # and across, into a turn (pace)
     if g.action == "chest":
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":
@@ -1428,6 +1469,9 @@ def body_parts(
         if dive and z > 0.35:
             side += dive * (0.25 + 0.7 * min(z / 1.5, 1.0)) * k
             z -= abs(dive) * 0.42 * k * min((z - 0.35) / 1.2, 1.0)
+        if roll_m:
+            # Tipped from the hips up, as far as the shoulders: the label goes with the drawn trunk.
+            side += roll_m * min(max((z - HIP_PIVOT_Z * k) / (TRUNK_M * k), 0.0), 1.2)
         return [
             round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(max(z + lift, 0.02), 4)
         ]
