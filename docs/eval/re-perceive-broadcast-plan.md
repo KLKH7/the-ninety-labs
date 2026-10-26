@@ -39,5 +39,24 @@ Mode `broadcast_side` goes into the agents' tools (`perceive.MODES`, and the wor
 
 Either short, it stays off, and the demo keeps the honest framing: claims on an unsure side stay quiet. With 10 resolved and 0 wrong, the 95% upper bound on the wrong rate is about 28%. The report states that bound, and claims no more than it.
 
-## Outcome
-*Not yet run.*
+## Outcome (2026-10-26, validation; `re-perceive-broadcast.json`)
+
+Run on the association's validation clips that have a broadcast run (`runs/tactical1/join/runs`:
+seeds 108, 109, 110, 113, 114, 115, 116; 112 has none), graded offline against their answer keys:
+
+- Held on their side: **13** claims (all passes).
+- Resolved: **0** (right 0, wrong 0). Contradicted: **0**. Still held: 13.
+- Why: for 10, no single broadcast track is paired with the actor (he is out of the broadcast's
+  picture, or the pairing is ambiguous); for 3, the paired broadcast track's whole-clip vote is not
+  above 0.96. Across the 7 clips only 7 broadcast tracks clear 0.96 at all.
+
+**By the rule fixed above it stays off** (needs at least 10 resolved): `broadcast_side` is in
+`ninety/agents/perceive.py`, tested, and not in `perceive.MODES`. Claims on an unsure side stay
+quiet. The demo's held claims were not run: the mode is not enabled, so it would decide nothing.
+
+**Deviation, stated:** the broadcast's whole-clip vote is read with the join run's own code
+(716014c, `runs/tactical1/join/code`), the code that made these observations and the association.
+At today's main the two-colour kit reader (R4, #283) needs the second shirt colour these older
+observations do not carry, and every broadcast track's confidence reads 0.0; read that way nothing
+could resolve either. The track ids agree exactly with the association's under both.
+

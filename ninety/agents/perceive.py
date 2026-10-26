@@ -36,7 +36,7 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 
-from ninety.agents.factcheck import MIN_CONFIDENCE, TEAM_NAMED, side_known
+from ninety.agents.factcheck import MIN_CONFIDENCE, MIN_TEAM_CONFIDENCE, TEAM_NAMED, side_known
 
 # Design (the Coordinator's brief): a look is at most a 3 s window of video.
 WINDOW_S = 3.0
@@ -194,4 +194,28 @@ def recheck(perceiver: Perceiver, claim_text: str, evidence: list[str], scope: d
     return (updated if targets and confirmed == len(targets) else None), looks
 
 
-__all__ = ["MAX_PER_MINUTE", "MODES", "WINDOW_S", "Look", "Perceiver", "doubtful", "recheck"]
+def broadcast_side(event: Mapping, association: Mapping, broadcast: Mapping) -> tuple[str, str]:
+    """Mode `broadcast_side` (docs/eval/re-perceive-broadcast-plan.md): ask the other camera what side
+    it saw the event's actor on. `association` is the join's `tracks` (broadcast track id -> its
+    tactical track and the pairing's confidence, ninety/vision/join.py); `broadcast` maps a broadcast
+    track id to (side, its whole-clip side vote's confidence), the reading the gate was measured on
+    (lesson 227). Returns (outcome, why): "resolved" only when the vote clears MIN_TEAM_CONFIDENCE on
+    the claim's side through a pairing of confidence 1.0; "contradicted" when it clears it on the
+    other side; else "unresolved". Not in MODES: its enabling rule is in the plan, and unmet."""
+    actor = event.get("player")
+    pairs = [b for b, a in association.items() if actor is not None and a.get("track") == actor]
+    if len(pairs) != 1:
+        return "unresolved", "no single broadcast track paired with the actor"
+    b = pairs[0]
+    side, conf = broadcast.get(b, (None, None))
+    if side is None or conf is None or conf <= MIN_TEAM_CONFIDENCE:
+        return "unresolved", f"the broadcast's vote on {b} is not sure"
+    if side != event.get("team"):
+        return "contradicted", f"the broadcast saw {b} on the other side at {conf}"
+    if association[b].get("confidence") != 1.0:
+        return "unresolved", f"the pairing of {b} is not certain"
+    return "resolved", f"the broadcast saw {b} on this side at {conf}"
+
+
+__all__ = ["MAX_PER_MINUTE", "MODES", "WINDOW_S", "Look", "Perceiver", "broadcast_side", "doubtful",
+           "recheck"]
