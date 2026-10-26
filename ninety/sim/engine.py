@@ -1808,17 +1808,11 @@ class Engine:
         out = max(math.hypot(cx - sx, cy - sy), shape.RADIUS_M + ball.RADIUS) + 0.001
         lx, ly = sx + nx * out, sy + ny * out
         if palm:
-            # Demo engine v2 (P11; *design*): a keeper's hands meet the ball palms facing it, turned
-            # out toward the side they reached to, so a ball off them (a parry) goes back and wide,
-            # not on along his arm. The palm's normal: halfway between straight back at the ball
-            # and out from his body to where his hands met it.
+            # Demo engine v2 (P11; *design*): a keeper's hands meet the ball palms facing it, so a
+            # ball off them (a parry) comes back the way it came, at what it keeps, plus his own
+            # movement (a diving keeper's carries it out to his side), not on along his arm.
             speed = math.hypot(rx, ry) or 1.0
-            px_, py_ = at[:2] if at else (p.x, p.y)
-            ox, oy = cx - px_, cy - py_
-            o = math.hypot(ox, oy) or 1.0
-            nx, ny = -rx / speed + ox / o, -ry / speed + oy / o
-            n = math.hypot(nx, ny)
-            nx, ny = (nx / n, ny / n) if n > 1e-6 else (-rx / speed, -ry / speed)
+            nx, ny = -rx / speed, -ry / speed
         into = rx * nx + ry * ny
         if into < 0:
             rx, ry = rx - (1 + keep) * into * nx, ry - (1 + keep) * into * ny

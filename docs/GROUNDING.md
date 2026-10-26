@@ -328,6 +328,22 @@ The one engine output the live path reads, for identity and side only ([FEED_SPE
 | ID8 | the reader applies each correction to the frames it covers | the provider's correction says those frames were wrong | rule | `::test_the_reader_applies_corrections` |
 | ID9 | the provider's player id is the club code and the shirt; the jersey and name are the team sheet's | *design* (rules 4.4 and 4.7: fictional clubs and names, `ninety/intel/teamsheet.py`) | design | `::test_the_feed_is_25_hz_pitch_centred_and_carries_identity_only` |
 
+### Demo engine v2: the branch that makes the demo match only
+
+These rows hold only on the branch `demo/engine-v2`, which makes the demo match and nothing else:
+every published measurement, validation and test set, training render and the frozen engine on
+`main` stay on the rows above. Each changes a cause, never an outcome; outcome rates are reported
+as held-out checks in the pull request.
+
+| # | Rule | Source | Kind |
+|---|---|---|---|
+| V1 | a carry in open play is capped at the speed that makes an average body (P2, P9) take 20 m from standing 1/0.91 as long as without the ball, about 6.2 m/s (62% of top speed, scaled by the carrier's own top speed now, P10); the carrier's estimate of a carry times his own body from the speed he has along it, under that cap (`decisions.carry_speed`, `CARRY_SHARE`). It replaces 2.5 to 4.5 m/s by dribbling rating (*design*) | sprinting with the ball, professional players averaged 20.37 km/h against 22.39 km/h without it over 20 m ([Preissler et al. 2023](https://doi.org/10.1038/s41598-022-27255-y), *Sci Rep* 13:22, 33 professional female players; a men's figure would be better, *verify*) | physical |
+| V2 | a carrier weighs carries straight at goal and turned 0.4, 0.8 and 1.2 rad either way (was 0 and 0.8), so a carry can go round a defender | *design* | option list |
+| V3 | on his feet a keeper's hands reach `KEEPER_STAND_REACH_M` (P11) across; only a dive (or being down after one) stretches them by `KEEPER_DIVE_EXTRA_M` (P15). His dive takes his body as far as the ball crosses beyond his standing reach, at most `KEEPER_DIVE_TRAVEL_M`. Main stretched his arms from his reaction whether or not he dived, so he took balls 1.48 m to his side on his feet | P11, P15 (same sources) | physical |
+| V4 | a keeper holds with both hands a ball met within his standing reach (A4's 16 to 28 m/s); beyond it, the hold falls linearly to nothing at the dive's full stretch, and a ball he cannot hold comes off his palms, which face it turned out toward where he reached: halfway between straight back and outward, keeping `MISCONTROL_KEEP` of the speed into them (a parry) | *design*, *verify* (no study found splitting saves into held and parried) | physical |
+| V5 | a keeper leaves a shot whose own flight crosses the goal line wide or over (Law 9, 10), as he never dives at one (P15); main took any shot his hands reached, most of them above his head and over the bar | Laws 9, 10 | decision |
+| V6 | a clearance (in his own third) is aimed up the pitch away from goal, or at a team-mate he sees at least 20 m further up and within `MAX_PASS_M` (*design*), and each aim is valued by the pass estimate's race where it comes down (D1): his side keeps it as often as that race says, and it is worth having or losing it there (D9). Main valued every clearance as an even contest wherever it landed (*design*), so he aimed at an empty spot | D1, D9 | decision |
+
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.
