@@ -567,3 +567,30 @@ def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_ba
     assert passes and any("km/h" in t for t in shown)
     claim = only_claim(out)
     assert all("101" not in s["detail"] for s in claim["steps"]) and "101" not in claim["text"]
+
+
+def test_a_tactical_camera_name_never_names_a_broadcast_track_with_the_same_id_string(tmp_path):
+    """Lesson 259 in the bundle: the events and cues name BROADCAST tracks, and the insights hold the
+    tactical camera's names under ids numbered from 1 as well. "h-t8" in the events is not the tactical
+    "h-t8": only the association's names (identity_broadcast) may reach an event's text."""
+    from tests.test_companion_match import insights
+
+    events = [{**e, "team_confidence": 0.99} for e in _tracked(EVENTS)]
+    actors = sorted({e[k] for e in events for k in ("player", "receiver") if e.get(k)})
+    assert actors, "the events must name players, or this proves nothing"
+    mi = insights()
+    mi.identity_source = {"source": "id_feed", "label": "Player ID feed", "provider": "sim", "note": "test",
+                          "id_corrections": 0}
+    mi.identity = {actors[0]: {"name": "Tactical Wrongname", "number": 7, "position": "striker",
+                                "confident": True, "source": "id_feed"}}
+    mi.identity_broadcast = {actors[-1]: {"name": "Broadcast Rightname", "number": 9, "position": "striker",
+                                          "confident": True, "source": "id_feed"}}
+    path = tmp_path / "insights.json"
+    path.write_text(json.dumps(mi.as_dict()))
+    out, _ = run(tmp_path, "--insights", str(path), events=events)
+    aired = [c["text"] for c in cues(out) if c["kind"] != "insight"]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    blob = " ".join(aired)
+    assert "Wrongname" not in blob
+    assert "Rightname" in blob

@@ -310,7 +310,10 @@ def test_onair_keeps_only_the_speeds_a_cited_event_may_state_and_leaves_tidy_tex
 
 
 NAMES = {"h-t9": "Rondell", "h-t1": "Carrick"}
-SCORES = [{"t": 100.4, "home": 2, "away": 1, "confident": True}]
+# The scorebug read 1-1 before the goal and 2-1 at it: only a reading that differs from the one before
+# it follows a goal with a score.
+SCORES = [{"t": 0.0, "home": 1, "away": 1, "confident": True},
+          {"t": 100.4, "home": 2, "away": 1, "confident": True}]
 
 
 def test_the_voices_name_a_player_by_the_feed_and_say_the_score_after_a_goal():
@@ -338,3 +341,15 @@ def test_a_shot_on_target_is_a_big_chance():
     assert said(shot)[0][1].startswith("Big chance! ")
     calls = [li["text"] for li in commentary.commentary(shot, [], CLUBS, names=NAMES)["lines"]]
     assert calls == ["Big chance! Rondell shoots, on target!"]
+
+
+def test_a_goal_beside_a_scorebug_that_did_not_change_is_followed_by_no_score():
+    goal = [ev("g1", 100.4, "goal", "h-t9", x=95.0)]
+    steady = [{"t": 0.0, "home": 2, "away": 1, "confident": True},
+              {"t": 100.4, "home": 2, "away": 1, "confident": True}]
+    track, _ = describe.describe(goal, [], clubs=CLUBS, names=NAMES, scores=steady)
+    assert [s.spoken for s in track.said] == ["Goal! Rondell scores, on the right."]
+    calls = [li["text"] for li in commentary.commentary(goal, [], CLUBS, names=NAMES, scores=steady)["lines"]]
+    assert calls == ["Goal! Rondell scores!"]
+    only = [{"t": 100.4, "home": 2, "away": 1, "confident": True}]  # no earlier reading: unknown
+    assert describe.score_after(100.4, only) is None

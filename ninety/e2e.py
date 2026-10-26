@@ -752,12 +752,15 @@ async def run(args: argparse.Namespace) -> dict:
     # (#389: only this path reads them, and hands the screens and the voices names alone) and the
     # scorebug's measured readings (#356).
     insights_file = args.insights or args.team_stats
-    mi, names, scores = None, {}, []
+    mi, names, fact_names, scores = None, {}, {}, []
     if insights_file is not None:
         from ninety.intel.match_insights import MatchInsights
 
         mi = MatchInsights.from_dict(json.loads(insights_file.read_text()))
-        names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
+        # Two id spaces (lesson 259): the detected events and the cues name BROADCAST tracks, the insights'
+        # facts the tactical camera's. A name crosses only through the association (identity_broadcast).
+        names = {t: w["name"] for t, w in (mi.identity_broadcast or {}).items() if w.get("name")}
+        fact_names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
         scores = [r for r in mi.facts.get("scorebug", ()) if r.get("confident")]
     # What the screens show: a tracked player by the feed's name or as "a London player", never his raw
     # track id (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
@@ -773,7 +776,7 @@ async def run(args: argparse.Namespace) -> dict:
     cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
     if mi is not None:
         bar, bar_claims = insight_bar.build(mi, Timeline.of_clip(clip.meta).to_video, sides_known(events),
-                                            clubs_of(clip.meta), names)
+                                            clubs_of(clip.meta), fact_names)
         cues, claims, spoken_cues = cues + bar, claims + bar_claims, spoken_cues + bar
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":

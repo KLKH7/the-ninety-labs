@@ -417,10 +417,16 @@ def scored_by(events: list[dict]) -> set[str]:
 
 def score_after(t: float, scores: list[dict]) -> tuple[int, int] | None:
     """The score the scorebug showed just after a goal at `t`: its first reading from SCORE_BEFORE_S
-    before the goal to SCORE_AFTER_S after it (the reader's change is the goal's own frame, #356)."""
-    shown = [r for r in scores if t - SCORE_BEFORE_S <= float(r["t"]) <= t + SCORE_AFTER_S]
-    first = min(shown, key=lambda r: float(r["t"]), default=None)
-    return None if first is None else (int(first["home"]), int(first["away"]))
+    before the goal to SCORE_AFTER_S after it (the reader's change is the goal's own frame, #356), and
+    only if that reading differs from the one before it: a goal detected beside a scorebug that did not
+    change (a false goal) is followed by no score. With no earlier reading it cannot be told, so none."""
+    ordered = sorted(scores, key=lambda r: float(r["t"]))
+    shown = [i for i, r in enumerate(ordered) if t - SCORE_BEFORE_S <= float(r["t"]) <= t + SCORE_AFTER_S]
+    if not shown or shown[0] == 0:
+        return None
+    first, before = ordered[shown[0]], ordered[shown[0] - 1]
+    now, was = (int(first["home"]), int(first["away"])), (int(before["home"]), int(before["away"]))
+    return None if now == was else now
 
 
 def score_said(score: tuple[int, int], clubs: dict[str, str] | None) -> str:
