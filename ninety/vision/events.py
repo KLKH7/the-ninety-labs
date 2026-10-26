@@ -349,8 +349,15 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
+# Saves do not work from video yet: on the shot-outcome set's test split 2 of 49 were found
+# (docs/eval/shot-outcomes/RESULT.md; a ball in the keeper's hands, placed on the ground, lands 2 to
+# 7 m from him). So the live path does not say a shot was saved: a detected save is written as a
+# shot with no outcome (lesson 258). `saves=True` keeps it, for measuring the rule only.
+SAVES_AIR = False
+
+
 def detect(rows: list[dict], join_breaks: bool = True,
-           context_rows: list[dict] | None = None) -> tuple[list[dict], dict]:
+           context_rows: list[dict] | None = None, saves: bool = SAVES_AIR) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
     `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
     what it does (ninety/eval/attribution_derive.py); the live path always runs with it.
@@ -426,7 +433,8 @@ def detect(rows: list[dict], join_breaks: bool = True,
         who = attribute(a.track, path[i], tracks)
         if shot:
             event("shot", a.last, shooter, path[i].x, path[i].y, conf, side_conf,
-                  ball_speed_kmh=speed, player=who, outcome=result.outcome)
+                  ball_speed_kmh=speed, player=who,
+                  outcome=None if result.outcome == "on_target" and not saves else result.outcome)
             if is_goal:
                 g = result.goal
                 event("goal", g["frame"], shooter, g["x"], g["y"], g["confidence"], side_conf, player=who)
@@ -522,8 +530,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("observations", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--summary", type=Path, default=None, help="how the events were found, as JSON")
+    ap.add_argument("--keep-saves", action="store_true",
+                    help="write a detected save as one (for measuring the save rule; the live path does not)")
     a = ap.parse_args(argv)
-    events, summary = detect(read_observations(a.observations))
+    events, summary = detect(read_observations(a.observations), saves=a.keep_saves)
     a.out.write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
     if a.summary:
         a.summary.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

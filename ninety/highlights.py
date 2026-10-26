@@ -134,6 +134,17 @@ def label(kind: str, x: float, y: float, d: float, v: float | None, T: float | N
 # How the attack that led to the shot started (the plan's Amendment 2): the restart, or the ball won
 # in open play, that began the shooting side's possession. None when its start was not seen. The
 # restart kinds are the detector's own (ninety/vision/restarts.py, `restart` on a set_piece).
+#
+# The restart events, as their author specifies them (Kian on #324):
+#   type        "kickoff" (Law 8) or "set_piece"; `restart` on a set piece only: "corner" |
+#               "goal_kick" | "throw_in" | "free_kick" | "penalty_kick" (the answer key's has none)
+#   team        the side TAKING it: corner and penalty, the side attacking that end; goal kick, the
+#               side defending it; free kick, throw-in and kick-off, the side of the player at the ball
+#   team_confidence  the taker's side score, null when no player of that side is within reach;
+#               name the side only where factcheck.side_known holds
+#   t, frame    the kick (the last frame the ball lay still); the answer key's comes about 1 to 3 s earlier
+#               (kick-offs 1 to 2.3 s, set pieces 1.6 to 2.9 s)
+#   cause       free kicks and penalties, optional and not on the live path yet; not read here
 ORIGINS = ("corner", "throw_in", "goal_kick", "free_kick", "penalty_kick", "kick_off", "open_play")
 RESTART_KINDS = frozenset({"corner", "throw_in", "goal_kick", "free_kick", "penalty_kick"})
 PITCH_Y = 68.0

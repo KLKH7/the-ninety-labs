@@ -168,8 +168,8 @@ def test_a_changed_analyst_prompt_still_fails_the_committed_replay(monkeypatch):
 
 
 def test_a_changed_fact_check_message_still_fails_the_committed_replay(monkeypatch):
-    def reworded(claim, known):
-        v = check(claim, known)
+    def reworded(claim, known, **kw):  # the slice passes the play flag (#353)
+        v = check(claim, known, **kw)
         return Verdict(v.ok, [r.replace(" not ", " never ") for r in v.reasons], v.category)
 
     monkeypatch.setattr(slice_mod, "check", reworded)

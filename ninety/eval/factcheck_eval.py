@@ -24,7 +24,7 @@ from pathlib import Path
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, evidence, foundry, foundry_evals
+from ninety.agents import credentials, evidence, factcheck, foundry, foundry_evals
 from ninety.agents.factcheck import Claim, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
@@ -40,7 +40,7 @@ HELD_OUT_TONE_WORDS = ("patient", "bold", "speculative", "long ball", "gentle", 
 # When a tone word fits an event, from the event's own fields. Set before reading any Judge
 # output; a "true" label must be true (LESSONS: an evaluation's true labels must fit the facts).
 SHORT_SLOW = (15, 60)  # a cautious or patient pass: at most 15 m and 60 km/h
-LONG_PASS_M = 30  # a long ball: at least 30 m
+LONG_PASS_M = factcheck.LONG_BALL_M  # a long ball: 32 m or more (GROUNDING I11), as the code check reads it
 LONG_RANGE_M = 20  # a hopeful or speculative shot: from at least 20 m
 FAST_PASS_KMH = 80  # not a gentle, slow pass: at least 80 km/h
 FAST_SHOT_KMH = 100  # not a tame shot: at least 100 km/h
@@ -102,40 +102,44 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "true: shot": (
             True, shots, "{player} shoots at {ball_speed_kmh} km/h."
         ),
-        # true claims with interpretation: a commentator's reading of supported facts
-        "true: interpreted tackle": (
-            True, tackles_won,
+        # Tone: a commentator's word for how a supported fact looked ("cautious", "risky", "a confident
+        # ball"). Neither true nor false: no cited fact states it, the Judge's rule holds what the facts
+        # do not state, and a human labeller doubted them too (docs/eval/factcheck-human-labels.md).
+        # Counted apart, as how often the Judge lets such a word air. "Forward" is gone from the
+        # confident pass: no cited fact gives a direction.
+        "tone: crucial tackle": (
+            None, tackles_won,
             "{player} wins the ball back from {receiver}, a crucial defensive intervention."
         ),
-        "true: interpreted pass": (
-            True, as_meant,
-            "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
+        "tone: confident pass": (
+            None, as_meant,
+            "{player} picks out {receiver} with a {distance_m} m pass, a confident ball."
         ),
-        "true: interpreted shot": (
-            True, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
+        "tone: ambitious shot": (
+            None, shots, "{player} tries their luck at {ball_speed_kmh} km/h, an ambitious effort."
         ),
         # The three tone kinds below keep their text; since the tone fix they only use events the
         # word fits (before, "cautious" was put on every completed pass, including 42 m at 96 km/h).
-        "true: neutral interpretation": (
-            True, short_slow, "{player} plays a cautious pass to {receiver}."
+        "tone: cautious pass": (
+            None, short_slow, "{player} plays a cautious pass to {receiver}."
         ),
-        "true: negative interpretation": (
-            True, tackles, "{player} makes a risky tackle on {receiver}."
+        "tone: risky tackle": (
+            None, tackles, "{player} makes a risky tackle on {receiver}."
         ),
-        "true: distant interpretation": (
-            True, long_range, "{player} makes a hopeful effort from {distance_m} metres."
+        "tone: hopeful effort": (
+            None, long_range, "{player} makes a hopeful effort from {distance_m} metres."
         ),
         # held-out tone: words that never appear in the Judge's instructions
-        "true: held-out tone, patient pass": (
-            True, short_slow, "{player} plays a patient pass to {receiver}."
+        "tone: held-out, patient pass": (
+            None, short_slow, "{player} plays a patient pass to {receiver}."
         ),
-        "true: held-out tone, bold challenge": (
-            True, tackles, "{player} puts in a bold challenge on {receiver}."
+        "tone: held-out, bold challenge": (
+            None, tackles, "{player} puts in a bold challenge on {receiver}."
         ),
-        "true: held-out tone, speculative shot": (
-            True, long_range, "{player} tries a speculative shot from {distance_m} metres."
+        "tone: held-out, speculative shot": (
+            None, long_range, "{player} tries a speculative shot from {distance_m} metres."
         ),
-        "true: held-out tone, long ball": (
+        "true: long ball": (
             True, long_balls, "{player} plays a long ball to {receiver}."
         ),
         "true: interception": (
@@ -354,13 +358,15 @@ def report(
     for kind in kinds:
         group = [r for r in rows if r["kind"] == kind]
         truth = group[0]["true"]
-        code = sum(r["code_ok"] == truth for r in group)
-        both = sum(passed(r) == truth for r in group)
-        word = "accepted" if truth else "caught"
+        aired = truth is None  # tone: how often it airs, neither right nor wrong
+        code = sum(r["code_ok"] == (truth or aired) for r in group)
+        both = sum(passed(r) == (truth or aired) for r in group)
+        word = "aired" if aired else "accepted" if truth else "caught"
         lines.append(f"| {kind} | {len(group)} | {code}/{len(group)} {word} | {both}/{len(group)} {word} |")
 
-    false = [r for r in rows if not r["true"]]
-    true = [r for r in rows if r["true"]]
+    false = [r for r in rows if r["true"] is False]
+    true = [r for r in rows if r["true"] is True]
+    tone = [r for r in rows if r["true"] is None]
     code_catch = sum(not r["code_ok"] for r in false)
     both_catch = sum(not passed(r) for r in false)
     both_wrong = sum(not passed(r) for r in true)
@@ -384,6 +390,9 @@ def report(
         f"{both_catch - false_service_errors}/{len(false) - false_service_errors}).  ",
         f"**True claims wrongly rejected:** code + judge {both_wrong}/{len(true)} "
         f"(excluding service/timeout holds: {semantic_true_wrong}/{semantic_denominator}).",
+        f"**Tone words, neither true nor false** (a commentator's word no cited fact states; the Judge "
+        f"holds what the facts do not state): code + judge aired "
+        f"{sum(passed(r) for r in tone)}/{len(tone)}.  ",
         f"**Judge service/timeout errors:** {len(service_errors)} total, "
         f"{true_service_errors} on true claims.",
         "",
@@ -400,7 +409,7 @@ def report(
             + ".",
             "",
         ]
-    misses = [r for r in rows if passed(r) != r["true"]]
+    misses = [r for r in rows if r["true"] is not None and passed(r) != r["true"]]
     for r in misses:
         why = "; ".join(r["reasons"]) or "accepted"
         lines.append(f"- *{r['kind']}* (seed {r['seed']}): \"{r['claim'].text}\" {why}")
@@ -459,7 +468,8 @@ def main() -> None:
     if args.foundry:
         foundry_run = foundry_evals.record(
             FOUNDRY_EVAL, f"seeds {args.seeds}, judge {label.replace('`', '')}",
-            [foundry_item(r) for r in rows], FOUNDRY_CRITERIA,
+            # a tone claim has no right answer to grade
+            [foundry_item(r) for r in rows if r["true"] is not None], FOUNDRY_CRITERIA,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(report(rows, args.seeds, label, foundry_run, defs=defs))
