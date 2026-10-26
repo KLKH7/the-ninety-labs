@@ -225,6 +225,9 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         # A fouled player's hands out to break his fall (fouls.fall_at, lesson 280), full and half.
         {**base, "action": "stand", "brace": {"w": 1.0, "l": [40.5, 30.45, 0.95], "r": [40.6, 29.95, 0.85]}},
         {**base, "action": "stand", "brace": {"w": 0.5, "l": [40.3, 30.6, 1.1], "r": [40.4, 29.7, 1.0]}},
+        # Getting up on one knee (fouls.get_up), and a keeper's dive arms fading as he gets up.
+        {**base, "action": "down", "lift": -0.3, "crouch": {"w": 0.7, "lead": "r"}},
+        {**base, "action": "walk", "phase": 2.6, "speed": 1.2, "dive_up": -0.6},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4
