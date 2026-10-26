@@ -32,6 +32,11 @@ export const LOOK = {
 
 // The grade, in linear light before the tone curve (render.js post shader, BROADCAST_LOOK).
 export const GRADE_GLSL = `
+  // Every stream's post shader compiles this; only the broadcast defines LOOK_SAT. Without a default
+  // the tactical views' shader fails to compile on GPU GL and they render black.
+  #ifndef LOOK_SAT
+  #define LOOK_SAT 1.0
+  #endif
   vec3 broadcastGrade(vec3 c) {
     // white balance a touch warm, as a daylight broadcast is graded
     c *= vec3(1.045, 1.0, 0.94);
