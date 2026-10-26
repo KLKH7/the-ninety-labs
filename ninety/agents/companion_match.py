@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ninety.agents import referee
 from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
@@ -124,7 +124,8 @@ TOOL_WORDS = (
         "style",
         r"\b(?:style|playing like|play(?:ing)? like this|tactic\w*|approach|long balls?|go(?:ing)? long"
         r"|cross\w*|wings?|down the (?:left|right|middle)|counter[- ]attack\w*|on the break|one-twos?"
-        r"|wall pass\w*|how (?:are|is) [\w' ]+ playing"
+        r"|wall pass\w*|how (?:are|is) [\w' ]+ (?:playing|doing|getting on|looking|defending|attacking)"
+        r"|how is the (?:game|match) going|going forward"
         r"|goal ?keeper|keeper)\b",
     ),
     (
@@ -1114,6 +1115,66 @@ def physical_gate(text: str, calls, facts: list[dict], insights) -> tuple[str | 
     return None, sorted(running, key=lambda f: (f.get("metric") != want, -(f.get("value") or 0))) + rest
 
 
+# Design (the Coordinator, Oct 26): a count this small, or a stat with no success, says nothing about
+# how a side plays, and never answers on its own ("crossed 1 time and found a teammate 0 times").
+TINY_COUNT = 5
+HOW_PLAYING = re.compile(r"\bhow (?:are|is|have|has)\b[^?]*\b(?:play\w*|do(?:ing)?|getting on|look\w*|going"
+                         r"|defend\w*|attack\w*)\b", re.I)
+
+
+TALLIES = frozenset({"crosses"})  # a style tally: what a side did how often (match_insights.style)
+
+
+def tiny(fact: dict) -> bool:
+    """A tally of how a side plays (TALLIES) under TINY_COUNT, or one whose successes are none (crosses
+    that found nobody). A moment's own number (opponents a pass took out) is no tally."""
+    if fact.get("kind") not in TALLIES or not isinstance(fact.get("value"), (int, float)):
+        return False
+    return fact["value"] < TINY_COUNT or fact.get("completed") == 0
+
+
+def _overview(question: Question, calls: list[dict], insights, known: dict, history, suggest):
+    """The answer to "how are <club> playing?": up to two checked sentences, where the ball was (and
+    the route they attack by, when its sample allows), then their most significant moment."""
+    if not calls or calls[0]["name"] != "style" or not HOW_PLAYING.search(question.text):
+        return None
+    lo, hi = calls[0]["minute_from"], calls[0]["minute_to"]
+    club = calls[0].get("club")
+    if club is None:  # "how is the game going?": each club's, in turn
+        parts = [_overview(question, [{**calls[0], "club": c}, *calls[1:]], insights, known, history, suggest)
+                 for c in insights.fixture.clubs.values()]
+        parts = [p for p in parts if p is not None]
+        if not parts:
+            return None
+        return replace(parts[0], text=" ".join(p.text for p in parts),
+                       evidence=tuple(i for p in parts for i in p.evidence))
+    from ninety.agents import insight_bar  # it reads this module's code_texts: imported when asked
+
+    pool = [*insights.territory(lo, hi, club)["summary"], *insights.style(lo, hi, club)["summary"]]
+    moments = [(s, f, t) for s, f, t in insight_bar.candidates(insights)
+               if f.get("club") == club and f.get("minute", 0) <= hi]
+    moments.sort(key=lambda m: (not (lo <= m[1].get("minute", 0) <= hi), -m[0]))  # this stretch first
+    said = []
+    for f in pool:
+        f = {**f, "clubs": insights.fixture.clubs}
+        if f.get("club") != club or tiny(f):
+            continue
+        ok = (t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), {**known, f["id"]: f}, insights).ok)
+        text = next(ok, None)
+        if text is not None:
+            said.append((text, f))
+    if moments:
+        _, f, text = moments[0]
+        lead = text[0].lower() + text[1:] if text.split()[0] in ("In", "From") else text
+        whose = f"{club}'" if club.endswith("s") else f"{club}'s"
+        said.append((f"{whose} biggest moment: {lead}", f))
+    if not said:
+        return None
+    return _match_answer(" ".join(t for t, _ in said[:3]), [f for _, f in said[:3]], insights, calls,
+                         asked=[*(h["question"] for h in history), question.text], t=question.t,
+                         suggest=suggest)
+
+
 def code_match_answer(
     question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
@@ -1147,6 +1208,7 @@ def code_match_answer(
             facts,
             key=lambda f: (f.get("kind") != "sheet" or f.get("role") != role, f.get("club") not in named),
         )
+    facts = sorted(facts, key=tiny)  # a tiny count never leads while there is anything else to say
     why, facts = physical_gate(question.text, calls, facts, insights)
     if why is not None:  # a figure asked for that is held: say so, never answer something else
         return Answer("unanswerable", why, None, None, None, (), 0.0, float(question.t)), calls
@@ -1198,6 +1260,11 @@ def code_match_answer(
             t=question.t,
             suggest=suggest,
         ), calls
+    # "How are Lisbon playing?": an overview, not the first count to hand. Where the ball was and the
+    # main route (when its sample allows), then the club's most significant moment, each checked.
+    overview = _overview(question, calls, insights, known, history, suggest)
+    if overview is not None:
+        return overview, calls
     # Possession: each club's share when it is known; else why it is not, and the longest run of
     # passing, which needs no side told.
     if calls and calls[0]["name"] == "possession":
@@ -1320,6 +1387,15 @@ async def answer_match(
     code's answer over the model's chosen tools (or code's, if the plan was unusable). `history` is
     the session's earlier turns ({question, answer, calls}), so a follow-up has its context."""
     history = list(history)
+    if HOW_PLAYING.search(question.text):
+        # "How are Lisbon playing?" is answered by code's overview in Live mode too: ranked by what
+        # matters, never the first small count a model picks ("crossed 1 time and found a teammate 0
+        # times"), and with no model call spent.
+        calls = code_calls(question, insights, history)
+        known = {f["id"]: f for f in run_tools(insights, calls)}
+        overview = _overview(question, calls, insights, known, history, True)
+        if overview is not None:
+            return MatchResult(overview, "code", tuple(calls))
     if ask is None:
         a, calls = code_match_answer(question, insights, history=history)
         return MatchResult(a, "code", tuple(calls))

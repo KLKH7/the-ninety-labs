@@ -1129,3 +1129,26 @@ def test_at_kick_off_the_answer_is_too_early_not_a_canned_list():
     early = Question("s1", None, "How are Lisbon playing?", 1.0)
     a = asyncio.run(companion.answer_match(early, insights())).answer
     assert a.text == companion.TOO_EARLY
+
+
+# -- "How are they playing?": an overview ranked by what matters, never a tiny count -----------------
+
+
+def test_how_a_club_is_playing_is_an_overview_led_by_its_biggest_moment_not_a_small_count():
+    a = asyncio.run(companion.answer_match(Question("s1", None, "How are London playing?", 60 * 60.0),
+                                           insights())).answer
+    assert a.status == "verified" and "London Athletic's biggest moment: in minute 23" in a.text, a.text
+    tiny = {"kind": "crosses", "metric": "crosses", "value": 1, "unit": "crosses", "completed": 0}
+    assert companion.tiny(tiny) and companion.tiny(tiny | {"value": 7})  # none found: says nothing
+    assert not companion.tiny(tiny | {"value": 7, "completed": 3})
+    assert not companion.tiny({"value": 2, "unit": "%"})
+    assert not companion.tiny({"kind": "line_break", "value": 4, "unit": "opponents"})  # a moment
+
+
+def test_live_mode_answers_how_they_are_playing_with_the_overview_and_spends_no_model_call():
+    async def ask(prompt):  # the model: never asked for an overview
+        raise AssertionError("a model call was made")
+
+    q = Question("s1", None, "How is London Athletic's attack looking?", 60 * 60.0)
+    r = asyncio.run(companion.answer_match(q, insights(), ask=ask, judge=ask))
+    assert r.source == "code" and "biggest moment" in r.answer.text
