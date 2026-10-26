@@ -736,6 +736,9 @@ PASS_WORDS.update({f"{k}_all": v for k, v in list(PASS_WORDS.items())})
 # What code says for a score question (Kian, Oct 26, option B): no scoreline from vision, which
 # finds some goals and misses others; the goals it spotted follow, one sentence each.
 SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep one."
+# Fixed text, stating no fact: possession is unknown when too few passes had their side told surely.
+POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: vision could not tell surely "
+                      "which side made most of the passes.")
 
 
 def code_texts(fact: dict) -> list[str]:
@@ -747,8 +750,9 @@ def code_texts(fact: dict) -> list[str]:
         if not fact.get("confident"):
             return []
         cl = fact["clubs"]
-        return [f"The broadcast's scorebug shows {cl['home']} {_plural(fact['home'], 'goal')}, "
-                f"{cl['away']} {_plural(fact['away'], 'goal')}."]
+        # The score first, as a fan asks it; where it comes from after it (the broadcast's graphic).
+        return [f"{cl['home']} {_plural(fact['home'], 'goal')}, "
+                f"{cl['away']} {_plural(fact['away'], 'goal')}, read from the broadcast's scorebug."]
     if not fact.get("confident", False):
         return []
     club, kind, metric = fact.get("club"), fact.get("kind"), fact.get("metric")
@@ -930,12 +934,18 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "saves":
         return [f"{club} made {_plural(fact['value'], 'save')} {span}."]
     if metric == "opponents_bypassed_by_player":
-        if fact.get("rank") != 1 or not fact.get("leads") or not fact.get("player_is"):
+        if fact.get("rank") != 1 or not fact.get("leads"):
             return []
+        # His name or role past the gate, else his club: tracking follows him but cannot vouch for
+        # who he is, so he is "a Lisbon Esportes player", never a track id or a guessed name.
+        who = fact.get("player_is") or (f"A {club} player" if club else "A player")
         return [
-            f"{fact['player_is']} has taken the most opponents out of the game with passes {span}: "
+            f"{who} has taken the most opponents out of the game with passes {span}: "
             f"{fact['value']} opponents in {_plural(fact['also'][0][0], 'pass')}."
         ]
+    if kind == "spell":  # a run vision followed receiver to passer: no side needed
+        whose = f"{club}'s longest" if club else "The longest"
+        return [f"{whose} run of passing was {fact['value']} passes in a row, in minute {fact['minute']}."]
     if fact.get("type") == "shape":
         return _shape_texts(fact, club or "", span)
     if kind == "sheet":
@@ -971,7 +981,14 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     lo, hi = minutes_of(question.text, minute) or (max(1, minute - WINDOW_MIN + 1), minute)
     # A club the question names may be the side acting or the side acted on ("which pass cut through
     # Lisbon Esportes?"): code reads both clubs' facts and the fact-check binds the sentence to the right one.
-    return [{"name": n, "club": None, "minute_from": lo, "minute_to": hi} for n in names]
+    # Players are the exception: "Lisbon's best player" is one of Lisbon's, ranked among them.
+    named = clubs_named(question.text, insights)
+    club = named[0] if len(named) == 1 else None
+    stretch = minutes_of(question.text, minute)
+    # Who has had more of the ball asks about the match so far, unless a stretch is named.
+    return [{"name": n, "club": club if n == "players" else None,
+             "minute_from": 1 if n == "possession" and stretch is None else lo, "minute_to": hi}
+            for n in names]
 
 
 # What a fan calls each running figure the physical tool may hold, the most specific first: a
@@ -1073,6 +1090,9 @@ def code_match_answer(
         # A question about one club hears about that club first (its facts before the other's); the
         # fact-check still binds the sentence to the right side.
         facts = sorted(facts, key=lambda f: f.get("club") not in (None, named[0]))
+        # A player of that club (the players tool, ranked within it: code_calls) is never answered with
+        # another club's player: "Lisbon's most dangerous player" is never a London player.
+        facts = [f for f in facts if f.get("kind") != "players" or f.get("club") == named[0]]
     if re.search(r"\b(?:which|who|whose)\b", question.text, re.I):
         # "Which pass…?", "Who…?": a moment with a player in it, before a club's total.
         facts = sorted(facts, key=lambda f: f.get("t") is None)
@@ -1138,6 +1158,23 @@ def code_match_answer(
             t=question.t,
             suggest=suggest,
         ), calls
+    # Possession: each club's share when it is known; else why it is not, and the longest run of
+    # passing, which needs no side told.
+    if calls and calls[0]["name"] == "possession":
+        share = [f for f in facts if f.get("metric") == "possession_share"]
+        if share and not any(f.get("confident") for f in share):
+            said = []
+            for f in (f for f in facts if f.get("kind") == "spell"):
+                ok = (t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), known, insights).ok)
+                text = next(ok, None)
+                if text is not None:
+                    said.append((text, f))
+                    break
+            # The pointer cites nothing and states no number; the run of passing is its own checked
+            # sentence, citing its fact.
+            return _match_answer(" ".join([POSSESSION_UNKNOWN, *(t for t, _ in said)]), [f for _, f in said],
+                                 insights, calls, asked=[*(h["question"] for h in history), question.text],
+                                 t=question.t, suggest=suggest), calls
     # A goal's story ("why did they score?"): the goal with the strongest thing before it, when the
     # goal build-up is what was asked (a "what's the score?" is the score's to answer).
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
@@ -1171,12 +1208,21 @@ def code_match_answer(
                     t=question.t,
                     suggest=suggest,
                 ), calls
-    names = ", ".join(n.replace("_", " ") for n in MATCH_TOOLS[:4])
-    why = (
-        "I have no tracked positions for this match yet."
-        if not facts and calls
-        else f"I can answer about {names} and the team sheets."
-    )
+    names = ", ".join(n.replace("_", " ").replace("build up", "build-up") for n in MATCH_TOOLS[:4])
+    ranked = [f for f in facts if f.get("kind") == "players"]
+    asked = next((c for c in calls if c["name"] == "players"), None)
+    span = f"from minute {calls[0]['minute_from']} to minute {calls[0]['minute_to']}" if calls else ""
+    if ranked and asked is not None:
+        # The players were ranked but none can be named the best: say so, never the canned list.
+        club = asked.get("club")
+        whose = (f"{club}'" if club.endswith("s") else f"{club}'s") if club else "the"
+        why = (f"I can't single out {whose} most dangerous player {span}: tracking missed too many "
+               "players, or too many are level, to rank them surely.")
+    elif not facts and calls:
+        # The match is tracked (these are its insights): nothing in the stretch answers it yet.
+        why = f"Nothing {span} answers that yet."
+    else:
+        why = f"I can answer about {names} and the team sheets."
     t_from, t_to = 0.0, float(question.t)
     return Answer("unanswerable", why, None, None, None, (), t_from, t_to), calls
 

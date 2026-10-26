@@ -977,9 +977,9 @@ def _bug(sid, minute, home, away, confidence=0.95):
 
 @pytest.mark.parametrize("bugs, measured, said", [
     ([_bug("s1", 23, 1, 0), _bug("s2", 61, 2, 0)], True,
-     "The broadcast's scorebug shows London Athletic 2 goals, Lisbon Esportes 0 goals."),  # the latest
+     "London Athletic 2 goals, Lisbon Esportes 0 goals, read from the broadcast's scorebug."),  # the latest
     ([_bug("s1", 23, 1, 0), _bug("s2", 85, 2, 0)], True,
-     "The broadcast's scorebug shows London Athletic 1 goal, Lisbon Esportes 0 goals."),  # none from later
+     "London Athletic 1 goal, Lisbon Esportes 0 goals, read from the broadcast's scorebug."),  # none later
     ([_bug("s1", 23, 1, 0, confidence=0.3)], True, companion.SCORE_POINTER),  # under the gate
     ([_bug("s1", 23, 1, 0)], False, companion.SCORE_POINTER),  # not measured yet: never said
     ([], True, companion.SCORE_POINTER),
@@ -1013,3 +1013,57 @@ def test_a_scorebug_sentence_cannot_swap_its_numbers():
     swapped = f"The broadcast's scorebug shows {clubs['home']} 1 goal, {clubs['away']} 2 goals."
     assert verify(Claim(ok, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
     assert not verify(Claim(swapped, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
+
+
+# -- Round-2 audit rows 6 and 7 (the score first, a club's player, possession) ----------------------
+
+
+def test_the_score_answer_leads_with_the_score_and_says_where_it_was_read(monkeypatch):
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
+    lead = "London Athletic 1 goal, Lisbon Esportes 0 goals, read from the broadcast's scorebug."
+    assert a.text.startswith(lead)
+    assert "minute 23" in a.text  # then the goal by minute
+
+
+def test_a_clubs_best_player_is_ranked_within_that_club_and_never_another_clubs():
+    calls = companion.code_calls(Question("s1", None, "Who is Lisbon's most dangerous player?", 60 * 60.0),
+                                 insights())
+    players = next(c for c in calls if c["name"] == "players")
+    assert players["club"] == "Lisbon Esportes"
+    others = companion.code_calls(Question("s1", None, "Which pass cut through Lisbon Esportes?", 60 * 60.0),
+                                  insights())
+    assert all(c["club"] is None for c in others)  # a club acted on: both clubs' facts are read
+
+
+def test_a_ranked_player_without_a_name_is_his_club_and_an_unsure_ranking_says_why():
+    leader = {"id": "top:a-t3:m46-60", "kind": "players", "metric": "opponents_bypassed_by_player",
+              "team": "away", "club": "Lisbon Esportes", "minute_from": 46, "minute_to": 60,
+              "player": "a-t3", "player_is": None, "rank": 1, "value": 5, "unit": "opponents", "lo": 5,
+              "hi": 5, "confident": True, "also": [[1, "passes"]], "leads": True}
+    (text,) = companion.code_texts(leader)
+    assert text.startswith("A Lisbon Esportes player has taken the most opponents") and "a-t3" not in text
+    assert companion.code_texts({**leader, "leads": False}) == []
+
+
+def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing():
+    mi = insights()
+    mi.facts["spell"] = [{"id": "spell:v9", "kind": "spell", "metric": "spell_passes", "team": None,
+                          "minute": 31, "t": 1850.0, "value": 7, "unit": "passes", "confident": True,
+                          "club": None, "events": []}]
+    # Every pass's side unsure: the share is unknown (bounds 0 to 100), not 0 or 100.
+    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
+                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+                              for i in range(20)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0),
+                                           mi)).answer
+    assert a.text.startswith(companion.POSSESSION_UNKNOWN), a.text
+    assert "7 passes in a row, in minute 31" in a.text
+    assert "%" not in a.text  # no share said
+
+
+def test_the_refusal_says_build_up_with_its_hyphen():
+    joke = Question("s1", None, "Tell me a joke", 80 * 60.0)
+    a = asyncio.run(companion.answer_match(joke, insights())).answer
+    assert a.status == "unanswerable" and "goal build-up" in a.text and "build up" not in a.text
