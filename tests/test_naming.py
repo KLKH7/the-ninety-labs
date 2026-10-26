@@ -200,3 +200,23 @@ def test_insights_carry_both_team_sheets_with_no_track_in_them():
     assert [len(body["sheets"][t]) for t in ("home", "away")] == [11, 11]
     rows = [r for t in ("home", "away") for r in body["sheets"][t]]
     assert all(set(r) == {"number", "name", "position", "line"} for r in rows)
+
+
+def test_the_committed_calibration_names_nobody_unless_the_held_out_half_met_its_target():
+    # Merge-queue review of #374: the gate's real default was pinned by no test (setting share 0.6,
+    # seconds 5.0, association 0.75 in the committed file left every test green).
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    graded = json.loads((root / "docs/eval/naming.json").read_text())
+    held = graded["held_out"]
+    met = (held["track_names"]["precision"] >= graded["target"]
+           and held["event_names"]["precision"] >= graded["target"])
+    gate = naming.gates()
+    if met:
+        assert None not in gate.values()
+    else:
+        assert gate == {"share": None, "seconds": None, "association": None}  # nothing is named
+    body = json.loads(naming.CALIBRATION.read_text())
+    assert body["held_out_met"] is met

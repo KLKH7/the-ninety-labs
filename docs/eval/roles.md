@@ -102,6 +102,12 @@ The answer key matches the tracked positions to a median of 0.21 m. Chosen on de
 | Before (roles.assign, gate 0.203) | held out | 339 (277, 0.817, 0.77-0.85) | 0.322 | 65 (54, 0.831, 0.72-0.90) | 0.533 |
 | Before (roles.assign, gate 0.203) | whole match | 611 (510, 0.835, 0.80-0.86) | 0.314 | 125 (103, 0.824, 0.75-0.88) | 0.494 |
 
+**Which code scored this.** The table was scored at commit `20c4f418`. Two audit fixes came after it
+(`2af2df12`): the side-doubt rule went from a median over 16.5 m to a strict majority of frames, the
+`keep_apart` weights stopped being rounded, and `tactical()` without a gate accepts only confidence-1.0
+pairings. The published numbers therefore predate those fixes; the conclusion (the gate stays closed)
+is unchanged, and the grader has not been re-run at this head.
+
 **Reading.** On the held-out half, a name would be right 88.4% of the time on tracks and 92.6% on
 events. Both are better than the naming in use before (81.7% and 83.1%), and both are under the
 0.95 target, so by the rule the gate stays closed (`ninety/intel/naming_calibration.json`). The
