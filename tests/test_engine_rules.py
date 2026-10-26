@@ -1039,7 +1039,8 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
     assert e.keeper_dive(k)
     travel = e.dive[3]
     when, cross, _ = e.ball_at_x(k.x)
-    assert abs(travel - (abs(cross - y0) - offball.arm_reach_m(when))) < 1e-6  # his arms by then
+    # demo engine v2: as far as it is beyond his standing reach (the dive's stretch takes his hands on)
+    assert abs(travel - (abs(cross - y0) - offball.KEEPER_STAND_REACH_M)) < 1e-6
     frames = 0
     while e.keeper_dive(k):
         frames += 1
@@ -1094,13 +1095,18 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
 
 
 
-def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows():
+def test_on_his_feet_the_keeper_has_only_his_standing_reach_and_a_dive_stretches_it():
+    # Demo engine v2 (P11, P15): his arms once stretched to the dive's reach from his reaction whether
+    # or not he dived, so he took balls 1.48 m to his side standing. On his feet, before or after he
+    # reacts, he has his standing reach; once he dives it grows.
     from ninety.sim import offball
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
     e.t += e.reaction(k) * 0.5
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == offball.KEEPER_STAND_REACH_M
     e.t += e.reaction(k) * 0.5 + 0.2
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == offball.KEEPER_STAND_REACH_M
+    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] > offball.KEEPER_STAND_REACH_M
 
 
@@ -1114,7 +1120,7 @@ def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == stretched
 
 
-def test_a_late_dive_counts_the_stretch_his_arms_already_have():
+def test_a_late_dive_still_stretches_his_arms_from_his_reaction_and_goes_as_far_as_beyond_standing_reach():
     from ninety.sim import offball
     e = Engine(1)
     k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: his arms are still stretching
@@ -1124,7 +1130,8 @@ def test_a_late_dive_counts_the_stretch_his_arms_already_have():
     y0 = k.y
     assert e.keeper_dive(k)
     assert e.dive[4] == e.kicked_at + e.reaction(k)  # his arms began when he reacted, not when he dived
-    want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
+    # demo engine v2: his body goes as far as it is beyond his standing reach
+    want = min(abs(cross - y0) - offball.KEEPER_STAND_REACH_M, offball.KEEPER_DIVE_TRAVEL_M)
     assert abs(abs(e.dive[3]) - want) < 1e-6
 
 
@@ -1373,10 +1380,17 @@ def test_the_engine_the_dive_and_the_shooter_share_one_envelope():
     e.kicked = {"type": "shot", "team": "home"}
     e.kicked_at = e.t
     e.reaction = lambda p: react
+    # demo engine v2 (V3): at a pass his arms stretch from his reaction, as the passer judges him; at
+    # a shot only a dive stretches them, and the shooter judges his dive as the engine has it.
     for at, z in ((0.5, 0.2), (0.6, 1.0), (0.7, 2.3), (1.2, 2.6)):
-        engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
+        e.kicked, e.dive = {"type": "pass", "team": "home"}, None
+        at_a_pass = e.reach(k, 104.0, 34.0, z, at=e.t + at)
         passer = decisions._reach(104.0, 34.0, z, at, react, 105.0)
-        assert engine == pytest.approx(passer)
+        assert at_a_pass == pytest.approx(passer)
+        e.kicked = {"type": "shot", "team": "home"}
+        assert e.reach(k, 104.0, 34.0, z, at=e.t + at)[0] <= offball.KEEPER_STAND_REACH_M  # on his feet
+        e.dive = (k.id, e.t, k.y, 0.0, e.kicked_at + react, 0.0)
+        engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
         shooter = offball.keeper_reach_m(at, react, z)
         across = engine[0] if z <= engine[1] else 0.0
         launched = offball.KEEPER_DIVE_TRAVEL_M * offball.dive_progress(at - react)
