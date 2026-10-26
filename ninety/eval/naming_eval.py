@@ -63,8 +63,21 @@ def broadcast_frames(vision: Path, segments: list[str]) -> list[dict]:
     return out
 
 
+def by_number(owner: dict[str, tuple[str, float]]) -> dict[str, tuple[str, float]]:
+    """The broadcast owners keyed by track number alone: a segment whose sides were swapped after
+    the join (the clip's sides.json) swapped its ids' letters, and the tracker numbers its tracks
+    once for both sides, so the number names the track (checked: no number is used twice)."""
+    out = {}
+    for t, v in owner.items():
+        n = t.split("-t")[1]
+        if n in out:
+            raise SystemExit(f"broadcast track number {n} is used by both sides")
+        out[n] = v
+    return out
+
+
 def right(w: dict, owner: dict[str, tuple[str, float]], role: dict[str, str], track: str) -> bool:
-    true = owner[track][0]
+    true = (owner.get(track) or owner[track.split("-t")[1]])[0]
     return true[0] == w["team"][0] and role.get(true) == w["role"]
 
 
@@ -104,7 +117,7 @@ def main(argv: list[str] | None = None) -> None:
     b_frames = broadcast_frames(args.vision, segments)
     truth, role = load_truth(args.truth, {f["frame"] for f in frames} | {f["frame"] for f in b_frames})
     owner_v = true_players([f for f in frames if f["frame"] in truth], truth)
-    owner_b = true_players([f for f in b_frames if f["frame"] in truth], truth)
+    owner_b = by_number(true_players([f for f in b_frames if f["frame"] in truth], truth))
     dev = lambda t: naming.segment(t) % 2 == 0  # noqa: E731
     held = lambda t: naming.segment(t) % 2 == 1  # noqa: E731
 

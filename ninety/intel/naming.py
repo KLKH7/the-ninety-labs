@@ -13,7 +13,13 @@ with three changes that each make a wrong name less likely, measured in docs/eva
    minus frames that did not). An empty slot gains nothing, so a track takes a slot only when most
    of its frames in the window voted for it, and two tracks never share one: a fragment that
    another track beats to its slot stays unnamed instead of taking a near one.
-3. **Names cross the camera join.** The events come from the broadcast, whose tracks are other
+3. **A segment whose sides are in doubt names nobody.** Each team defends one goal all match
+   (Law 1; our engine does not change ends, ninety/intel/scene.py), so its keeper, its deepest
+   player, stands in its own penalty area, within 16.5 m of its goal line (Law 1), for most of
+   the play. A segment in which either team's deepest player is further out than that in more
+   than half its sampled frames holds tracks on the wrong side (a misread kit, a keeper read as
+   the other team), and a wrong side is a wrong name: nobody in it is named.
+4. **Names cross the camera join.** The events come from the broadcast, whose tracks are other
    ids (ninety.vision.join pairs them). A broadcast track is given the name of its tactical track
    only when the association is at least the measured gate and both cameras read the same side.
 
@@ -27,16 +33,19 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ninety.intel import roles
+from ninety.intel.scene import depth
 from ninety.intel.teamsheet import LABEL, LINE, ROLES, Fixture
 
 FPS = 25
 WINDOW_S = 10.0  # design: a window short enough that a player's two fragments rarely fall in one
 PER_SEGMENT = 1000  # ninety.vision.match_join.PER_SEGMENT: a joined match's track ids per segment
+PENALTY_AREA_M = 16.5  # Law 1: the penalty area reaches 16.5 m from the goal line
 TRACK = re.compile(r"^([ha])-t(\d+)$")
 CALIBRATION = Path(__file__).resolve().parent / "naming_calibration.json"
 
@@ -116,6 +125,20 @@ def assign(frames: Sequence[Mapping], team: str, window_s: float = WINDOW_S) -> 
     return out
 
 
+def side_doubt(frames: Sequence[Mapping]) -> set[int]:
+    """The segments in which a team's deepest player is outside its own penalty area in more than
+    half the sampled frames: their sides are in doubt."""
+    deepest: dict[tuple[int, str], list[float]] = defaultdict(list)
+    for f in frames:
+        if int(f["frame"]) % roles.STEP_FRAMES:
+            continue
+        for team in ("home", "away"):
+            own = [p for p in f["players"] if p["team"] == team]
+            if own:
+                deepest[(segment(own[0]["id"]), team)].append(min(depth(team, p["x"]) for p in own))
+    return {k for (k, _), d in deepest.items() if statistics.median(d) > PENALTY_AREA_M}
+
+
 def gates(path: Path = CALIBRATION) -> dict:
     """The measured gates (docs/eval/roles.md): the least share and seconds at which a tactical
     track is named, and the least association confidence that carries its name to a broadcast
@@ -144,6 +167,7 @@ def people(
         for p in f["players"]:
             t0, t1 = spans.get(p["id"], (f["t"], f["t"]))
             spans[p["id"]] = (min(t0, f["t"]), max(t1, f["t"]))
+    doubt = side_doubt(frames)
     for team in ("home", "away"):
         club = fixture.clubs[team] if fixture else None
         sheet = {s.role: s for s in fixture.sheet(team)} if fixture else {}
@@ -156,7 +180,8 @@ def people(
                 starter = sheet.get(r["role"])
                 if starter:
                     w["sheet_name"] = starter.name
-                ok = (gate.get("share") is not None and gate.get("seconds") is not None
+                ok = (segment(track) not in doubt
+                      and gate.get("share") is not None and gate.get("seconds") is not None
                       and r["share"] >= gate["share"] and r["seconds"] >= gate["seconds"])
                 if ok and starter:
                     w.update(name=starter.name, number=starter.number, position=LABEL[r["role"]],
@@ -187,6 +212,28 @@ def broadcast_people(
     return out
 
 
+PEOPLE = ("player", "receiver", "intended", "interceptor", "deflected_by")  # ninety/e2e.PEOPLE
+
+
+def tactical(association: Mapping[str, Mapping], gate: Mapping) -> dict[str, str]:
+    """Broadcast track -> its tactical track, where the association is at least the gate (all
+    associated tracks when no gate was measured) and both cameras read the same side."""
+    g = gate.get("association")
+    out = {}
+    for track, a in association.items():
+        tv = a.get("track")
+        if tv and a.get("confidence", 0) >= (g if g is not None else 0) and tv[0] == track[0]:
+            out[track] = tv
+    return out
+
+
+def tactical_events(events: Sequence[Mapping], association: Mapping[str, Mapping], gate: Mapping):
+    """The events with every person they name moved to his tactical track, or to None where the
+    join gives none: an event's broadcast id names another man among the tactical tracks."""
+    to = tactical(association, gate)
+    return [{**e, **{k: to.get(e[k]) for k in PEOPLE if e.get(k)}} for e in events]
+
+
 def lineup(broadcast: Mapping[str, Mapping]) -> list[dict]:
     """The bundle's line-up rows (ninety/e2e.read_lineup): each broadcast track (the ids events
     name) a name passed both gates; `confident` is always true, since nothing else is listed."""
@@ -197,5 +244,5 @@ def lineup(broadcast: Mapping[str, Mapping]) -> list[dict]:
     ]
 
 
-__all__ = ["CALIBRATION", "WINDOW_S", "assign", "broadcast_people", "gates", "lineup",
-           "match_windows", "people", "segment", "votes"]
+__all__ = ["CALIBRATION", "PEOPLE", "WINDOW_S", "assign", "broadcast_people", "gates", "lineup",
+           "match_windows", "people", "segment", "side_doubt", "tactical", "tactical_events", "votes"]

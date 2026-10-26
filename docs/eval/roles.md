@@ -56,3 +56,15 @@ settings that meet the target on development, the one that names the most events
 to the stricter). If none meets it, nothing is named. Reported: precision with its Wilson 95%
 interval and coverage (named over all) for each unit, on development, held out and the whole
 match, and the naming in use before this change on the same data.
+
+**Amendment 1 (Oct 25, after development was graded, before the held-out was scored).** As
+pre-registered, no setting met 0.95 on development (best 0.946 on tracks at 203 names;
+`docs/eval/naming.json` before this amendment is kept in the PR). By the rule, nothing was named.
+Diagnosis on development only: 12 of the 21 wrong names at the strictest passing-size setting
+were on the wrong side, 10 of them in one segment (24) whose sides were misread. One rule is
+added, from the Laws and not from a fitted number: each team defends one goal all match, so its
+deepest player (its keeper) stands within its penalty area (16.5 m of its goal line, Law 1) for
+most of the play. A segment in which either team's deepest player is further out than that in
+more than half its sampled frames names nobody (`naming.side_doubt`). The rule was chosen after
+seeing that the wrong names were in such segments, so development no longer tests it: the
+held-out half does, scored once, with the same target, grid and selection rule as above.

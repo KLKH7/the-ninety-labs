@@ -24,6 +24,7 @@ from ninety.intel import (
     ball_share,
     counter_press,
     line_breaks,
+    naming,
     offside,
     overloads,
     pass_options,
@@ -59,6 +60,9 @@ class MatchInsights:
     gates: dict = field(default_factory=dict)
     team_stats: dict = field(default_factory=dict)  # the phone's match stats (ninety/intel/team_stats.py)
     stats: dict = field(default_factory=dict)  # the Stats tab's grouped rows (ninety/intel/stats_table.py)
+    # A joined match's broadcast tracks (the ids its events name) -> what a fan may be told of each,
+    # through the camera join (ninety/intel/naming.broadcast_people); empty for a single camera.
+    broadcast: dict = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -68,23 +72,35 @@ class MatchInsights:
         events: Sequence[Mapping],
         fixture: Fixture,
         gate: Mapping | None = None,
+        association: Mapping[str, Mapping] | None = None,
     ) -> MatchInsights:
         bad = sorted({str(fr.get("source")) for fr in frames} - {"tracked"})
         if bad:  # the live path's positions are tracked ones; the simulator's are the answer key
             raise ValueError(f"{clip}: frames must be source 'tracked', got {bad}")
         f = Frames(frames)
-        gate = dict(roles.gates() if gate is None else gate)
-        people = {}
-        for team in TEAMS:
-            assigned = roles.assign(f.frames, team)
-            for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
-                people[track] = roles.who(track, team, assigned, fixture, gate)
-        spans: dict[str, tuple[float, float]] = {}
-        for fr in f.frames:
-            for p in fr["players"]:
-                t0, t1 = spans.get(p["id"], (fr["t"], fr["t"]))
-                spans[p["id"]] = (min(t0, fr["t"]), max(t1, fr["t"]))
-        people = roles.one_track_per_name(people, spans)
+        broadcast: dict[str, dict] = {}
+        if association is not None:
+            # A joined match: the players are the tactical camera's tracks and the events name the
+            # broadcast's, two id spaces in which one id is two different men. Names come from the
+            # whole-pitch tracks (ninety/intel/naming.py), and every person an event names is moved
+            # to his tactical track before any fact reads him, or to none (lesson 259).
+            gate = dict(naming.gates() if gate is None else gate)
+            people = naming.people(f.frames, fixture, gate)
+            broadcast = naming.broadcast_people(association, people, fixture, gate)
+            events = naming.tactical_events(events, association, gate)
+        else:
+            gate = dict(roles.gates() if gate is None else gate)
+            people = {}
+            for team in TEAMS:
+                assigned = roles.assign(f.frames, team)
+                for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
+                    people[track] = roles.who(track, team, assigned, fixture, gate)
+            spans: dict[str, tuple[float, float]] = {}
+            for fr in f.frames:
+                for p in fr["players"]:
+                    t0, t1 = spans.get(p["id"], (fr["t"], fr["t"]))
+                    spans[p["id"]] = (min(t0, fr["t"]), max(t1, fr["t"]))
+            people = roles.one_track_per_name(people, spans)
         shapes = shape_drawings(f.frames)
         facts = {
             "line_break": line_breaks.line_breaks(events, f),
@@ -133,6 +149,7 @@ class MatchInsights:
                     r["scorer_is"] = people[r["player"]]["say"]
         last = max((float(fr["t"]) for fr in f.frames), default=0.0)
         mi = cls(clip, fixture, facts, people, int(last // 60) + 1, gate, team_stats_mod.team_stats(f.frames))
+        mi.broadcast = broadcast
         from ninety.intel.stats_table import stats_table
 
         mi.stats = stats_table(mi)  # the phone's Stats tab, from the same tools the Companion reads
@@ -492,6 +509,8 @@ class MatchInsights:
             "team_stats": self.team_stats,
             "stats": self.stats,
             "facts": self.facts,
+            **({"broadcast": self.broadcast, "lineup": naming.lineup(self.broadcast)}
+               if self.broadcast else {}),
         }
 
     @classmethod
@@ -506,6 +525,7 @@ class MatchInsights:
             dict(body.get("gates") or {}),
             dict(body.get("team_stats") or {}),
             dict(body.get("stats") or {}),
+            dict(body.get("broadcast") or {}),
         )
 
 
@@ -574,12 +594,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("fixture", type=Path, help="the clip's clip.json, or {seed, home_code, away_code}")
     ap.add_argument("--clip", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--association", type=Path,
+                    help="a joined match's association.json: names cross the camera join (naming.py)")
     args = ap.parse_args(argv)
     body = json.loads(args.tracked.read_text())
     frames = [f for f in body["frames"] if f.get("source") == tracking.TRACKED]
     if len(frames) != len(body["frames"]):
         raise SystemExit(f"{args.tracked}: every frame must be source {tracking.TRACKED!r}")
-    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture))
+    association = json.loads(args.association.read_text())["tracks"] if args.association else None
+    mi = MatchInsights.build(args.clip, frames, detected.load(args.detected), load_fixture(args.fixture),
+                             association=association)
     args.out.write_text(json.dumps(mi.as_dict(), separators=(",", ":")))
     print(f"{args.out}: " + ", ".join(f"{k} {len(v)}" for k, v in mi.facts.items()))
 
