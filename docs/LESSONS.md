@@ -3355,9 +3355,12 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** the engine owns when a player is down, for how long, where his feet are and the outcome;
   the renderer may shape the body inside that spell (a stumble, a topple that gathers pace, the way
   his run carries him, arms out to break the fall), seeded by the player and the engine frame so the
-  same foul is drawn the same in every clip. The labels follow the drawn body (`fall`, `fall_dir`
-  and the arms in the label row), as they do for touches (lessons 212, 273).
+  same foul is drawn the same in every clip, and getting up is a person's (hands, one knee, up), not
+  the plank pivoting back. The labels follow the drawn body (`fall`, `fall_dir` and the arms in the
+  label row), as they do for touches (lessons 212, 273). The same went for the keeper's dive: a
+  stored pose bending the spine 1.7 rad over straight legs read as "a weird lean" and twisted the
+  skinned body; a dive is now the straight body tipped over his feet with the arms on past his head.
 - **Check:** `uv run pytest tests/test_render_fouls.py -k "spell or stumbles or same_foul or run_into
-  or hands_go_out or under_way or drawn_way"` and the page parity test
+  or hands_go_out or under_way or drawn_way or one_knee or head_on or dives"` and the page parity test
   (`tests/test_render_mesh.py::test_the_page_turns_steps_and_touches_like_the_python_pose`, brace
   poses); `ninety-render-check` passes on the foul's window before and after.
