@@ -597,16 +597,24 @@ def _headline_of(text: str, question: str, cited: list[dict], insights) -> str |
     return head
 
 
-def clubs_named(text: str, insights) -> list[str]:
-    """The clubs a question names, by full or short name ("Lisbon's left-back")."""
-
+def club_words(insights) -> dict[str, set[str]]:
+    """Each club's names a fan may use: its full and short name, its code ("LIS"), and each word of its
+    full name the other club's does not share ("Esportes")."""
     fx = insights.fixture
-    out = []
+    full = {team: fx.clubs[team] for team in ("home", "away")}
+    words = {team: {w for w in full[team].split() if len(w) >= 4} for team in full}
+    out = {}
     for team, code in (("home", fx.home_code), ("away", fx.away_code)):
-        full = fx.clubs[team]
-        if any(re.search(rf"\b{re.escape(n)}\b", text, re.I) for n in {full, short_name(code)}):
-            out.append(full)
+        other = words["away" if team == "home" else "home"]
+        out[full[team]] = {full[team], short_name(code), code, *(words[team] - other)}
     return out
+
+
+def clubs_named(text: str, insights) -> list[str]:
+    """The clubs a question names, by any name a fan uses for them ("Lisbon's left-back", "LIS",
+    "Esportes")."""
+    return [club for club, names in club_words(insights).items()
+            if any(re.search(rf"\b{re.escape(n)}\b", text, re.I) for n in names)]
 
 
 def _short(insights, club: str | None) -> str | None:
@@ -643,7 +651,14 @@ def _figure(f: dict) -> str | None:
         return f"{v}%"
     if unit in ("m", "s", "km/h"):
         return f"{v} {unit}"
-    return f"{v} {unit[:-1] if v == '1' and unit.endswith('s') else unit}"
+    return f"{v} {_singular(unit) if v == '1' else unit}"
+
+
+def _singular(unit: str) -> str:
+    """"crosses" -> "cross", "passes" -> "pass", "shots" -> "shot"."""
+    if unit.endswith(("sses", "shes", "ches", "xes")):
+        return unit[:-2]
+    return unit[:-1] if unit.endswith("s") else unit
 
 
 def _place(f: dict) -> str | None:
@@ -741,6 +756,18 @@ PASS_WORDS.update({f"{k}_all": v for k, v in list(PASS_WORDS.items())})
 # What code says for a score question (Kian, Oct 26, option B): no scoreline from vision, which
 # finds some goals and misses others; the goals it spotted follow, one sentence each.
 SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep one."
+# Design (the Coordinator, Oct 26): a share (of passes by channel, of possession) is said only over at
+# least this many passes; fewer is too early to say anything, and the answer says so.
+MIN_SHARE_PASSES = 15
+TOO_EARLY = "It's too early to say: the match has barely started."
+SHOTS_SIDE_UNKNOWN = "Vision couldn't tell surely which side took them, so it can't say who has had more."
+
+
+def _sample(fact: dict) -> int | None:
+    """How many passes a share fact rests on (its `passes`, or the count it carries in `also`)."""
+    if isinstance(fact.get("passes"), int):
+        return fact["passes"]
+    return next((int(v) for v, unit, *_ in fact.get("also") or () if unit == "passes"), None)
 # Fixed text, stating no fact: possession is unknown when too few passes had their side told surely.
 POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: vision could not tell surely "
                       "which side made most of the passes.")
@@ -760,11 +787,13 @@ def code_texts(fact: dict) -> list[str]:
                 f"{cl['away']} {_plural(fact['away'], 'goal')}, read from the broadcast's scorebug."]
     if not fact.get("confident", False):
         return []
+    if fact.get("unit") == "%" and _sample(fact) is not None and _sample(fact) < MIN_SHARE_PASSES:
+        return []  # a share of a handful of passes says nothing yet (code_match_answer: too early)
     club, kind, metric = fact.get("club"), fact.get("kind"), fact.get("metric")
     span = (
         f"from minute {fact['minute_from']} to minute {fact['minute_to']}"
-        if fact.get("minute_from")
-        else f"in minute {fact.get('minute')}"
+        if fact.get("minute_from") and fact.get("minute_to") != fact["minute_from"]
+        else f"in minute {fact.get('minute_from') or fact.get('minute')}"  # never "from minute 1 to minute 1"
     )
     club = club or ""
     who = fact.get("passer_is") or f"{'an' if club[:1] in 'AEIOU' else 'a'} {club} player"
@@ -984,15 +1013,21 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     if not names and history:
         names = [c["name"] for c in history[-1]["calls"]] if history[-1].get("calls") else []
     lo, hi = minutes_of(question.text, minute) or (max(1, minute - WINDOW_MIN + 1), minute)
-    # A club the question names may be the side acting or the side acted on ("which pass cut through
-    # Lisbon Esportes?"): code reads both clubs' facts and the fact-check binds the sentence to the right one.
-    # Players are the exception: "Lisbon's best player" is one of Lisbon's, ranked among them.
+    # The club the question is about: named, or "they" / "them" / "their" after a question that named one.
     named = clubs_named(question.text, insights)
+    if not named and re.search(r"\b(?:they|them|their|theirs)\b", question.text, re.I) and history:
+        named = clubs_named(history[-1].get("question", ""), insights)
     club = named[0] if len(named) == 1 else None
     stretch = minutes_of(question.text, minute)
-    # Who has had more of the ball asks about the match so far, unless a stretch is named.
-    return [{"name": n, "club": club if n == "players" else None,
-             "minute_from": 1 if n == "possession" and stretch is None else lo, "minute_to": hi}
+    # The named club is the side acting ("How are Lisbon playing?", "Lisbon's best player"), except for
+    # a pass that cut through a side ("which pass cut through Lisbon?"): there both clubs are read and
+    # the fact-check binds the sentence to the right one.
+    acted_on = {"line_breaks"}
+    # A count or a comparison ("who has had more shots?", "how many corners?") asks about the match so
+    # far, unless a stretch is named; "how are they playing?" asks about now.
+    so_far = {"possession", "shots", "set_pieces"}
+    return [{"name": n, "club": None if n in acted_on else club,
+             "minute_from": 1 if n in so_far and stretch is None else lo, "minute_to": hi}
             for n in names]
 
 
@@ -1180,6 +1215,35 @@ def code_match_answer(
             return _match_answer(" ".join([POSSESSION_UNKNOWN, *(t for t, _ in said)]), [f for _, f in said],
                                  insights, calls, asked=[*(h["question"] for h in history), question.text],
                                  t=question.t, suggest=suggest), calls
+    # A comparison of shots: each club's count when its side is known; else the total, and that which
+    # side took them is not known (fixed words, stating no number).
+    compares = re.search(r"\b(?:more|most|who|which)\b", question.text, re.I)
+    if calls and calls[0]["name"] == "shots" and compares:
+        total = next((f for f in facts if f.get("metric") == "shots_all"), None)
+        per_club = [f for f in facts if f.get("metric") == "shots"]
+        if total is not None and per_club and not all(f.get("confident") for f in per_club):
+            ok = (t for t in code_texts(total) if _verify(Claim(t, [total["id"]]), known, insights).ok)
+            text = next(ok, None)
+            if text is not None:
+                return _match_answer(f"{text} {SHOTS_SIDE_UNKNOWN}", [total], insights, calls,
+                                     asked=[*(h["question"] for h in history), question.text], t=question.t,
+                                     suggest=suggest), calls
+    # A recap ("what happened in the first half?"): every goal in the stretch, then its strongest other
+    # moment, each its own checked sentence.
+    if calls and calls[0]["name"] == "key_moments":
+        goals = sorted((f for f in facts if f.get("kind") == "goal"), key=lambda f: f.get("t") or 0)
+        others = [f for f in facts if f.get("kind") != "goal"]
+        said = []
+        for f in [*goals, *others]:
+            if len(said) >= len(goals) + 1:
+                break
+            text = next((t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), known, insights).ok), None)
+            if text is not None:
+                said.append((text, f))
+        if len(said) > 1:
+            return _match_answer(" ".join(t for t, _ in said), [f for _, f in said], insights, calls,
+                                 asked=[*(h["question"] for h in history), question.text], t=question.t,
+                                 suggest=suggest), calls
     # A goal's story ("why did they score?"): the goal with the strongest thing before it, when the
     # goal build-up is what was asked (a "what's the score?" is the score's to answer).
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
@@ -1216,8 +1280,18 @@ def code_match_answer(
     names = ", ".join(n.replace("_", " ").replace("build up", "build-up") for n in MATCH_TOOLS[:4])
     ranked = [f for f in facts if f.get("kind") == "players"]
     asked = next((c for c in calls if c["name"] == "players"), None)
-    span = f"from minute {calls[0]['minute_from']} to minute {calls[0]['minute_to']}" if calls else ""
-    if ranked and asked is not None:
+    lo_hi = (calls[0]["minute_from"], calls[0]["minute_to"]) if calls else None
+    span = ("" if lo_hi is None else f"in minute {lo_hi[0]}" if lo_hi[0] == lo_hi[1]
+            else f"from minute {lo_hi[0]} to minute {lo_hi[1]}")
+    thin = next((f for f in facts if f.get("unit") == "%" and f.get("confident") and _sample(f) is not None
+                 and _sample(f) < MIN_SHARE_PASSES), None)
+    if calls and _minute_now(question.t) <= 2:
+        why = TOO_EARLY  # nothing yet to rank, count or share: say so, not a canned list
+    elif thin is not None:
+        whose = thin.get("club") or "either side"
+        why = (f"Too few of {whose}'s passes {span} to say yet: {_plural(_sample(thin), 'pass')}, and a "
+               f"share needs {MIN_SHARE_PASSES}.")
+    elif ranked and asked is not None:
         # The players were ranked but none can be named the best: say so, never the canned list.
         club = asked.get("club")
         whose = (f"{club}'" if club.endswith("s") else f"{club}'s") if club else "the"
