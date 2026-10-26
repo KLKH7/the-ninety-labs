@@ -49,6 +49,11 @@ import { describeVisual, drawVisual, drawable, fromScout, headline, title } from
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** Docked beside the big screen on a desktop (`?embed=1`, web/viewer's companion panel): already
+ * paired by the page around it, which plays every sound; it opens on Live and talks to its parent
+ * page about tabs, same origin only. */
+const embed = params.get("embed") === "1" && window.parent !== window;
+if (embed) document.body.dataset.embed = "1";
 
 const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/window.py)
 // design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
@@ -289,6 +294,7 @@ function showTab(tab: Tab, focus = false) {
   // ion-tabs shows the panel; keyboard focus follows once it has.
   void ($("live") as IonTabs).select(tab).then(() => focus && $(`tab-button-${tab}`).focus());
   document.body.dataset.tab = tab;
+  if (embed) window.parent.postMessage({ type: "ninety-tab", tab }, location.origin);
   if (tab === "insights") {
     unread = 0;
     showUnread();
@@ -296,6 +302,16 @@ function showTab(tab: Tab, focus = false) {
   if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
 }
 
+// The big screen around an embedded phone may open a tab ("Ask anything about this match →").
+const OPEN_TABS: Record<string, Tab> = { live: "radar", radar: "radar", ask: "ask", story: "insights", insights: "insights" };
+if (embed) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return; // the parent page only
+    const m = e.data as { type?: unknown; tab?: unknown } | null;
+    const tab = m && m.type === "ninety-open" && typeof m.tab === "string" ? OPEN_TABS[m.tab] : undefined;
+    if (tab && document.body.dataset.state === "live") showTab(tab, true);
+  });
+}
 $("live").addEventListener("ionTabsDidChange", (e) => {
   const tab = (e as CustomEvent<{ tab: Tab }>).detail.tab;
   if (tab !== state.tab) showTab(tab);
@@ -922,6 +938,7 @@ let settings = prefs.load();
 let captionTimer = 0;
 /** Speaks a line with the fan's voice and rate; with the transcript on, shows it as a caption too. */
 function say(text: string) {
+  if (embed) return; // the big screen around it plays all sound
   speakAloud(text, { rate: settings.rate, voice: settings.voice });
   if (!settings.transcript) return;
   const caption = $("caption");
@@ -975,7 +992,7 @@ function renderSettings() {
       play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10l8-5z"/></svg>';
       play.addEventListener("click", () => {
         if ("speechSynthesis" in window) speechSynthesis.cancel();
-        speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
+        if (!embed) speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
       });
       return radioRow("voice", v.name, settings.voice === v.name, () => (settings.voice = v.name), play);
     }),
@@ -1464,7 +1481,7 @@ function syncAsk() {
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
 $("panel-ask").addEventListener("animationend", () => $("panel-ask").classList.remove("composer-in"));
-if (fan === null) onboard.open(null, false); // the first visit opens on the three choices
+if (fan === null && !embed) onboard.open(null, false); // the first visit opens on the three choices
 applyFan();
 
 function renderChips() {

@@ -1030,3 +1030,8 @@ body[data-focus="players"] #players-strip:not([hidden]) { display: block; }
 .focus-chev { color: var(--text-3); font-size: 22px; }
 .shirt-dot { flex: 0 0 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--text); background: rgba(118, 118, 128, 0.24); font-variant-numeric: tabular-nums; }
 .player-row .focus-label::before { display: none; }
+
+/* Embedded beside the big screen (?embed=1): no pairing screen (the page around it paired it), no
+   controls for a sound it never makes (the big screen plays it), no install or status-bar room. */
+body[data-embed] #pair, body[data-embed] .speak, body[data-embed] .listening, body[data-embed] .install, body[data-embed] #caption { display: none !important; }
+body[data-embed] { background: #000; }
