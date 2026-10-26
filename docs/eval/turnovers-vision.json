@@ -1,0 +1,105 @@
+{
+ "read1_abae7c17": {
+  "pressure": {
+   "true": 66,
+   "det": 46,
+   "tp": 19,
+   "recall": 0.288,
+   "precision": 0.413,
+   "recall_95": [
+    0.19,
+    0.41
+   ],
+   "precision_95": [
+    0.28,
+    0.56
+   ]
+  },
+  "tackle": {
+   "true": 8,
+   "det": 3,
+   "tp": 0,
+   "recall": 0.0,
+   "precision": 0.0,
+   "recall_95": [
+    0.0,
+    0.32
+   ],
+   "precision_95": [
+    0.0,
+    0.56
+   ]
+  },
+  "interception": {
+   "true": 8,
+   "det": 27,
+   "tp": 1,
+   "recall": 0.125,
+   "precision": 0.037,
+   "recall_95": [
+    0.02,
+    0.47
+   ],
+   "precision_95": [
+    0.01,
+    0.18
+   ]
+  }
+ },
+ "read2_8aad0754": {
+  "pressure": {
+   "true": 66,
+   "det": 46,
+   "tp": 19,
+   "recall": 0.288,
+   "precision": 0.413,
+   "recall_95": [
+    0.19,
+    0.41
+   ],
+   "precision_95": [
+    0.28,
+    0.56
+   ]
+  },
+  "tackle": {
+   "true": 8,
+   "det": 3,
+   "tp": 1,
+   "recall": 0.125,
+   "precision": 0.333,
+   "recall_95": [
+    0.02,
+    0.47
+   ],
+   "precision_95": [
+    0.06,
+    0.79
+   ]
+  },
+  "interception": {
+   "true": 8,
+   "det": 25,
+   "tp": 0,
+   "recall": 0.0,
+   "precision": 0.0,
+   "recall_95": [
+    0.0,
+    0.32
+   ],
+   "precision_95": [
+    0.0,
+    0.13
+   ]
+  }
+ },
+ "side_accuracy": {
+  "read1": 0.56,
+  "read2": 0.615,
+  "windows_renamed": 20,
+  "windows_no_vote": 53,
+  "windows_naming_kept_by_votes": 7
+ },
+ "clips": 80,
+ "split": "shot-outcome set validation, seeds 910001-910008"
+}

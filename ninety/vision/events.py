@@ -29,8 +29,9 @@ Events, from one spell to the next:
   once in PRESSURE_REPEAT_S for each side, as the engine writes it (docs/eval/pressure-plan.md);
 - a spell that ends with the ball leaving him slower than any pass and an opponent at it: a tackle,
   won or lost by the side of the next spell (docs/eval/tackle-plan.md).
-Of these three, only pressure is written by default (WRITTEN): interceptions and tackles missed
-their plans' bar on validation, and are built for measuring (`detect(..., kinds=TURNOVERS)`).
+None of the three is written by default (WRITTEN): each missed its plan's bar, interceptions and
+tackles on validation stand-ins, pressure on the detector's real output for 80 validation windows
+(docs/eval/turnovers-vision-result.md); they are built for measuring (`detect(..., kinds=TURNOVERS)`).
 
 A broadcast cuts away from a long dead ball to its restart (ninety/render/edit.py): the frame
 numbers jump there. Nothing seen before a cut is linked to anything after it: a spell before it and
@@ -146,10 +147,11 @@ ARRIVE_MPS = 6.0
 HELD = 0.49
 # The new kinds `detect` writes by default; each plan's bar decides whether its kind is in. On the
 # validation stand-in (docs/eval/turnovers-dev.json, M4, amendment 1) pressure met it (37 of 55,
-# 37 of 52); interceptions (12 of 60 right) and tackles (19 of 44 found, amendment 2) did not: built,
-# not written.
+# 37 of 52); interceptions (12 of 60 right) and tackles (19 of 44 found, amendment 2) did not. On the
+# detector's real output for 80 validation windows pressure did not either (19 of 66 found, 19 of 46
+# right: docs/eval/turnovers-vision-result.md). Built, none written.
 TURNOVERS = ("interception", "pressure", "tackle")
-WRITTEN = ("pressure",)
+WRITTEN: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -452,30 +454,6 @@ def possession_changes(sp: list[Spell], out_frames: list[int], cut_at: list[int]
     return out
 
 
-def name_by_strikes(path: list[BallPoint], sp: list[Spell], tracks: list[Track], rows: list[dict]) -> int:
-    """Amendment B1 (docs/eval/turnovers-vision-plan.md): on the broadcast, the kits named by the goal
-    their strikes head for. Each spell end of an outfield track with a side whose ball heads for a goal
-    (`heads_for_goal`, toward either) votes that its kit attacks that goal (home attacks x = 105). When
-    the votes against `assign_teams`' naming outnumber those for it, every outfield track's side is
-    swapped; keepers keep the half they stand in. Returns the votes for less the votes against. The
-    tactical views' sides are not touched (their observations name each box's view)."""
-    if any("views" in d or "view" in d for r in rows for d in r["players"]):
-        return 0
-    index = {p.frame: i for i, p in enumerate(path)}
-    margin = 0
-    for s in sp:
-        if s.track.team is None or s.track.keeper:
-            continue
-        for side in ("home", "away"):
-            if heads_for_goal(path, index[s.last], side):
-                margin += 1 if side == s.track.team else -1
-    if margin < 0:
-        for t in tracks:
-            if t.team is not None and not t.keeper:
-                t.team = "away" if t.team == "home" else "home"
-    return margin
-
-
 def detect(rows: list[dict], join_breaks: bool = True, kinds: tuple[str, ...] = WRITTEN,
            pace: float | None = None) -> tuple[list[dict], dict]:
     """The detected events, and a summary of how they were found (teams, spells, counts).
@@ -490,7 +468,6 @@ def detect(rows: list[dict], join_breaks: bool = True, kinds: tuple[str, ...] = 
     path = ball_path(rows)
     index = {p.frame: i for i, p in enumerate(path)}
     sp = spells(path, tracks)
-    teams["named_by_strikes"] = name_by_strikes(path, sp, tracks, rows)
     outs = out_of_play(path)
     events: list[dict] = []
 

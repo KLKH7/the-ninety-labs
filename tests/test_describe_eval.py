@@ -70,9 +70,14 @@ def test_a_report_pair_that_no_longer_names_its_event_is_refused(tmp_path, monke
 def test_a_report_pair_that_still_names_its_event_is_graded(tmp_path, monkeypatch):
     pair = {"truth_id": "e1", "detected_id": "v00006", "type": "pass"}
     monkeypatch.setattr(describe_eval, "EVENT_REPORT", _report_with(tmp_path, pair))
-    # v00006 is the report's sixth event of the kinds it knew; kinds added since (pressure) do not
-    # move it, and the fixture's own id for that event is returned.
-    rows = describe_eval.detected.load(describe_eval.detected.FIXTURES / "detected-seed900001.jsonl")
+    # v00006 is the report's sixth event of the kinds it knew; a kind added since (pressure, while it
+    # was written: the fixture as it was then) does not move it, and the fixture's own id is returned.
+    fixtures = describe_eval.detected.FIXTURES
+    (tmp_path / "fx").mkdir()
+    (tmp_path / "fx" / "detected-seed900001.jsonl").write_text(
+        (fixtures / "detected-seed900001-with-pressure.jsonl").read_text())
+    monkeypatch.setattr(describe_eval.detected, "FIXTURES", tmp_path / "fx")
+    rows = describe_eval.detected.load(tmp_path / "fx" / "detected-seed900001.jsonl")
     sixth = [e for e in rows if e["type"] in describe_eval.REPORT_KINDS][5]
     assert any(e["type"] not in describe_eval.REPORT_KINDS for e in rows)  # the premise: one was added
     assert describe_eval.real_detections() == {sixth["id"]} and sixth["type"] == "pass"

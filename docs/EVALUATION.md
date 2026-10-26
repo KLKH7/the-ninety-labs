@@ -452,7 +452,7 @@ turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses th
 over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
 drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
 does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
-the true camera. Possession changes at restarts are not detected (pressure is, below, measured on validation stand-ins only); who acted is, as a track
+the true camera. Possession changes at restarts are not detected, nor pressure (built, below, but under its bar on real vision); who acted is, as a track
 (below), never as a shirt number.
 
 ### Interceptions, pressure and tackles (development only)
@@ -466,8 +466,12 @@ windows, and its 4 rendered validation clips with only what the broadcast shows
 ([turnovers-dev.json](eval/turnovers-dev.json)). These are not vision numbers and not test numbers.
 
 - **Pressure** met its bar, read (amendment 1) with the noise split equally between a clip offset, a
-  shift per frame and each object's own: strict recall 37 of 55, precision 37 of 52. Written by default.
-  With all noise independent it was 28 of 55, with all of it one offset 40 of 55.
+  shift per frame and each object's own: strict recall 37 of 55, precision 37 of 52. With all noise
+  independent it was 28 of 55, with all of it one offset 40 of 55. On the detector's **real output**
+  for the shot-outcome set's 80 validation windows it missed it: 19 of 66 found, 19 of 46 right
+  (strict), mostly from the kits named the wrong way round (24 of 80 windows); naming them by their
+  strikes (amendment B1) did not lift it. Built, not written
+  ([turnovers-vision-result.md](eval/turnovers-vision-result.md)).
 - **Interceptions** missed it (precision 12 of 60): built, not written. The pass's aim is not in the
   picture; its stand-in (where the ball, struck at the speed seen, slows to 6 m/s) disagrees with the
   engine on 133 of 477 validation passes an opponent controlled, even with a perfect ball.
