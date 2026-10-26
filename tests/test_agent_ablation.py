@@ -18,9 +18,10 @@ SEED = 21
 
 
 def scripted_run(grader=None):
-    # The single agent writes a true claim in minute 1 and a false number in minute 2. The graph's
-    # Tactician writes the same false number in minute 2, and keeps writing it when sent back.
-    replies = iter([reply(true_claim(FIRST)), reply(false_claim(MAIN))])
+    # The single agent writes a true claim in minute 1 and a false number in minute 2, in both its
+    # arms (each minute runs the arms in order: one agent, one agent + fact-checker, graph); checked,
+    # it keeps writing the false number when sent back. The graph's Tactician does the same.
+    replies = iter([reply(true_claim(FIRST))] * 2 + [reply(false_claim(MAIN))] * 4)
 
     async def one_agent(prompt: str) -> str:
         return next(replies)
@@ -37,11 +38,42 @@ def scripted_run(grader=None):
 BODY = scripted_run()
 
 
-def test_the_single_agent_airs_its_false_number_and_the_graph_does_not():
-    one, graph = BODY["arms"]["one agent"], BODY["arms"]["graph"]
+def test_the_single_agent_airs_its_false_number_and_the_checked_arms_do_not():
+    one, checked, graph = (BODY["arms"][a] for a in ("one agent", "one agent + fact-checker", "graph"))
     assert (one["aired"], one["false_aired"], one["false_by_code"]) == (2, 1, 1)
+    assert (checked["aired"], checked["false_aired"]) == (1, 0)
     assert (graph["aired"], graph["false_aired"]) == (1, 0)
     assert graph["model_calls"] > one["model_calls"]  # the graph's checks cost calls, and the table says so
+    # Checked: minute 1 by the agent and the Judge; minute 2's three drafts, all rejected by the code.
+    assert checked["model_calls"] == 2 + 3
+    assert (checked["held"], checked["rejected"], checked["rewritten"]) == (0, 1, 0)
+    assert graph["rejected"] == 1
+
+
+def test_a_claim_aired_after_a_rewrite_is_counted():
+    replies = iter([reply(false_claim(MAIN)), reply(true_claim(FIRST))])
+
+    async def agent(prompt: str) -> str:
+        return next(replies)
+
+    from ninety.agents import workflow
+    from ninety.match.facts import compact
+
+    known = {e["id"]: compact(e) for e in workflow.agent_events(EVENTS)}
+    checker: dict = {}
+    aired, calls, why = asyncio.run(
+        ab.checked_agent_minute(agent, Judge(), SEED, "x-inline", 1, known, checker)
+    )
+    assert [c.text for c in aired] == [ab.parse_claim(reply(true_claim(FIRST))).text] and why == ""
+    assert calls == 3 and checker == {"drafts": 2, "held": 0, "rejected": 0, "rewritten": 1}
+
+
+def test_a_failed_checked_agent_airs_nothing_and_says_why():
+    async def down(prompt):
+        raise RuntimeError("injected")
+
+    aired, calls, why = asyncio.run(ab.checked_agent_minute(down, Judge(), SEED, "x-inline", 1, {}))
+    assert aired == [] and why
 
 
 def test_every_aired_claim_is_graded_the_same_way():
@@ -75,7 +107,7 @@ def test_both_arms_read_the_match_the_grader_grades():
 
     prompts = {"one agent": [], "graph": []}
 
-    async def one_agent(prompt: str) -> str:
+    async def one_agent(prompt: str) -> str:  # both single-agent arms ask it, one prompt each a minute
         prompts["one agent"].append(prompt)
         return reply(true_claim(FIRST))
 
@@ -88,8 +120,10 @@ def test_both_arms_read_the_match_the_grader_grades():
     scripted_analyst = graph.analyst
     asyncio.run(ab.run(replace(graph, analyst=analyst), one_agent, Judge(), {SEED: EVENTS}, minutes=2))
     known = {e["id"]: compact(e) for e in workflow.agent_events(EVENTS)}  # what the grader grades
-    for arm, sent in prompts.items():
-        assert len(sent) == 2, arm  # one prompt a minute
+    sent_by_arm = {"one agent": prompts["one agent"][0::2],
+                   "one agent + fact-checker": prompts["one agent"][1::2], "graph": prompts["graph"]}
+    for arm, sent in sent_by_arm.items():
+        assert len(sent) == 2, arm  # one prompt a minute (the true claim needs no rewrite)
         for minute, prompt in enumerate(sent, start=1):
             inline = inline_events(prompt)
             assert inline and {e["id"] for e in inline} <= set(known), arm
@@ -115,8 +149,28 @@ def test_the_report_is_strict_json_and_names_the_false_claims():
     text = ab.results(BODY)
     json.loads(text)  # strict: allow_nan=False would have raised on NaN
     md = ab.report({**BODY, "agent_definitions": {}}, "scripted models")
-    assert "| one agent | 2 | 1/2 (50%)" in md and "| graph | 1 | 0/1 (0%)" in md
+    assert "| one agent | 2 | 1 | 1/2 (50%)" in md and "| graph | 1 | 1 | 0/1 (0%)" in md
+    assert "| one agent + fact-checker | 1 | 1 | 0/1 (0%)" in md
     assert "199 km/h" in md
+    # The plan's reading rule: the same true and false counts, so arm 2 matches the graph.
+    assert "matches the graph" in md
+
+
+def reading(graph: tuple[int, int], checked: tuple[int, int]) -> str:
+    def arm(true: int, false: int) -> dict:
+        return {"aired": true + false, "true_aired": true, "false_aired": false}
+
+    return ab.reading({"graph": arm(*graph), "one agent + fact-checker": arm(*checked)})
+
+
+def test_the_pre_registered_reading_rule():
+    # (true, false) on air for the graph, then for arm 2.
+    assert "graph wins" in reading((6, 0), (6, 1))  # as many true, fewer false
+    assert "graph wins" in reading((9, 1), (6, 1))  # more true, at a lower false rate
+    assert "graph wins" in reading((6, 1), (5, 1))  # the graph's rule is read first: more true, lower rate
+    assert "matches" in reading((5, 1), (6, 1))  # within one of each
+    assert "Neither" in reading((3, 0), (9, 0))  # far fewer true, no fewer false
+    assert "Neither" in reading((9, 4), (3, 1))  # more true but a higher false rate, and not within one
 
 
 def test_the_live_command_refuses_to_run_offline(monkeypatch):
@@ -135,11 +189,12 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
     from tests.test_workflow import SUPPORTED, Credential, FakeFoundry
 
     fake = FakeFoundry({
-        "analyst": [reply(true_claim(FIRST)), reply(false_claim(MAIN))],  # the slice's: one agent
+        # The slice's Analyst, for both single-agent arms: minute 1, then minute 2 with two rewrites.
+        "analyst": [reply(true_claim(FIRST))] * 2 + [reply(false_claim(MAIN))] * 4,
         "moment-analyst": [picks(FIRST), picks(MAIN)],
         "tactician": [reply(true_claim(FIRST))] + [reply(false_claim(MAIN))] * 4,
         "challenger": ['{"agree": true}'] * 2,
-        "judge": [SUPPORTED] * 12,
+        "judge": [SUPPORTED] * 16,
     })
     order: list[str] = []
 
