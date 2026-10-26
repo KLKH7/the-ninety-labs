@@ -714,6 +714,24 @@ different side from vision's), so 115 have a side sure enough to air (5 without 
 others have no join pairing at the gate and keep vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
 (no change to `ninety/sim/engine.py` or its modules since `1d0390be`).
 
+**The broadcast camera, matched directly** (pre-registered in
+[identity-direct-plan.md](eval/identity-direct-plan.md) before it ran). As broadcasts match a
+provider's feed to their own calibrated camera, the broadcast's tracks (pitch metres, only in
+frames that passed the camera trust test) are matched to the feed too, with both sides' players
+as candidates, and combined with the join (the more confident name wins). The plan's gate,
+event-actor precision at least 0.95 on the held-out half, was met, so it ships on:
+
+| Demo seed 8080, join and direct combined | Event actors named, right | Events named |
+|---|---|---|
+| Held-out (odd segments) | 106 / 106 (1.000, 95% 0.97 to 1.00) | 106 of 122 with an actor |
+| Whole match | 222 / 224 (0.991) | 224 of 345 (113 through the join alone) |
+
+The 121 events left unnamed: 92 have no player (vision attributed nobody), 27 have a track that
+was no one feed player for most of its frames, 2 lost the name to another track at the same time,
+and none had a track with no calibrated frame (1 event's own frame failed the trust test, but
+its track was seen in others). 226 events now have a side sure enough to air (115 through the
+join alone, 5 without the feed).
+
 ### Tracked positions for the phone
 
 `uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance

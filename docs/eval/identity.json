@@ -1,5 +1,5 @@
 {
- "commit": "02ac2a595d2a249941839bc1b9095e2b59dbddef",
+ "commit": "d684c4571a70c609d8bba6454d3513d71294b855",
  "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-match",
  "truth": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-friendly-satoshi-58a337/f0944a04-a1d3-4240-9c94-7b1fe56ea87e/scratchpad/truth8080",
  "feed": "/private/tmp/claude-501/-Users-kianlakhani-the-ninety-labs--claude-worktrees-infallible-gates-f4e517/e8bdacb3-0a9d-4bd6-95e7-933eda1173a1/scratchpad/identity_feed.jsonl",
@@ -141,5 +141,68 @@
   "without_feed": 5,
   "with_feed": 115
  },
- "events_side_changed": 1
+ "events_side_changed": 1,
+ "direct": {
+  "plan": "docs/eval/identity-direct-plan.md",
+  "direct_tracks": 1161,
+  "held_out": {
+   "track_names": {
+    "named": 471,
+    "right": 468,
+    "precision": 0.994,
+    "ci": [
+     0.98,
+     1.0
+    ]
+   },
+   "events": 122,
+   "event_names": {
+    "named": 106,
+    "right": 106,
+    "precision": 1.0,
+    "ci": [
+     0.97,
+     1.0
+    ]
+   },
+   "event_coverage": 0.869,
+   "tracks_named": 471
+  },
+  "all": {
+   "track_names": {
+    "named": 878,
+    "right": 871,
+    "precision": 0.992,
+    "ci": [
+     0.98,
+     1.0
+    ]
+   },
+   "events": 253,
+   "event_names": {
+    "named": 224,
+    "right": 222,
+    "precision": 0.991,
+    "ci": [
+     0.97,
+     1.0
+    ]
+   },
+   "event_coverage": 0.885,
+   "tracks_named": 878
+  },
+  "paths": {
+   "join": 867,
+   "direct": 1046
+  },
+  "events": 345,
+  "reasons": {
+   "named": 224,
+   "no_feed_majority": 27,
+   "no_player_attributed": 92,
+   "name_held_by_another_track": 2
+  },
+  "events_on_withheld_frames": 1,
+  "events_side_sure": 226
+ }
 }
