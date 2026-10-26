@@ -191,10 +191,11 @@ def change(t, team="home", conf=0.9):
 
 
 def test_a_vision_goal_the_scorebug_shows_is_confirmed_and_more_confident():
-    goal = E(1, 10.0 + WINDOW_S - 0.04, "goal", confidence=0.6)
+    goal = E(1, 10.0 + WINDOW_S - 0.04, "goal", confidence=0.6, team_confidence=0.5)
     out, summary = sb.reconcile([goal], change(10.0))
     [g] = [e for e in out if e["type"] == "goal"]
     assert g["id"] == "v1" and g["confidence"] == round(1 - 0.4 * 0.1, 3)
+    assert g["team_confidence"] == round(1 - 0.5 * 0.1, 3)  # the side read twice: kit and digit
     assert summary == {"confirmed": 1, "added": 0, "held": []}
 
 

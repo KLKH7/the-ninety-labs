@@ -35,11 +35,11 @@ probability.
 
 **Reconciling with vision's goals** (`reconcile`; docs/eval/scorebug-plan.md, W stated before any
 validation score). A score change with a vision goal of that side within W confirms it, their
-confidences combined as independent evidence. A score change with none adds a goal there, the
-scorer by look-back: the side's last detected shot before it within LOOKBACK_S with nothing of the
-other side between, named only as that shot's `player` (already identity-gated, events.attribute),
-the assist the last completed pass to him before it. A vision goal no score change confirms is held
-back. A scoreline is shown only from `score_change` events.
+confidences (and their side confidences) combined as independent evidence. A score change with none
+adds a goal there, the scorer by look-back: the side's last detected shot before it within
+LOOKBACK_S with nothing of the other side between, named only as that shot's `player` (already
+identity-gated, events.attribute), the assist the last completed pass to him before it. A vision
+goal no score change confirms is held back. A scoreline is shown only from `score_change` events.
 """
 
 from __future__ import annotations
@@ -291,6 +291,10 @@ def reconcile(events: list[dict], score_events_: list[dict]) -> tuple[list[dict]
             used.add(g["id"])
             a, b = g.get("confidence") or 0.0, c["confidence"] or 0.0
             g["confidence"] = round(1 - (1 - a) * (1 - b), 3)
+            # The side too: vision's from the kit, the scorebug's from which digit changed, two
+            # independent readings of the same side, combined the same way.
+            s = g.get("team_confidence") or 0.0
+            g["team_confidence"] = round(1 - (1 - s) * (1 - b), 3)
             out.append(g)
             confirmed += 1
             continue
