@@ -1067,3 +1067,17 @@ def test_the_refusal_says_build_up_with_its_hyphen():
     joke = Question("s1", None, "Tell me a joke", 80 * 60.0)
     a = asyncio.run(companion.answer_match(joke, insights())).answer
     assert a.status == "unanswerable" and "goal build-up" in a.text and "build up" not in a.text
+
+
+def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known():
+    # The video session's probe: "Who scored?" was headed "Lisbon" (the first scorer's club) for a 4-1.
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
+    assert a.headline == "London 1, Lisbon 0", a.headline
+    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
+                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+                              for i in range(20)]
+    for q in ("Who has more of the ball?", "Who has had more possession?"):
+        a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
+        assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)

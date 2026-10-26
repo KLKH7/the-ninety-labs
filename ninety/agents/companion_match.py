@@ -682,7 +682,12 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     # "Who's winning?" asks the score; "who is winning the battle in midfield?" does not.
     winning = re.search(r"\b(?:winning|ahead|in front|leading)\s*\??\s*$", question, re.I)
     bug = next((f for f in cited if f.get("metric") == "scorebug" and f.get("confident")), None)
-    if bug is not None and (kind != "who" or winning):  # the scorebug's reading: the only scoreline
+    routed = route(question)
+    # A score question ("who scored?" too) is headed by the scorebug's reading, never by one scorer.
+    asks_score = bool(routed) and routed[0] == "score"
+    if routed and routed[0] == "possession" and not any(f.get("metric") == "possession_share" for f in cited):
+        return "Not known yet"  # the share is unknown (POSSESSION_UNKNOWN): no figure heads it
+    if bug is not None and (kind != "who" or winning or asks_score):  # the scorebug's reading
         fx = insights.fixture
         return f"{short_name(fx.home_code)} {bug['home']}, {short_name(fx.away_code)} {bug['away']}"
     if any(f.get("metric") == "score" for f in cited) and (kind != "who" or winning):  # never a scoreline
