@@ -11,7 +11,6 @@ body { font-size: 17px; line-height: 1.4; color: var(--text); background: var(--
 /* Section headers are sentence case, 20 bold (The Athletic, Apple Sports); never uppercase labels. */
 .caps { font-size: 20px !important; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; }
 .section-title { font-size: 20px; font-weight: 700; margin: 32px 0 8px; }
-.how-to { margin: 0; padding-left: 20px; font-size: 15px; color: var(--text-2); display: grid; gap: 6px; }
 .mockbar { margin: 0 0 16px; padding: 8px 12px; background: var(--surface); color: var(--text); font-size: 13px; border-radius: 12px; text-align: center; }
 .pad { padding: 0 20px; }
 .pad-in { padding: 0 16px 16px; }
@@ -359,6 +358,11 @@ ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.24
 .insight.away { padding: 14px 22px 14px 20px; }
 .story-body p { font-size: 17px; line-height: 1.35; }
 .when-line { margin-top: 14px; font-size: 17px; color: var(--text-2); }
+/* A goal outweighs a play (demo audit 2, row 8): the club's crest, "Goal" in 28 pt, then the club and minute. */
+.insight.goal-card { padding-top: 18px; padding-bottom: 18px; }
+.goal-card .goal-head { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 28px; font-weight: 800; }
+.goal-card .goal-head .crest { width: 30px; height: 35px; margin: 0; }
+.goal-card .story-body > p:first-of-type { font-size: 20px; font-weight: 600; }
 
 /* The tab bar over black (Live, Story) and over Perplexity's page (Ask). */
 ion-tab-bar { --background: rgba(30, 30, 32, 0.82); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }

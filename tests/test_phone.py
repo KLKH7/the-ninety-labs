@@ -160,6 +160,12 @@ def tap_player(page, index: int = 0):
     page.wait_for_selector("#player:not([hidden])")
 
 
+def open_story(page, mode: str = "all"):
+    """Open Story on All plays (it opens on Key plays: demo audit 2, row 8) or on `mode`."""
+    page.click("#tab-button-insights")
+    page.click(f"#story-mode ion-segment-button[value={mode}]")
+
+
 def open_roster(page):
     """Open Live's Players tab (Apple Sports' line-ups) the way a keyboard user does."""
     page.focus("#lt-players")
@@ -263,6 +269,8 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone = ctx.new_page()
     errors = watch(phone)
     phone.goto(f"{mock_site}?mock=1&clip=mock")
+    # One line says how to pair, above the form: no numbered steps under it (demo audit 2, row 9).
+    assert phone.locator(".how-to").count() == 0 and "How to find the code" not in phone.inner_text("body")
     # The page imports the mock feed before it shows the bar (main.ts: `await import("./mock")`):
     # wait for the bar itself, the sign the mock is ready, never a read the moment the page loads.
     phone.wait_for_selector("#mockbar", state="visible")  # the mock says so on every screen
@@ -719,8 +727,9 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"
         assert page.text_content("#roster-summary") == "Players"
-        page.click("#lt-players")
-        assert page.locator("#roster .who").count() == 0  # tracks are never listed as players
+        # Tracks are never listed as players: nothing else to show, so no Players tab (audit 2, row 1).
+        page.wait_for_selector("#lt-players", state="hidden")
+        assert page.locator("#roster .who").count() == 0
         tap_player(page)
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
         assert re.fullmatch(r"(London|Lisbon) player|A player", page.inner_text("#player-title"))  # no number
