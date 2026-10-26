@@ -14,6 +14,8 @@ import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
 import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
+import * as fans from "./fan";
+import { mountOnboarding } from "./onboarding";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
 import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
@@ -1033,6 +1035,10 @@ playerSheet.addEventListener("ionModalDidDismiss", () => {
 });
 /** Close the sheet for the Ask tab, keeping its player as the question's subject. */
 function askAboutPlayer() {
+  if (onboard.isOpen && !onboard.editing) {
+    onboard.close(); // a question about a player wins over the choices: they wait for next visit
+    syncAsk();
+  }
   keepSelection = true;
   $("player").hidden = true;
   void playerSheet.dismiss();
@@ -1296,6 +1302,42 @@ async function compare(a: string, b: string) {
   $("compare-rows").hidden = false;
 }
 
+// --- the fan's choices (fan.ts, onboarding.ts): club, mode, focus; on this device only ----------
+
+let fan = fans.load();
+const chosen = () => (fan && fan !== "skipped" ? fan : null);
+let storyTouched = false; // the fan picked All or Key plays this visit: their pick stands
+const onboard = mountOnboarding($("onboard"), (picked, editing) => {
+  if (picked) fan = picked;
+  else if (!editing) fan = "skipped"; // not now: Personalise in the settings sheet reopens it
+  if (picked || !editing) fans.save(fan!);
+  applyFan(true);
+});
+
+/** What the choices shape: Ask's questions and which come first, the Story feed's starting filter,
+ * and the settings row. */
+function applyFan(rerender = false) {
+  const f = chosen();
+  $("fan-value").textContent = f ? fans.summary(f) : "";
+  $("ask-start").dataset.focus = f?.focus ?? "";
+  if (f && !storyTouched) {
+    const mode = fans.storyMode(f);
+    ($("story-mode") as HTMLElement & { value: string }).value = mode;
+    $("insights").dataset.mode = mode;
+    if (rerender) renderInsights();
+  }
+  syncAsk();
+  if (rerender) renderChips();
+}
+
+$("fan-edit").addEventListener("click", () => {
+  void settingsSheet.dismiss();
+  showTab("ask");
+  onboard.open(chosen(), true);
+  syncAsk();
+  void ($("ask-content") as HTMLElement & { scrollToTop(ms?: number): Promise<void> }).scrollToTop(0);
+});
+
 // --- questions -------------------------------------------------------------------------------
 
 function playerQuestions(id: string): string[] {
@@ -1305,6 +1347,8 @@ function playerQuestions(id: string): string[] {
 
 /** The match questions the Companion's tools answer with a picture. */
 function matchQuestions(): string[] {
+  const f = chosen();
+  if (f) return fans.questions(f, teams); // the fan's club and focus first
   return [
     `Where are ${teams.home} overloading?`,
     `Which pass broke ${teams.away}'s lines?`,
@@ -1327,6 +1371,42 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** A starter card's glyph: its topic's (SF Symbols' shapes, drawn here), else its kind's
+ * (fan.ts, `kindOf`), so a grid of one kind still reads as six different questions. */
+const KIND_GLYPHS: Record<fans.Kind, string> = {
+  moments: '<path d="M12 3.5 14.5 9l6 .5-4.6 3.9 1.4 5.9L12 16.2l-5.3 3.1 1.4-5.9L3.5 9.5l6-.5z"/>',
+  tactics: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.6"/>',
+  players: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/>',
+  numbers: '<path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/>',
+};
+const TOPIC_GLYPHS: [RegExp, string][] = [
+  [/overload/i, '<circle cx="6" cy="8" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><circle cx="12" cy="11.5" r="1"/>'], // three round the ball
+  [/lines/i, '<path d="M3.5 11h5M15.5 11h5M3.5 17h5M15.5 17h5M12 20.5V4M8.5 7.5 12 4l3.5 3.5"/>'], // a pass up through the gap in two lines
+  [/options/i, '<circle cx="6" cy="12" r="2.2"/><path d="M8.2 12h12M7.9 10.8 19 5M7.9 13.2 19 19"/>'], // three passes from one man
+  [/shape/i, '<path d="M5 6h.01M12 6h.01M19 6h.01M5 12h.01M12 12h.01M19 12h.01M8.5 18h.01M15.5 18h.01" stroke-width="3"/>'], // a formation
+  [/ball back/i, '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17.5 3v4h-4"/>'], // the ball won back
+  [/compact/i, '<path d="M3 12h6M21 12h-6M6.5 9.5 9 12l-2.5 2.5M17.5 9.5 15 12l2.5 2.5M12 4v16"/>'], // squeezed together
+  [/missed/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>'],
+  [/shots/i, '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>'],
+  [/corners/i, '<path d="M6 21V3l11 4.5L6 12"/>'],
+  [/furthest|run/i, '<circle cx="4.8" cy="19.2" r="1.8"/><circle cx="19.2" cy="4.8" r="1.8"/><path d="M6.6 19.2c3.4 0 3.4-7.2 5.4-7.2s2-7.2 5.4-7.2"/>'],
+  [/fastest|speed/i, '<path d="M13.5 3 6 13.5h5.5L10.5 21 18 10.5h-5.5z"/>'],
+  [/linking/i, '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'],
+  [/more of the ball/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/>'],
+  [/halves/i, '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14M7 12h.01M17 12h.01" stroke-width="2"/>'],
+];
+const glyphFor = (q: string) => TOPIC_GLYPHS.find(([re]) => re.test(q))?.[1] ?? KIND_GLYPHS[fans.kindOf(q)];
+function card(q: string) {
+  const b = chip(q, null);
+  b.classList.add("q-card");
+  b.textContent = "";
+  const text = document.createElement("span");
+  text.textContent = q;
+  b.insertAdjacentHTML("afterbegin", `<svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true">${glyphFor(q)}</svg>`);
+  b.append(text);
+  return b;
+}
+
 /** Questions this fan has already asked: never suggested back to them. */
 const asked = new Set<string>();
 
@@ -1334,7 +1414,12 @@ const asked = new Set<string>();
  * answer, the answers under "Recent" and the chips (or an answer's follow-ups) above the composer. */
 function syncAsk() {
   const any = $("answers").children.length > 0;
-  $("ask-start").hidden = any;
+  if (any && onboard.isOpen && !onboard.editing) onboard.close(); // they asked instead: next visit
+  // The composer waits for the choices (Kian, Oct 25), then rises in once they are made or skipped.
+  const panel = $("panel-ask");
+  if (panel.classList.contains("onboarding") && !onboard.isOpen) panel.classList.add("composer-in");
+  panel.classList.toggle("onboarding", onboard.isOpen);
+  $("ask-start").hidden = any || onboard.isOpen;
   $("recent-title").hidden = !any;
   if (!any) $("ask-chips").hidden = true;
   else if ($("ask-chips").dataset.started !== "1") {
@@ -1343,7 +1428,9 @@ function syncAsk() {
   }
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
-syncAsk();
+$("panel-ask").addEventListener("animationend", () => $("panel-ask").classList.remove("composer-in"));
+if (fan === null) onboard.open(null, false); // the first visit opens on the three choices
+applyFan();
 
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
@@ -1351,13 +1438,13 @@ function renderChips() {
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
   // An empty conversation opens on a grid of questions (never a blank page), then the answers.
-  $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
+  $("ask-grid").replaceChildren(...all.slice(0, 6).map(card));
   // And about the players most in the game (the Scout's per-player numbers), when there are any.
   const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
   const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
   const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
   const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
-  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").replaceChildren(...theirs.map(card));
   $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
@@ -1422,6 +1509,7 @@ async function ask(text: string) {
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
   asked.add(q);
+  if (onboard.isOpen) onboard.close(); // a typed question wins over the choices: they wait
   renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
@@ -1447,7 +1535,10 @@ async function ask(text: string) {
   } finally {
     button.removeAttribute("aria-disabled");
   }
-  if (input.value.trim() === q) input.value = "";
+  if (input.value.trim() === q) {
+    input.value = "";
+    fitQuestion();
+  }
   pending.replaceWith(renderAnswer(q, at, answer, failed));
   // The new question at the top, whole, with its answer under it (Messages scrolls a new thread
   // turn into view; it never leaves the question cut under the bar).
@@ -1659,6 +1750,20 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
 $("ask-form").addEventListener("submit", (e) => {
   e.preventDefault();
   void ask($<HTMLInputElement>("question").value);
+});
+// The composer grows with the question, up to five lines, then scrolls; Return sends, as in
+// Messages (Shift-Return for a new line).
+function fitQuestion() {
+  const q = $<HTMLTextAreaElement>("question");
+  q.style.height = "auto";
+  q.style.height = `${Math.min(q.scrollHeight, 22 * 5 + 18)}px`;
+}
+$("question").addEventListener("input", fitQuestion);
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    $<HTMLFormElement>("ask-form").requestSubmit();
+  }
 });
 
 // --- "How do we know?": what the cameras saw, what was measured, what checked it ---------------
@@ -2111,6 +2216,7 @@ function renderInsights() {
 }
 
 $("story-mode").addEventListener("ionChange", (e) => {
+  storyTouched = true;
   $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
   renderInsights();
   requestAnimationFrame(redrawPictures);
