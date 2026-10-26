@@ -120,6 +120,25 @@ def report(s: dict, clips: list[str], cameras: list[str] | None = None) -> str:
     ]) + "\n"
 
 
+def broadcast_rows(name: str, detected: list[dict], association: dict, broadcast: dict,
+                   truth: list[dict]) -> list[dict]:
+    """Mode `broadcast_side` (docs/eval/re-perceive-broadcast-plan.md): every detected event the
+    fact-checker holds on its side, asked of the broadcast through the association, graded on
+    `truth`: a resolution is right when the true event's side is the side resolved; a contradiction
+    is right when the detected side was wrong."""
+    out = []
+    for event in detected:
+        if event["type"] not in TEMPLATE_TYPES or side_known(event):
+            continue
+        outcome, why = perceive.broadcast_side(event, association, broadcast)
+        match = truth_of(event, truth)
+        side_right = None if match is None else match["team"] == event["team"]
+        out.append({"clip": name, "event": event["id"], "type": event["type"], "outcome": outcome,
+                    "held_on": "side", "matched": match is not None, "side_right": side_right,
+                    "right": side_right, "why": why})
+    return out
+
+
 def split_rows(seeds: list[int], fused: Path, views: dict[str, Path], truth_root: Path) -> list[dict]:
     """Clips laid out as vision's validation run writes them: the fused observations per seed
     (`<fused>/seed<N>.jsonl`, whose events are what the live path detects), each camera's
@@ -145,8 +164,29 @@ def main() -> None:
     ap.add_argument("--view", action="append", default=[], metavar="NAME=DIR",
                     help="split layout: one camera's observations, seed<N>.jsonl (repeatable)")
     ap.add_argument("--truth-root", type=Path, help="split layout: <dir>/seed<N>/events.jsonl")
+    ap.add_argument("--joined", type=Path, nargs="*", default=[],
+                    help="mode broadcast_side: join runs (views/detected.jsonl, joined/association.json)")
+    ap.add_argument("--broadcast-sides", type=Path,
+                    help="mode broadcast_side: {sides: {clip: {broadcast track: [side, confidence]}}}")
     ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
     args = ap.parse_args()
+    if args.joined:
+        sides = json.loads(args.broadcast_sides.read_text())
+        rows = []
+        for run in args.joined:
+            if run.name not in sides["sides"]:
+                continue  # no broadcast run for this clip
+            rows += broadcast_rows(run.name, _jsonl(run / "views" / "detected.jsonl"),
+                                   json.loads((run / "joined" / "association.json").read_text())["tracks"],
+                                   {k: tuple(v) for k, v in sides["sides"][run.name].items()},
+                                   _jsonl(args.truth_root / run.name / "events.jsonl"))
+        s = summary(rows)
+        names = sorted({r["clip"] for r in rows} | {r.name for r in args.joined if r.name in sides["sides"]})
+        args.out.with_suffix(".json").write_text(json.dumps(
+            {"mode": "broadcast_side", "clips": names, "broadcast_sides_from": sides.get("code"),
+             "summary": s, "rows": rows}, indent=1, allow_nan=False) + "\n")
+        print(json.dumps(s, indent=1))
+        return
     rows = [r for clip in args.clips for r in clip_rows(clip)]
     if args.seeds:
         views = dict(v.split("=", 1) for v in args.view)
