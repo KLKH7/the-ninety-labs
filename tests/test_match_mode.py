@@ -792,6 +792,32 @@ def _hls_bundle(www, out: str) -> bool:
     return True
 
 
+def test_the_big_screen_keeps_the_hls_source_and_opens_past_the_stinger(browser, site):  # noqa: F811
+    """The big screen opens on its first clean picture (0.34 s, past the stinger) through the player's own
+    source: hls.js stays attached (a blob: source), never replaced by the MP4 afterwards, which dropped
+    HLS's fast start and self-heal (#390's poster line ran after attachPlayer)."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(site + "hls/manifest.json").close()
+    except urllib.error.HTTPError:
+        pytest.skip("no ffmpeg to encode the ladder")
+    try:
+        chrome = browser.browser_type.launch(channel="chrome", headless=True)
+    except Exception:
+        pytest.skip("no Chrome here (Playwright's Chromium cannot play H.264)")
+    page = chrome.new_page(viewport={"width": 1280, "height": 900})
+    page.goto(site + "?bundle=hls/")  # match mode: the big screen
+    page.wait_for_selector("body[data-state=ready][data-screen=big]")
+    page.wait_for_function("window.ninetyPlayer && document.querySelector('#video').readyState >= 2")
+    page.wait_for_timeout(500)  # anything set after the player attached would have landed by now
+    assert page.evaluate("window.ninetyPlayer.state.source") == "hls.js"
+    assert page.evaluate("document.querySelector('#video').src").startswith("blob:")
+    assert page.evaluate("document.querySelector('#video').currentTime") == pytest.approx(0.34, abs=0.05)
+    chrome.close()
+
+
 def test_hls_playback_starts_low_and_survives_a_forced_media_error(browser, site):  # noqa: F811
     """src/player.ts in Chrome (H.264 needs the branded build; Playwright's Chromium has no
     H.264): hls.js plays the ladder from its lowest rendition, and a fatal media error is
