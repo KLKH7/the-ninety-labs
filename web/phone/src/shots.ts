@@ -26,17 +26,6 @@ export function place(s: Pick<Shot, "team" | "x" | "y">): { across: number; down
   return { across: home ? Y - s.y : s.y, down: home ? X - s.x : s.x };
 }
 
-/** A shot's dot: filled for a goal, ringed on target, hollow for a miss or a block, and a plain
- * neutral ring for a shot whose outcome is not known. The live path writes no saves (lesson 258), so
- * a null outcome says nothing about where the shot went and is never drawn as a miss. */
-export const kind = (o: string | null | undefined) =>
-  o === "goal" ? "goal" : o === "on_target" ? "on" : o === "blocked" || o === "off_target" ? "off" : "plain";
-
-/** The sentence for a shot: only what its outcome says, nothing for one that is not known. */
-export const said = (o: string | null | undefined, who: string) =>
-  o === "goal" ? `${who} scores.` : o === "on_target" ? `Shot saved, from ${who}.` : o === "blocked" ? `${who}'s shot is blocked.`
-    : o === "off_target" ? `${who} shoots wide.` : `${who} shoots.`;
-
 export const label = (o: string | null) =>
   o === "goal" ? "goal" : o === "on_target" ? "saved" : o === "blocked" ? "blocked" : o === "off_target" ? "off target" : "shot";
 
@@ -64,8 +53,8 @@ export function draw(svg: SVGSVGElement, shots: Shot[]) {
   ];
   for (const s of shots) {
     const p = place(s);
-    const k = kind(s.outcome);
-    parts.push(el("circle", { cx: p.across, cy: p.down, r: k === "off" || k === "plain" ? 1.1 : 1.4, class: `shot ${s.team} ${k}` }));
+    const kind = s.outcome === "goal" ? "goal" : s.outcome === "on_target" ? "on" : "off";
+    parts.push(el("circle", { cx: p.across, cy: p.down, r: kind === "off" ? 1.1 : 1.4, class: `shot ${s.team} ${kind}` }));
   }
   svg.replaceChildren(...parts);
 }

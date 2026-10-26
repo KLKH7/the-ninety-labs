@@ -3119,8 +3119,9 @@ short and actionable. This file is public: no research sources, product names or
   an explicit switch.
   Then each consumer's branch for the missing value is read: the phone's last branch said "shoots
   wide" for any other outcome, so the first fix turned every former save into a new false miss (the
-  merge queue's review found it); a missing outcome now reads "X shoots." and is drawn neutral.
+  merge queue's review found it); a missing outcome now reads "X takes a shot." and is drawn as its
+  own grey mark (#369).
 - **Check:** `tests/test_vision_outcomes.py::test_the_live_path_writes_a_detected_save_as_a_shot_with_no_outcome`
-  (`events.SAVES_AIR` is False; the same scene with saves on is a save);
-  `tests/test_phone_shot_words.py` (a null outcome is a plain shot, never a miss).
+  (`events.SAVES_AIR` is False; the same scene with saves on is a save), and
+  #369's phone test (a null outcome never reads "wide").
 

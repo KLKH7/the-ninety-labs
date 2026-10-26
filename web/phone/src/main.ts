@@ -1800,7 +1800,7 @@ function playSentence(e: DetectedEvent): string | null {
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
       return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(named(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
-      return shotMap.said(e.outcome, who(e.player));
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
     case "out_of_play":
       return "The ball goes out of play.";
     case "set_piece":
