@@ -39,7 +39,7 @@ from ninety.intel import (
 )
 from ninety.intel import identity as identity_mod
 from ninety.intel import team_stats as team_stats_mod
-from ninety.intel.scene import TEAMS, Frames, xy
+from ninety.intel.scene import TEAMS, Frames, minute_of, xy
 from ninety.intel.teamsheet import Fixture
 
 BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
@@ -150,6 +150,7 @@ class MatchInsights:
         # readings (`score_reads`), whose first holds the score before any change.
         facts["scorebug"] = scoring.scorebug([*events, *score_reads])
         facts["restart"] = set_pieces.rows(events)  # corners, free kicks and the rest (I25)
+        facts["spell"] = spell_rows(events)  # runs of passes, receiver to passer (ninety/speech/spells.py)
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs.get(r["team"])  # None for a fact whose side is not known
@@ -335,8 +336,13 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession."""
-        return self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession;
+        and the longest spells of passes in a row (a run vision followed receiver to passer, which
+        needs no side told), longest first."""
+        out = self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
+        spells = [r for r in self.facts.get("spell", ()) if minute_from <= r["minute"] <= minute_to]
+        spells.sort(key=lambda r: (-r["value"], r["t"]))
+        return {**out, "facts": [*out.get("facts", []), *spells[:1]]}
 
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Where the ball was over the minutes: each club's share with it in its attacking third."""
@@ -619,6 +625,23 @@ def load_fixture(path: Path) -> Fixture:
     body = json.loads(Path(path).read_text())
     params = body.get("params", body)
     return Fixture(int(body["seed"]), params["home_code"], params["away_code"])
+
+
+def spell_rows(events: Sequence[Mapping]) -> list[dict]:
+    """Each spell of possession (ninety/speech/spells.py) as an insight fact: its passes, when it ended,
+    and its side only when every pass's was told surely."""
+    from ninety.agents import factcheck
+    from ninety.speech import spells
+
+    rows = []
+    for run in spells.spells(list(events)):
+        last, team = run[-1], run[-1].get("team")
+        sure = team in TEAMS and all(e.get("team") == team and factcheck.side_known(e) for e in run)
+        rows.append({"id": f"spell:{last['id']}", "kind": "spell", "metric": "spell_passes",
+                     "team": team if sure else None, "minute": minute_of(float(last["t"])),
+                     "t": round(float(last["t"]), 2), "value": len(run), "unit": "passes", "confident": True,
+                     "events": [e["id"] for e in run]})
+    return rows
 
 
 def score_reads(path: Path) -> list[dict]:
