@@ -3249,3 +3249,33 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
   fact, event or match.json field other than the line-up changes;
   `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 274. A reach that comes from a movement counts only while the movement happens
+- **What happened:** from the moment a keeper reacted to a shot, his hands reached `KEEPER_ARM_M`
+  (1.48 m) across, whether or not he dived (`engine.stretch_from`). The dive's extra reach was given
+  to a keeper on his feet, so he took shots 1.0 to 1.48 m wide standing, and dived about once in 30
+  minutes on the demo match (seed 8080; Kian: flat-footed catches, almost no dives). He also played
+  every shot his hands reached, most of them above 2.5 m and going over the bar, so his catches were
+  overhead. A ball he could not hold bounced off his spine's normal, along his arm and on toward goal.
+  A first fix gave him standing reach at every ball. Shots then doubled, to about 50 a match on two
+  seeds, because the engine has no dive at a pass, so a keeper on his feet had no way past standing reach at
+  a through ball or a cross. The audit flagged keeping main's reach at passes as a special case
+  justified by an outcome rate. The cause, the missing pass dive, is what is documented (GROUNDING V3).
+- **Rule:** a capability that an action gives (a dive's stretch, a jump's height, a sprint's speed)
+  is granted only while the engine performs that action. Where the engine lacks the action, a stand-in
+  is marked *design* and named as a stand-in for the missing action. A held-out check that moves
+  points to the cause; it is never the reason for a rule.
+- **Check:** `tests/test_engine_rules.py::test_on_his_feet_the_keeper_has_only_his_standing_reach_and_a_dive_stretches_it`
+  and `tests/test_demo_engine_v2.py` (the keeper leaves a shot going over; palms parry through the
+  contact rule; the hold falls with stretch).
+
+### 275. A design constant that sets a whole behaviour's scale needs a measurement behind it
+- **What happened:** a carry ran at 2.5 to 4.5 m/s by dribbling rating (*design*), about half a
+  sprint. Every carry lost the race the carrier himself runs before choosing, so players almost
+  never took a man on, and the few carries looked like jogging (Kian, demo seed 8080). Measured,
+  sprinting with the ball runs at 91% of the speed without it over 20 m (Preissler et al. 2023).
+- **Rule:** a *design* value that decides whether a whole kind of play happens (a speed, a reach, a
+  range) is checked against a measurement before it is relied on. The measurement becomes the
+  engine's value by derivation (here a bisection on the body model), not by choosing a number.
+- **Check:** `tests/test_demo_engine_v2.py::test_the_carry_cap_is_derived_from_the_with_ball_sprint`
+  and `::test_the_with_ball_share_is_the_cited_figure` (GROUNDING V1).
