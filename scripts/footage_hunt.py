@@ -17,9 +17,9 @@ a long ball out, an odd catch) is never picked; goals are always in, with their 
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +27,13 @@ import numpy as np
 from ninety.render import edit as _edit  # the renderer's own dead-ball cuts: what is on screen
 
 FPS = 25
-RUN, OUT = Path(sys.argv[1]), Path(sys.argv[2])
+_ap = argparse.ArgumentParser(
+    description="Editorial watchability scorer for a condensed demo match (offline)."
+)
+_ap.add_argument("run", type=Path, help="a 90-minute ninety-sim run: events.jsonl, frames.jsonl")
+_ap.add_argument("out", type=Path, help="where candidates.json, picks.json and carries.json go")
+_args = _ap.parse_args()
+RUN, OUT = _args.run, _args.out
 OUT.mkdir(parents=True, exist_ok=True)
 
 ev = [json.loads(x) for x in (RUN / "events.jsonl").read_text().splitlines() if x.strip()]
@@ -53,7 +59,7 @@ dive_amt = np.array(_dive, dtype=np.float32)
 poss = np.array(_poss, dtype=np.int16)
 touch = poss >= 0  # frames where a player touches the ball (the engine's possessor)
 END_S = float(ball[-1, 0])
-HALF_S = next(e["t"] for e in ev if e["type"] == "half_time")
+HALF_S = next((e["t"] for e in ev if e["type"] == "half_time"), END_S / 2)  # a short run has none
 HANDS = ACTIONS.get("hands", -99)
 SAVE_ACTIONS = [ACTIONS[k] for k in ("dive", "parry", "punch", "tip") if k in ACTIONS]
 KEEPERS = {teams[i]: i for i in range(len(ids)) if roles[i] == "GK"}
@@ -329,7 +335,9 @@ PT = np.array([e["t"] for e in PLAYS])
 
 def settled(t: float, hold: float = 2.5) -> bool:
     """Nobody plays the ball on (and it does not change hands) for `hold` seconds after t."""
-    return not ((PT > t + 0.05) & (PT < t + hold)).any()
+    return not (
+        (PT > t + 0.05) & (PT < t + hold + 0.5)
+    ).any()  # and nobody strikes it within 0.5 s of the cut
 
 
 starts = set()

@@ -87,6 +87,19 @@ save is a flat-footed catch, mostly with the ball over the keeper's head (z ≈ 
 the scorer keeps all of those out. It also flags 65 bad moments across the 90 minutes. Clean footage
 is scarce. That is an engine finding, not one an edit can fix.
 
+**Which version is which.** v1 (below, "Result (v1)") cut seed 8080 and is what
+[demo-match-hunt-8080.json](demo-match-hunt-8080.json) records: 73 candidates rendered, 51 chosen.
+v2 is the script on `main`; it was run on 8080 (64 candidates, not rendered) and on the demo seed
+8324 (Result (8324)). Every count of rendered and checked clips, and every scorebug and goal reading
+below, comes from runs on the render pods and the Mac, run locally and not committed (the footage and
+its reports are gigabytes).
+
+**What this footage is not.** The demo match is a director's pick from the answer key, so no number
+measured on it (stats, detection rates, the scorebug) generalises; the measured results are on the
+held-out sets named in EVALUATION.md. On 8080 the v1 edit shows the match's only diving save and no
+carry into the box in 16 minutes, because the engine at the freeze produced almost none (below); that
+went to the engine backlog and is what the demo-only engine v2 (#403) addresses.
+
 ## v2 (Oct 26, after Kian's notes on the first re-cut)
 
 Three changes, all in `scripts/footage_hunt.py`; the engine is not touched.

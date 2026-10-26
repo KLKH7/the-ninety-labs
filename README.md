@@ -127,9 +127,11 @@ replay. Team members refresh the recording with
 
 Audited against `main` at `ea7743a8` on Oct 25, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
-`65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
-seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
-8076, and both are recorded in [demo-match.md](docs/eval/demo-match.md).
+`65247ba3` (#276). **The demo match is a director's pick from the answer key, not a random sample**
+([demo-match-hunt.md](docs/eval/demo-match-hunt.md)): Kian chose seed 8324 on the demo-only engine v2
+(#403), 1-3, condensed to about 17.7 minutes by an editorial scorer that keeps clean play and drops
+flagged moments. No number measured on the demo footage generalises. The earlier pre-registered
+rule's picks (seed 8076, then Kian's 8080) are recorded in [demo-match.md](docs/eval/demo-match.md).
 
 **Measured on `main`:**
 

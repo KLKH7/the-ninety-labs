@@ -1,5 +1,5 @@
 {
- "rule": "footage hunt (Oct 26, Kian's request): editorial watchability scorer ~/ninety-notes/footage-hunt/score.py over the answer key, replacing the demo-match edit rule for seed 8080; same seed, same engine",
+ "rule": "footage hunt (Oct 26, Kian's request): editorial watchability scorer (v1 of scripts/footage_hunt.py) over the answer key, replacing the demo-match edit rule for seed 8080; same seed, same engine",
  "engine_sha": "65247ba3",
  "seed": 8080,
  "render_flags": "--set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical",
