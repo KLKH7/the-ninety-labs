@@ -2104,7 +2104,7 @@ class BroadcastRenderer {
     }
     // The broadcast look (look.js): the stream a viewer watches of a broadcast stadium only.
     this.look = this.graphics && p.stadium === 'broadcast' ? applyBroadcastLook(this) : null;
-    return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
+    return { bugRect: this.bugRect, look: this.look, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
   setupLights(p) {
