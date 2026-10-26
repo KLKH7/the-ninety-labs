@@ -1,18 +1,26 @@
-"""The agent ablation: one agent with every tool, against the full multi-agent graph.
+"""The agent ablation: one agent with every tool, with and without the fact-checker, against the
+full multi-agent graph.
+
+    uv run python -m ninety.eval.agent_ablation --live --seeds 940001,940002 --name ablation-third-arm
 
     uv run python -m ninety.eval.agent_ablation --live --out runs/eval    # agents-live task=ablation
 
-On the held-out seeds (21 and 33), every minute of the served match runs through two arms:
+On the given seeds (21 and 33 by default, the committed two-arm run; 940001 and 940002 for the
+three-arm run docs/eval/ablation-third-arm-plan.md fixed before it ran), every minute of the served
+match runs through three arms:
 
 - **one agent**: the slice's Analyst (`ninety-analyst`), one published agent, writes the minute's
   claim, and it airs as written: no Tactician, no Challenger, no fact-checking agent. This is what
   a single agent would put on screen.
+- **one agent + fact-checker**: the same Analyst, then the slice's fact-checker (ninety/agents/slice.py:
+  the code checks, the confidence gate and the Judge, with up to two rewrites). This separates what
+  the fact-checker buys from what the graph's other agents buy.
 - **graph**: the multi-agent workflow (ninety/agents/workflow.py): the moment Analyst, the
   Tactician, the Challenger, the fact-checking agent (code checks, confidence gate, the Judge with
   rewrites) and the Producer. Only verified claims air.
 
-Both arms get the minute's events inline, from the match this commit simulated, under a match id no
-server serves (a call to the match tools fails the call), and every aired claim of both arms is
+Every arm gets the minute's events inline, from the match this commit simulated, under a match id no
+server serves (a call to the match tools fails the call), and every aired claim of every arm is
 then graded the same way, against that match's own
 events (grading is the answer key's allowed use): the code checks (numbers, players, cited ids)
 and the published Judge (meaning). The graph cannot air a claim its own fact-checker failed, so a
@@ -38,6 +46,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ninety.agents import evidence, workflow
+from ninety.agents import slice as single
 from ninety.agents.contracts import Models
 from ninety.agents.factcheck import Claim, Verdict, check
 from ninety.agents.judge import judge as judge_call
@@ -49,6 +58,11 @@ ROOT = Path(__file__).resolve().parents[2]
 COMMAND = "uv run python -m ninety.eval.agent_ablation --live"
 SEEDS = (21, 33)  # the held-out seeds (docs/EVALUATION.md)
 MINUTES = match_server.MINUTES  # every served match is this long
+
+# docs/eval/latency-cost.md's prices for gpt-4.1-mini, at the plan's ~3,000 tokens in and 150 out a call
+# (docs/eval/ablation-third-arm-plan.md): tokens were not metered, so cost is estimated from calls.
+USD_PER_CALL = 3000 * 0.0004 / 1000 + 150 * 0.0016 / 1000
+BUDGET_USD = 0.50  # the plan's cost stop, approved by Kian
 
 Ask = Callable[[str], Awaitable[str]]
 Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
@@ -70,7 +84,7 @@ async def grade(claim: Claim, known: dict[str, dict], judge: Judge) -> dict:
 
 
 def window(known: dict[str, dict], minute: int) -> list[dict]:
-    """The minute's events as both arms read them: inline, from the match this commit simulated and
+    """The minute's events as every arm reads them: inline, from the match this commit simulated and
     the grader grades against. The deployed match tools serve the matches the deployed image
     simulated, with its own engine: a one-agent run once aired a goal at 03:03 on seed 33, which had
     no shot here (lesson 90)."""
@@ -93,15 +107,58 @@ async def one_agent_minute(
     return ([claim], 1, "") if claim.text.strip() else ([], 1, "empty claim")
 
 
-async def graph_minute(
-    models: Models, events: list[dict], match: str, minute: int
+async def checked_agent_minute(
+    ask: Ask, judge: Judge, seed: int, match: str, minute: int, known: dict[str, dict],
+    checker: dict | None = None,
 ) -> tuple[list[Claim], int, str]:
-    """The workflow's verified claims for the minute, and its model calls."""
+    """The same single agent, then the same fact-checker as the graph (ninety/agents/slice.py: the code
+    checks, the confidence gate and the Judge; a rejected claim goes back with its reasons, at most
+    slice.MAX_REWRITES times). Only a verified claim airs. Returns the aired claims, the model calls
+    (the agent's and the Judge's), and why nothing aired, if nothing did; `checker` gathers what the
+    fact-checker held, rejected, or let air after a rewrite."""
+    calls = 0
+    checked = {} if checker is None else checker
+    for k in ("drafts", "held", "rejected", "rewritten"):
+        checked.setdefault(k, 0)
+
+    async def counted_ask(prompt: str) -> str:
+        nonlocal calls
+        calls += 1
+        return await ask(prompt)
+
+    async def counted_judge(claim: Claim, evidence: list[dict]) -> Verdict:
+        nonlocal calls
+        calls += 1
+        return await judge(claim, evidence)
+
+    try:
+        outcome = await single.run_workflow(counted_ask, counted_judge, minute, False, seed, MINUTES, True,
+                                            events=list(known.values()), stats=[], inline=True,
+                                            match=match)
+    except Exception as e:  # a failed call airs nothing, as for the other arms
+        return [], calls, f"{type(e).__name__}"
+    checked["drafts"] += outcome.attempts
+    checked["rewritten"] += outcome.accepted and outcome.attempts > 1
+    if outcome.accepted:
+        return [outcome.claim], calls, ""
+    checked[outcome.status if outcome.status == "held" else "rejected"] += 1
+    return [], calls, f"{outcome.status} after {outcome.attempts} draft(s)"
+
+
+async def graph_minute(
+    models: Models, events: list[dict], match: str, minute: int, checker: dict | None = None
+) -> tuple[list[Claim], int, str]:
+    """The workflow's verified claims for the minute, and its model calls; `checker` gathers what the
+    fact-checking agent held, rejected, or let air after a rewrite."""
     result = await workflow.run_workflow(models, events, minute, match, inline_events=True)
     aired = [r.aired for r in result.reviews if r.aired is not None]
     held = sum(r.status == "held" for r in result.reviews)
     rejected = sum(r.status == "rejected" for r in result.reviews)
     failed = [s.detail for s in result.trace if s.role == "analyst" and s.action == "fail"]
+    if checker is not None:
+        rewrites = {s.moment for s in result.trace if s.action == "rewrite"}
+        checker.update(held=held, rejected=rejected,
+                       rewritten=sum(r.aired is not None and r.moment_id in rewrites for r in result.reviews))
     why = "" if aired else "; ".join([f"{len(result.reviews)} moment(s): {held} held, {rejected} rejected",
                                        *(f"analyst: {d}" for d in failed)])
     return aired, result.model_calls, why
@@ -109,27 +166,49 @@ async def graph_minute(
 
 async def run(
     graph_models: Models, one_agent: Ask, grader: Judge, events_by_seed: dict[int, list[dict]],
-    minutes: int = MINUTES,
+    minutes: int = MINUTES, budget_usd: float = BUDGET_USD,
 ) -> dict:
-    """Both arms over every minute of every seed, each aired claim graded."""
-    arms: dict[str, list[dict]] = {"one agent": [], "graph": []}
+    """Every arm over every minute of every seed, each aired claim graded. Starts no further minute
+    once the estimated spend (every model call, the grader's too) reaches `budget_usd`."""
+    arms: dict[str, list[dict]] = {"one agent": [], "one agent + fact-checker": [], "graph": []}
+    graded_calls = 0
+
+    async def counted_grader(claim: Claim, evidence: list[dict]) -> Verdict:
+        nonlocal graded_calls
+        graded_calls += 1
+        return await grader(claim, evidence)
+
+    def spent() -> float:
+        return (graded_calls + sum(m["model_calls"] for ms in arms.values() for m in ms)) * USD_PER_CALL
+
+    stopped = ""
     for seed, events in events_by_seed.items():
         # The inline events under a match id no server serves (lesson 90): a tool call errors.
         match = match_server.unserved(match_server.match_id(seed))
         known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
         for minute in range(1, minutes + 1):
+            if not stopped and spent() >= budget_usd:
+                stopped = f"cost stop: ${spent():.2f} estimated before seed {seed} minute {minute}"
+            if stopped:
+                break
             for arm in arms:
                 started = time.perf_counter()
+                checker: dict = {}
                 if arm == "one agent":
                     aired, calls, why = await one_agent_minute(one_agent, match, minute, known)
+                elif arm == "one agent + fact-checker":
+                    aired, calls, why = await checked_agent_minute(
+                        one_agent, grader, seed, match, minute, known, checker
+                    )
                 else:
-                    aired, calls, why = await graph_minute(graph_models, events, match, minute)
+                    aired, calls, why = await graph_minute(graph_models, events, match, minute, checker)
                 seconds = time.perf_counter() - started
-                graded = [await grade(c, known, grader) for c in aired]
+                graded = [await grade(c, known, counted_grader) for c in aired]
                 arms[arm].append({"seed": seed, "minute": minute, "aired": graded, "model_calls": calls,
-                                  "seconds": round(seconds, 2), "why_none": why})
+                                  "seconds": round(seconds, 2), "why_none": why, "checker": checker})
     return {"seeds": list(events_by_seed), "minutes": minutes,
-            "arms": {a: summary(m) for a, m in arms.items()}, "minutes_by_arm": arms}
+            "arms": {a: summary(m) for a, m in arms.items()}, "minutes_by_arm": arms,
+            "grader_calls": graded_calls, "estimated_usd": round(spent(), 4), "stopped": stopped}
 
 
 def summary(minutes: list[dict]) -> dict:
@@ -148,6 +227,8 @@ def summary(minutes: list[dict]) -> dict:
         "minutes_read_the_tools": sum("ReadTheTools" in m["why_none"] for m in minutes),
         "model_calls": calls,
         "seconds": round(sum(m["seconds"] for m in minutes), 1),
+        **{k: sum(m.get("checker", {}).get(k, 0) for m in minutes)
+           for k in ("held", "rejected", "rewritten")},
     }
 
 
@@ -160,42 +241,96 @@ def pct(n: int, d: int) -> str:
     return f"{n}/{d} ({100 * n / d:.0f}%)" if d else f"{n}/0"
 
 
+ARM_WORDS = {
+    "one agent": "the slice's Analyst, one published agent, writes the minute's claim, and it airs as "
+    "written.",
+    "one agent + fact-checker": "the same Analyst, then the same fact-checker as the graph (the code checks, "
+    "the confidence gate and the Judge; a rejected claim goes back with its reasons, at most twice); only "
+    "a verified claim airs.",
+    "graph": "the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the confidence "
+    "gate and the Judge, Producer); only verified claims air.",
+}
+
+
+def reading(arms: dict) -> str:
+    """The plan's reading rule, fixed before any run was scored (docs/eval/ablation-third-arm-plan.md):
+    exactly one of four outcomes, checked in order."""
+    g, c = arms["graph"], arms["one agent + fact-checker"]
+
+    def rate(arm: dict) -> float:
+        return arm["false_aired"] / arm["aired"] if arm["aired"] else 0.0
+
+    def beats(a: dict, b: dict) -> bool:
+        return (a["true_aired"] >= b["true_aired"] and a["false_aired"] < b["false_aired"]) or (
+            a["true_aired"] > b["true_aired"] and rate(a) <= rate(b)
+        )
+
+    if abs(g["true_aired"] - c["true_aired"]) <= 1 and abs(g["false_aired"] - c["false_aired"]) <= 1:
+        return ("**Outcome 1, the single agent with the fact-checker matches the graph** by the plan's rule "
+                "(within one true and one false claim): the fact-checker does the work, and the graph's "
+                "extra agents buy only coverage, at their cost.")
+    if beats(g, c):
+        return ("**Outcome 2, the graph wins** by the plan's rule: at least as many true claims with fewer "
+                "false ones on air, or more true claims at a false rate no higher.")
+    if beats(c, g):
+        return ("**Outcome 3, the single agent with the fact-checker wins** by the plan's rule: at least as "
+                "many true claims with fewer false ones on air, or more true claims at a false rate no "
+                "higher.")
+    return "**Outcome 4, mixed** by the plan's rule: neither arm beats the other; no winner is drawn."
+
+
+def checked(name: str, arm: dict) -> str:
+    if name == "one agent" or "held" not in arm:  # no fact-checker, or a run from before the third arm
+        return "n/a"
+    return f"{arm['held']} / {arm['rejected']} / {arm['rewritten']}"
+
+
 def report(body: dict, ran: str) -> str:
-    one, graph = body["arms"]["one agent"], body["arms"]["graph"]
+    arms = body["arms"]
     seeds = ", ".join(map(str, body["seeds"]))
     lines = [
-        "# Ablation: one agent with every tool, against the multi-agent graph",
+        "# Ablation: one agent with every tool, with and without the fact-checker, against the multi-agent "
+        "graph",
         "",
-        f"Generated by `{COMMAND}` in agents-live, on held-out seeds {seeds}, every minute of",
+        f"Generated by `{COMMAND}`, on seeds {seeds}, every minute of",
         f"the served match ({body['minutes']} each), with {ran}, at commit `{body.get('commit', 'unknown')}`",
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
-        "to run. Data: `docs/eval/ablation-agents.json`.",
+        f"to run. Data: `docs/eval/{body.get('name', 'ablation-agents')}.json`.",
         "",
         evidence.md_line(body[evidence.KEY]),
         "",
-        "- **one agent**: the slice's Analyst, one published agent, writes the minute's claim, and it airs",
-        "  as written.",
-        "- **graph**: the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the",
-        "  confidence gate and the Judge, Producer); only verified claims air.",
+        *(f"- **{name}**: {ARM_WORDS[name]}" for name in arms),
         "",
-        "Both arms get the minute's events inline, from the match this commit simulated, under a match",
+        "Every arm gets the minute's events inline, from the match this commit simulated, under a match",
         "id no server serves; an agent that calls the deployed match tools anyway (the deployed image's",
-        "match, simulated with its own engine) fails that call. Every aired claim of both arms is graded",
+        "match, simulated with its own engine) fails that call. Every aired claim of every arm is graded",
         "the same way, against those events: the code checks (numbers, players, cited ids), then the",
         "published Judge. A claim is *false* if either fails it.",
         "",
-        "| Arm | Claims aired | False on air | of which: code checks | of which: Judge "
-        "| Minutes with an insight | Minutes lost to a tool call | Model calls |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Arm | Claims aired | True on air | False on air | of which: code checks | of which: Judge "
+        "| Minutes with an insight | Minutes lost to a tool call | Held / rejected / aired after a rewrite "
+        "| Model calls | Cost (est.) | Seconds a minute |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
-    for name, arm in (("one agent", one), ("graph", graph)):
+    for name, arm in arms.items():
         lines.append(
-            f"| {name} | {arm['aired']} | {pct(arm['false_aired'], arm['aired'])} | {arm['false_by_code']} "
-            f"| {arm['false_by_judge']} | {pct(arm['minutes_with_an_insight'], arm['minutes'])} "
-            f"| {arm['minutes_read_the_tools']} of {arm['minutes']} | {arm['model_calls']} |"
+            f"| {name} | {arm['aired']} | {arm['true_aired']} | {pct(arm['false_aired'], arm['aired'])} "
+            f"| {arm['false_by_code']} | {arm['false_by_judge']} "
+            f"| {pct(arm['minutes_with_an_insight'], arm['minutes'])} "
+            f"| {arm['minutes_read_the_tools']} of {arm['minutes']} "
+            f"| {checked(name, arm)} | {arm['model_calls']} "
+            f"| ${arm['model_calls'] * USD_PER_CALL:.2f} | {arm['seconds'] / max(arm['minutes'], 1):.1f} |"
         )
+    if "estimated_usd" in body:
+        lines += ["", f"Estimated cost of the run: ${body['estimated_usd']:.2f}, from {body['grader_calls']} "
+                  "grader calls and every arm's model calls (tokens not metered)."]
+    if body.get("stopped"):
+        lines += ["", f"**The run stopped early ({body['stopped']}).** The rule below is read on the "
+                  "minutes run."]
+    if "one agent + fact-checker" in arms:
+        lines += ["", reading(arms)]
     lines += ["", "## False claims on air", ""]
-    for name in ("one agent", "graph"):
+    for name in arms:
         false = [(m, c) for m in body["minutes_by_arm"][name] for c in m["aired"] if not c["true"]]
         lines.append(f"### {name}: {len(false)}")
         lines.append("")
@@ -208,14 +343,25 @@ def report(body: dict, ran: str) -> str:
     lines += [
         "## Reading it",
         "",
-        "- The graph's aired claims already passed the same code checks and a Judge call, so a false",
-        "  claim on its row is one where the grader's second Judge call disagreed with the first.",
+        "- The checked arms' aired claims already passed the same code checks and a Judge call, so a",
+        "  false claim on their rows is one where the grader's second Judge call disagreed with the first.",
         "- The arms do not get the same budget: the one agent has one call a minute and no retry, the",
-        "  graph several agents and rewrites. This compares what each puts on screen at its own cost",
-        "  (the table gives both), not two designs at a matched number of calls.",
-        "- The grader's Judge is the same published Judge the graph's fact-checker asked, so the",
-        "  grade is correlated with the graph's own filter, which favours the graph. The code checks",
-        "  are independent of it, and the table splits false claims by which check caught them.",
+        "  checked agent up to three drafts and their Judge calls, the graph several agents and rewrites.",
+        "  This compares what each puts on screen at its own cost (the table gives both), not designs at",
+        "  a matched number of calls.",
+        "- Cost is estimated, as the plan fixes it: model calls times the price of ~3,000 tokens in and",
+        "  150 out (gpt-4.1-mini global rates, docs/eval/latency-cost.md); tokens are not metered. A Judge",
+        "  call retried after a timeout or service error counts once, so calls and cost are a floor.",
+        "- *Held / rejected / aired after a rewrite* are each claim's final outcome, not how many drafts",
+        "  were sent back. The two checked arms count *held* differently: the graph holds a moment whose",
+        "  writer's call failed, while the checked agent's failed call loses its minute (a minute with",
+        "  nothing aired, and the reason, in the data); the checked agent also rewrites a held claim,",
+        "  as the live slice does, and the graph does not.",
+        "- One run of live models: a second run would differ. The table claims nothing past this sample.",
+        "- The grader's Judge is the same published Judge the checked agent's and the graph's",
+        "  fact-checker asked, so the grade is correlated with their own filter, which favours both",
+        "  over the unchecked agent. The code checks are independent of it, and the table splits false",
+        "  claims by which check caught them.",
         "- An agent that calls the match tools while given its events inline fails that call",
         "  (`foundry.ReadTheTools`), so a minute's claims never come from the deployed image's match.",
         "  Such a minute airs nothing for that arm, and the table counts them: the one agent's",
@@ -253,6 +399,7 @@ async def live_arms():
             async def answer(prompt: str) -> str:
                 # Every arm gets its events inline: a call to the match tools fails the call.
                 reply = await asyncio.wait_for(agents[role].run(prompt), workflow.MODEL_TIMEOUT_SECONDS)
+                ANSWERED["calls"] += 1  # the model answered, whatever the answer is worth
                 return foundry.inline_only(reply)
 
             return answer
@@ -266,10 +413,18 @@ async def live_arms():
         yield models, ask("one agent"), judge, f"{', '.join(sorted(set(ran)))} on {config.MODEL}", defs
 
 
+ANSWERED = {"calls": 0}  # writer calls that returned in this process (the Judge's are not counted)
+
+
 async def live(seeds: tuple[int, ...]) -> tuple[dict, str, dict]:
     async with live_arms() as (models, one_agent, judge, ran, defs):
         events = {s: workflow.simulated_events(s, MINUTES) for s in seeds}  # after the sign-in
-        return await run(models, one_agent, judge, events), ran, defs
+        body = await run(models, one_agent, judge, events)
+    if not ANSWERED["calls"]:
+        # The plan's void run: no model answered at all, so nothing was measured and no report is
+        # written (docs/eval/ablation-third-arm-plan.md, exclusions).
+        raise SystemExit("no model answered: a void run, and no report written")
+    return body, ran, defs
 
 
 def main() -> None:
@@ -277,6 +432,8 @@ def main() -> None:
     ap.add_argument("--live", action="store_true", help="the published agents (Azure): the committed run")
     ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
     ap.add_argument("--out", type=Path, default=ROOT / "runs" / "eval")
+    ap.add_argument("--name", default="ablation-agents",
+                    help="the output files' name: ablation-third-arm for the plan's run (its own files)")
     args = ap.parse_args()
     if not args.live:
         ap.error("the ablation is measured live (--live); tests/test_agent_ablation.py runs it on scripts")
@@ -285,9 +442,10 @@ def main() -> None:
     body["ran"] = ran
     body[evidence.KEY] = defs  # each agent's version and definition fingerprint (ninety/agents/evidence.py)
     body["commit"] = workflow._commit()  # the engine the seeds were simulated with, and everything else
+    body["name"] = args.name
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "ablation-agents.json").write_text(results(body))
-    (args.out / "ablation-agents.md").write_text(report(body, ran))
+    (args.out / f"{args.name}.json").write_text(results(body))
+    (args.out / f"{args.name}.md").write_text(report(body, ran))
     for name, arm in body["arms"].items():
         print(f"{name}: {arm['aired']} aired, {arm['false_aired']} false, {arm['model_calls']} model calls")
 

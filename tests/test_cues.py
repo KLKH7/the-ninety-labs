@@ -124,3 +124,14 @@ def test_cue_times_are_rounded_to_event_precision():
     ledger = InMemoryLedger()
     asyncio.run(ledger.append(Record("e4", 1, "event", 4.12, "truth", None, (), {**PASS, "id": "e4"})))
     assert {cue["t_out"] for cue in asyncio.run(template_cues(ledger))} == {9.12}
+
+
+@pytest.mark.parametrize("persona", ["analyst", "casual"])
+def test_a_shot_that_went_in_reads_as_a_goal_never_shot_goal(persona):
+    """Video-prep, Oct 25: the graphic read "A player shot, goal". A shot that went in is a goal, for
+    both personas; with no player and no sure side it is "a goal"."""
+    unnamed = {"type": "shot", "player": None, "team": "home", "team_confidence": 0.1, "confidence": 0.9,
+               "outcome": "goal", "ball_speed_kmh": 88.0}
+    text = cues._shot_text(unnamed, persona)
+    assert text.startswith("a goal") and "shot" not in text
+    assert cues._shot_text({**unnamed, "player": "h9"}, persona).startswith("h9 scores")
