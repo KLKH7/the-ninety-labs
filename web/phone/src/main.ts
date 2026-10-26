@@ -2365,11 +2365,38 @@ function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
   // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
   const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
-  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}|${scorebugGoals(t)?.length ?? -1}`;
   if (key === spottedKey) return;
   spottedKey = key;
   const minute = (g: { t: number }) => `${momentum.minuteOf(g.t)}′`;
   const sideOf = goalSide;
+  // With the scorebug's readings, every goal it counted, under its club (Coordinator, Oct 26: the
+  // score and the lines agree): each rise in a side's count is a goal at that minute; a scorer only
+  // where a goal vision spotted beside it is named by the team sheet.
+  const bug = scorebugGoals(t);
+  if (bug) {
+    for (const side of ["home", "away"] as const) {
+      const mine = bug.filter((g) => g.side === side);
+      const named = mine.map((g) => {
+        const near = goals.find((v) => sideOf(v) === side && Math.abs(v.t - g.t) <= SCOREBUG_MATCH_S);
+        const who = near ? bundleEvents.get(near.event)?.player : undefined;
+        return who && !unnamedTrack(who, undefined, true) ? eventName(who) : "";
+      });
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "side-goal";
+      b.textContent = mine.map((g, k) => (named[k] ? `${named[k]} ${minute(g)}` : minute(g))).join(" ");
+      b.addEventListener("click", () => {
+        void openHow({ t: mine[mine.length - 1].t, visual: null, source: "code", evidence: [],
+          why: { question: "", text: `${teams[side]}'s goals, read from the broadcast's score graphic: ${mine.map(minute).join(", ")}.` } });
+      });
+      li.append(b);
+      $(`goals-${side}`).replaceChildren(...(mine.length ? [li] : []));
+    }
+    $("goals-unsure").replaceChildren();
+    return;
+  }
   for (const side of ["home", "away", null] as const) {
     const mine = goals.filter((g) => sideOf(g) === side);
     // One line per scorer, his goals' minutes in order.
@@ -2398,6 +2425,21 @@ function renderSpotted(m: MatchData, t: number) {
       }),
     );
   }
+}
+
+/** Each goal the scorebug counted up to t: a rise in a side's count between readings (one goal a rise
+ * of one); null when the bundle carries no readings that pass the gate. */
+function scorebugGoals(t: number): { t: number; side: "home" | "away" }[] | null {
+  const reads = scorebugEvents.filter((e) => (e.type === "score_change" || e.type === "score_read") && e.score && e.t <= t + 1e-6);
+  if (!reads.length) return null;
+  const out: { t: number; side: "home" | "away" }[] = [];
+  let prev = { home: 0, away: 0 };
+  for (const e of [...reads].sort((a, b) => a.t - b.t)) {
+    const now = e.score!;
+    for (const side of ["home", "away"] as const) for (let k = prev[side]; k < now[side]; k++) if (e.type === "score_change") out.push({ t: e.t, side });
+    prev = { home: Math.max(prev.home, now.home), away: Math.max(prev.away, now.away) };
+  }
+  return out;
 }
 
 /** A goal's club: its own side, or else the side whose count the broadcast's scorebug raised within
@@ -2520,6 +2562,10 @@ interface TeamStatsFacts {
   possession?: Record<"home" | "away", { share: number }>;
 }
 const shownStats = new Map<string, [number, number]>();
+/** Events a row of counts must rest on before it shows (Coordinator, Oct 26: counted only on sides told
+ * surely, a row of 0 and 1 says nothing; design): fewer, and the row is not drawn. */
+const MIN_ROW_EVENTS = (window as { __ninetyMinRowEvents?: number }).__ninetyMinRowEvents ?? 10; // tests' seam: tests/test_phone.py watch()
+const enough = (total: number) => total >= MIN_ROW_EVENTS;
 function renderStats(st: MatchData["stats"][number]) {
   type Row = [string, number, number];
   const pct = (n: number, d: number) => (d > 0 ? Math.round((100 * n) / d) : NaN);
@@ -2531,14 +2577,16 @@ function renderStats(st: MatchData["stats"][number]) {
       ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
       // Counted from what vision saw: it can miss a shot or a goal the broadcast showed, so the
       // label says so (video-prep, Oct 25: 3 goals seen under a 4-1 scorebug).
-      ["Shots seen", st.home.shots, st.away.shots],
-      ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ...(enough(st.home.shots + st.away.shots) ? [
+        ["Shots seen", st.home.shots, st.away.shots],
+        ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ] as Row[] : []),
     ]],
-    ["Passing", [
+    ["Passing", enough(st.home.passes_attempted + st.away.passes_attempted) ? [
       ["Passes completed", st.home.passes_completed, st.away.passes_completed],
       ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
       ["Pass accuracy %", pct(st.home.passes_completed, st.home.passes_attempted), pct(st.away.passes_completed, st.away.passes_attempted)],
-    ]],
+    ] : []],
     ["Pressing", []],
     ["Shape", []],
     ["Physical", ts?.distance ? [["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]] : []],

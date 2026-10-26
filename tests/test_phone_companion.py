@@ -1266,13 +1266,30 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 0, 1, team="away")]
     sideless = [{"t": 61.2, "team": None, "event": "e6"}]
     ctx, laptop, page, errors = scorebug_phone(browser, site, readings, sideless, at="61.6")
-    page.wait_for_selector("#goals-away .side-goal")
-    assert page.inner_text("#goals-away .side-goal") == "Dunhollow goal 2′"
-    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
-    assert page.text_content("#score-home") == "0" and page.text_content("#score-away") == "0"  # 0-0 read
+    page.wait_for_function("document.querySelector('#score-away').textContent === '0'")
+    # With readings, the lines are the scorebug's goals (they agree with the numerals): none at 0-0.
+    assert page.locator(".side-goal").count() == 0
     laptop.fill("#seek", "63")
     page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
     assert page.text_content("#score-home") == "0"
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-away .side-goal") == "2′"  # the minute the away count rose
+    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
+    assert not errors
+    ctx.close()
+
+
+def test_the_band_lists_every_goal_the_scorebug_counted_so_the_lines_agree_with_the_score(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: the band read 3-1 over one line each. Every rise in a side's count is a goal
+    under its crest, in minutes ("2′ 2′"), whether or not vision spotted it; a jump of two is two."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 3, 0, team="home"),
+                reading(62.8, "score_change", 3, 1, team="away")]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="63")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '3'")
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-home .side-goal") == "2′ 2′ 2′"  # 61.9 s, and two at 62.5 s
+    assert page.inner_text("#goals-away .side-goal") == "2′"
     assert not errors
     ctx.close()
 
@@ -1717,5 +1734,25 @@ def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_ca
     first.click()
     page.wait_for_selector("#player:not([hidden])")
     assert page.inner_text("#player-title").startswith("Tac Named, #9 · Striker")
+    assert not errors
+    ctx.close()
+
+
+def test_a_team_stats_row_on_fewer_than_ten_events_is_not_drawn(browser, site):  # noqa: F811
+    """Coordinator, Oct 26 (inventory #7): counted only on sides told surely, a row of 0 and 1 says
+    nothing; under MIN_ROW_EVENTS (10) events a row of counts is not drawn. The clip has a few."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.add_init_script("delete window.__ninetyMinRowEvents")  # the phone's own threshold
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_timeout(500)
+    rows = "[...document.querySelectorAll('#stat-rows .stat-row')]"
+    labels = page.evaluate(f"{rows}.map((l) => l.getAttribute('aria-label'))")
+    assert not [x for x in labels if x.startswith(("Shots", "Passes", "Pass accuracy"))], labels
     assert not errors
     ctx.close()
