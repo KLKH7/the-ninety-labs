@@ -220,3 +220,16 @@ def test_the_committed_calibration_names_nobody_unless_the_held_out_half_met_its
         assert gate == {"share": None, "seconds": None, "association": None}  # nothing is named
     body = json.loads(naming.CALIBRATION.read_text())
     assert body["held_out_met"] is met
+
+
+def test_the_bundle_sheets_come_from_the_seed_and_codes_alone():
+    from ninety.e2e import sheets_of
+
+    meta = {"seed": 8080, "params": {"home_code": "LON", "away_code": "LIS"}}
+    sheets = sheets_of(meta)  # no insights, no tracked stats: a pre-match input
+    assert [len(sheets[t]) for t in ("home", "away")] == [11, 11]
+    assert sheets["home"][0] == {"number": 1, "name": FX.sheet("home")[0].name, "position": "goalkeeper",
+                                 "line": "goalkeeper"}
+    assert sheets_of({"seed": 8080, "params": {}}) is None
+    assert sheets_of({"params": {"home_code": "LON", "away_code": "LIS"}}) is None
+    assert sheets_of({"seed": 1, "params": {"home_code": "LON", "away_code": "ZZZ"}}) is None
