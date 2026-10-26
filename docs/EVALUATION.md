@@ -701,16 +701,16 @@ position through the team sheet). The feed is the engine's own players, so this 
 side of the match (a track that switches players, a wrong side, a wrong join pairing) and the
 feed's own swaps. The association gate was chosen on the even segments from naming_eval's
 pre-registered grid (0.75, 0.9, 1.0) at its 0.95 target, then the odd segments scored once
-([identity.json](eval/identity.json); the feed as shipped: seed 8080, 20 swaps, all corrected):
+([identity.json](eval/identity.json); the feed as shipped: seed 8080, 15 swaps, all corrected):
 
 | Demo seed 8080 | Tracks named, right | Event actors named, right | Event actors named |
 |---|---|---|---|
-| Held-out (odd segments), association 0.75 | 465 / 468 (0.994, 95% 0.98 to 1.00) | 56 / 56 (1.000, 0.94 to 1.00) | 56 of 122 |
-| Whole match | 868 / 877 (0.990) | 110 / 111 (0.991) | 111 of 253 |
+| Held-out (odd segments), association 0.75 | 468 / 471 (0.994, 95% 0.98 to 1.00) | 58 / 58 (1.000, 0.94 to 1.00) | 58 of 122 |
+| Whole match | 871 / 878 (0.992) | 112 / 113 (0.991) | 113 of 253 |
 
-877 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
-club. 111 of the match's 345 detected events take their player's side from the feed (1 of them a
-different side from vision's), so 113 have a side sure enough to air (5 without the feed); the
+878 of the 1,945 tactical tracks, 73% of tracked player-frames, are named; the rest show their
+club. 113 of the match's 345 detected events take their player's side from the feed (1 of them a
+different side from vision's), so 115 have a side sure enough to air (5 without the feed); the
 others have no join pairing at the gate and keep vision's side. Measured on the demo match only, with the engine unchanged since the demo's render
 (no change to `ninety/sim/engine.py` or its modules since `1d0390be`).
 
