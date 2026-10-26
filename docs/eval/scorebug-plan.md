@@ -173,3 +173,25 @@ changed because of it.
 **The current reader is not yet measured on validation.** That needs the linux face and the
 validation images on a Linux machine; the images are not on the Mac. Same clips, same grader,
 nothing tuned on them. The run, when it happens, is reported beside this one.
+
+## The pass bar, stated before the current reader's validation result (2026-10-26, 00:56Z)
+
+Stated while the pod is still re-rendering the validation clips, before any output of the current
+reader on them exists. A score shown wrong is worse than a score not shown, so the bar is mostly
+about wrong readings. Any one of the three below failing means no score is shown anywhere.
+
+1. **No false score change:** every detected `score_change` matches a true goal of the same side
+   within W (1.0 s). Precision must be 1.0 on all 80 clips, with no allowance, because a
+   wrong scoreline on air is the failure that matters.
+2. **Digits:** at least 99% of the samples read are right on both digits, against the whole match's
+   goals.
+3. **Recall:** at least 12 of the 16 validation goals found (a point estimate of 0.75; the Wilson
+   interval is reported beside it). A missed change leaves the score stale until the next held
+   reading; it is never wrong.
+
+If it passes:
+- the reconcile's added goals (each carrying the side whose digit changed) feed the demo package;
+- SCOREBUG_MEASURED may flip.
+
+If it fails, the result is reported as it is. Nothing is tuned on these clips; a fix would be
+measured on clips not yet seen.
