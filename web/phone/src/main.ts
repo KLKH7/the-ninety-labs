@@ -908,6 +908,10 @@ playerSheet.addEventListener("ionModalDidDismiss", () => {
 });
 /** Close the sheet for the Ask tab, keeping its player as the question's subject. */
 function askAboutPlayer() {
+  if (onboard.isOpen && !onboard.editing) {
+    onboard.close(); // a question about a player wins over the choices: they wait for next visit
+    syncAsk();
+  }
   keepSelection = true;
   $("player").hidden = true;
   void playerSheet.dismiss();
@@ -1278,7 +1282,10 @@ const asked = new Set<string>();
 function syncAsk() {
   const any = $("answers").children.length > 0;
   if (any && onboard.isOpen && !onboard.editing) onboard.close(); // they asked instead: next visit
-  $("ask-content").classList.toggle("onboarding", onboard.isOpen);
+  // The composer waits for the choices (Kian, Oct 25), then rises in once they are made or skipped.
+  const panel = $("panel-ask");
+  if (panel.classList.contains("onboarding") && !onboard.isOpen) panel.classList.add("composer-in");
+  panel.classList.toggle("onboarding", onboard.isOpen);
   $("ask-start").hidden = any || onboard.isOpen;
   $("recent-title").hidden = !any;
   if (!any) $("ask-chips").hidden = true;
@@ -1288,6 +1295,7 @@ function syncAsk() {
   }
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
+$("panel-ask").addEventListener("animationend", () => $("panel-ask").classList.remove("composer-in"));
 if (fan === null) onboard.open(null, false); // the first visit opens on the three choices
 applyFan();
 

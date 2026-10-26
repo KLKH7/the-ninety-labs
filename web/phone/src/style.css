@@ -928,3 +928,10 @@ ion-tab #ask-content { --padding-bottom: 12px; }
 /* The empty state, centred in the space above the composer. */
 #ask-start-title { text-align: center; }
 .q-glyph { width: 26px; height: 26px; stroke-width: 1.6; stroke: rgba(235, 235, 245, 0.7); }
+
+/* No composer while the choices are up (Kian, Oct 25): the tiles take the whole page above the tab
+   bar; once they are made or skipped, the composer rises in. */
+#panel-ask.onboarding ion-footer.composer { display: none; }
+#panel-ask.composer-in ion-footer.composer { animation: composer-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes composer-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #panel-ask.composer-in ion-footer.composer { animation-duration: 0.01s; } }

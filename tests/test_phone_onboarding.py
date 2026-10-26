@@ -68,7 +68,7 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     ctx, page, errors = open_phone(browser, site)
     page.click("#tab-button-ask")
     page.wait_for_selector("#onboard:visible")
-    assert page.is_hidden("#ask-start") and page.is_visible("#ask-form")  # the composer stays
+    assert page.is_hidden("#ask-start") and page.is_hidden("#ask-form")  # no composer while choosing
     assert page.inner_text("#onboard-title") == "Your club"
     assert page.locator(".onboard-option .onboard-crest svg").count() == 2
     tap(page, "London Athletic")
@@ -80,6 +80,7 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     tap(page, "Tactics")
     page.wait_for_selector("#ask-start:visible")
     assert page.is_hidden("#onboard")
+    page.wait_for_selector("#ask-form:visible")  # the composer rises in once the choices are made
     qs = grid(page)
     assert qs[0] == "Where are London overloading?" and "Which pass broke Lisbon's lines?" in qs
     saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))
@@ -123,35 +124,34 @@ def test_the_settings_row_reopens_the_choices_ticked_and_cancel_keeps_them(brows
     assert page.inner_text("#fan-value") == "London · Analyst"
     page.click("#fan-edit")
     page.wait_for_selector("#onboard:visible")
+    assert page.is_hidden("#ask-form")  # changing the choices hides the composer too
     assert page.inner_text(".onboard-skip") == "Cancel"
     assert page.get_attribute(".onboard-option[data-value=LON]", "aria-checked") == "true"
     page.click(".onboard-skip")
     page.wait_for_selector("#ask-start:visible")
+    page.wait_for_selector("#ask-form:visible")
     assert json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))["focus"] == "players"
     assert not errors
     ctx.close()
 
 
-def test_skip_is_remembered_and_a_typed_question_closes_the_choices(browser, site):  # noqa: F811
+def test_skip_is_remembered_and_brings_the_composer(browser, site):  # noqa: F811
     ctx, page, errors = open_phone(browser, site)
     page.click("#tab-button-ask")
     page.wait_for_selector("#onboard:visible")
+    assert page.is_hidden("#ask-form")  # no composer while choosing
     page.click(".onboard-skip")
     page.wait_for_selector("#ask-start:visible")
+    page.wait_for_selector("#ask-form:visible")
     assert json.loads(page.evaluate("localStorage.getItem('ninety.fan')")) == {"skipped": True}
     assert grid(page)[0] == "Where are London overloading?"  # the unpersonalised grid, as before
-    page.close()
-    ctx2, page2, errors2 = open_phone(browser, site)
-    page2.click("#tab-button-ask")
-    page2.wait_for_selector("#onboard:visible")
-    page2.fill("#question", "Who has more of the ball?")
-    page2.click("#ask-button")
-    page2.wait_for_selector("#answers .answer")
-    assert page2.is_hidden("#onboard")
-    assert page2.evaluate("localStorage.getItem('ninety.fan')") is None  # asked again next visit
-    assert not errors and not errors2
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#ask-form:visible")  # skipped: straight to the composer next visit
+    assert page.is_hidden("#onboard")
+    assert not errors
     ctx.close()
-    ctx2.close()
 
 
 def test_a_browser_that_refuses_storage_still_onboards(browser, site):  # noqa: F811
@@ -189,6 +189,7 @@ def test_the_composer_is_one_pill_with_send_inside_centred_and_return_sends(brow
     ctx, page, errors = open_phone(browser, site)
     page.click("#tab-button-ask")
     page.click(".onboard-skip")
+    page.wait_for_function("!document.getElementById('panel-ask').classList.contains('composer-in')")  # risen
     pill = page.locator(".ask-pill").bounding_box()
     send = page.locator("#ask-button").bounding_box()
     assert pill["x"] < send["x"] and send["x"] + send["width"] <= pill["x"] + pill["width"]  # inside

@@ -21,7 +21,16 @@ import pytest
 
 from ninety import e2e
 from tests.e2e_clip import H, W, write_clip
-from tests.test_phone import MOCK_CODE, MOCK_DIST, PHONE_SIZE, browser, turn_on_read_aloud, unavailable, watch  # noqa: F401
+from tests.test_phone import (  # noqa: F401
+    MOCK_CODE,
+    MOCK_DIST,
+    PHONE_SIZE,
+    browser,
+    open_ask,
+    turn_on_read_aloud,
+    unavailable,
+    watch,
+)
 from tests.test_radar import FPS, SEGMENTS, observations_clip, tracked_clip
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -185,7 +194,7 @@ QUESTIONS = [
 
 
 def ask(page, text: str):
-    page.click("#tab-button-ask")
+    open_ask(page)
     n = page.locator("#answers .answer:not(.pending)").count()
     page.fill("#question", text)
     page.click("#ask-button")
@@ -361,7 +370,7 @@ def test_the_tabs_move_with_the_arrow_keys(browser, site):  # noqa: F811
     page.focus("#tab-button-radar")
     page.keyboard.press("ArrowRight")
     focused("ask")
-    page.wait_for_selector("#ask-form")
+    page.wait_for_selector("#ask-content")
     page.keyboard.press("End")
     focused("insights")
     page.wait_for_selector("#insights-title")
