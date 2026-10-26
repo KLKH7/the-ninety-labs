@@ -21,7 +21,7 @@ def _place(team: str, role: str, rng: random.Random) -> tuple[float, float]:
 
 def frames(seconds: float = 20.0, segment: int = 0, extra: bool = False, swap_keeper: bool = False):
     """A segment's tracked frames: every player of both sides holding his 4-3-3 place, track id
-    h-t<k*1000 + slot> (slot 1 the keeper), optionally an extra short-lived home track."""
+    h-t<k*1000 + slot> (slot 1 the keeper), optionally an extra home track all clip long."""
     rng = random.Random(segment)
     out = []
     base = segment * 1000
@@ -111,3 +111,68 @@ def test_match_insights_lists_the_broadcast_lineup():
     assert [r["id"] for r in body["lineup"]] == ["h-t7"]
     assert body["lineup"][0]["name"] == mi.people["h-t2"]["name"]
     assert MatchInsights.from_dict(body).broadcast == mi.broadcast
+
+
+def test_segments_are_separate_and_doubt_withholds_only_its_own():
+    fr = frames(segment=0) + frames(segment=1, swap_keeper=True)
+    assert naming.segment("h-t1003") == 1 and naming.segment("h-t3") == 0
+    assert naming.side_doubt(fr) == {1}
+    people = naming.people(fr, FX, OPEN)
+    assert all(people[f"h-t{n}"]["name"] for n in range(1, 12))
+    assert not any(w["name"] for t, w in people.items() if naming.segment(t) == 1)
+
+
+def test_doubt_needs_more_than_half_the_frames():
+    fr = frames(seconds=4.0)
+    keeper = [p for f in fr for p in f["players"] if p["id"] == "h-t1"]
+    for p in keeper[: len(keeper) // 2]:
+        p["x"] = 40.0  # out of his area in exactly half the frames: no doubt
+    assert naming.side_doubt(fr) == set()
+    keeper[len(keeper) // 2]["x"] = 40.0
+    for f in fr[len(fr) // 2 : len(fr) // 2 + 10]:
+        next(p for p in f["players"] if p["id"] == "h-t1")["x"] = 40.0
+    assert naming.side_doubt(fr) == {0}
+
+
+def test_a_fragment_beaten_to_its_slot_is_not_named_and_the_longer_track_keeps_it():
+    fr = frames(seconds=30.0)
+    for f in fr[375:]:  # the striker's track ends at 15 s; another track carries him on
+        for p in f["players"]:
+            if p["id"] == "h-t10":
+                p["id"] = "h-t40"
+    for f in fr[300:375]:  # and for the 3 s before, a duplicate of him overlaps the first
+        p = next(p for p in f["players"] if p["id"] == "h-t10")
+        f["players"].append({**p, "id": "h-t41", "x": p["x"] + 0.3})
+    people = naming.people(fr, FX, OPEN)
+    striker = next(s.name for s in FX.sheet("home") if s.role == "ST")
+    assert people["h-t10"]["name"] == striker and people["h-t40"]["name"] == striker
+    assert people["h-t41"]["name"] is None
+    assert len([w for w in people.values() if w["name"] == striker]) == 2  # never at once
+
+
+def test_a_slot_needs_a_strict_majority_of_a_window():
+    voted = [(i * 5, i * 0.2, {"h-t1": "GK" if i % 2 else "RB"}) for i in range(10)]
+    assert naming.match_windows(voted, 10.0) == {}  # 5 of 10 for each: neither won
+    voted[0] = (0, 0.0, {"h-t1": "GK"})
+    assert naming.match_windows(voted, 10.0) == {"h-t1": {"GK": 10}}
+
+
+def test_the_extra_track_dropped_is_the_one_furthest_from_any_slot():
+    fr = frames(extra=True)
+    for f in fr:
+        next(p for p in f["players"] if p["id"] == "h-t99")["x"] = 104.0  # a stray far upfield
+    voted = naming.votes(fr, "home", naming.roles.places(frames(), "home"))
+    assert all("h-t99" not in got for _, _, got in voted)
+
+
+def test_events_cross_the_join_only_on_the_same_side_and_surely_without_a_gate():
+    association = {"h-t7": {"track": "a-t2", "confidence": 1.0}, "h-t8": {"track": "h-t3", "confidence": 0.9}}
+    assert naming.tactical(association, OPEN) == {"h-t8": "h-t3"}
+    assert naming.tactical(association, {"association": None}) == {}
+    sure = {"h-t9": {"track": "h-t4", "confidence": 1.0}}
+    assert naming.tactical(sure, {"association": None}) == {"h-t9": "h-t4"}
+
+
+def test_keep_apart_treats_touching_spans_as_overlapping_and_ties_keep_the_first():
+    assert naming.keep_apart([("a", 0.0, 10.0, 5), ("b", 10.0, 20.0, 5)]) in ({"a"}, {"b"})
+    assert naming.keep_apart([("a", 0.0, 10.0, 5), ("b", 5.0, 20.0, 5)]) == {"a"}

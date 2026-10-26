@@ -37,18 +37,18 @@ from __future__ import annotations
 
 import json
 import re
-import statistics
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from ninety.intel import roles
+from ninety.intel import roles, scene
 from ninety.intel.scene import depth
 from ninety.intel.teamsheet import LABEL, LINE, ROLES, Fixture
+from ninety.vision import match_join
 
-FPS = 25
+FPS = scene.FPS
 WINDOW_S = 10.0  # design: a window short enough that a player's two fragments rarely fall in one
-PER_SEGMENT = 1000  # ninety.vision.match_join.PER_SEGMENT: a joined match's track ids per segment
+PER_SEGMENT = match_join.PER_SEGMENT  # a joined match's track ids per segment
 PENALTY_AREA_M = 16.5  # Law 1: the penalty area reaches 16.5 m from the goal line
 TRACK = re.compile(r"^([ha])-t(\d+)$")
 CALIBRATION = Path(__file__).resolve().parent / "naming_calibration.json"
@@ -131,7 +131,8 @@ def assign(frames: Sequence[Mapping], team: str, window_s: float = WINDOW_S) -> 
 
 def keep_apart(claims: Sequence[tuple[str, float, float, int]]) -> set[str]:
     """Of tracks (id, start, end, weight) claiming one slot, the set that never overlap in time and
-    has the greatest total weight (weighted interval scheduling; ties to the earlier ids)."""
+    has the greatest total weight (weighted interval scheduling; on a tie, the set found first in
+    order of end time is kept)."""
     items = sorted(claims, key=lambda c: (c[2], c[1], c[0]))
     best: list[tuple[int, list[str]]] = [(0, [])]
     ends = [c[2] for c in items]
@@ -160,7 +161,7 @@ def side_doubt(frames: Sequence[Mapping]) -> set[int]:
             own = [p for p in f["players"] if p["team"] == team]
             if own:
                 deepest[(segment(own[0]["id"]), team)].append(min(depth(team, p["x"]) for p in own))
-    return {k for (k, _), d in deepest.items() if statistics.median(d) > PENALTY_AREA_M}
+    return {k for (k, _), d in deepest.items() if 2 * sum(x > PENALTY_AREA_M for x in d) > len(d)}
 
 
 def gates(path: Path = CALIBRATION) -> dict:
@@ -216,7 +217,7 @@ def people(
         for track, w in out.items():
             if w["team"] == team and w["name"]:
                 claims[(segment(track), w["role"])].append(
-                    (track, *spans[track], round(got[track]["share"] * got[track]["seconds"] * 1000)))
+                    (track, *spans[track], got[track]["share"] * got[track]["seconds"]))  # frames for it
         for group in claims.values():
             keep = keep_apart(group)
             for track, *_ in group:
@@ -251,13 +252,14 @@ PEOPLE = ("player", "receiver", "intended", "interceptor", "deflected_by")  # ni
 
 
 def tactical(association: Mapping[str, Mapping], gate: Mapping) -> dict[str, str]:
-    """Broadcast track -> its tactical track, where the association is at least the gate (all
-    associated tracks when no gate was measured) and both cameras read the same side."""
+    """Broadcast track -> its tactical track, where the association is at least the gate (only a
+    pairing every paired frame agreed on, confidence 1.0, when no gate was measured) and both
+    cameras read the same side."""
     g = gate.get("association")
     out = {}
     for track, a in association.items():
         tv = a.get("track")
-        if tv and a.get("confidence", 0) >= (g if g is not None else 0) and tv[0] == track[0]:
+        if tv and a.get("confidence", 0) >= (g if g is not None else 1.0) and tv[0] == track[0]:
             out[track] = tv
     return out
 
