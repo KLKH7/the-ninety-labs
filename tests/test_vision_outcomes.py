@@ -463,7 +463,7 @@ def caught(keeper=(103.0, 34.0), held=12, lands=(108.0, 36.0)):
 def test_a_ball_held_in_the_keepers_box_after_a_shot_is_a_save_though_it_lands_behind_him():
     shots, goals, types, _ = run(caught())
     assert goals == [] and "out_of_play" not in types
-    strike = run(shot_scene(keeper_catch(), keeper=(103.0, 34.0)))[0][0]["frame"]  # the strike, as a catch has it
+    strike = run(shot_scene(keeper_catch(), keeper=(103.0, 34.0)))[0][0]["frame"]  # as a catch has it
     assert [(s["team"], s["outcome"], s["frame"]) for s in shots] == [("home", "on_target", strike)]
 
 
