@@ -3,6 +3,8 @@ and what must recover. Expected values are written here, not read from the table
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from ninety.eval import workflow_failures as wf
@@ -313,7 +315,7 @@ def test_every_variant_is_fact_checked_before_it_airs():
         from ninety.agents.contracts import Variant
 
         # Every persona gets a number the evidence does not hold.
-        return [Variant(p.persona, p.lang, claim.text.replace("42 km/h", "99 km/h"), tuple(claim.evidence))
+        return [Variant(p.persona, p.lang, re.sub(r"\d+ m\b", "99 m", claim.text), tuple(claim.evidence))
                 for p in profiles]
 
     result = minute(True, personalizer=inflating)

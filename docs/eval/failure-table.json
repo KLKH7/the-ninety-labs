@@ -18,42 +18,42 @@
    "judge_asked": 6,
    "insights": [
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "analyst",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "casual",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "player_focus",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Un pase completado de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m.",
      "persona": "analyst",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Un pase completado de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m.",
      "persona": "casual",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Un pase completado de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m.",
      "persona": "player_focus",
      "lang": "es",
      "verified": true,
@@ -201,21 +201,21 @@
    "judge_asked": 3,
    "insights": [
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "analyst",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "casual",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "A completed pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m.",
      "persona": "player_focus",
      "lang": "en",
      "verified": true,
