@@ -169,14 +169,16 @@ def read_team_stats(path: Path) -> dict:
     return out
 
 
-def read_lineup(path: Path) -> list[dict] | None:
+def read_lineup(path: Path, key: str = "lineup") -> list[dict] | None:
     """MatchInsights' team sheet (the line-up tool, insight-scout): per player id a name, shirt and
-    position, with whether the tool is confident of it. The phone shows only confident entries. A
-    row without an id, or with a name, shirt or position of the wrong type, stops the bundle."""
-    rows = json.loads(path.read_text()).get("lineup")
+    position, with whether the tool is confident of it and where the name comes from (`source`
+    id_feed: the player-ID feed, ninety/intel/identity.py). The phone shows only confident entries.
+    `lineup` names broadcast tracks (events); `lineup_tactical` the tactical ones (radar, player
+    card). A row without an id, or with a field of the wrong type, stops the bundle."""
+    rows = json.loads(path.read_text()).get(key)
     if rows is None:
         return None
-    kinds = {"name": str, "number": int, "position": str, "confident": bool}
+    kinds = {"name": str, "number": int, "position": str, "confident": bool, "source": str}
     out = []
     for r in rows:
         wrong = [k for k, t in kinds.items() if k in r and not isinstance(r[k], t)]
@@ -806,6 +808,13 @@ async def run(args: argparse.Namespace) -> dict:
             lineup = read_lineup(args.team_stats)
             if lineup is not None:
                 body["lineup"] = lineup
+            tactical = read_lineup(args.team_stats, "lineup_tactical")
+            if tactical is not None:
+                body["lineup_tactical"] = tactical
+            source = json.loads(args.team_stats.read_text()).get("identity")
+            if source is not None:  # where the names come from, said on every screen that shows one
+                body["identity"] = {k: source.get(k) for k in ("source", "label", "provider", "note",
+                                                               "id_corrections")}
         sheets = sheets_of(clip.meta)
         if sheets is not None:  # pre-match, from the seed and codes: never gated on a tracked stat
             body["sheets"] = sheets

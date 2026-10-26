@@ -312,6 +312,22 @@ when its number clears the threshold by more than vision's measured 95th percent
 | H11 | Nothing before a broadcast cut is read: the condensed match's cut skips time and events, so an event before it says nothing about what followed (a throw-in before a cut was once read as a free kick after it); a restart after the cut is the detector's to see | the merge-queue review of #324 (development run on the demo match's answer key; lesson 253) | rule | `tests/test_highlights.py::test_nothing_before_a_cut_is_read_but_a_restart_after_it_is` |
 | H12 | A moment's `team` and `player` are null unless its side was told surely (`factcheck.side_known`), and a caption names an origin only when `origin` says so; a counter-attack word is never given (no cited definition) | lesson 218; GROUNDING D-rows on the side gate | rule | `tests/test_captioner.py` (origin and unsure-player cases) |
 
+### Player-ID feed: what the simulated tracking provider delivers
+
+The one engine output the live path reads, for identity and side only ([FEED_SPEC.md](FEED_SPEC.md), lesson 269).
+
+| ID | Rule | Source | Kind | Test |
+|---|---|---|---|---|
+| ID1 | the feed is 25 frames per second | Linke, Link & Lames 2020, *Football-specific validity of TRACAB's optical video tracking systems*, PLOS ONE 15(3): e0230179 (TRACAB records at 25 Hz) | provider | `tests/test_identity_feed.py::test_the_feed_is_25_hz_pitch_centred_and_carries_identity_only` |
+| ID2 | each position carries an error with an RMSE of 0.08 m, drifting frame to frame (AR(1), correlation 0.95, *design*) | Linke et al. 2020: TRACAB Gen5 position RMSE 0.08 m against VICON | provider | `::test_the_feed_s_position_error_is_the_provider_s` |
+| ID3 | a row is delivered 15 s after capture, plus up to 100 ms of jitter (*design*), so rows arrive out of order | SciSports live-data documentation: the live TRACAB stream is held about 15 s so an operator can correct it; fuller corrections follow after the match | provider | `::test_the_reader_aligns_by_capture_time_not_arrival_order` |
+| ID4 | a player within 0.75 m of another is occluded and is dropped for 3 to 12 frames at 0.2 per second (*design*) | *design*: occlusion when players overlap optically (SciSports, above) | design | `::test_occluded_players_drop_out_and_come_back_low_confidence` |
+| ID5 | for one second after a dropout a player's entry is low confidence, and the reader skips it | *design* | design | `::test_occluded_players_drop_out_and_come_back_low_confidence` |
+| ID6 | two team-mates within 1.0 m swap ids at 0.02 per second together | *design*: the source says overlapping players cause identity errors but publishes no rate | design | `::test_swaps_are_between_close_team_mates_and_each_is_corrected` |
+| ID7 | a swap lasts 2 to 6 s, then an `id_correction` row names the pair and the span, delivered after the swapped frames; a swap still open when the stream ends is corrected at its end | *design*: the source says operators correct identity errors, some within the live hold and the rest after the match; that our corrections arrive after the swapped frames, and their spans, are ours | design | `::test_swaps_are_between_close_team_mates_and_each_is_corrected` |
+| ID8 | the reader applies each correction to the frames it covers | the provider's correction says those frames were wrong | rule | `::test_the_reader_applies_corrections` |
+| ID9 | the provider's player id is the club code and the shirt; the jersey and name are the team sheet's | *design* (rules 4.4 and 4.7: fictional clubs and names, `ninety/intel/teamsheet.py`) | design | `::test_the_feed_is_25_hz_pitch_centred_and_carries_identity_only` |
+
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.

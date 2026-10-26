@@ -22,7 +22,9 @@ from pathlib import Path
 from ninety.match import tracking
 
 ROOT = Path(__file__).resolve().parents[1]
-TRUTH_FILES = {"events.jsonl", "frames.jsonl"}
+# The player-ID feed too: the agents, the MCP server and the Companion never open it; only the
+# line-up step does (ninety/intel/identity.py, AGENTS.md, lesson 269).
+TRUTH_FILES = {"events.jsonl", "frames.jsonl", "identity_feed.jsonl"}
 TRUTH_DIRS = {"truth", "truth-test"}
 # Our modules that write, read or fetch the answer key: none may load on the live path.
 FORBIDDEN = (
