@@ -235,12 +235,12 @@ for i, e in enumerate(ev):
         hands = np.where(seg == HANDS)[0]
         dives = int(np.isin(seg, SAVE_ACTIONS).sum()) + int((dive_amt[f : f + 75, gi] > 0.3).sum())
         kind = "none"
-        if e["outcome"] == "on_target":
-            if dives:
-                v += 8.0
-                kind = "dive save"
-                musts.append((t, 20.0, "dive save"))
-            elif len(hands):
+        if dives and e["outcome"] != "goal":  # a dive or a parry, whatever the shot's outcome is named
+            v += 8.0
+            kind = "dive save"
+            musts.append((t, 20.0, "dive save"))
+        elif e["outcome"] == "on_target":
+            if len(hands):
                 h = f + hands[0]
                 dist = float(np.hypot(*(xy[h, gi] - ball[h, 1:3])))
                 z = float(ball[h, 3])
@@ -426,6 +426,7 @@ for t, _, what in sorted(musts, key=lambda m: -m[1]):
         c
         for c in cands
         if not c["bad"]
+        and c["score"] >= 3.0
         and c["start"] <= t - 3
         and c["end"] >= t + 2
         and not overlaps(c["start"], c["end"], chosen)
