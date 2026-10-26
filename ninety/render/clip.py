@@ -47,6 +47,7 @@ from ninety.render.scene import (
     advance_gaits,
     ball_parts,
     body_parts,
+    carry_at,
     contacts,
     crowded_start,
     drawn_ball,
@@ -334,6 +335,8 @@ def render_clip(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
+        if info.get("look"):  # the broadcast look (web/render/look.js): stadium=broadcast only
+            clip["renderer"]["look"] = info["look"]
         # Each tactical lens films the same scene in a page of its own: the same seed, looks and
         # per-frame spec as the broadcast, its own camera and picture size, and no graphics.
         vpages = {}
@@ -380,6 +383,7 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                carry_at(g, fr, pl["id"], pl["x"], pl["y"], h)  # a ball in close control, played in stride
                 fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
                 mine = reacts.get(pl["id"], [])
                 fouls.signal_at(g, mine, fi, FPS, pl["x"], pl["y"], h)

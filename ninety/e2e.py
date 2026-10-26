@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety import condensed, highlights, radar
-from ninety.agents import live, onair, telemetry
+from ninety.agents import factcheck, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import (
@@ -752,6 +752,8 @@ async def run(args: argparse.Namespace) -> dict:
     # (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
     cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta))
     claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
+    # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
+    cues, claims = onair.gate_speeds(cues, claims, events)
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
@@ -769,6 +771,13 @@ async def run(args: argparse.Namespace) -> dict:
                                        clubs=clubs_of(clip.meta))
     if voice is not None:
         voice.save(track, out)
+    # Every text the track writes, as a screen may show it: the checked form names track ids, which never
+    # air (ninety/agents/onair.py); what is said (`spoken`) never named them.
+    sure, clubs = sides_known(events), clubs_of(clip.meta)
+    for line in track.said:
+        line.text = onair.render(line.text, sure, clubs)
+    refused = [{**r, "text": onair.render(r["text"], sure, clubs)} if isinstance(r.get("text"), str) else r
+               for r in refused]
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
@@ -796,7 +805,8 @@ async def run(args: argparse.Namespace) -> dict:
         verdict = None
         if args.highlights_verdict:
             verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
-        body = condensed.build(clip.meta, events, verdict)
+        body = condensed.build(clip.meta, events, verdict,
+                               read_scorebug(args.scorebug) if args.scorebug else None)
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
@@ -819,7 +829,9 @@ async def run(args: argparse.Namespace) -> dict:
         if sheets is not None:  # pre-match, from the seed and codes: never gated on a tracked stat
             body["sheets"] = sheets
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
-                                                             args.captioner)
+                                                             args.captioner, sides_known(events),
+                                                             clubs_of(clip.meta),
+                                                             names_of(body.get("lineup")))
         # Each moment recorded from the footage: a still and, unless --frames, its clip.
         highlights.record(body["highlights"], Timeline.of_clip(clip.meta), clip.images, out, not args.frames)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
@@ -859,6 +871,13 @@ async def run(args: argparse.Namespace) -> dict:
         # The track ids a screen may name by club (`sides_known`); every other one is "a player".
         "sides_known": sides_known(events),
         "min_team_confidence": MIN_TEAM_CONFIDENCE,  # the phone names an event's side only above it
+        # Whether vision's ball speed is measured, and its band: the screens say a speed only with it
+        # (web/viewer/src/speed.ts); the bundle's words state only the speeds it covers.
+        # Measured only when one of its speeds is one vision's error covers: the screens' gate opens
+        # for the whole bundle, so it stays shut while none is.
+        "speed": {"measured": any(factcheck.measured_speed(e) and factcheck.plausible_speed(e)
+                                  for e in events),
+                  "error_kmh": factcheck.SPEED_ERROR_KMH},
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
@@ -895,9 +914,16 @@ async def run(args: argparse.Namespace) -> dict:
 
 
 
-async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
+def names_of(lineup: list[dict] | None) -> dict[str, str]:
+    """Each named broadcast track's name, from the line-up's confident rows (the player-ID feed)."""
+    return {r["id"]: r["name"] for r in lineup or [] if r.get("confident") and r.get("name")}
+
+
+async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str] | None = None,
+                       clubs: dict[str, str] | None = None, names: dict[str, str] | None = None) -> dict:
     """Each highlight's caption (ninety/agents/captioner.py): code-written, or with `foundry` the
-    published Captioner's line where the fact-checker passes it. Returns the run's record."""
+    published Captioner's line where the fact-checker passes it, then said as every screen says a
+    player (onair.render: by club, never a track id). Returns the run's record."""
     from ninety.agents import captioner
 
     tokens, unavailable, results = {}, None, None
@@ -906,13 +932,15 @@ async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
 
         try:
             async with captioner.foundry_model(tokens) as (model, judge):
-                results = await captioner.captions(reel["moments"], events, model, judge)
+                results = await captioner.captions(reel["moments"], events, model, judge, clubs=clubs,
+                                                   names=names)
         except RegistryDrift:
             raise  # a changed or unpublished prompt never runs under an old name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code captions still air
             unavailable = type(e).__name__  # the type only: no endpoint or token
     if results is None:
-        results = await captioner.captions(reel["moments"], events, None, None)
+        results = await captioner.captions(reel["moments"], events, None, None, clubs=clubs, names=names)
+    results = [{**r, "text": onair.render(r["text"], sure or [], clubs)} for r in results]
     captioner.apply(reel, results)
     return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
             "tokens": tokens, "unavailable": unavailable}

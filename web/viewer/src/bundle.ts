@@ -58,7 +58,11 @@ export interface Manifest {
   /** Runs of consecutive match frames: image `index` shows match frame `frame`. More than one when
    * the broadcast cut from a dead ball to its restart (ninety/match/timeline.py). */
   segments?: { index: number; frame: number; frames: number }[];
-  footage: { kind: "video" | "frames"; src: string; pattern?: string; frames: number };
+  /** `mp4`, `hls`, `poster`, `audio` from #397 (H.264 + an HLS ladder); `src` stays the legacy file. */
+  footage: {
+    kind: "video" | "frames"; src: string; pattern?: string; frames: number;
+    mp4?: string; hls?: string; poster?: string; audio?: "muxed" | null;
+  };
   detector: string | null;
   detections: { source: string; frames: number };
   events: { source: string; count: number; standin: boolean; held: string[] };
