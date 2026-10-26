@@ -68,6 +68,37 @@ def test_a_claim_aired_after_a_rewrite_is_counted():
     assert calls == 3 and checker == {"drafts": 2, "held": 0, "rejected": 0, "rewritten": 1}
 
 
+def test_a_claim_the_judge_holds_three_times_is_counted_held():
+    async def agent(prompt: str) -> str:
+        return reply(true_claim(FIRST))
+
+    from ninety.agents import workflow
+    from ninety.match.facts import compact
+
+    known = {e["id"]: compact(e) for e in workflow.agent_events(EVENTS)}
+    out = Verdict(False, ["the Judge timed out"], "timeout")
+    checker: dict = {}
+    aired, calls, why = asyncio.run(
+        ab.checked_agent_minute(agent, Judge(out, out, out), SEED, "x-inline", 1, known, checker)
+    )
+    assert aired == [] and why.startswith("held") and calls == 6  # three drafts, three Judge calls
+    assert (checker["held"], checker["rejected"], checker["rewritten"]) == (1, 0, 0)
+
+
+def test_the_estimate_counts_the_arms_and_the_grader():
+    calls = sum(arm["model_calls"] for arm in BODY["arms"].values())
+    assert BODY["grader_calls"] >= 1 and calls > BODY["grader_calls"]
+    assert BODY["estimated_usd"] == round((calls + BODY["grader_calls"]) * ab.USD_PER_CALL, 4)
+
+
+def test_the_report_gives_the_checked_arms_outcomes():
+    md = ab.report({**BODY, "agent_definitions": {}}, "scripted models")
+    one, checked, graph = (BODY["arms"][a] for a in ("one agent", "one agent + fact-checker", "graph"))
+    assert f"| n/a | {one['model_calls']} |" in md
+    for arm in (checked, graph):
+        assert f"| {arm['held']} / {arm['rejected']} / {arm['rewritten']} | {arm['model_calls']} |" in md
+
+
 def test_a_failed_checked_agent_airs_nothing_and_says_why():
     async def down(prompt):
         raise RuntimeError("injected")
@@ -169,6 +200,7 @@ def test_the_pre_registered_reading_rule():
     assert "Outcome 1" in reading((5, 1), (6, 2))
     assert "Outcome 2" in reading((6, 0), (6, 2))  # as many true, fewer false
     assert "Outcome 2" in reading((9, 1), (6, 1))  # more true, at a lower false rate
+    assert "Outcome 2" in reading((9, 0), (6, 0))  # more true, at the same false rate
     assert "Outcome 3" in reading((6, 2), (6, 0))  # the same, swapped
     assert "Outcome 3" in reading((6, 1), (9, 1))
     assert "Outcome 4" in reading((9, 4), (3, 1))  # more true but a higher false rate
@@ -277,3 +309,23 @@ def test_a_live_arm_that_calls_the_match_tools_fails_that_call(monkeypatch, tmp_
     md = (tmp_path / "ablation-agents.md").read_text()
     minutes = body["arms"]["one agent"]["minutes"]
     assert "Minutes lost to a tool call" in md and md.count(f"| 1 of {minutes} |") == 2
+
+
+def test_a_run_where_no_model_answered_is_void_and_writes_no_report(monkeypatch, tmp_path):
+    # The plan's exclusions: a run is void only if no model answered at all, and then no report.
+    import sys
+
+    from ninety.agents import credentials, workflow
+    from tests.test_workflow import Credential, FakeFoundry
+
+    down = [RuntimeError("expired token")] * 40
+    roles = ("analyst", "moment-analyst", "tactician", "challenger", "judge")
+    monkeypatch.setattr("agent_framework.foundry.FoundryAgent", FakeFoundry({r: down for r in roles}))
+    monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Credential(3600)))
+    monkeypatch.setattr(workflow, "simulated_events", lambda seed, minutes: EVENTS)
+    monkeypatch.setattr(ab, "MINUTES", 2)
+    monkeypatch.setitem(ab.ANSWERED, "calls", 0)
+    monkeypatch.setattr(sys, "argv", ["agent_ablation", "--live", "--seeds", "21", "--out", str(tmp_path)])
+    with pytest.raises(SystemExit, match="void"):
+        ab.main()
+    assert not list(tmp_path.iterdir())
