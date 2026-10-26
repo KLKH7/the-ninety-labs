@@ -120,20 +120,20 @@ def test_an_unsure_detection_in_the_build_up_holds_the_caption():
 def test_without_a_model_every_caption_is_code_written_and_no_call_is_made():
     events, r = scene()
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out == [{"event": "s1", "text": "h9 scores from 26 m at 112 km/h.", "source": "code"}]
+    assert out == [{"event": "s1", "text": "h9 scores from 26 m.", "source": "code"}]
 
 
 def test_the_code_caption_follows_the_moment():
     events, r = scene(x=105 - 6.0, kmh=56.0, outcome="on_target")
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out[0]["text"] == "h9 is denied from 6 m at 56 km/h."
+    assert out[0]["text"] == "h9 is denied from 6 m."
 
 
 def test_a_goal_whose_strike_was_not_seen_keeps_a_code_caption_with_no_distance_and_no_model_call():
     events = [ev("g1", 61.0, "goal", player=None, x=105.0)]  # lesson 270: a goal with no shot
     r = reel(events, MEASURED)
     out = asyncio.run(captioner.captions(r["moments"], events, says("h9 scores from 26 m."), PASSES))
-    assert out == [{"event": "g1", "text": "home scores.", "source": "code"}]
+    assert out == [{"event": "g1", "text": "A home player scores.", "source": "code"}]
 
 
 def test_the_build_up_is_the_clip_before_the_shot_and_at_most_six_events():
@@ -196,6 +196,28 @@ def test_a_fan_word_is_said_only_of_the_label_that_earns_it(text, label, ok):
 # In the bundle
 
 
+def test_the_code_caption_says_a_detected_speed_only_once_vision_s_speed_is_measured(monkeypatch):
+    from ninety.agents import factcheck
+
+    events, r = scene()
+    held = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
+    monkeypatch.setattr(factcheck, "SPEED_MEASURED", True)
+    said = asyncio.run(captioner.captions(r["moments"], events, None, None))[0]["text"]
+    assert (held, said) == ("h9 scores from 26 m.", "h9 scores from 26 m at 112 km/h.")
+
+
+def test_the_bundle_says_a_highlight_s_player_by_club_never_by_track_id():
+    events, r = scene()
+    for e in events:
+        e["player"] = "h-t9"  # a tracker's id, as vision writes it
+    events[0]["receiver"] = "h-t9"
+    r = reel(events, MEASURED)
+    asyncio.run(e2e.caption_reel(r, events, "code", ["h-t9"], {"home": "London", "away": "Lisbon"}))
+    assert r["moments"][0]["caption"] == "A London player scores from 26 m."
+    asyncio.run(e2e.caption_reel(r, events, "code", [], {"home": "London", "away": "Lisbon"}))
+    assert r["moments"][0]["caption"] == "A player scores from 26 m."
+
+
 def test_the_bundle_captions_every_highlight_with_code_by_default():
     events, r = scene()
     record = asyncio.run(e2e.caption_reel(r, events, "code"))
@@ -251,7 +273,7 @@ def test_a_restart_the_code_did_not_find_keeps_the_code_caption():
 def test_the_code_caption_says_where_the_attack_started():
     events, r = corner_scene()
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out[0]["text"] == "h9 scores from 26 m at 112 km/h, from a corner."
+    assert out[0]["text"] == "h9 scores from 26 m, from a corner."
 
 
 @pytest.mark.parametrize("text,origin,ok", [
@@ -340,7 +362,7 @@ def test_an_unsure_side_names_no_team_and_no_player():
     m = r["moments"][0]
     assert (m["team"], m["player"]) == (None, None)
     out = asyncio.run(captioner.captions(r["moments"], events, None, None))
-    assert out[0]["text"] == "A player scores from 26 m at 112 km/h."
+    assert out[0]["text"] == "A player scores from 26 m."
 
 
 def test_a_caption_naming_a_player_on_an_unsure_side_keeps_the_code_caption():

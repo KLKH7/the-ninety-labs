@@ -811,7 +811,8 @@ async def run(args: argparse.Namespace) -> dict:
         if sheets is not None:  # pre-match, from the seed and codes: never gated on a tracked stat
             body["sheets"] = sheets
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
-                                                             args.captioner)
+                                                             args.captioner, sides_known(events),
+                                                             clubs_of(clip.meta))
         # Each moment recorded from the footage: a still and, unless --frames, its clip.
         highlights.record(body["highlights"], Timeline.of_clip(clip.meta), clip.images, out, not args.frames)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
@@ -887,9 +888,11 @@ async def run(args: argparse.Namespace) -> dict:
 
 
 
-async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
+async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str] | None = None,
+                       clubs: dict[str, str] | None = None) -> dict:
     """Each highlight's caption (ninety/agents/captioner.py): code-written, or with `foundry` the
-    published Captioner's line where the fact-checker passes it. Returns the run's record."""
+    published Captioner's line where the fact-checker passes it, then said as every screen says a
+    player (onair.render: by club, never a track id). Returns the run's record."""
     from ninety.agents import captioner
 
     tokens, unavailable, results = {}, None, None
@@ -898,13 +901,14 @@ async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
 
         try:
             async with captioner.foundry_model(tokens) as (model, judge):
-                results = await captioner.captions(reel["moments"], events, model, judge)
+                results = await captioner.captions(reel["moments"], events, model, judge, clubs=clubs)
         except RegistryDrift:
             raise  # a changed or unpublished prompt never runs under an old name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code captions still air
             unavailable = type(e).__name__  # the type only: no endpoint or token
     if results is None:
-        results = await captioner.captions(reel["moments"], events, None, None)
+        results = await captioner.captions(reel["moments"], events, None, None, clubs=clubs)
+    results = [{**r, "text": onair.render(r["text"], sure or [], clubs)} for r in results]
     captioner.apply(reel, results)
     return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
             "tokens": tokens, "unavailable": unavailable}

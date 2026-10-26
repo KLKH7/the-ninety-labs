@@ -41,6 +41,7 @@ from ninety.agents.factcheck import (
     confidence_gate,
     label_reasons,
     origin_reasons,
+    sayable_speed,
     side_known,
 )
 from ninety.match.facts import compact
@@ -145,11 +146,16 @@ def unsure_players(text: str, cited: Sequence[dict]) -> list[str]:
             for p in sorted(set(PLAYER.findall(text)) & unsure)]
 
 
-def code_caption(moment: dict, shot: dict) -> str:
+def code_caption(moment: dict, shot: dict, clubs: dict[str, str] | None = None) -> str:
     """The caption code writes, from the moment's own numbers: always true, never the model's."""
-    # The moment names a side and a player only when the side was told surely (ninety/highlights.py).
-    who = moment.get("player") or moment.get("team") or "A player"
-    speed = f" at {moment['v_kmh']:.0f} km/h" if moment.get("v_kmh") is not None else ""
+    # The moment names a side and a player only when the side was told surely (ninety/highlights.py);
+    # a player's track id is said by club when it airs (ninety/agents/onair.py, via e2e), a side by
+    # its club's name, never "home".
+    team = moment.get("team")
+    who = moment.get("player") or (f"A {(clubs or {}).get(team, team)} player" if team else "A player")
+    # A detected speed only once vision's speed error is measured (factcheck.sayable_speed).
+    said = moment.get("v_kmh") is not None and bool(shot) and sayable_speed(shot)
+    speed = f" at {moment['v_kmh']:.0f} km/h" if said else ""
     what = "scores" if moment["kind"] == "goal" else "is denied"
     start = ORIGIN_PHRASE.get(moment.get("origin"), "")
     # A goal whose strike was not seen has no distance (highlights.reel): none is said.
@@ -164,7 +170,8 @@ def prompt(moment: dict, shot: dict, around: list[dict], fact: dict) -> dict:
 
 
 async def captions(moments: Sequence[dict], events: Sequence[dict], model: Caption | None,
-                   judge: Judge | None, timeout_s: float = MODEL_TIMEOUT_S) -> list[dict]:
+                   judge: Judge | None, timeout_s: float = MODEL_TIMEOUT_S,
+                   clubs: dict[str, str] | None = None) -> list[dict]:
     """A caption for every moment, with where it came from (`model` or `code`), and a record of
     every model call (moment, milliseconds, and why the code caption stayed when it did). Without a
     model every caption is code. A failure is recorded by its type only, never its message, so no
@@ -172,9 +179,9 @@ async def captions(moments: Sequence[dict], events: Sequence[dict], model: Capti
 
     async def one(moment: dict) -> dict:
         if moment.get("d_m") is None:  # no strike seen, so no distance fact to check a model's line by
-            return {"event": moment["event"], "text": code_caption(moment, {}), "source": "code"}
+            return {"event": moment["event"], "text": code_caption(moment, {}, clubs), "source": "code"}
         shot, around, fact = evidence_for(moment, events)
-        out = {"event": moment["event"], "text": code_caption(moment, shot), "source": "code"}
+        out = {"event": moment["event"], "text": code_caption(moment, shot, clubs), "source": "code"}
         if model is None:
             return out
         started = time.perf_counter()
