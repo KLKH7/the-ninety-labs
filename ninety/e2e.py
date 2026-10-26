@@ -138,7 +138,9 @@ def read_cards(path: Path) -> list[dict]:
 def read_team_stats(path: Path) -> dict:
     """The MatchInsights bundle's `team_stats` (insight-scout, #269): each team's tracked distance
     with how much of its players' time was tracked. Only measured rows go on: a team's km must come
-    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed)."""
+    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed).
+    A coverage above 1 is a double count (more tracks than players on a side), not a malformed row:
+    the distance, and how close it is measured, are left out and every other team stat ships."""
     body = json.loads(path.read_text())
     stats = body.get("team_stats", body)
     out: dict = {"from_footage": bool(stats.get("from_footage", True)), "bin_min": stats.get("bin_min")}
@@ -154,10 +156,14 @@ def read_team_stats(path: Path) -> dict:
             raise SystemExit(f"{path}: team_stats.distance has no {side}")
         km, coverage = d.get("km"), d.get("coverage")
         sound_km = isinstance(km, (int, float)) and km >= 0
-        if not sound_km or not isinstance(coverage, (int, float)) or not 0 <= coverage <= 1:
-            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage from 0 to 1")
-    out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
-                       for side in ("home", "away")}
+        if not sound_km or not isinstance(coverage, (int, float)) or coverage < 0:
+            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage of 0 or more")
+    if all(distance[side]["coverage"] <= 1 for side in ("home", "away")):
+        out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
+                           for side in ("home", "away")}
+    else:
+        out.pop("within_pct", None)
+        print(f"{path}: team distance left out: its coverage is above 1 (a double count)")
     if "possession" in stats:
         out["possession"] = {side: {"share": stats["possession"][side]["share"]} for side in ("home", "away")}
     return out
@@ -185,10 +191,17 @@ def read_lineup(path: Path, key: str = "lineup") -> list[dict] | None:
 GROUPS = ("Attack", "Passing", "Pressing", "Shape", "Physical")
 
 
+def over_counted(coverage) -> bool:
+    """A coverage (a number, or one per side) above 1: more tracked time than players had."""
+    values = coverage.values() if isinstance(coverage, dict) else [coverage]
+    return any(isinstance(c, (int, float)) and c > 1 for c in values)
+
+
 def read_stats(path: Path) -> dict | None:
     """MatchInsights' `stats` block (insight-scout, #269): per-team rows by group, each a series of
     values "so far" to a minute, with whether the value is confident. A row missing its group, key,
-    label or series stops the bundle; the block is optional."""
+    label or series stops the bundle; the block is optional. A row with a coverage above 1 (a double
+    count, as read_team_stats) is left out."""
     body = json.loads(path.read_text())
     block = body.get("stats")
     if block is None:
@@ -203,6 +216,9 @@ def read_stats(path: Path) -> dict | None:
                 raise SystemExit(f"{path}: stats.{row['key']}: each value needs minute_to and confident")
             keep = ("minute_to", "home", "away", "confident", "evidence", "coverage")
             series.append({k: v[k] for k in keep if k in v})
+        if any(over_counted(v.get("coverage")) for v in series):
+            print(f"{path}: stats.{row['key']} left out: its coverage is above 1 (a double count)")
+            continue
         rows.append({"group": row["group"], "key": row["key"], "label": row["label"],
                      "unit": row.get("unit"), "series": sorted(series, key=lambda v: v["minute_to"])})
     return {"bin_min": block.get("bin_min"), "from_footage": bool(block.get("from_footage", True)),

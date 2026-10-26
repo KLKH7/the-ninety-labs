@@ -39,6 +39,7 @@ import {
   shirt,
   team,
   teams,
+  tacticalSheet,
   teamSheet,
   type SheetEntry,
   unnamedTrack,
@@ -453,10 +454,14 @@ async function loadBundle() {
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
     // The team sheet: names, shirts and positions the line-up tool is confident of (never a guess).
-    for (const k of Object.keys(teamSheet)) delete teamSheet[k];
-    for (const e of ((match as { lineup?: (SheetEntry & { id: string; confident?: boolean })[] } | null)?.lineup ?? [])) {
-      if (e.confident === true) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
+    type Rows = { lineup?: Row[]; lineup_tactical?: Row[]; identity?: { label?: string; note?: string } } | null;
+    type Row = SheetEntry & { id: string; confident?: boolean };
+    for (const [sheet, rows] of [[teamSheet, (match as Rows)?.lineup], [tacticalSheet, (match as Rows)?.lineup_tactical]] as const) {
+      for (const k of Object.keys(sheet)) delete sheet[k];
+      for (const e of rows ?? []) if (e.confident === true) sheet[e.id] = { name: e.name, number: e.number, position: e.position };
     }
+    const id = (match as Rows)?.identity;
+    identity = id?.label ? { label: id.label, note: id.note } : null;
     $("match-card").hidden = !state.match;
     renderChips(); // the Ask grid's player questions come from the match's numbers
   } catch {
@@ -562,6 +567,7 @@ function buildRadar() {
   mapCanvas.dataset.from = state.radarFrom ?? "";
   $("map-box").hidden = !on;
   for (const id of ["pick-hint", "roster-box", "now-box", "legend"]) $(id).hidden = !on;
+  syncPlayersTab();
   $("legend-view").hidden = state.radarFrom !== "bundle";
   $("wind-toggle").hidden = !state.minimap;
   if (on) {
@@ -686,6 +692,7 @@ function renderRoster(roster: string[]) {
   }
   roster = roster.filter((id) => !isTrack(id));
   $("roster-box").hidden = roster.length === 0;
+  syncPlayersTab();
   // One card per club, home first (Apple Sports and FotMob line-ups): crest and full name, the
   // club's players at their average positions on a small pitch, then #, name and where he plays.
   $("roster").replaceChildren(
@@ -746,6 +753,7 @@ const LINE_X: Record<SheetPlayer["line"], number> = { goalkeeper: 6, defender: 2
  * tracked number is attached to anyone unless the line-up names the track (none on the demo). */
 function renderSheets(sheets: Record<"home" | "away", SheetPlayer[]>) {
   $("roster-box").hidden = false;
+  syncPlayersTab();
   const svgNS = "http://www.w3.org/2000/svg";
   $("roster").replaceChildren(
     ...(["home", "away"] as const).map((side) => {
@@ -1094,7 +1102,11 @@ function select(id: string | null, fromLaptop = false) {
   showSheet(id !== null);
   $("pick-hint").hidden = state.radar === null;
   if (id) {
-    $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
+    // The ID feed's shirt and position beside the name (lesson 269); vision's numbers below as before.
+    const row = tacticalSheet[id];
+    const shirt = row?.name ? [row.number !== undefined ? `#${row.number}` : "", row.position ?? ""].filter(Boolean).join(" · ") : "";
+    const title = shirt ? `${playerName(id)}, ${shirt}` : playerName(id);
+    $("player-title").textContent = fromLaptop ? `${title} · followed from the big screen` : title;
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
     // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
@@ -1226,6 +1238,8 @@ function renderCompareChips(id: string) {
   const others = rosterIds()
     .filter((o) => o !== id)
     .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    // One chip a label (UI inventory #11): unnamed players who read alike are one choice, not a dozen.
+    .filter(((seen) => (o: string) => !seen.has(distinctName(o)) && !!seen.add(distinctName(o)))(new Set<string>()))
     .filter((o) => ++side[team(o)] <= 11);
   $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
@@ -1446,6 +1460,9 @@ const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
 function badgeFor(a: ViewerAnswer): string {
   if (a.status !== "verified") return STATUS_WORDS[a.status];
   if (a.source === "model") return STATUS_WORDS.verified;
+  // By what the answer rests on: the scorebug's reading, a name from the ID feed, or tracking.
+  if (a.metric === "scorebug" || a.evidence.some((e) => e.startsWith("scorebug:"))) return "Read from the broadcast's scorebug";
+  if (identity && feedNamed(a.headline)) return identity.label;
   return feed.mock ? "Computed from mock positions" : "Computed from tracked positions";
 }
 
@@ -1463,7 +1480,18 @@ const METRIC_WORDS: Record<string, string> = {
 /** An answer's or a card's text, its player ids said as the payload names them (tactical ids: never
  * the team sheet's line-up, which names broadcast tracks; names-by-role, Oct 25). */
 function named(text: string, names?: Record<string, string>): string {
-  return nameIds(text, teams, names);
+  // Answers and cards name TACTICAL tracks: the ID feed's rows for them, under what a payload says.
+  const feed: Record<string, string> = {};
+  for (const [id, e] of Object.entries(tacticalSheet)) if (e.name) feed[id] = e.name;
+  return nameIds(text, teams, { ...feed, ...names });
+}
+
+/** The player-ID feed (match.json `identity`): where names come from, never vision (lesson 269). */
+let identity: { label: string; note?: string } | null = null;
+/** Whether any of these words carry a name the ID feed gave. */
+function feedNamed(...texts: (string | null | undefined)[]): boolean {
+  const all = [...Object.values(teamSheet), ...Object.values(tacticalSheet)].map((e) => e.name).filter((n): n is string => !!n);
+  return all.some((n) => texts.some((t) => !!t && t.includes(n)));
 }
 
 /** A detected event's text (broadcast track ids): the team sheet names a track the line-up is sure
@@ -1931,6 +1959,9 @@ async function openHow(h: How) {
       canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ")}.`);
     });
   }
+  // A name in it came from the player-ID feed (lesson 269): say so, never that vision named him.
+  if (identity && feedNamed(h.why?.text, h.answer?.text, h.answer?.headline, ...Object.values(h.names ?? {})))
+    steps.push(step("Who the players are", p(identity.label, "said")));
   const measured = p("Measured from player tracking", "said");
   if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), measured));
   else steps.push(step("What was measured", measured));
@@ -2054,6 +2085,7 @@ function playsUpTo(t: number): DetectedEvent[] {
   return [...bundleEvents.values()].filter((e) => e.t <= t + 1e-6 && (e.confidence ?? 0) >= min && playSentence(e)).sort((a, b) => b.t - a.t);
 }
 let playsShown = -1;
+let goalsShown = -1;
 
 function storyItem(team: "home" | "away" | null, text: string, t: number): { li: HTMLLIElement; body: HTMLDivElement } {
   const li = document.createElement("li");
@@ -2076,9 +2108,14 @@ function storyItem(team: "home" | "away" | null, text: string, t: number): { li:
  * key plays); "See all" opens Story. Hidden until there is one. */
 function renderKeyMoments(plays: DetectedEvent[]) {
   type Moment = { t: number; team: "home" | "away" | null; text: string; goal: boolean };
-  const goals: Moment[] = plays
-    .filter((e) => e.type === "shot" && e.outcome === "goal")
-    .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })); // a club's colour only on a side told surely
+  // The match's goals (reconciled with the scorebug), then any detected goal none of them tells.
+  const now = viewTime();
+  const goals: Moment[] = [
+    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? `${teams[side]} goal` : "Goal", goal: true }; }),
+    ...plays
+      .filter((e) => e.type === "shot" && e.outcome === "goal" && !toldByGoal(e, now))
+      .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })), // a club's colour only on a side told surely
+  ];
   const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
   const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
   $("key-moments").hidden = moments.length === 0;
@@ -2107,6 +2144,7 @@ function renderInsights() {
   const now = viewTime();
   const plays = playsUpTo(now);
   playsShown = plays.length;
+  goalsShown = goalsUpTo(now).length;
   renderKeyMoments(plays);
   const key = list.dataset.mode === "key";
   type Row = { t: number; el: HTMLLIElement };
@@ -2126,8 +2164,25 @@ function renderInsights() {
     if (c.visual) body.append(picture(c.visual, c.t, c.names));
     return { t: c.t, el: li };
   });
+  // Goals first in weight (demo audit 2, row 8): each of the match's goals as a larger card with its
+  // club's crest, "Goal", the club and minute, and the scorer where the team sheet names him.
+  for (const g of goalsUpTo(now)) {
+    const side = goalSide(g);
+    const who = bundleEvents.get(g.event)?.player;
+    const scorer = who && !unnamedTrack(who, undefined, true) ? eventName(who) : "";
+    const { li, body } = storyItem(side, scorer ? `${goalLine(g)} · ${scorer}` : goalLine(g), g.t);
+    li.classList.add("goal-card");
+    li.dataset.goal = g.event;
+    const head = document.createElement("h3");
+    head.className = "goal-head";
+    head.innerHTML = side ? `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>` : "";
+    head.append("Goal");
+    body.prepend(head);
+    rows.push({ t: g.t, el: li });
+  }
   for (const e of plays) {
     const goal = e.type === "shot" && e.outcome === "goal";
+    if (goal && toldByGoal(e, now)) continue; // its goal's card says it
     if (key && !goal) continue;
     const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
@@ -2186,16 +2241,8 @@ function renderSpotted(m: MatchData, t: number) {
   const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
   if (key === spottedKey) return;
   spottedKey = key;
-  const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
-  // A goal vision could not give a side takes the side whose count the broadcast's scorebug raised
-  // within SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels).
-  const sideOf = (g: { t: number; team?: string | null }): "home" | "away" | null => {
-    if (g.team === "home" || g.team === "away") return g.team;
-    const change = scorebugEvents.find(
-      (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
-    );
-    return change ? (change.team as "home" | "away") : null;
-  };
+  const minute = (g: { t: number }) => `${momentum.minuteOf(g.t)}′`;
+  const sideOf = goalSide;
   for (const side of ["home", "away", null] as const) {
     const mine = goals.filter((g) => sideOf(g) === side);
     // One line per scorer, his goals' minutes in order.
@@ -2225,6 +2272,45 @@ function renderSpotted(m: MatchData, t: number) {
     );
   }
 }
+
+/** A goal's club: its own side, or else the side whose count the broadcast's scorebug raised within
+ * SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels). */
+function goalSide(g: { t: number; team?: string | null }): "home" | "away" | null {
+  if (g.team === "home" || g.team === "away") return g.team;
+  const change = scorebugEvents.find(
+    (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
+  );
+  return change ? (change.team as "home" | "away") : null;
+}
+
+/** "London · 38′": a goal's club (when known) and minute, as Apple Sports heads a goal. */
+function goalLine(g: { t: number; team?: string | null }): string {
+  const side = goalSide(g);
+  return side ? `${teams[side]} · ${momentum.minuteOf(g.t)}′` : `${momentum.minuteOf(g.t)}′`;
+}
+
+/** The match's goals up to t (match.json `goals`, reconciled with the scorebug, #356). */
+const goalsUpTo = (t: number) => (state.match?.goals ?? []).filter((g) => g.t <= t);
+const GOAL_SHOT_S = 5; // design: a shot that goes in is followed by its goal event within seconds
+type GoalRow = MatchData["goals"][number];
+/** Each detected goal shot up to t with the match's goal that tells it: one goal a shot, the nearest
+ * after it within GOAL_SHOT_S and of the same club (either side may be unknown). */
+function goalShots(t: number): Map<string, GoalRow> {
+  const out = new Map<string, GoalRow>();
+  const used = new Set<GoalRow>();
+  const shots = [...bundleEvents.values()].filter((e) => e.type === "shot" && e.outcome === "goal" && e.t <= t).sort((a, b) => a.t - b.t);
+  for (const s of shots) {
+    const side = sureSide(s);
+    const g = goalsUpTo(t)
+      .filter((g) => !used.has(g) && g.t >= s.t - 1 && g.t - s.t <= GOAL_SHOT_S)
+      .filter((g) => { const gs = goalSide(g); return gs === null || side === null || gs === side; })
+      .sort((a, b) => Math.abs(a.t - s.t) - Math.abs(b.t - s.t))[0];
+    if (g) { used.add(g); out.set(s.id, g); }
+  }
+  return out;
+}
+/** A detected goal shot that one of the match's goals already tells. */
+const toldByGoal = (e: { id: string }, t: number) => goalShots(t).has(e.id);
 
 /** The score, only as vision read it off the broadcast's own scorebug: the latest `score_change`
  * (#356) at or before t; nothing before the first reading. Never counted from detected goals
@@ -2280,7 +2366,7 @@ function showMatch(t: number) {
   renderScorebug(t);
   renderShots(t);
   renderSquad();
-  if (playsUpTo(t).length !== playsShown) renderInsights();
+  if (playsUpTo(t).length !== playsShown || goalsUpTo(t).length !== goalsShown) renderInsights();
   const st = statsAt(m, t);
   const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
   if (key === statsKey) return;
@@ -2430,7 +2516,8 @@ function renderShots(t: number) {
   const all: (shotMap.Shot & { sure: boolean })[] = [...bundleEvents.values()]
     .filter((e) => e.type === "shot" && e.t <= t && (e.team === "home" || e.team === "away") && e.x !== undefined && e.y !== undefined && (e.confidence ?? 0) >= min)
     .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null, sure: sureSide(e) !== null }));
-  $("shot-map").hidden = all.length === 0;
+  // The card shows only what it draws (UI inventory #8): a shot is placed only on a side told surely.
+  $("shot-map").hidden = !all.some((s) => s.sure);
   // A shot on an unsure side is in "All" only: no club's filter claims it.
   const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
   // Live's card draws what the Stats map draws: a shot only on a sure side (its place on the half
@@ -2444,7 +2531,7 @@ function renderShots(t: number) {
     // Shots counted, never goals: a goal count is a score (Kian, Oct 25), and the broadcast carries it.
     $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}.`;
   }
-  const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
+  const key = `${shotFilter}|${shown.map((s) => s.id).join()}|${goalsUpTo(t).length}|${scorebugEvents.length}`;
   if (key === shotsKey) return;
   shotsKey = key;
   const svg = $("shots") as unknown as SVGSVGElement;
@@ -2452,14 +2539,27 @@ function renderShots(t: number) {
   // direction its side attacks. An unsure one is listed, not drawn.
   shotMap.draw(svg, shown.filter((s) => s.sure));
   svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}. The list follows.`);
+  const paired = goalShots(t);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
       // Who and where only on a sure side: the zone is read from that side's direction of attack.
-      const who = s.player ? eventName(s.player) : s.sure ? teams[s.team] : "A shot";
-      li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
+      // "London · 38′" (demo audit 2, row 10): the club where it is known, a goal's from its
+      // reconciled goal; the scorer only where the team sheet names him.
+      const goal = paired.get(s.id);
+      const side = s.sure ? s.team : goal ? goalSide(goal) : null;
+      const named = s.player && !unnamedTrack(s.player, undefined, true) ? `, ${eventName(s.player)}` : "";
+      li.textContent = `${side ? `${teams[side]} · ` : ""}${momentum.minuteOf(s.t)}′, ${shotMap.label(s.outcome)}${named}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
+    // The match's goals vision has no shot for (missed shots, #356's reconciled goals).
+    ...(shotFilter === "all" ? goalsUpTo(t) : goalsUpTo(t).filter((g) => goalSide(g) === shotFilter))
+      .filter((g) => ![...paired.values()].includes(g))
+      .map((g) => {
+        const li = document.createElement("li");
+        li.textContent = `${goalLine(g)}, goal`;
+        return li;
+      }),
   );
 }
 
@@ -2467,6 +2567,13 @@ function renderShots(t: number) {
 
 const LIVE_PANES = ["pitch", "stats", "players"] as const;
 type LivePane = (typeof LIVE_PANES)[number];
+/** Players is a tab only while it has something to show (demo audit 2, row 1: a blank pane reads as
+ * a crash): the team sheet or the line-up, the pass network, the top performers. */
+function syncPlayersTab() {
+  const empty = ["roster-box", "pass-network", "top-players"].every((id) => $(id).hidden);
+  $("lt-players").hidden = empty;
+  if (empty && document.body.dataset.pane === "players") showPane("pitch");
+}
 function showPane(pane: LivePane, focus = false) {
   for (const p of LIVE_PANES) {
     const tab = $(`lt-${p}`);
@@ -2484,11 +2591,12 @@ for (const p of LIVE_PANES) {
   const tab = $(`lt-${p}`);
   tab.addEventListener("click", () => showPane(p));
   tab.addEventListener("keydown", (e) => {
-    const i = LIVE_PANES.indexOf(p);
-    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? LIVE_PANES.length - 1 : null;
+    const shown = LIVE_PANES.filter((q) => !$(`lt-${q}`).hidden);
+    const i = shown.indexOf(p);
+    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? shown.length - 1 : null;
     if (to === null) return;
     e.preventDefault();
-    showPane(LIVE_PANES[(to + LIVE_PANES.length) % LIVE_PANES.length], true);
+    showPane(shown[(to + shown.length) % shown.length], true);
   });
 }
 
@@ -2578,6 +2686,7 @@ function renderSquad() {
   const net = m?.pass_network?.[networkSide];
   // The card shows while either club has a network; a club without one shows an empty pitch never.
   $("pass-network").hidden = !(m?.pass_network?.home?.nodes.length || m?.pass_network?.away?.nodes.length);
+  syncPlayersTab();
   $("network").toggleAttribute("hidden", !net?.nodes.length);
   $("network-rows").hidden = !net?.nodes.length;
   if (!net?.nodes.length) return;

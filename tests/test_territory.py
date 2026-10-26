@@ -70,7 +70,7 @@ def test_team_stats_keep_distance_with_its_coverage_and_possession_only_when_wri
 
 
 @pytest.mark.parametrize("away", [{"km": 39.8}, {"km": -1, "coverage": 0.9},
-                                  {"km": 39.8, "coverage": 1.4}])
+                                  {"km": 39.8, "coverage": -0.1}])
 def test_a_distance_without_a_sound_coverage_stops_the_bundle(tmp_path, away):
     from ninety import e2e
 
@@ -79,6 +79,23 @@ def test_a_distance_without_a_sound_coverage_stops_the_bundle(tmp_path, away):
     path.write_text(json.dumps({"team_stats": {"distance": {"home": home, "away": away}}}))
     with pytest.raises(SystemExit):
         e2e.read_team_stats(path)
+
+
+def test_a_double_counted_distance_is_left_out_and_the_other_team_stats_ship(tmp_path):
+    from ninety import e2e
+
+    path = tmp_path / "insights.json"
+    distance = {"home": {"km": 15.3, "coverage": 1.05}, "away": {"km": 15.0, "coverage": 1.0}}
+    sound = {"group": "Pressing", "key": "turnovers", "label": "Turnovers",
+             "series": [{"minute_to": 90, "home": 33, "away": 24, "confident": True}]}
+    doubled = {"group": "Physical", "key": "distance_km", "label": "Distance", "unit": "km",
+               "series": [{"minute_to": 90, "home": 15.3, "away": 14.9, "confident": True,
+                           "coverage": {"home": 1.03, "away": 1.01}}]}
+    path.write_text(json.dumps({"team_stats": {"bin_min": 5, "within_pct": 21, "distance": distance},
+                                "stats": {"rows": [sound, doubled]}}))
+    stats = e2e.read_team_stats(path)
+    assert "distance" not in stats and "within_pct" not in stats and stats["bin_min"] == 5
+    assert [r["key"] for r in e2e.read_stats(path)["rows"]] == ["turnovers"]
 
 
 def test_the_stats_block_keeps_rows_by_group_in_minute_order_and_refuses_a_row_without_a_group(tmp_path):
