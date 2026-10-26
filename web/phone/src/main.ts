@@ -1816,7 +1816,9 @@ function playSentence(e: DetectedEvent): string | null {
       if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
       return e.interceptor ? `${who(e.player)}'s pass is cut out by ${low(named(e.interceptor))}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
-      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
+      // A shot vision could not tell the end of (outcome null, #368: saves are not read from video)
+      // says only that it was taken, never "wide".
+      return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : e.outcome === "off_target" ? `${who(e.player)} shoots wide.` : `${who(e.player)} takes a shot.`;
     case "out_of_play":
       return "The ball goes out of play.";
     case "set_piece":
