@@ -726,11 +726,20 @@ event-actor precision at least 0.95 on the held-out half, was met, so it ships o
 | Held-out (odd segments) | 106 / 106 (1.000, 95% 0.97 to 1.00) | 106 of 122 with an actor |
 | Whole match | 222 / 224 (0.991) | 224 of 345 (113 through the join alone) |
 
-The 121 events left unnamed: 92 have no player (vision attributed nobody), 27 have a track that
-was no one feed player for most of its frames, 2 lost the name to another track at the same time,
-and none had a track with no calibrated frame (1 event's own frame failed the trust test, but
-its track was seen in others). 226 events now have a side sure enough to air (115 through the
-join alone, 5 without the feed).
+The direct path's own 1,161 broadcast tracks are 1,146 right (0.987). The 121 events left
+unnamed: 92 have no player (vision attributed nobody), 27 have a track that was no one feed
+player for most of its frames, and 2 lost the name to another track at the same time. None was
+withheld by calibration, but that holds by construction: the tracker skips frames whose camera
+fit failed, so every broadcast track has a calibrated frame (1 event's own frame failed the trust
+test). 226 events now have a side sure enough to air (115 through the join alone, 5 without the
+feed). Of the 2 wrong event names, one came through the direct path, a track named as an
+opponent at a share of 0.511, so that event carries a sure, wrong side.
+
+**What these numbers do and do not show.** The feed is the engine's players plus a provider's
+error, and the answer key is the engine player nearest each track, so a name and its grade are
+close to the same computation. These precisions measure how well a track's windowed majority
+agrees with its whole-track nearest player, through fragments, switches and swaps. They are not
+a hard test of identification; a real provider's feed against real tracks would be.
 
 ### Tracked positions for the phone
 
