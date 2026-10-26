@@ -176,6 +176,10 @@ def _who(event: dict) -> str:
 def event_versions(event: dict) -> list[str]:
     """The line for one event, full then short. Numbers come from the event itself."""
     kind, who, place = event["type"], _who(event), where(event["x"], event["y"])
+    # A sentence that opens on "a player" opens with a capital ("Goal! A player scores."); a player
+    # id or a side (said as its club later, by spoken()) is left as it is.
+    if who == UNNAMED:
+        who = "A player"
     if kind == "goal":
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":

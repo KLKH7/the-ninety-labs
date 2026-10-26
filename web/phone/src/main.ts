@@ -16,7 +16,7 @@ import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { DEFAULT_TEAMS, fullName, nameIds, playerLabel, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -39,6 +39,7 @@ import {
   teams,
   teamSheet,
   type SheetEntry,
+  unnamedTrack,
 } from "./types";
 import { describeVisual, drawVisual, drawable, fromScout, headline, title } from "./visual";
 
@@ -608,7 +609,7 @@ function renderRoster(roster: string[]) {
     // where he plays ("Left midfielder") until the line-up names him.
     const at = avg.get(id);
     const sheet = teamSheet[id];
-    const unnamed = isTrack(id) && playerName(id) === playerLabel(id, teams);
+    const unnamed = unnamedTrack(id);
     const num = document.createElement("span");
     num.className = "num";
     num.textContent = sheet?.number !== undefined ? String(sheet.number) : unnamed ? "" : shirt(id);
@@ -659,14 +660,14 @@ function renderRoster(roster: string[]) {
         const g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", `translate(${at[0].toFixed(1)} ${(68 - at[1]).toFixed(1)})`);
         g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
-        g.querySelector("text")!.textContent = teamSheet[id]?.number !== undefined ? String(teamSheet[id].number) : isTrack(id) && playerName(id) === playerLabel(id, teams) ? "" : shirt(id);
+        g.querySelector("text")!.textContent = teamSheet[id]?.number !== undefined ? String(teamSheet[id].number) : unnamedTrack(id) ? "" : shirt(id);
         pitch.append(g);
       }
       const cols = document.createElement("p");
       cols.className = "roster-cols";
       cols.setAttribute("aria-hidden", "true");
       const anySheet = ids.some((id) => teamSheet[id]?.position);
-      const anyWhere = ids.some((id) => avg.has(id) && !(isTrack(id) && playerName(id) === playerLabel(id, teams)));
+      const anyWhere = ids.some((id) => avg.has(id) && !(unnamedTrack(id)));
       cols.innerHTML = anySheet ? "<span>#</span><span>Name</span><span></span>" : anyWhere ? "<span>#</span><span>Name</span><span>Mostly</span>" : "<span>#</span><span>Player</span><span></span>";
       const row = document.createElement("div");
       row.className = "roster-row";
@@ -1110,7 +1111,8 @@ function renderCompareChips(id: string) {
       b.type = "button";
       b.className = `chip who-chip ${team(o)}`;
       b.dataset.player = o;
-      b.textContent = playerName(o);
+      const at = unnamedTrack(o) ? averagePositions().get(o) : undefined;
+      b.textContent = at && !sideUnsure(o) ? roleWords(team(o), at[0], at[1]) : playerName(o);
       b.addEventListener("click", () => void compare(id, o));
       return b;
     }),
@@ -1952,7 +1954,8 @@ function renderSpotted(m: MatchData, t: number) {
     const lines = new Map<string, typeof mine>();
     for (const g of mine) {
       const who = bundleEvents.get(g.event)?.player;
-      const label = who ? playerName(who) : side ? `${teams[side]} goal` : "Goal";
+      // The scorer's name only where the team sheet names him; else his club's goal (never a track id).
+      const label = who && !unnamedTrack(who) ? playerName(who) : side ? `${teams[side]} goal` : "Goal";
       lines.set(label, [...(lines.get(label) ?? []), g]);
     }
     $(side ? `goals-${side}` : "goals-unsure").replaceChildren(
@@ -2026,8 +2029,10 @@ function renderStats(st: MatchData["stats"][number]) {
   const groups: [string, Row[]][] = [
     ["Attack", [
       ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
-      ["Shots", st.home.shots, st.away.shots],
-      ["Shots on target", st.home.shots_on_target, st.away.shots_on_target],
+      // Counted from what vision saw: it can miss a shot or a goal the broadcast showed, so the
+      // label says so (video-prep, Oct 25: 3 goals seen under a 4-1 scorebug).
+      ["Shots seen", st.home.shots, st.away.shots],
+      ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
     ]],
     ["Passing", [
       ["Passes completed", st.home.passes_completed, st.away.passes_completed],
