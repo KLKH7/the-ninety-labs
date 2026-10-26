@@ -105,32 +105,47 @@ def _centred(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return [(x - cx, y - cy) for x, y in points]
 
 
-def assign(frames: Sequence[Mapping], team: str) -> dict[str, dict]:
-    """Each track of `team` seen in at least MIN_FRAMES sampled frames: its role, its share, and
-    in how many sampled frames it was seen."""
+def _rows(frames: Sequence[Mapping], team: str) -> list[tuple[list[str], list[tuple[float, float]]]]:
+    """The sampled frames of `team` with 2 to 11 tracked players: their ids and centred places."""
     sampled = [f for f in frames if int(f["frame"]) % STEP_FRAMES == 0] or list(frames)
     rows = []
     for f in sampled:
         own = [p for p in f["players"] if p["team"] == team]
         if 2 <= len(own) <= len(ROLES):
             rows.append(([p["id"] for p in own], _centred([_team_frame(team, p) for p in own])))
+    return rows
+
+
+def _places(rows, rounds: int) -> dict[str, tuple[float, float]]:
     refs = dict(zip(ROLES, _centred([TEMPLATE[r] for r in ROLES]), strict=True))
-    votes: dict[str, Counter] = defaultdict(Counter)
-    for rnd in range(ROUNDS + 1):
+    for _ in range(rounds):
         sums: dict[str, list[float]] = {r: [0.0, 0.0, 0.0] for r in ROLES}
-        last = rnd == ROUNDS
-        for ids, pts in rows:
+        for _ids, pts in rows:
             cost = [[(x - refs[r][0]) ** 2 + (y - refs[r][1]) ** 2 for r in ROLES] for x, y in pts]
             for k, col in enumerate(hungarian(cost)):
-                role = ROLES[col]
-                s = sums[role]
+                s = sums[ROLES[col]]
                 s[0] += pts[k][0]
                 s[1] += pts[k][1]
                 s[2] += 1
-                if last:
-                    votes[ids[k]][role] += 1
-        if not last:
-            refs = {r: (s[0] / s[2], s[1] / s[2]) if s[2] else refs[r] for r, s in sums.items()}
+        refs = {r: (s[0] / s[2], s[1] / s[2]) if s[2] else refs[r] for r, s in sums.items()}
+    return refs
+
+
+def places(frames: Sequence[Mapping], team: str) -> dict[str, tuple[float, float]]:
+    """Each role's reference place in `team`'s shape, relative to its centre, after ROUNDS rounds."""
+    return _places(_rows(frames, team), ROUNDS)
+
+
+def assign(frames: Sequence[Mapping], team: str) -> dict[str, dict]:
+    """Each track of `team` seen in at least MIN_FRAMES sampled frames: its role, its share, and
+    in how many sampled frames it was seen."""
+    rows = _rows(frames, team)
+    refs = _places(rows, ROUNDS)
+    votes: dict[str, Counter] = defaultdict(Counter)
+    for ids, pts in rows:
+        cost = [[(x - refs[r][0]) ** 2 + (y - refs[r][1]) ** 2 for r in ROLES] for x, y in pts]
+        for k, col in enumerate(hungarian(cost)):
+            votes[ids[k]][ROLES[col]] += 1
     out = {}
     for track, c in votes.items():
         seen = sum(c.values())
@@ -235,4 +250,5 @@ def say(w: Mapping) -> str:
 
 
 __all__ = [
-    "CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "one_track_per_name", "say", "who"]
+    "CALIBRATION", "TEMPLATE", "assign", "gates", "hungarian", "one_track_per_name", "places", "say",
+    "who"]

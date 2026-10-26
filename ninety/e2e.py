@@ -225,6 +225,23 @@ def clubs_of(meta: dict) -> dict[str, str] | None:
         return None
 
 
+def sheets_of(meta: dict) -> dict | None:
+    """Both team sheets (shirt, name, position and line of each starter), drawn from the clip's seed
+    and club codes (ninety/intel/teamsheet.py): what a broadcaster has before kick-off, with no
+    track in it. None for a clip without a seed or known codes."""
+    from ninety.intel import teamsheet
+
+    teams = teams_of(meta)
+    if not teams or meta.get("seed") is None:
+        return None
+    try:
+        fx = teamsheet.Fixture(int(meta["seed"]), teams["home"], teams["away"])
+        return {t: [{k: r[k] for k in ("number", "name", "position", "line")} for r in rows]
+                for t, rows in fx.as_dict()["sheets"].items()}
+    except ValueError:
+        return None
+
+
 PEOPLE = ("player", "receiver", "intended", "interceptor", "deflected_by")
 
 
@@ -773,6 +790,9 @@ async def run(args: argparse.Namespace) -> dict:
             lineup = read_lineup(args.team_stats)
             if lineup is not None:
                 body["lineup"] = lineup
+        sheets = sheets_of(clip.meta)
+        if sheets is not None:  # pre-match, from the seed and codes: never gated on a tracked stat
+            body["sheets"] = sheets
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
                                                              args.captioner)
         # Each moment recorded from the footage: a still and, unless --frames, its clip.
