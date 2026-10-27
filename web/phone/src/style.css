@@ -775,7 +775,7 @@ ion-modal { --backdrop-opacity: 0.45; }
 .see-all { border: 0; background: none; padding: 0; min-height: 44px; font: inherit; font-size: 15px; color: var(--text-2); cursor: pointer; }
 .see-all::after { content: " ›"; }
 .moment-rows { list-style: none; margin: 0; padding: 0; }
-.moment-row { display: grid; grid-template-columns: 40px 8px 1fr; align-items: baseline; gap: 8px; padding: 10px 0; border-bottom: 0.5px solid var(--hairline); font-size: 16px; }
+.moment-row { display: grid; grid-template-columns: 40px 8px 1fr; align-items: baseline; gap: 8px; padding: 10px 0; border-bottom: 0.5px solid var(--hairline); font-size: 17px; font-weight: 400; }
 .moment-row:last-child { border-bottom: 0; }
 .moment-row .min { color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 15px; }
 .moment-row::before { content: ""; grid-column: 2; grid-row: 1; width: 8px; height: 8px; border-radius: 4px; background: var(--home); align-self: center; }
@@ -783,7 +783,8 @@ ion-modal { --backdrop-opacity: 0.45; }
 .moment-row.neutral::before { background: var(--text-3); }
 .moment-row .min { grid-column: 1; grid-row: 1; }
 .moment-row .text { grid-column: 3; grid-row: 1; }
-.moment-row.goal .text { font-weight: 600; }
+/* Every row the same type (Kian, Oct 27: 17 pt regular); a goal is told by a small label, never by size. */
+.moment-row .goal-tag { margin-right: 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-2); }
 .teaser-rows { display: grid; gap: 4px; }
 .teaser { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 8px 0; }
 .teaser .crest { grid-row: 1 / span 2; width: 28px; height: 28px; display: inline-flex; }
@@ -993,8 +994,6 @@ body[data-mode="casual"] #live-shots { display: none; }
 .focus-strip:not([hidden]) { order: -1; }
 body[data-mode="casual"] #key-moments { order: 3; }
 body[data-mode="casual"] #just-now { order: 4; }
-body[data-mode="casual"] #key-moments .moment-row { font-size: 20px; padding: 10px 0; }
-body[data-mode="casual"] #key-moments .moment-row.goal .text { font-size: 22px; font-weight: 700; }
 body[data-mode="casual"] #just-now .just-text { font-size: 22px; line-height: 1.3; }
 body[data-mode="analyst"] #live-summary { order: 3; }
 body[data-mode="analyst"] #momentum { order: 4; }
