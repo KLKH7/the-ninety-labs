@@ -283,7 +283,7 @@ CHAT_REPLIES = {
     "thanks": "You're welcome! Anything else about the match? Try one of these:",
     "about": ("I'm your match companion: I answer questions about this match from what the cameras "
               "tracked, and every number is checked before you see it. Try one of these:"),
-    "other": "I can only talk about this match. Try one of these:",
+    "other": "I can't answer that one from this match's tracking. Try one of these:",
 }
 # A message that continues the last question ("and in the first half?", "what about them?"): it reuses
 # that question's tools. Anything else that routes to no tool is not about the match's facts.
@@ -313,11 +313,14 @@ def chat_kind(text: str, insights, history=()) -> str | None:
     return "other"
 
 
-def chat_answer(question: Question, insights, history=(), suggest: bool = True) -> Answer | None:
+def chat_answer(question: Question, insights, history=(), suggest: bool = True,
+                small_talk_only: bool = False) -> Answer | None:
     """The reply to small talk (chat_kind): fixed words that state no fact, and three questions the
-    tools can answer now. None for a question about the match."""
+    tools can answer now. None for a question about the match. `small_talk_only` replies only to a
+    greeting, thanks or a question about the companion: a message code routes to no tool ("other")
+    may still be one the model's planner can place ("how many passes?"), and is its to try first."""
     kind = chat_kind(question.text, insights, history)
-    if kind is None:
+    if kind is None or (small_talk_only and kind == "other"):
         return None
     t = 60.0 * _minute_in(question.t, insights)
     asked = [*(h["question"] for h in history), question.text]
@@ -1500,8 +1503,10 @@ async def answer_match(
     code's answer over the model's chosen tools (or code's, if the plan was unusable). `history` is
     the session's earlier turns ({question, answer, calls}), so a follow-up has its context."""
     history = list(history)
-    chat = chat_answer(question, insights, history)
-    if chat is not None:  # small talk: code's reply, before any tool or model call (lesson 287)
+    # Small talk: code's reply, before any tool or model call (lesson 287). With a model, a message code
+    # routes to no tool goes to its planner; an empty plan comes back to code, which says so.
+    chat = chat_answer(question, insights, history, small_talk_only=ask is not None)
+    if chat is not None:
         return MatchResult(chat, "code")
     if HOW_PLAYING.search(question.text):
         # "How are Lisbon playing?" is answered by code's overview in Live mode too: ranked by what
