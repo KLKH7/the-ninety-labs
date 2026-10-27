@@ -1280,3 +1280,23 @@ def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():
     assert ball_share.possession(rows, 46, 39) == {}  # nothing in the window yet
     late = ball_share.possession(rows, 31, 35)["home"]
     assert late["value"] is None and not late["confident"]  # minutes 31 to 35: never measured
+
+
+@pytest.mark.parametrize("scorer, source, said", [
+    ("Ben Vomble", "id_feed", True),  # the feed's name for the goal's own player
+    ("a Lisbon Esportes player", None, False),  # a Lisbon label on a London goal: never
+    ("Lisbon Esportes's right winger", None, False),
+])
+def test_a_scorer_is_said_only_by_a_name_with_no_club_in_it(scorer, source, said):
+    mi = insights()
+    goal = {**_goal("v90", 23), "scorer_is": scorer, "clubs": mi.fixture.clubs,
+            **({"scorer_source": source} if source else {})}
+    texts = companion.code_texts(goal)
+    assert any(scorer in t for t in texts) is said
+    assert all("Lisbon" not in t for t in texts if "scored for London" in t), texts
+    if said:  # the fact-checker passes the feed's name although vision's record of him is unsure
+        from ninety.agents.factcheck import Claim
+
+        text = f"{scorer} scored for London Athletic in minute 23."
+        assert companion._verify(Claim(text, [goal["id"]]), {goal["id"]: goal}, mi).ok
+

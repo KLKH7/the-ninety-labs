@@ -185,6 +185,8 @@ class MatchInsights:
                 w = mi.identity_broadcast.get((by_id.get(g["event"]) or {}).get("player") or "")
                 if g.get("player") and w and w["team"] == g["team"]:
                     g["scorer_is"], g["scorer_source"] = w["name"], identity_mod.SOURCE
+                else:  # with the feed, names are the feed's: never vision's guess at a role (AGENTS.md)
+                    g.pop("scorer_is", None)
         return mi
 
     # -- what the tools answer -------------------------------------------------------------

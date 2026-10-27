@@ -101,7 +101,7 @@ def test_the_share_is_always_said_after_a_minute_of_possession_and_never_before(
     assert got["home"]["value"] == round(100 * 40 / 61)
     assert cm.code_texts({**got["home"], "club": "London Athletic", "minute_from": 1, "minute_to": 2}) == [
         f"London Athletic had {got['home']['value']}% of possession from minute 1 to minute 2, "
-        "counted by time on the ball."]
+        f"counted by time on the ball, give or take {terr.ERROR_POINTS} points."]
 
 
 def frame(k, x):
@@ -185,4 +185,22 @@ def test_the_error_said_beside_possession_is_the_committed_measurement():
     worst = max([body["gate"]["max_error"], *(m["so_far_max"] for m in body["matches"])])
     assert terr.ERROR_POINTS == math.ceil(worst)
     assert body["gate"]["mae_points_at_most"] == 5.0
+
+
+@pytest.mark.parametrize("error, ok", [(None, True), (5, False)])
+def test_the_possession_sentence_carries_its_measured_error_and_no_other(error, ok):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    rows = [{"id": f"poss:m{m}", "kind": "possession_minute", "team": None, "minute": m, "frames": 60.0,
+             "home": 30.0, "away": 20.0} for m in range(1, 3)]
+    fx = Fixture(7, "OAK", "FEN")
+    fact = {**terr.possession(rows, 1, 2)["home"], "club": "London Athletic", "clubs": fx.clubs}
+    text = cm.code_texts(fact)[0]
+    assert f"give or take {terr.ERROR_POINTS} points" in text
+    if error is not None:
+        text = text.replace(f"give or take {terr.ERROR_POINTS} points", f"give or take {error} points")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    assert verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok is ok
 

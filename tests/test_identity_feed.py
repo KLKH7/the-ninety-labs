@@ -692,3 +692,24 @@ def test_the_side_step_leaves_shooters_unnamed_while_the_gate_is_off(feed_path, 
     identity.main(args)
     assert calls == [1]
 
+
+@pytest.mark.parametrize("feed_team, named", [("home", True), ("away", False)])
+def test_a_goal_takes_the_feed_s_name_only_for_a_player_of_its_own_side(feed_path, monkeypatch, feed_team,
+                                                                        named):
+    """A goal is said with the feed's name for its own player only when the feed puts him on the
+    scoring side; a name on the other side is never the scorer, and with the feed no role is either."""
+    frames = tracked(engine_frames())
+    goal = {"id": "g1", "type": "goal", "team": "home", "t": 3.0, "frame": 75, "x": 105.0, "y": 34.0,
+            "player": "h-t7", "confidence": 1.0, "team_confidence": 1.0}
+    shot = {**goal, "id": "s1", "type": "shot", "t": 2.0, "frame": 50, "x": 95.0, "outcome": "goal"}
+    association = {"h-t7": {"track": "h-t2", "confidence": 1.0}}
+    who = {"track": "h-t7", "team": feed_team, "player": "LON09", "name": "Fed Name", "number": 9,
+           "position": "striker", "source": "id_feed"}
+    monkeypatch.setattr(identity, "named_broadcast", lambda *a, **k: {"h-t7": who})
+    mi = MatchInsights.build("c", frames, [shot, goal], FX, association=association,
+                             feed=identity.load(feed_path))
+    g = mi.facts["goal"][0]
+    assert g.get("player")  # vision's scorer, through the join
+    want = ("Fed Name", "id_feed") if named else (None, None)
+    assert (g.get("scorer_is"), g.get("scorer_source")) == want
+

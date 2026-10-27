@@ -1379,6 +1379,8 @@ def test_the_stats_graphics_show_only_rows_the_bundle_measured_surely(browser, s
     page, errors = open_viewer(browser, site + "?bundle=match/")
     rows = page.evaluate(f"window.ninetyScorebug.rowsAt({json.dumps(match)}, 400, {json.dumps(score)})")
     assert [(r["key"], r["home"], r["away"]) for r in rows] == want
+    # Possession is on air with the bundle's label, which carries its measured error (lesson 285).
+    assert all(r["label"] == "possession" for r in rows if r["key"] == "possession")
     assert not errors
     page.context.close()
 
@@ -1451,3 +1453,17 @@ def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site): 
     assert page.evaluate(f"window.ninetyMatch.chapterAt({39.5 / rate}).n") == 1
     assert float(page.get_attribute("#scrub", "max")) == pytest.approx(75 / rate, abs=0.01)
     ctx.close()
+
+
+def test_possession_is_on_air_with_its_measured_error(browser, site):  # noqa: F811
+    from ninety.intel import ball_share
+
+    match = stats_match(possession_sure=True)
+    label = f"Possession (time on the ball, \u00b1{ball_share.ERROR_POINTS} pts)"
+    match["insight_stats"]["rows"][0]["label"] = label
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    rows = page.evaluate(f"window.ninetyScorebug.rowsAt({json.dumps(match)}, 400, null)")
+    assert [r["label"] for r in rows if r["key"] == "possession"] == [label]
+    assert not errors
+    page.context.close()
+

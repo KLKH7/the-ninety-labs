@@ -15,7 +15,7 @@ import { fullName } from "./teams";
 type Pair = { home: number; away: number };
 export interface Row { key: string; label: string; home: number; away: number; unit: string }
 
-interface ScoutRow { key: string; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }
+interface ScoutRow { key: string; label?: string; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }
 type Stats = MatchData & { insight_stats?: { rows?: ScoutRow[] } };
 
 /** A share of passes means something only over this many (web/phone MIN_SHARE_PASSES, ninety/agents
@@ -42,7 +42,10 @@ const SCOUT: [string, string, string][] = [
 export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
   const out: Row[] = [];
   const poss = scoutAt(m, "possession", t);
-  if (poss) out.push({ key: "possession", label: "Possession", ...poss, unit: "%" });
+  // The bundle's own label, which carries the measured error ("Possession (time on the ball, ±10 pts)"):
+  // a number that missed its gate is never on air without it (lesson 285).
+  const possLabel = m?.insight_stats?.rows?.find((r) => r.key === "possession")?.label ?? "Possession";
+  if (poss) out.push({ key: "possession", label: possLabel, ...poss, unit: "%" });
   let st: MatchData["stats"][number] | null = null;
   for (const s of m?.stats ?? []) if (s.t <= t + 1e-6) st = s;
   if (st) {

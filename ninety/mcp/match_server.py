@@ -250,7 +250,8 @@ def referee(match: str, minute_from: int, minute_to: int, club: str | None = Non
 
 def possession(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
     """Each club's share of the time either side had the ball between two match minutes (time in
-    possession, dead and contested time left out), stated once a minute of possession was seen.
+    possession, dead and contested time left out), stated once a minute of possession was seen and
+    only from kick-off or a half's start; measured to within 10 points (docs/eval/possession-time.json).
     Cite by id."""
     return _insight(match, "possession", minute_from, minute_to, club)
 

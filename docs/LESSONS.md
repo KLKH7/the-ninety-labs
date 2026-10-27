@@ -3469,3 +3469,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_a_scorer_who_is_only_his_club_is_not_said_twice`;
   `tests/test_identity_feed.py::test_the_shooter_step_is_off_while_its_committed_score_missed`.
 
+
+### 289. "Who's on top" headed by one club's number names a winner without a comparison
+- **What happened:** on the 8324 preview at 33:50, "Who has been on top in the half hour" was headed
+  "London" from one sentence about London's attacking-third share (13% to 18%, minutes 1 to 34). It
+  never looked at Lisbon, ignored "the half hour", and 13% to 18% is no sign of being on top: over
+  minutes 31 to 34 Lisbon had the ball in London's third more (the answer key: 27% against 8%).
+- **Rule:** a comparative question is answered by a comparison: both clubs over the window the fan
+  named, the verdict only when the measures' own bounds separate them, else "Too close to call".
+  The headline is the comparison's verdict, never the first fact's club.
+- **Check:** `tests/test_companion_match.py::test_on_top_compares_both_clubs_over_the_stretch_asked`
+  and `::test_on_top_is_too_close_to_call_when_the_ranges_overlap`.
+
+### 290. A statistic measured on halves is not measured on five minutes
+- **What happened:** time-based possession (I17b) was graded on halves and whole matches (MAE
+  5.75 points). Asked over minutes 31 to 35 of 8324 it read London 65%; the answer key says 36%,
+  the other club. 99 seconds of possession are too few for a share, and no such window was graded.
+- **Rule:** say a statistic only over the windows its measurement covered (here: from kick-off and
+  from a half's start); a window it was not measured on is "not known", or a measured one is used.
+- **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.

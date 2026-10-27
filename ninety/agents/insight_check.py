@@ -328,6 +328,10 @@ def check(
             ):
                 reasons.append(f"{one} is said as two players")
     said_names = {w["name"] for w in about if w.get("name")}
+    # A goal's scorer named by the player-ID feed (the goal's own player, its side the goal's:
+    # match_insights) is said by that name; vision's own record of him may be unsure.
+    said_names |= {f["scorer_is"] for f in cited
+                   if f.get("scorer_source") == "id_feed" and f.get("scorer_is")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
         if not re.search(rf"\b{re.escape(name)}\b", claim.text):
@@ -580,7 +584,8 @@ TEMPLATES = {
     "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
     "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
-    "possession_share": [rf"had {_N}% of possession", r"counted by time on the ball"],
+    "possession_share": [rf"had {_N}% of possession", r"counted by time on the ball",
+                         rf"give or take {_N} points"],
     "score": [
         r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
     ],

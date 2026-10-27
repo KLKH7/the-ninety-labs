@@ -980,7 +980,10 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "possession_share":
         if fact.get("value") is None:
             return []
-        return [f"{club} had {fact['value']}% of possession {span}, counted by time on the ball."]
+        from ninety.intel.ball_share import ERROR_POINTS
+
+        return [f"{club} had {fact['value']}% of possession {span}, counted by time on the ball, "
+                f"give or take {ERROR_POINTS} points."]
     if metric == "final_third_share":
         lo, hi = fact["lo"], fact["hi"]
         share = f"{lo}%" if lo == hi else f"between {lo}% and {hi}%"
@@ -1001,7 +1004,10 @@ def code_texts(fact: dict) -> list[str]:
         out = []
         # A scorer is said only by name or role: "a London Athletic player scored for London Athletic"
         # says the club twice and no one (Kian, Oct 27).
-        scorer = fact.get("scorer_is") if club and club not in (fact.get("scorer_is") or club) else None
+        clubs_said = {club, *(fact.get("clubs") or {}).values()} - {None}
+        who = fact.get("scorer_is") or ""
+        # Never a label with a club in it: the club twice, or worse, a Lisbon label on a London goal.
+        scorer = who if club and who and not any(c in who for c in clubs_said) else None
         if scorer and fact.get("assister_is"):
             out.append(f"{scorer} scored for {club} in minute {m}, from {fact['assister_is']}'s pass.")
         if scorer:

@@ -160,7 +160,7 @@ def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dic
             "seconds": round(secs[team], 1),
             "confident": stated,
             "method": "time",
-            "also": [[round(total), "seconds"]],
+            "also": [[round(total), "seconds"], [ERROR_POINTS, "points"]],
         }
     if all(out[t]["value"] is not None for t in TEAMS) and out["home"]["value"] + out["away"]["value"] != 100:
         out["away"]["value"] = 100 - out["home"]["value"]  # rounded halves always make 100
