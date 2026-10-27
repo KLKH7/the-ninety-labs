@@ -41,6 +41,7 @@ from ninety.agents.factcheck import (
     shape_reasons,
     spelled_as_digits,
 )
+from ninety.intel import ball_share
 from ninety.intel.teamsheet import LABEL
 
 # The words a unit may be written as. A count of opponents is of players; seconds may be "s".
@@ -283,6 +284,8 @@ def check(
                 reasons.append(f"minute {m.group('n')} is not a cited minute")
             continue
         after, before = text[m.end() :], text[: m.start()]
+        # A range's first number takes the unit after the range's last ("22–28%"); each is still checked.
+        after = re.sub(rf"^–{NUMBER.pattern}", "", after)
         contexts = {c for _, _, c in pairs if c and re.search(c, before, re.I)}
         ok = False
         for v, unit, context in pairs:
@@ -328,6 +331,10 @@ def check(
             ):
                 reasons.append(f"{one} is said as two players")
     said_names = {w["name"] for w in about if w.get("name")}
+    # A goal's scorer named by the player-ID feed (the goal's own player, its side the goal's:
+    # match_insights) is said by that name; vision's own record of him may be unsure.
+    said_names |= {f["scorer_is"] for f in cited
+                   if f.get("scorer_source") == "id_feed" and f.get("scorer_is")}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
         if not re.search(rf"\b{re.escape(name)}\b", claim.text):
@@ -422,6 +429,20 @@ def check(
         for name in clubs.values():
             if re.search(rf"\b{re.escape(name)}\b", claim.text) and name not in sided:
                 reasons.append(f"{name} is named, but the side of the cited fact is not known")
+
+    # A possession share missed its gate and is said only with its measured error (lesson 285): a
+    # sentence citing one carries "give or take N points", N the fact's own (the number check above).
+    shares = [f for f in cited if f.get("metric") == "possession_share" and f.get("value") is not None]
+    if shares and not re.search(rf"\bgive or take {_N} points\b", text):
+        reasons.append("a possession share is said with its error: 'give or take N points'")
+
+    # A territory share's plain fraction is the one its bounds make (ball_share.share_words), never another.
+    for f in cited:
+        said = re.search(r"\babout (a tenth|a fifth|a quarter|a third|half) of the time\b", claim.text)
+        if f.get("metric") == "final_third_share" and said:
+            words = ball_share.share_words(f.get("lo", f.get("value")), f.get("hi", f.get("value")))
+            if words != f"about {said.group(1)}":
+                reasons.append(f"'about {said.group(1)}' is not the share's fraction ({words or 'none'})")
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}
@@ -580,7 +601,8 @@ TEMPLATES = {
     "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
     "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
-    "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "possession_share": [rf"have had {_N}% of the ball", r"in the footage we've seen", r"by time on the ball",
+                         rf"give or take {_N} points"],
     "score": [
         r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
     ],
@@ -602,8 +624,10 @@ TEMPLATES = {
         rf"(?:shot|a shot came) from {_N} m out", rf"where the posts were {_N} degrees apart",
     ],
     "final_third_share": [
-        r"the ball was in",
-        rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",
+        r"have had the ball in their attacking third",
+        rf"(?:about (?:a tenth|a fifth|a quarter|a third|half) of the time \({_N}(?:–{_N})?%\)"
+        rf"|{_N}(?:–{_N})?% of the time)",
+        r"in the footage we've seen",
     ],
 }
 

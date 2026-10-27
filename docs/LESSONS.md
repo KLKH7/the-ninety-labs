@@ -3441,6 +3441,33 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
   with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
 
+### 285. A share stated only when every input is sure is never stated
+- **What happened:** the Stats tab's possession was each club's share of the detected passes, said
+  only when no pass of the window had an unsure side (I17). On the demo match (seed 8324) a few
+  passes in every window had one, so the row read "unsure" from kick-off to full time, and the big
+  screen's half-time and full-time panels, which show only confident rows, never had possession.
+  Each gate was right on its own; together they made a headline number that could not appear.
+- **Rule:** before shipping a gated statistic, count how often its gate opens on the demo match. A
+  gate that needs every one of hundreds of inputs to pass is a gate that never opens: measure the
+  statistic's error instead and state it with its error. Possession is now time on the ball
+  (I17b), stated once a minute of possession was seen, its error against the answer key published
+  (docs/eval/possession-time.json).
+- **Check:** `tests/test_possession_territory.py::test_the_share_is_always_said_after_a_minute_of_possession_and_never_before`
+  (fails with the old all-sure gate).
+
+### 286. A label for "nobody named" in a name's slot says the club twice
+- **What happened:** where vision's scorer was not named, his `say` was the generic "a Lisbon
+  Esportes player", and the Companion put it where a name goes: "a Lisbon Esportes player scored
+  for Lisbon Esportes in minute 35". The feed did name that goal's track (Ben Vomble), but goal
+  facts never read the feed's names, so the line said the club twice and no one.
+- **Rule:** a sentence with a person's slot is said only with a name or a role, never with the
+  fallback label that is only the club; and a name the approved source gives (the player-ID feed,
+  through the goal's own player) reaches the fact that needs it. A new attribution step (the feed
+  player nearest the ball at the strike) is pre-registered and gated like any other: it missed
+  (0.40 against 0.95 on held-out seed 8080, the misses shots vision detected where there were
+  none) and is off.
+- **Check:** `tests/test_companion_match.py::test_a_scorer_who_is_only_his_club_is_not_said_twice`;
+  `tests/test_identity_feed.py::test_the_shooter_step_is_off_while_its_committed_score_missed`.
 
 ### 287. A message that routes to no tool is not a follow-up by default
 - **What happened:** in the 8324 preview's docked companion at 89:59, Kian typed "hello" and got a
@@ -3463,6 +3490,25 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_question_code_does_not_route_is_answered_by_the_models_plan`,
   `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
   on main 14a33133, and each fails when its guard is removed.
+
+### 289. "Who's on top" headed by one club's number names a winner without a comparison
+- **What happened:** on the 8324 preview at 33:50, "Who has been on top in the half hour" was headed
+  "London" from one sentence about London's attacking-third share (13% to 18%, minutes 1 to 34). It
+  never looked at Lisbon, ignored "the half hour", and 13% to 18% is no sign of being on top: over
+  minutes 31 to 34 Lisbon had the ball in London's third more (the answer key: 27% against 8%).
+- **Rule:** a comparative question is answered by a comparison: both clubs over the window the fan
+  named, the verdict only when the measures' own bounds separate them, else "Too close to call".
+  The headline is the comparison's verdict, never the first fact's club.
+- **Check:** `tests/test_companion_match.py::test_on_top_compares_both_clubs_over_the_stretch_asked`
+  and `::test_on_top_is_too_close_to_call_when_the_ranges_overlap`.
+
+### 290. A statistic measured on halves is not measured on five minutes
+- **What happened:** time-based possession (I17b) was graded on halves and whole matches (MAE
+  5.75 points). Asked over minutes 31 to 35 of 8324 it read London 65%; the answer key says 36%,
+  the other club. 99 seconds of possession are too few for a share, and no such window was graded.
+- **Rule:** say a statistic only over the windows its measurement covered (here: from kick-off and
+  from a half's start); a window it was not measured on is "not known", or a measured one is used.
+- **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
 
 ### 293. A grader's rule that accepts any match lets a wrong answer through
 - **What happened:** building the Ask grader (`ninety/eval/ask_grade`), the first look at main's
@@ -3534,3 +3580,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
+
+### 296. A phrase the fact-checker allows is not a phrase it requires
+- **What happened:** #424 put possession on air "give or take 10 points", the error measured when
+  the share missed its 5-point gate. The fact-checker's possession template *allowed* the clause
+  but did not *require* it: the same sentence with the clause deleted still verified, so a
+  model-written possession share could reach the screen with no error (delta review of ff0a17eb).
+  A second miss in the same area: `on_top` named a leader from two seconds of footage ("100% to
+  0%"), with no minimum sample.
+- **Rule:** a qualifier that a number must carry (its error, its coverage) is a check that rejects
+  the sentence without it, not an entry in the list of allowed words. A comparison needs the same
+  sample floor as the measure it rests on.
+- **Check:** `tests/test_possession_territory.py::test_the_possession_sentence_carries_its_measured_error_and_no_other`
+  (the clause left out is rejected) and `tests/test_companion_match.py::test_on_top_is_not_known_on_too_little_footage`;
+  each fails with its guard removed.

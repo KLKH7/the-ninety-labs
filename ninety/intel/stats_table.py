@@ -12,6 +12,7 @@ from __future__ import annotations
 import statistics
 from collections.abc import Callable
 
+from ninety.intel import ball_share
 from ninety.intel.scene import TEAMS
 from ninety.intel.team_stats import BIN_MIN, within_pct
 
@@ -138,7 +139,7 @@ def _rows(mi) -> list:
         (
             "Attack",
             "possession",
-            "Possession (share of passes)",
+            f"Possession (time on the ball, ±{ball_share.ERROR_POINTS} pts)",
             "%",
             _summary(mi.possession, "possession_share"),
         ),

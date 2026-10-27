@@ -752,6 +752,47 @@ from tracked positions against the ground truth, offline, with and without the s
 for speed now and 1.5 km/h for top speed (measured 21 Oct, before #250 and #270; not re-measured), against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
 
+### Possession, time on the ball
+
+The Stats tab, the big screen's half-time and full-time panels and the Companion say possession as
+time on the ball (GROUNDING I17b; `ninety/intel/ball_share.py`): of the seconds either side had the
+ball on the tactical camera's tracked frames, each side's share, dead and contested time left out,
+stated once a minute of possession was seen. Pre-registered in
+[possession-time-plan.md](eval/possession-time-plan.md) (commit cb17fb89) before any comparison
+with the answer key, then scored once (`uv run python -m ninety.eval.possession_time`, result in
+[possession-time.json](eval/possession-time.json)):
+
+| Match | Home share, live vs answer key |
+|---|---|
+| 8080 (held out) | first half 74% vs 76.5%; second half 56% vs 64.1%; full match 63% vs 69.1% |
+| 8324 (demo) | first half 60% vs 55.5%; second half 37% vs 29.5%; full match 50% vs 44.2% |
+
+**It misses its gate:** mean absolute error 5.75 points over the six windows, against
+≤ 5; largest 8.1. The "so far" values at each 5-minute bin are closer
+(MAE 4.42 and 3.6 points, largest 9.2). In five of the six windows the live share is nearer 50% than
+the truth; why is not measured. As the plan says, the number stays on screen, labelled with its measured error
+("Possession (time on the ball, ±10 pts)": the largest error, of the windows and the "so far"
+values), never "unsure". Two matches are few windows: the error is the demo's, not a general one.
+The independent audit then found the code did not enforce the plan's "2 frames running" (a frame
+with nobody on the ball did not end a run); fixed, the method was scored again with no other
+change: the six windows are identical and only 8324's "so far" MAE moved (3.66 to 3.6). The first
+score is kept as [possession-time-first.json](eval/possession-time-first.json).
+
+### Scorers from the ID feed
+
+A goal whose player (vision's) the player-ID feed names is said with his name, on the phone and
+by the Companion; the goal, its time and side stay vision's. A further step, naming a shot's or
+goal's shooter as the feed player of the shooting side nearest vision's ball at the strike (within
+1.5 m, P6), was pre-registered ([scorer-feed-plan.md](eval/scorer-feed-plan.md)) and scored once
+([scorer-feed.json](eval/scorer-feed.json); engine ids were matched to feed ids by nearest position
+over minute 2, not by the team sheet as the plan says, a grading detail that names the same men):
+on held-out seed 8080 it named 5, **2 right
+(precision 0.4, 95% 0.12 to 0.77)** against its 0.95 gate; the three wrong are
+shots vision detected where the answer key has no shot, not wrong men. Goals alone were right
+1 of 1 on 8080 and 3 of 3 on 8324, but that split was not pre-registered, so it is not used. The
+step is off (`identity.SHOOTERS_GATE_MET`): where the feed does not name the goal's own player,
+the phone says the club.
+
 ### Possession now (the wind map's layer)
 
 `uv run python -m ninety.eval.possession_score calibrate` sets the gate on validation clips, and
