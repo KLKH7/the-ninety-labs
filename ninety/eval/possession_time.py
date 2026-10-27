@@ -60,7 +60,7 @@ def truth_sides(frames: dict[int, tuple[str, float, float]], events: list[dict])
     for i, e in enumerate(evs):
         if e["type"] in DEAD_FROM:
             end = next((f["frame"] for f in evs[i + 1:] if f["type"] in DEAD_TO), None)
-            dead.append((int(e["frame"]), int(end) if end is not None else 10 ** 9))
+            dead.append((int(e["frame"]), int(end) if end is not None else 1_000_000_000))
     dead_at = set()
     last = max(frames)
     for a, b in dead:
