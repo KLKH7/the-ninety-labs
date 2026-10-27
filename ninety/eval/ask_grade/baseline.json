@@ -1,30 +1,32 @@
 {
  "about": "The Ask's code path on tests/fixtures/ask-grade-insights-8324.json.gz, graded by ninety/eval/ask_grade. tests/test_ask_grade.py fails if any rate here goes down; raise it with `uv run python -m ninety.eval.ask_grade.run baseline` when a change raises it. A change to how the insights are built refreshes the fixture first (gzip the insights `grade --rebuild-insights runs/demo-8324-final` writes with that code) in the same PR.",
  "all": {
-  "core": 0.147,
-  "answered": 0.49,
-  "relevant": 0.636,
-  "correct": 0.121,
-  "no_false_unknown": 0.458,
-  "no_future": 0.97,
-  "span_clipped": 0.779,
-  "coverage_honest": 0.164,
-  "natural": 0.8,
-  "consistent": 0.689,
-  "pass": 0.028
+  "core": 0.254,
+  "answered": 0.597,
+  "relevant": 0.68,
+  "correct": 0.234,
+  "no_false_unknown": 0.575,
+  "no_future": 0.975,
+  "span_clipped": 0.993,
+  "coverage_honest": 0.287,
+  "natural": 0.91,
+  "consistent": 0.717,
+  "comparison_direction": 0.009,
+  "pass": 0.208
  },
  "chips": {
-  "core": 0.358,
-  "answered": 0.636,
+  "core": 0.395,
+  "answered": 0.673,
   "relevant": 0.917,
-  "correct": 0.095,
-  "no_false_unknown": 0.631,
+  "correct": 0.167,
+  "no_false_unknown": 0.702,
   "no_future": 0.951,
-  "span_clipped": 0.63,
-  "coverage_honest": 0.167,
-  "natural": 0.741,
+  "span_clipped": 0.988,
+  "coverage_honest": 0.286,
+  "natural": 0.852,
   "consistent": 0.716,
-  "pass": 0.012
+  "comparison_direction": 0.0,
+  "pass": 0.16
  },
  "intents": {
   "score": {
@@ -36,9 +38,10 @@
    "no_future": 1.0,
    "span_clipped": 1.0,
    "coverage_honest": null,
-   "natural": 0.485,
+   "natural": 1.0,
    "consistent": 0.636,
-   "pass": 0.212
+   "comparison_direction": null,
+   "pass": 0.636
   },
   "scorers": {
    "core": 0.439,
@@ -49,9 +52,10 @@
    "no_future": 1.0,
    "span_clipped": 1.0,
    "coverage_honest": null,
-   "natural": 0.667,
+   "natural": 1.0,
    "consistent": 0.556,
-   "pass": 0.197
+   "comparison_direction": null,
+   "pass": 0.258
   },
   "winning": {
    "core": 0.455,
@@ -62,35 +66,38 @@
    "no_future": 1.0,
    "span_clipped": 1.0,
    "coverage_honest": null,
-   "natural": 0.758,
+   "natural": 1.0,
    "consistent": 0.333,
-   "pass": 0.212
+   "comparison_direction": null,
+   "pass": 0.455
   },
   "on_top": {
-   "core": 0.0,
-   "answered": 0.167,
-   "relevant": 0.333,
-   "correct": 0.0,
-   "no_false_unknown": 0.167,
-   "no_future": 0.972,
-   "span_clipped": 0.875,
-   "coverage_honest": null,
-   "natural": 0.833,
-   "consistent": 0.444,
-   "pass": 0.0
-  },
-  "possession": {
-   "core": 0.0,
-   "answered": 0.0,
-   "relevant": 0.75,
-   "correct": 0.0,
-   "no_false_unknown": 0.0,
+   "core": 0.667,
+   "answered": 1.0,
+   "relevant": 1.0,
+   "correct": 0.667,
+   "no_false_unknown": 1.0,
    "no_future": 1.0,
    "span_clipped": 1.0,
    "coverage_honest": null,
    "natural": 1.0,
-   "consistent": 0.8,
-   "pass": 0.0
+   "consistent": 0.639,
+   "comparison_direction": null,
+   "pass": 0.639
+  },
+  "possession": {
+   "core": 0.833,
+   "answered": 0.833,
+   "relevant": 0.833,
+   "correct": 0.833,
+   "no_false_unknown": 0.833,
+   "no_future": 1.0,
+   "span_clipped": 1.0,
+   "coverage_honest": 1.0,
+   "natural": 1.0,
+   "consistent": 0.9,
+   "comparison_direction": null,
+   "pass": 0.833
   },
   "passes": {
    "core": 0.0,
@@ -103,6 +110,7 @@
    "coverage_honest": null,
    "natural": 1.0,
    "consistent": 0.889,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "completion": {
@@ -112,10 +120,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.288,
    "no_future": 0.985,
-   "span_clipped": 0.788,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 0.97,
    "consistent": 0.667,
+   "comparison_direction": 0.0,
    "pass": 0.0
   },
   "shots": {
@@ -125,10 +134,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.859,
    "no_future": 1.0,
-   "span_clipped": 0.295,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
-   "natural": 0.962,
+   "natural": 0.987,
    "consistent": 0.846,
+   "comparison_direction": 0.0,
    "pass": 0.0
   },
   "on_target": {
@@ -138,10 +148,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.652,
    "no_future": 0.985,
-   "span_clipped": 0.409,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 0.985,
    "consistent": 0.537,
+   "comparison_direction": 0.047,
    "pass": 0.0
   },
   "territory": {
@@ -151,11 +162,12 @@
    "correct": 0.792,
    "no_false_unknown": 0.875,
    "no_future": 0.972,
-   "span_clipped": 0.278,
+   "span_clipped": 1.0,
    "coverage_honest": 0.905,
-   "natural": 0.125,
+   "natural": 0.917,
    "consistent": 0.792,
-   "pass": 0.0
+   "comparison_direction": null,
+   "pass": 0.792
   },
   "corners": {
    "core": 0.0,
@@ -164,10 +176,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.923,
    "no_future": 1.0,
-   "span_clipped": 0.231,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 1.0,
    "consistent": 0.923,
+   "comparison_direction": 0.0,
    "pass": 0.0
   },
   "out_of_play": {
@@ -177,24 +190,26 @@
    "correct": 0.0,
    "no_false_unknown": 0.455,
    "no_future": 1.0,
-   "span_clipped": 0.621,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 1.0,
    "consistent": 0.6,
+   "comparison_direction": 0.0,
    "pass": 0.0
   },
   "momentum": {
-   "core": 0.0,
-   "answered": 0.273,
-   "relevant": 0.818,
-   "correct": 0.0,
-   "no_false_unknown": 0.273,
-   "no_future": 0.909,
-   "span_clipped": 0.818,
+   "core": 0.894,
+   "answered": 0.955,
+   "relevant": 1.0,
+   "correct": 0.894,
+   "no_false_unknown": 0.955,
+   "no_future": 0.985,
+   "span_clipped": 1.0,
    "coverage_honest": null,
-   "natural": 0.727,
-   "consistent": 0.509,
-   "pass": 0.0
+   "natural": 0.955,
+   "consistent": 0.873,
+   "comparison_direction": null,
+   "pass": 0.879
   },
   "best_home": {
    "core": 0.0,
@@ -203,10 +218,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.153,
    "no_future": 0.875,
-   "span_clipped": 0.861,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 0.847,
    "consistent": 0.803,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "best_away": {
@@ -216,10 +232,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.264,
    "no_future": 0.986,
-   "span_clipped": 0.861,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 0.736,
    "consistent": 0.742,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "best_overall": {
@@ -229,10 +246,11 @@
    "correct": 0.0,
    "no_false_unknown": 0.333,
    "no_future": 0.889,
-   "span_clipped": 0.778,
+   "span_clipped": 1.0,
    "coverage_honest": 0.0,
    "natural": 0.667,
    "consistent": 0.708,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "fastest": {
@@ -246,6 +264,7 @@
    "coverage_honest": null,
    "natural": 1.0,
    "consistent": 0.75,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "distance": {
@@ -259,6 +278,7 @@
    "coverage_honest": null,
    "natural": 1.0,
    "consistent": 0.917,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "why_goal": {
@@ -272,6 +292,7 @@
    "coverage_honest": null,
    "natural": 0.931,
    "consistent": 0.924,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "key_moments": {
@@ -281,10 +302,11 @@
    "correct": 0.218,
    "no_false_unknown": 0.923,
    "no_future": 0.846,
-   "span_clipped": 0.846,
+   "span_clipped": 0.859,
    "coverage_honest": null,
-   "natural": 0.372,
+   "natural": 0.385,
    "consistent": 0.859,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "unmeasured": {
@@ -298,6 +320,7 @@
    "coverage_honest": null,
    "natural": 0.848,
    "consistent": 0.3,
+   "comparison_direction": null,
    "pass": 0.0
   },
   "tactics_chip": {
@@ -307,11 +330,12 @@
    "correct": null,
    "no_false_unknown": null,
    "no_future": 0.949,
-   "span_clipped": 0.628,
+   "span_clipped": 1.0,
    "coverage_honest": null,
-   "natural": 0.718,
+   "natural": 0.872,
    "consistent": 0.41,
-   "pass": 0.026
+   "comparison_direction": null,
+   "pass": 0.179
   }
  }
 }

@@ -225,10 +225,10 @@ def match_events(seed: int, minutes: float) -> list[dict]:
     return events_in(seed, minutes, 1, int(minutes) + 1)
 
 
-def match_stats(seed: int, minutes: float) -> list[dict]:
+def match_stats(seed: int, minutes: float, minute: int | None = None) -> list[dict]:
     """The window stats the fact-checker knows, from the engine's full events, as the MCP server
-    serves them (ninety/intel/windows.agent_rows)."""
-    return agent_rows(facts.match_events(seed, minutes))
+    serves them (ninety/intel/windows.agent_rows): with `minute`, as they stood at its end."""
+    return agent_rows(facts.match_events(seed, minutes), now=None if minute is None else 60.0 * minute)
 
 
 async def run_workflow(
@@ -248,8 +248,9 @@ async def run_workflow(
     A claim may cite an event or a window stat by id. With `inline`, the Analyst's prompt carries
     the minute's events (a clip the match server does not serve: the Analyst cannot read it there)."""
     if events is None:
-        events = match_events(seed, minutes)
-        stats = match_stats(seed, minutes) if stats is None else stats
+        # Nothing after the minute asked about (lesson 292): its events and stats up to its end.
+        events = [e for e in match_events(seed, minutes) if e["minute"] <= minute]
+        stats = match_stats(seed, minutes, minute) if stats is None else stats
     known = {e["id"]: e for e in [*events, *(stats or ())]}
     trace: list[str] = []
     rows = [e for e in events if e.get("minute") == minute] if inline else None

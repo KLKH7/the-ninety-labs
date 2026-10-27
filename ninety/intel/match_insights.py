@@ -38,6 +38,7 @@ from ninety.intel import (
     style,
 )
 from ninety.intel import identity as identity_mod
+from ninety.intel import player_stats as player_stats_mod
 from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, minute_of, xy
 from ninety.intel.teamsheet import Fixture
@@ -69,6 +70,9 @@ class MatchInsights:
     identity: dict = field(default_factory=dict)
     identity_broadcast: dict = field(default_factory=dict)
     identity_source: dict = field(default_factory=dict)
+    # Per-player stats keyed by the feed's names (ninety/intel/player_stats.py; AGENTS.md, Kian's
+    # decision of Oct 26): running while tracked and the detected events the feed names him in.
+    per_player: dict = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -178,6 +182,8 @@ class MatchInsights:
                 mi.identity_broadcast = identity_mod.named_broadcast(
                     association, mi.identity, feed, detected_events, broadcast_frames)
             mi.identity_source = identity_mod.disclosure(feed)
+            mi.per_player = player_stats_mod.build(f.frames, detected_events, feed, mi.identity,
+                                                        mi.identity_broadcast or mi.identity)
             # A goal's scorer by name where the feed names the broadcast track vision says scored:
             # a name, never whether, when or for whom (the goal and its side stay vision's).
             by_id = {e["id"]: e for e in detected_events}
@@ -436,6 +442,37 @@ class MatchInsights:
             facts.append(r)
         return {"facts": facts, "summary": []}
 
+    def _player_rows(self, minute: float) -> list[dict]:
+        if not self.per_player:
+            raise ValueError("this match has no Player ID feed, so no per-player stats")
+        return player_stats_mod.stats(self.per_player, 60.0 * float(minute))
+
+    def player_stats(self, minute: float, player: str | None = None, club: str | None = None) -> dict:
+        """Each player's stats up to the match minute, named by the Player ID feed: tracked seconds
+        and coverage, distance while tracked and top speed (a 3 s mean), and his detected events.
+        A figure not measured well enough is None, with its reason under `withheld`."""
+        team = self.team(club)
+        rows = [r for r in self._player_rows(minute) if team in (None, r["team"])]
+        if player:
+            rows = player_stats_mod.find(rows, player)
+        return {"facts": rows, "summary": [], "source": identity_mod.SOURCE_LABEL,
+                "note": "Running is while the video tracked him, in the footage shown, never a match total."}
+
+    def player_rank(self, club: str | None, metric: str, minute: float) -> dict:
+        """Players ranked by one metric up to the match minute, most first (`best` is a stated
+        formula, never a model's view); fastest and furthest rank only players tracked enough."""
+        team = self.team(club)
+        rows = [r for r in self._player_rows(minute) if team in (None, r["team"])]
+        got = player_stats_mod.rank(rows, metric)
+        if got["withheld"] and metric == "involvement" and team is not None:
+            # The count is off, but the order alone was graded on a held-out match: the top three,
+            # with no number, "of the moves the video picked up" (player-involvement-rank-plan.md).
+            raw = player_stats_mod.stats(self.per_player, 60.0 * float(minute), withhold=False)
+            ordered = player_stats_mod.order([r for r in raw if r["team"] == team])
+            if not ordered["withheld"]:
+                got = ordered
+        return {**got, "summary": [], "club": club}
+
     def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Each kind of restart over the minutes: the total, and each club's count with bounds."""
         team = self.team(club)
@@ -585,6 +622,7 @@ class MatchInsights:
                 "lineup_tactical": identity_mod.lineup(self.identity)}
                if self.identity_source else {}),
             **({"lineup": identity_mod.lineup(self.identity_broadcast)} if self.identity_broadcast else {}),
+            **({"player_stats": self.per_player} if self.per_player else {}),
         }
 
     @classmethod
@@ -603,6 +641,7 @@ class MatchInsights:
             dict(body.get("identity_tracks") or {}),
             dict(body.get("identity_broadcast") or {}),
             dict(body.get("identity") or {}),
+            dict(body.get("player_stats") or {}),
         )
 
 

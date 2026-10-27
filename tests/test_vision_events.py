@@ -263,6 +263,33 @@ def test_a_strike_toward_the_goal_home_attacks_is_home_s_shot_whatever_the_kit_s
     assert home[0]["team_confidence"] is not None and away[0]["team_confidence"] is None
 
 
+def test_a_shooter_read_on_the_other_side_survives_detection_until_the_feeds_side_step(tmp_path):
+    """Lesson 292: a red (away-kit) player strikes toward the goal home attacks, so the shot is home's
+    and its shooter's track reads away. The detector keeps him: the player-ID feed's side step
+    (identity.sided, on the detector's raw file) may name him and give his side, and the load keeps a
+    feed-sided shooter. Without the feed, the load drops him and keeps the side (detected.attributed)."""
+    from ninety.intel import identity
+    from ninety.match import detected
+
+    rows, bx = [], 90.3
+    for f in range(40):
+        if f > 10:
+            bx += 25.0 / FPS
+        rows.append(row(f, crowd(f) + [(90.0, 34.0, RED)], (bx, 34.0)))
+    events, _ = ev.detect(rows)
+    shot = next(e for e in events if e["type"] == "shot")
+    assert shot["team"] == "home" and shot["player"] and shot["player"].startswith("a-")
+    events = [{**e, "id": f"e{k}"} for k, e in enumerate(events)]
+    raw, fed = tmp_path / "detected.jsonl", tmp_path / "detected.sided.jsonl"
+    raw.write_text("".join(json.dumps(e) + "\n" for e in events))
+    named = {shot["player"]: {"team": "home", "name": "Eli Hourrick"}}  # the feed: a home player after all
+    fed.write_text("".join(json.dumps(e) + "\n" for e in identity.sided(events, named)))
+    loaded = next(e for e in detected.load(fed) if e["type"] == "shot")
+    assert (loaded["team"], loaded["player"]) == ("home", shot["player"])
+    unfed = next(e for e in detected.load(raw) if e["type"] == "shot")
+    assert (unfed["team"], unfed["player"]) == ("home", None)
+
+
 def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not():
     def scene(out_for):
         rows = []

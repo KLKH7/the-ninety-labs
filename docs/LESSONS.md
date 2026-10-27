@@ -3551,7 +3551,11 @@ short and actionable. This file is public: no research sources, product names or
   memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
   L3), so every second-half territory truth had the clubs reversed until another session compared it
   with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
-  the engine's code, not in how football usually goes.
+  the engine's code, not in how football usually goes, and better, read it from the truth itself:
+  each half's direction now comes from where each side's shots and goals were
+  (`truth.attack_directions`; `test_attacking_directions_come_from_the_data_both_ways` fails both
+  for a kept and for a swapped end). A minute reader that took "to 28" as a minute had the same root:
+  read only explicit minutes (`test_only_explicit_minutes_are_minutes`).
 
 
 ### 294. A track's numbers are one stretch of tracking, not the player's match
@@ -3597,6 +3601,33 @@ short and actionable. This file is public: no research sources, product names or
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
 
+### 292. A stat computed from what the source gave is not a stat about the match
+- **What happened:** the Oct 27 audit of seed 8324's facts.json, which the agents and the phone say
+  to fans, found five numbers no football fan would accept. (1) Lisbon: 3 goals, 2 shots on target:
+  the 85th-minute goal followed a shot the detector read `off_target`, with the ball's crossing written
+  as `out_of_play` between them, and `shot_facts` counted on target only from shot outcomes, so the goal
+  proved nothing. (2) Lisbon's shot speed, 18.9 km/h, was one reading from 1 of 5 shots, citing all 5;
+  vision's shot speed is unmeasured. (3) `pressure_events` 0 for each side, from a detector that writes
+  no pressure, tackle or interception at all (#386), and a control-vs-chaos index that was pass
+  completion under another name. (4) The window stats the agents read at minute 35 counted passes
+  from after it (`agent_rows` over the whole match in live.py, the MCP server and the slice).
+  (5) "Lisbon Esportes's", and a London goal credited to the Lisbon track `a-t7007` (the detector
+  takes a shot's side from the end it goes toward, its player from the nearest track). Every test
+  used a shot just before each goal, truth events with every speed, events with pressing, and the
+  whole match.
+- **Rule:** a computed stat keeps football's invariants in every scope (goals <= shots on target <=
+  shots: a goal's strike counts on target, a goal with none seen is an implied shot cited by the goal,
+  GROUNDING I28). A number is stated only from what the source measured: cite only the measured
+  events, say how many, and state nothing below a pre-registered coverage (EVALUATION, "Shot speed
+  facts"); a count of a kind the source never detects is left out, not zero. A stat asked for at a
+  minute counts nothing after it, and its window ends there. A possessive goes through
+  `teamsheet.possessive`. A player whose track was read on the other side from a vision-sided event
+  is dropped, the side kept, at load (`detected.attributed`), after the feed's side step, so the feed can still name him; a feed-sided one keeps him (lesson 283). A goal's strike is a shot at most `STRIKE_GAP_S` before it (measured, GROUNDING I28).
+- **Check:** `tests/test_facts_invariants.py`: the 8324 cases by id, a property test over 200 random
+  detector outputs (whole match, each 15-minute window, a random slice), minute 35 through
+  `live.run`, and the attribution through `detected.load`. All fail on main 382996dc but the guard
+  that a source detecting pressing still gets a side's zero.
+
 ### 296. A phrase the fact-checker allows is not a phrase it requires
 - **What happened:** #424 put possession on air "give or take 10 points", the error measured when
   the share missed its 5-point gate. The fact-checker's possession template *allowed* the clause
@@ -3627,3 +3658,31 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_ask_intents.py` (every paraphrase reads as its row, including "which team is
   better right now"; Kian's repros; the relevance gate fails a builder that leads with the score);
   `uv run python -m ninety.eval.ask_grade.run --compare origin/main HEAD` (#427).
+### 298. A "within ±1" bar holds trivially for a rare event
+- **What happened:** the per-player stats plan set one bar for every count: at least 80% of
+  players within max(1, 21%) of the truth. Shots and goals met it (95% of players) while 5 shots
+  of 18 and 1 goal of 4 were found, because a player who never scores is "within 1" of 0 whatever
+  the detector does. Graded at 6cfdcfc5 on seed 8324 ([player-stats.md](eval/player-stats.md)).
+- **Rule:** a per-player bar on a count also needs the match total to be within the same margin,
+  or rare events pass by being missed. A check added after looking may only turn a stat off,
+  never on. That is how this one was added, and it is marked so in the code.
+- **Check:** `ninety/eval/player_stats_eval.py` (`total_ok`), and
+  `ninety/intel/player_stats_calibration.json` has `shots` and `goals` off.
+
+### 299. A template that was never provisioned is not the deployed infrastructure
+- **What happened:** on Oct 27, the day of the deadline, an audit found that the deployed API could
+  not reach Foundry. Its identity had only AcrPull and Key Vault Secrets User, and its container had
+  two env vars. `infra/main.bicep` had held `AZURE_CLIENT_ID` and the Speech role since #279, but
+  infra was last provisioned on Oct 23, and every deploy since then (`azd deploy`, deploy.yml) shipped
+  an image only. No template gave the API a Foundry role at all: only CI had one. So every
+  passcode-gated Live question fell back to code, as designed (`_live_models` turns any failure into
+  a code answer, lesson 96), and the viewer saw a correct answer either way. No test told code
+  and model apart on the deployed URL, and no deployed request reached Foundry's tracing.
+- **Rule:** a change to a role, env var or secret is not done until it is provisioned and checked
+  on the deployed resource, not just in the file. For every path with a silent fallback, a smoke
+  test on the deployed URL asserts which path answered. A provision passes every parameter the
+  deployed app runs with (`API_MIN_REPLICAS`), so it changes nothing else.
+- **Check:** `tests/test_live_ask_smoke.py` (fails when a Live answer's `source` is not `model`),
+  run by live-smoke.yml once the repo secret `NINETY_DEMO_PASSCODE` is set; infra/README.md lists
+  the two `az` commands that compare the deployed app with the file. `az deployment group what-if`
+  shows the drift as Create or Modify rows before a provision.

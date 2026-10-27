@@ -1,0 +1,79 @@
+{
+ "commit": "5b3b67e26f544c440380482044e038a884598048",
+ "plan": "docs/eval/player-involvement-rank-plan.md",
+ "clip": "/Users/kianlakhani/the-ninety-labs/runs/demo-8080-hunt",
+ "cases": [
+  {
+   "minute": 45,
+   "team": "home",
+   "ours": [
+    "Ben Toulmore",
+    "Isaac Tendell",
+    "Nico Guddon"
+   ],
+   "truth_top3": [
+    "Ben Toulmore",
+    "Gabe Pouvick",
+    "Isaac Tendell"
+   ],
+   "overlap": 2,
+   "leader_right": true,
+   "truth_events_shown": 327
+  },
+  {
+   "minute": 45,
+   "team": "away",
+   "ours": [
+    "Callum Memble",
+    "Eli Hourrick",
+    "Jonah Vaindell"
+   ],
+   "truth_top3": [
+    "Callum Memble",
+    "Eli Hourrick",
+    "Femi Rarrick",
+    "Sami Korrow"
+   ],
+   "overlap": 2,
+   "leader_right": true,
+   "truth_events_shown": 327
+  },
+  {
+   "minute": 90,
+   "team": "home",
+   "ours": [
+    "Ben Toulmore",
+    "Isaac Tendell",
+    "Nico Guddon"
+   ],
+   "truth_top3": [
+    "Ben Toulmore",
+    "Gabe Pouvick",
+    "Isaac Tendell"
+   ],
+   "overlap": 2,
+   "leader_right": false,
+   "truth_events_shown": 774
+  },
+  {
+   "minute": 90,
+   "team": "away",
+   "ours": [
+    "Femi Rarrick",
+    "Callum Memble",
+    "Femi Telby"
+   ],
+   "truth_top3": [
+    "Callum Memble",
+    "Eli Hourrick",
+    "Femi Rarrick"
+   ],
+   "overlap": 2,
+   "leader_right": true,
+   "truth_events_shown": 774
+  }
+ ],
+ "mean_overlap": 2.0,
+ "met": true,
+ "leaders_right": 3
+}

@@ -1,0 +1,61 @@
+{
+ "stats": {
+  "distance_m": {
+   "on": true,
+   "why": null
+  },
+  "top_kmh": {
+   "on": true,
+   "why": null
+  },
+  "est_footage_m": {
+   "on": false,
+   "why": "missed its bar (p90 \u2264 21%) on 18 players: median abs pct 17.0, p90 abs pct 22.7 (docs/eval/player-stats.md)"
+  },
+  "passes": {
+   "on": false,
+   "why": "missed its bar (\u2265 80% of players within max(1, 21%), and the total within 21%) on 22 players: share within 0.27, mean err -4.0, ours total 202, truth total 290 (docs/eval/player-stats.md)"
+  },
+  "passes_completed": {
+   "on": false,
+   "why": "missed its bar (\u2265 80% of players within max(1, 21%), and the total within 21%) on 22 players: share within 0.0, mean err -5.5, ours total 147, truth total 268 (docs/eval/player-stats.md)"
+  },
+  "shots": {
+   "on": false,
+   "why": "missed its bar (\u2265 80% of players within max(1, 21%), and the total within 21%) on 22 players: share within 0.95, mean err -0.59, ours total 5, truth total 18 (docs/eval/player-stats.md)"
+  },
+  "goals": {
+   "on": false,
+   "why": "missed its bar (\u2265 80% of players within max(1, 21%), and the total within 21%) on 22 players: share within 0.95, mean err -0.14, ours total 1, truth total 4 (docs/eval/player-stats.md)"
+  },
+  "involvements": {
+   "on": false,
+   "why": "missed its bar (\u2265 80% of players within max(1, 21%), and the total within 21%) on 22 players: share within 0.23, mean err -8.91, ours total 484, truth total 680 (docs/eval/player-stats.md)"
+  },
+  "rank:best": {
+   "on": true,
+   "why": null
+  },
+  "rank:involvement": {
+   "on": true,
+   "why": null
+  },
+  "rank:passes": {
+   "on": true,
+   "why": null
+  },
+  "rank:fastest": {
+   "on": true,
+   "why": null
+  },
+  "rank:distance": {
+   "on": true,
+   "why": null
+  },
+  "rank:involvement_order": {
+   "on": true,
+   "why": null
+  }
+ },
+ "source": "docs/eval/player-stats.json"
+}

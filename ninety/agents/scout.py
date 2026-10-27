@@ -31,6 +31,7 @@ from ninety.agents import companion_match as companion
 from ninety.agents import insight_check
 from ninety.agents.contracts import Ask, Description, Judge, status_for
 from ninety.agents.factcheck import Claim, parse_claim
+from ninety.intel.teamsheet import possessive
 
 CARD_GAP_MIN = 3  # design: at most one card every three match minutes, so a card is news, not noise
 NOTABLE = 0.9  # design: a fact must rank above 90% of its kind so far (the top tenth)
@@ -41,7 +42,7 @@ GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
 DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
     "counter": "{club} win it and shoot",
-    "shape": "{club}'s back line moves",
+    "shape": "{clubs} back line moves",
     "line_break": "{club} slice through",
     "overload": "{club} have the extra man",
     "counter_press": "{club} win it straight back",
@@ -61,7 +62,7 @@ WHY_TEXT = {
     "counter": "The sooner a side shoots after winning the ball, the less time the other side has to get "
     "back: {club} had a shot {value} seconds after winning it.",
     "shape": "A back line further from its own goal squeezes the space in midfield; one closer to it "
-    "protects the space behind: in minute {minute} {club}'s was {value} {unit} from their own goal.",
+    "protects the space behind: in minute {minute} {clubs} was {value} {unit} from their own goal.",
     "line_break": "Analysts call it packing: every opponent a pass gets past no longer stands between the "
     "ball and goal, and this pass took out {value} {unit}.",
     "overload": "With {own} against {other} around the ball, {club} had a spare player there.",
@@ -100,13 +101,13 @@ def where_spoken(fact: Mapping, clubs: Mapping[str, str]) -> str:
         y = (float(g["zone"]["y0"]) + float(g["zone"]["y1"])) / 2
     home, away = clubs["home"], clubs["away"]
     end = (
-        f"close to {home}'s goal"
+        f"close to {possessive(home)} goal"
         if x < 16.5
-        else f"in {home}'s third"
+        else f"in {possessive(home)} third"
         if x < 35
-        else f"close to {away}'s goal"
+        else f"close to {possessive(away)} goal"
         if x > 88.5
-        else f"in {away}'s third"
+        else f"in {possessive(away)} third"
         if x > 70
         else "in midfield"
     )
@@ -206,6 +207,7 @@ async def card_for(
             value=fact["value"],
             unit=fact["unit"],
             club=fact["club"],
+            clubs=possessive(fact["club"]),
             own=companion._plural(fact.get("own_players") or 0, "player"),
             other=companion._plural(fact.get("other_players") or 0, "player"),
         )
@@ -225,7 +227,7 @@ async def card_for(
             "team": fact["team"],
             "club": fact["club"],
             "kind": fact["kind"],
-            "headline": HEADLINES[fact["kind"]].format(club=fact["club"]),
+            "headline": HEADLINES[fact["kind"]].format(club=fact["club"], clubs=possessive(fact["club"])),
             "text": text,
             "status": "verified",
             "source": source,

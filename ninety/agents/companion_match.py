@@ -1052,7 +1052,10 @@ def code_texts(fact: dict) -> list[str]:
         else f"in minute {fact.get('minute_from') or fact.get('minute')}"  # never "from minute 1 to minute 1"
     )
     club = club or ""
-    who = fact.get("passer_is") or f"{'an' if club[:1] in 'AEIOU' else 'a'} {club} player"
+    who = fact.get("passer_is") or ""
+    if not who or re.fullmatch(rf"an? {re.escape(club)} player", who):
+        # Nobody named: the club's player as a fan says it, never "a London Athletic player" (lesson 297).
+        who = f"one of {_of(club)} players" if club else "a player"
     if metric == "regains_within_5s":
         lost = fact["also"][0][0]
         if not lost:
@@ -2043,7 +2046,7 @@ def code_match_answer(
     if calls and _minute_now(question.t) <= 2:
         why = TOO_EARLY  # nothing yet to rank, count or share: say so, not a canned list
     elif shape_held:
-        whose = f"{named[0]}'s" if len(named) == 1 else "A club's"
+        whose = _of(named[0]) if len(named) == 1 else "A club's"
         why = (f"{whose} shape can't be measured {span}: it needs every one of their players in view at "
                "once, and the cameras didn't have them all.")
     elif thin is not None:

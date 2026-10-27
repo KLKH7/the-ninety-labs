@@ -51,7 +51,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
     "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
-    "halves", "key_moments", "score", "set_pieces",
+    "halves", "key_moments", "score", "set_pieces", "player_stats", "player_rank",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -90,17 +90,19 @@ def events_of(match: str) -> tuple[dict, ...]:
 
 
 @lru_cache(maxsize=len(MATCHES) + len(DETECTED))
-def stats_of(match: str) -> tuple[dict, ...]:
+def stats_of(match: str, minute: int | None = None) -> tuple[dict, ...]:
     """The match's window stats, computed by code from its full events (positions included, which
-    the compact events leave out): detected events for a detected clip, the simulator's otherwise."""
+    the compact events leave out): detected events for a detected clip, the simulator's otherwise.
+    With `minute`, only what had happened by its end, each window ending there (lesson 292)."""
+    now = None if minute is None else 60.0 * minute
     if match in DETECTED:
-        return tuple(agent_rows(detected.load(DETECTED[match]())))
+        return tuple(agent_rows(detected.load(DETECTED[match]()), now=now))
     if match not in MATCHES:
         raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
-    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR else None
+    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR and now is None else None
     if stored and stored.exists():
         return tuple(json.loads(stored.read_text()))
-    return tuple(agent_rows(match_events(MATCHES[match], MINUTES)))
+    return tuple(agent_rows(match_events(MATCHES[match], MINUTES), now=now))
 
 
 def list_events(match: str, minute_from: int, minute_to: int, event_type: str | None) -> list[dict]:
@@ -115,14 +117,15 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
     return rows[:MAX_EVENTS]
 
 
-def match_info(match: str) -> dict:
+def match_info(match: str, minute: int | None = None) -> dict:
     """One match: its id, length in minutes, event types, and stats computed by code for each
-    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Cite a
-    stat by id; quote its value, percent or minutes as given."""
+    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Give the
+    minute you are asked about to see the stats as they stood at its end; null for the whole match.
+    Cite a stat by id; quote its value, percent or minutes as given."""
     events = events_of(match)  # refuses an unknown match
     minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
     return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES),
-            "stats": list(stats_of(match))}
+            "stats": list(stats_of(match, minute))}
 
 
 def fixture_path(clip: str) -> Path:
@@ -316,6 +319,28 @@ def shots(match: str, minute_from: int, minute_to: int, club: str | None = None)
     return _insight(match, "shots", minute_from, minute_to, club)
 
 
+def player_stats(match: str, minute: float, player: str | None = None, club: str | None = None) -> dict:
+    """Each player's stats up to a match minute (fractional: 33:50 is 33.83), named by the Player ID
+    feed (say "Player ID feed"): tracked seconds and coverage, distance while tracked (m) and top
+    speed (km/h, a 3 s mean), and detected passes, shots, goals and involvements. `player` is a name,
+    a shirt number or a unique part of a name; `club` a club's name; neither gives all 22. Running
+    is while the video tracked him in the footage shown, never a match total. A figure not measured
+    well enough is null with its reason under `withheld`: do not state it."""
+    return _insight(match, "player_stats", minute, player, club)
+
+
+def player_rank(match: str, club: str | None, metric: str, minute: float) -> dict:
+    """Players ranked by one metric up to a match minute, most first: best (a stated formula of
+    involvements, completed passes, shots and goals, never a model's view), involvement, passes,
+    passes_completed, shots, goals, fastest or distance. Fastest and distance rank only players
+    tracked at least half the footage shown. For one club, involvement may come back `order_only`: its
+    three names as an ordered list with no count or rank: say exactly its `say` ("A, then B, then C,
+    in the moves the video picked up"); never a number, never one player as "the most involved",
+    never "best".
+    A ranking not measured well enough has `withheld` set and no facts: say it is not available."""
+    return _insight(match, "player_rank", club, metric, minute)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -402,6 +427,7 @@ def make_server() -> FastMCP:
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
         possession, territory, shots, passing, physical, halves, key_moments, score, set_pieces,
+        player_stats, player_rank,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)
