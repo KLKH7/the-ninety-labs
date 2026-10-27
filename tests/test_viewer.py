@@ -184,7 +184,7 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     page.keyboard.press("3")
     assert page.get_by_role("radio", name="Audio description").get_attribute("aria-checked") == "true"
     assert page.is_visible("#voice-toggle") and page.is_checked("#voice")
-    assert "where the play is" in page.locator("#audio-note").inner_text()
+    assert "not voiced" in page.locator("#audio-note").inner_text()  # this bundle has no recorded lines
     # With the voice on, the live region is quiet: a screen reader does not say each line twice.
     assert page.get_attribute("#on-air", "aria-live") == "off"
     page.get_by_role("button", name="Watch it").click()  # seeks past the first line, to 60.7 s
@@ -195,6 +195,26 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     assert "ad-insight-m-e2" in on_air(page)
     assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
     assert not errors
+
+
+def test_the_viewer_never_speaks_with_the_browser_s_voice(browser, site):
+    """A line with no recorded audio is silent, its caption kept: audio description and commentary are
+    the bundle's voiced files or nothing (Kian, Oct 27: the browser's voice sounds robotic)."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script("""window.__speak = 0;
+        if (window.speechSynthesis) speechSynthesis.speak = () => { window.__speak += 1; };""")
+    page = ctx.new_page()
+    page.goto(site)
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.keyboard.press("3")  # audio description, voice on
+    page.get_by_role("button", name="Watch it").click()
+    page.keyboard.press("3")
+    play_to(page, 62.85)
+    assert narrator(page)["spoken"], "a line came due, or this proves nothing"
+    assert narrator(page)["voice"] == "none"
+    # mutation: speak a line without a file through speakAloud -> ninetySpokenAloud holds it
+    assert page.evaluate("window.ninetySpokenAloud") is None and page.evaluate("window.__speak") == 0
+    ctx.close()
 
 
 def test_audio_description_is_silent_with_the_voice_off(browser, site):

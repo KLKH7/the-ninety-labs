@@ -283,7 +283,7 @@ async function start() {
     ? "This bundle has no audio description: run ninety-e2e again."
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
-      : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
+      : "This bundle's audio description is not voiced: its captions are shown, nothing is spoken.";
   // The voice is off until a fan picks audio description on this page: a remembered choice never
   // starts it speaking on load.
   voiceBox.checked = false;

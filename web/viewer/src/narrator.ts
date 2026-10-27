@@ -5,12 +5,8 @@
 // short tone placed by `pan` says where the play is, and the browser's own voice says the line.
 // A seek or a pause stops the voice: nothing is said late.
 
-import { speakAloud } from "./speech";
 import type { AudioLine } from "./bundle";
 
-const TONE_HZ = 880; // design: a soft, high blip, apart from crowd noise
-const TONE_S = 0.09;
-const TONE_GAIN = 0.12;
 const SEEK_S = 0.5; // a clock jump bigger than this is a seek, not playback
 
 export interface NarratorState {
@@ -23,15 +19,15 @@ export class Narrator {
   private last = Number.NaN;
   private ctx: AudioContext | null = null;
   private current: AudioBufferSourceNode | null = null;
-  private speaking = false; // the browser's voice is ours: stop() never cuts the commentary's line
 
   constructor(
     private readonly lines: AudioLine[],
     private readonly base: string,
   ) {
     const recorded = lines.length > 0 && lines.every((l) => l.file);
-    const browser = typeof speechSynthesis !== "undefined";
-    this.state = { spoken: [], voice: recorded ? "recorded" : browser ? "browser" : "none" };
+    // Recorded lines only: a line without its file is silent, its caption kept (Kian, Oct 27: the
+    // browser's voice sounds robotic). "browser" stays in the type for bundles' notes, never set.
+    this.state = { spoken: [], voice: recorded ? "recorded" : "none" };
   }
 
   /** Called every frame with match time. Says the lines whose start the clock just passed. */
@@ -60,10 +56,7 @@ export class Narrator {
   stop() {
     this.current?.stop();
     this.current = null;
-    if (this.speaking && typeof speechSynthesis !== "undefined" && (speechSynthesis.speaking || speechSynthesis.pending)) {
-      speechSynthesis.cancel();
-    }
-    this.speaking = false;
+
   }
 
   private audio(): AudioContext | null {
@@ -87,25 +80,8 @@ export class Narrator {
           src.start();
           this.current = src;
         })
-        .catch(() => this.speak(line));
-      return;
+        .catch(() => undefined); // a file that will not play: silent, never the browser's voice
     }
-    if (ctx) {
-      const osc = new OscillatorNode(ctx, { frequency: TONE_HZ });
-      const gain = new GainNode(ctx, { gain: 0 });
-      const now = ctx.currentTime;
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(TONE_GAIN, now + 0.01);
-      gain.gain.linearRampToValueAtTime(0, now + TONE_S);
-      osc.connect(gain).connect(new StereoPannerNode(ctx, { pan: line.pan })).connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + TONE_S);
-    }
-    this.speak(line);
-  }
-
-  private speak(line: AudioLine) {
-    this.speaking = true;
-    speakAloud(line.spoken, { lang: "en-GB", rate: 1.1 });
+    // No file: silent, the caption only.
   }
 }
