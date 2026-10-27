@@ -76,3 +76,22 @@ def test_the_offline_insights_ride_along_only_for_their_own_clip(tmp_path):
     (tmp_path / "other.json").write_text(json.dumps({"clip": "seed8080-match"}))
     with pytest.raises(SystemExit, match="not this clip's"):
         served.pack(p, "demo-match", tmp_path / "b.tar.gz", insights=tmp_path / "other.json")
+
+
+def test_the_api_prefers_the_shipped_insights_to_a_runtime_build(monkeypatch, tmp_path):
+    # Where the Dockerfile puts a served clip's insights.json: match_server.insights_of reads it
+    # before building anything, so the feed's per-player stats survive into the deployed Ask. The
+    # clip has no frames or events here at all: only the stored file can answer.
+    from ninety.intel import teamsheet
+    from ninety.intel.match_insights import MatchInsights
+    from ninety.mcp import match_server
+
+    stored = MatchInsights.build("demo-match", [], [], teamsheet.Fixture(7, "OAK", "FEN"), {})
+    (tmp_path / "insights").mkdir()
+    (tmp_path / "insights" / "demo-match.json").write_text(json.dumps(stored.as_dict()))
+    monkeypatch.setattr(match_server, "MATCH_DIR", str(tmp_path))
+    match_server.insights_of.cache_clear()
+    try:
+        assert match_server.insights_of("demo-match").as_dict() == stored.as_dict()
+    finally:
+        match_server.insights_of.cache_clear()
