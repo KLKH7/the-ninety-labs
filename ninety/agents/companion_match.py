@@ -299,7 +299,14 @@ def chat_kind(text: str, insights, history=()) -> str | None:
     kind = next((k for k, pattern in SMALL_TALK if pattern.search(text)), None)
     if kind is not None:
         return kind
-    if route(text) or clubs_named(text, insights) or minutes_of(text, 90) is not None or asked_role(text):
+    if route(text) or clubs_named(text, insights) or minutes_of(text, 90) is not None:
+        return None
+    # A player or a position ("How much has the left back done?") is about the match, asked with "who"
+    # or not.
+    lowered = text.lower()
+    if any(re.search(rf"\b(?:{words})", lowered) for _, words in ROLE_WORDS):
+        return None
+    if hasattr(insights, "sheet_names") and asked_players(text, insights):
         return None
     if history and FOLLOW_ON.search(text):
         return None

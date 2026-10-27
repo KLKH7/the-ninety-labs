@@ -1264,3 +1264,9 @@ def test_no_window_runs_past_full_time():
     assert minute == 90 and companion._calls(plan, mi, minute)[0]["minute_to"] == 90
     a, _ = companion.code_match_answer(q, mi)
     assert "minute 91" not in a.text, a.text
+
+
+@pytest.mark.parametrize("text", ["How much has the left back done?", f"How is {LB.name} doing?",
+                                  f"Tell me about {LB.name.split()[-1]}"])
+def test_a_player_or_a_position_is_not_small_talk(text):
+    assert companion.chat_kind(text, insights()) is None
