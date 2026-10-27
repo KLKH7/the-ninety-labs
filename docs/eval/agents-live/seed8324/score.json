@@ -462,7 +462,8 @@
     "fact_checker hold m-s07-v00002: tactician's claim: event s07-v00001's ball speed is vision's, whose error is measured only for a pass along the ground (this pass is not marked on the ground): state it without the speed; event s07-v00002's ball speed is vision's, whose error is measured only for a pass along the ground (it is not a pass): state it without the speed; event s07-v00002's side was told with confidence unknown, not above 0.96: a claim naming a team waits for a surer side",
     "producer template m-s07-v00002: cue-s07-v00002-analyst stays: held"
    ],
-   "ms": 5980.2
+   "ms": 5980.2,
+   "exercised": false
   },
   "drill:judge-down-companion": {
    "injected": null,
@@ -486,7 +487,8 @@
     "reasons": [
      "judge service error; claim held back"
     ]
-   }
+   },
+   "exercised": true
   },
   "drill:vision-dropout": {
    "injected": "no detected events in the 60 s around the goal",
@@ -502,6 +504,7 @@
     "producer templates -: 490 template graphics on air"
    ],
    "ms": 3176.9,
+   "exercised": true,
    "dropped": 8,
    "aired_cites_dropped": false,
    "aired_says_goal": false
@@ -524,7 +527,8 @@
     "tactician fail m-s44-v00017: TimeoutError: ; template stays",
     "producer template m-s44-v00017: cue-s44-v00017-analyst stays: held"
    ],
-   "ms": 63565.5
+   "ms": 63565.5,
+   "exercised": true
   },
   "drill:slow-companion": {
    "injected": "the Companion answers after 12.0 s (budget 10.0 s)",
@@ -547,7 +551,8 @@
     "reasons": [
      "model timeout"
     ]
-   }
+   },
+   "exercised": true
   }
  },
  "latency": {

@@ -191,3 +191,13 @@ def test_observer_records_failures_and_stops_at_the_cap(tmp_path):
     assert row["error"] == "ConnectionError: down" and row["usd"] == 0.0
     with pytest.raises(al.OverBudget):
         asyncio.run(agent.run("p"))
+
+
+def test_a_drill_that_never_hits_its_fault_is_not_exercised(tmp_path):
+    start = {"kind": "drill_start", "key": "goal-1", "run": "drill:judge-down", "injected": "x"}
+    held = {**review(["g"]), "run": "drill:judge-down", "status": "held", "aired": None}
+    write_trace(tmp_path, [start, call("tactician", "p", "{}", run="drill:judge-down"), held], SPEC)
+    assert al.score(tmp_path)["drills"]["drill:judge-down"]["exercised"] is False
+    failed = call("judge", "p", None, run="drill:judge-down", error="ServiceRequestError: x")
+    write_trace(tmp_path, [start, failed, held], SPEC)
+    assert al.score(tmp_path)["drills"]["drill:judge-down"]["exercised"] is True

@@ -689,6 +689,11 @@ def totals(per: dict) -> dict:
     }
 
 
+# The role whose call each drill fails: the drill is exercised only if the trace shows that call failing.
+DRILL_ROLE = {"drill:judge-down": "judge", "drill:judge-down-companion": "judge",
+              "drill:slow-tactician": "tactician", "drill:slow-companion": "companion"}
+
+
 def drill_scores(rows: list[dict], specs: dict) -> dict:
     out = {}
     for run in dict.fromkeys(r["run"] for r in rows):
@@ -713,6 +718,9 @@ def drill_scores(rows: list[dict], specs: dict) -> dict:
             d["companion"] = {k: c[k] for k in ("source", "status", "text", "reasons")}
         if err := next((r for r in mine if r["kind"] == "graph_error"), None):
             d["graph_error"] = err["error"]
+        role = DRILL_ROLE.get(run)
+        d["exercised"] = (bool(start.get("dropped")) if role is None
+                          else any(r["role"] == role and r["error"] for r in calls))
         if run == "drill:vision-dropout":
             dropped = set(start.get("dropped", []))
             d["dropped"] = len(dropped)
@@ -750,7 +758,8 @@ def tables(result: dict) -> str:
     for stage, p in result["latency"].items():
         if p["n"]:
             lines.append(f'| {stage} | {p["n"]} | {p["p50_ms"] / 1000:.1f} s | {p["max_ms"] / 1000:.1f} s |')
-    lines += ["", "| drill | injected | ends (v/r/h) | aired | what happened |", "|---|---|---|---|---|"]
+    lines += ["", "| drill | injected | fault hit | ends (v/r/h) | aired | what happened |",
+              "|---|---|---|---|---|---|"]
     for run, d in result["drills"].items():
         e = d["ends"]
         c = d.get("companion")
@@ -761,7 +770,8 @@ def tables(result: dict) -> str:
                     f'{_yes(d["aired_cites_dropped"])}; aired says goal: '
                     f'{_yes(d["aired_says_goal"])}. ' + what)
         aired = "; ".join(f'"{a["text"]}"' for a in d["aired"]) or "nothing"
-        lines.append(f'| {run} | {d["injected"]} | {e["verified"]}/{e["rejected"]}/{e["held"]} | {aired} | '
+        lines.append(f'| {run} | {d["injected"]} | {_yes(d["exercised"])} | '
+                     f'{e["verified"]}/{e["rejected"]}/{e["held"]} | {aired} | '
                      f'{what.replace("|", "/")} |')
     return "\n".join(lines) + "\n"
 

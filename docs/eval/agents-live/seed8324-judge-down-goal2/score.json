@@ -49,7 +49,8 @@
     "fact_checker hold m-s18-v00011: tactician's claim: judge service error; claim held back",
     "producer template m-s18-v00011: cue-s18-v00011-analyst stays: held"
    ],
-   "ms": 5702.9
+   "ms": 5702.9,
+   "exercised": true
   }
  },
  "latency": {

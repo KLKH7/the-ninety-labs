@@ -68,7 +68,7 @@ The cold figure is a single call on another match; it matches lesson 90's 50.7 a
 
 | drill | injected | what happened | as pre-registered? |
 |---|---|---|---|
-| Judge down, graph (goal-2, min 35) | every Judge call raises a service error | Judge tried twice (one retry), claim **held** (`service`), template stays, minute done in 5.7 s. In the normal run this same minute aired a verified claim | yes, but **re-run on goal-2**: the pre-registered run on goal-1 never reached the Judge (a code check held its claim first: a ball speed vision measures only on ground passes), so it tested nothing. The re-run is labelled in its trace |
+| Judge down, graph (goal-2, min 35) | every Judge call raises a service error | Judge tried twice (one retry), claim **held** (`service`), template stays, minute done in 5.7 s. In the normal run this same minute aired a verified claim | yes, but **re-run on goal-2**: the pre-registered run on goal-1 never reached the Judge (a code check held its claim first: a ball speed vision measures only on ground passes), so it tested nothing (lesson 281). The re-run is labelled in its trace |
 | Judge down, Companion (goal-1) | same | Judge tried twice, held; the phone shows code's checked answer (reason `judge service error; claim held back`) | yes |
 | Vision dropout (goal-2) | no detected events in the 60 s around the goal (8 dropped) | the Analyst picked no moment; no template, no claim for the missing events; nothing aired says "goal" or cites a dropped id | yes |
 | Slow model (line-break, min 89) | the Tactician answers after 65 s (budget 60 s) | cancelled at 60.0 s, claim held (`timeout`), template stays, minute done in 63.6 s | yes |
@@ -111,7 +111,12 @@ verified, aired), and each drill.
   stdio server, not the deployed one.
 - **Little of the graph airs on this match.** 1 of 8 moments aired. The holds are the confidence
   gate working as designed: a side told with confidence at or below 0.96, or a detection below
-  0.50 (11 held drafts). On this footage, most graph moments keep their template graphic.
+  0.50 (11 held drafts). The graph reads the sided detections (`detected.sided.jsonl`), and
+  `compact()` keeps the feed's side: 208 of the 371 agent events carry `team_source: id_feed` with
+  side confidence 1.0, and the one claim that aired cites one of them. Every held event is one
+  the player-ID feed did not name (`team_source` null, side confidence 0.0 to 0.88), checked event
+  by event. It is not a wiring gap, and the gate is right to hold. On this footage, most graph
+  moments keep their template graphic.
 - **Raw track ids in graph text.** The aired graph claim names "a-t18090". The fact-checker checks
   that player against the cited events, but the graph's text is not rewritten into a fan-facing
   name. The broadcast INSIGHT bar uses the insight check, which bans track ids.

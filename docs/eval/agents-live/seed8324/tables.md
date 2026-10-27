@@ -20,10 +20,10 @@
 | graph_minute | 8 | 8.1 s | 19.4 s |
 | companion_answer | 8 | 5.7 s | 6.7 s |
 
-| drill | injected | ends (v/r/h) | aired | what happened |
-|---|---|---|---|---|
-| drill:judge-down | every Judge call raises ServiceRequestError | 0/0/1 | nothing | challenger agree m-s07-v00002: ; fact_checker hold m-s07-v00002: tactician's claim: event s07-v00001's ball speed is vision's, whose error is measured only for a pass along the ground (this pass is not marked on the ground): state it without the speed; event s07-v00002's ball speed is vision's, whos |
-| drill:judge-down-companion | None | 0/0/0 | nothing | Companion: code answer, ['judge service error; claim held back'] |
-| drill:vision-dropout | no detected events in the 60 s around the goal | 0/0/0 | nothing | 8 events dropped; aired cites a dropped id: **no**; aired says goal: **no**. producer templates -: 490 template graphics on air |
-| drill:slow-tactician | the Tactician answers after 65.0 s (budget 60.0 s) | 0/0/1 | nothing | analyst pick m-s44-v00017: evidence ['s44-v00017', 's44-v00011', 's44-v00012', 's44-v00013', 's44-v00014', 's44-v00015', 's44-v00016']; tactician fail m-s44-v00017: TimeoutError: ; template stays; producer template m-s44-v00017: cue-s44-v00017-analyst stays: held |
-| drill:slow-companion | the Companion answers after 12.0 s (budget 10.0 s) | 0/0/0 | nothing | Companion: code answer, ['model timeout'] |
+| drill | injected | fault hit | ends (v/r/h) | aired | what happened |
+|---|---|---|---|---|---|
+| drill:judge-down | every Judge call raises ServiceRequestError | **no** | 0/0/1 | nothing | challenger agree m-s07-v00002: ; fact_checker hold m-s07-v00002: tactician's claim: event s07-v00001's ball speed is vision's, whose error is measured only for a pass along the ground (this pass is not marked on the ground): state it without the speed; event s07-v00002's ball speed is vision's, whos |
+| drill:judge-down-companion | None | yes | 0/0/0 | nothing | Companion: code answer, ['judge service error; claim held back'] |
+| drill:vision-dropout | no detected events in the 60 s around the goal | yes | 0/0/0 | nothing | 8 events dropped; aired cites a dropped id: **no**; aired says goal: **no**. producer templates -: 490 template graphics on air |
+| drill:slow-tactician | the Tactician answers after 65.0 s (budget 60.0 s) | yes | 0/0/1 | nothing | analyst pick m-s44-v00017: evidence ['s44-v00017', 's44-v00011', 's44-v00012', 's44-v00013', 's44-v00014', 's44-v00015', 's44-v00016']; tactician fail m-s44-v00017: TimeoutError: ; template stays; producer template m-s44-v00017: cue-s44-v00017-analyst stays: held |
+| drill:slow-companion | the Companion answers after 12.0 s (budget 10.0 s) | yes | 0/0/0 | nothing | Companion: code answer, ['model timeout'] |
