@@ -3482,7 +3482,7 @@ short and actionable. This file is public: no research sources, product names or
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
 
-### NNN. A template that was never provisioned is not the deployed infrastructure
+### 299. A template that was never provisioned is not the deployed infrastructure
 - **What happened:** on Oct 27, the day of the deadline, an audit found that the deployed API could
   not reach Foundry. Its identity had only AcrPull and Key Vault Secrets User, and its container had
   two env vars. `infra/main.bicep` had held `AZURE_CLIENT_ID` and the Speech role since #279, but
