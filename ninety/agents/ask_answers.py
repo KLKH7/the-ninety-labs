@@ -174,6 +174,7 @@ class Reply:
 
 
 def _short(ctx: Ctx, team: str) -> str:
+    """The club's short name as a fan reads it ("Lisbon"), never its three-letter code."""
     from ninety.intel.teamsheet import short_name
 
     fx = ctx.mi.fixture
@@ -545,7 +546,7 @@ def passes(ctx: Ctx) -> Reply:
             f2,
         )
     r.notes.append(MISSES["passes"])
-    r.head = f"{_short(ctx, first)} {n[first]} passes seen"
+    r.head = f"{_short(ctx, first)}: {n[first]} passes seen"
     return r
 
 
@@ -612,7 +613,7 @@ def shots(ctx: Ctx) -> Reply:
             ft,
         )
     elif total == 0:
-        r.say(f"There have been no shots {w.said} {SEEN}.", ft)
+        r.say(f"Vision hasn't spotted a shot {w.said} {SEEN}.", ft)
     else:
         r.say(
             f"Vision has spotted {_plural(total, 'shot')} {w.said} {SEEN}: {c1} {_plural(n[first], 'shot')}, "
@@ -621,7 +622,7 @@ def shots(ctx: Ctx) -> Reply:
             f1,
             f2,
         )
-    r.head = f"{_short(ctx, first)} {n[first]} shots seen"
+    r.head = f"{_short(ctx, first)}: {n[first]} shots seen"
     return r
 
 
@@ -664,7 +665,7 @@ def on_target(ctx: Ctx) -> Reply:
         rest.append(f"didn't see how {_plural(unknown, 'shot')} ended")
     if rest:
         r.say("It " + " and ".join(rest) + ".", f)
-    r.head = f"{_short(ctx, first)} {on[first]} on target seen"
+    r.head = f"{_short(ctx, first)}: {on[first]} on target seen"
     return r
 
 
@@ -728,7 +729,7 @@ def corners(ctx: Ctx) -> Reply:
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     total = sum(n.values())
     if total == 0:
-        r.say(f"There have been no corners {w.said} {SEEN}.", f)
+        r.say(f"Vision hasn't spotted a corner {w.said} {SEEN}.", f)
         r.head = "No corners seen"
         return r
     r.say(
@@ -736,7 +737,7 @@ def corners(ctx: Ctx) -> Reply:
         f"{_plural(n[second], 'corner')}.",
         f,
     )
-    r.head = f"{_short(ctx, first)} {n[first]} corners seen"
+    r.head = f"{_short(ctx, first)}: {n[first]} corners seen"
     return r
 
 
@@ -774,7 +775,11 @@ def out_of_play(ctx: Ctx) -> Reply:
             f,
         )
     else:
-        r.say(f"The ball hasn't gone out of play {w.said} {SEEN}: {parts[0]}, {parts[1]} and {parts[2]}.", f)
+        r.say(
+            f"Vision hasn't seen the ball go out of play {w.said} {SEEN}: "
+            f"{parts[0]}, {parts[1]} and {parts[2]}.",
+            f,
+        )
     if asked and ctx.read.club:
         n, (one, many) = got[asked], RESTART_UNITS[asked]
         t = ctx.team_of[ctx.read.club]
@@ -850,6 +855,7 @@ def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
     names = [f["name"] for f in got.get("facts") or ()][:3]
     if got.get("withheld") or len(names) < 3:
         return None
+    said = got.get("say") or f"{names[0]}, then {names[1]}, then {names[2]}, in the moves the video picked up"
     f = ctx.fact(
         f"involved:{team}",
         "ask_involvement_order",
@@ -862,10 +868,7 @@ def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
         name_source="id_feed",
     )
     # Never "best", never one player "the most involved": an order, as it was graded (#431).
-    return (
-        f"Most involved for {ctx.clubs[team]}, in the moves the video picked up: {names[0]}, then "
-        f"{names[1]}, then {names[2]}."
-    ), f
+    return f"Most involved for {ctx.clubs[team]}: {said}.", f
 
 
 def best(ctx: Ctx) -> Reply:
@@ -1043,10 +1046,40 @@ def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
     return r
 
 
+def _one_player_cant(ctx: Ctx, row: dict | None, what: str) -> Reply:
+    """A question about one named player whose figure isn't said: why, about him, never "rank them"."""
+    name = (row or {}).get("name") or ctx.read.player
+    thing = "how far he has run" if what == "distance" else "his top speed"
+    cover = round(100 * ((row or {}).get("footage_coverage") or 0))
+    if row is not None and cover:
+        f = ctx.fact(
+            f"cover:{row['player']}",
+            "ask_player_coverage",
+            cover,
+            "%",
+            row["team"],
+            w=_so_far(ctx),
+            player_name=name,
+            name_source="id_feed",
+        )
+        r = _cant(
+            ctx,
+            f"Vision followed {name} for {cover}% of the footage we've seen, too little to say {thing}.",
+            Reply(),
+        )
+        r.lines[0] = (r.lines[0][0], [f])
+    else:
+        r = _cant(ctx, f"Vision can't yet say {thing} for {name}.", Reply())
+    r.say(FEED_NAMES)
+    return r
+
+
 def fastest(ctx: Ctx) -> Reply:
     row = _player_row(ctx)
     if row is not None and (got := _player_running(ctx, row, "fastest")) is not None:
         return got
+    if ctx.read.player:
+        return _one_player_cant(ctx, row, "fastest")
     top, _ = _ranked(ctx, "fastest")
     if top is not None:
         r = Reply()
@@ -1066,7 +1099,7 @@ def fastest(ctx: Ctx) -> Reply:
         r.head = top["name"][:48]
         return r
     return _cant(
-        ctx, "Vision can't measure each player's top speed well enough to rank them yet.", _team_km(ctx)
+        ctx, "Vision can't yet measure players' top speeds well enough to say who is fastest.", _team_km(ctx)
     )
 
 
@@ -1074,8 +1107,12 @@ def distance(ctx: Ctx) -> Reply:
     row = _player_row(ctx)
     if row is not None and (got := _player_running(ctx, row, "distance")) is not None:
         return got
+    if ctx.read.player:
+        return _one_player_cant(ctx, row, "distance")
     return _cant(
-        ctx, "Vision can't yet say how far each player has run well enough to rank them.", _team_km(ctx)
+        ctx,
+        "Vision can't yet measure how far players have run well enough to say who has run furthest.",
+        _team_km(ctx),
     )
 
 

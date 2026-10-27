@@ -334,15 +334,36 @@ def test_the_model_s_menu_is_the_table(mi):
     assert {r["id"] for r in body["intents"]} == set(cm.INTENT_ROWS) == set(ask_answers.BUILDERS)
 
 
-def test_a_row_the_model_picks_is_answered_by_code(mi):
-    """The model picks a row; code builds the answer from it (no model sentence airs)."""
+@pytest.mark.parametrize(
+    "text, picked",
+    [
+        ("Where are Lisbon outnumbering London?", "shots"),
+        ("How have London been pressing?", "passes"),
+        ("How are London pressing?", "possession"),
+        ("Where are Lisbon outnumbering London?", "possession"),
+    ],
+)
+def test_a_row_the_question_does_not_support_is_never_aired(mi, text, picked):
+    """Review of #432 (B1): a model that names a row the question gives no reason for is refused, and
+    code answers as if it had not planned: never a verified count of another topic."""
 
+    async def planner(prompt):
+        return json.dumps({"intent": picked})
+
+    r = asyncio.run(cm.answer_match(Question("s", None, text, 2050.0), mi, planner))
+    assert picked not in cm.plausible_rows(cm.read_question(text, mi, 2050.0))
+    assert any("does not support" in x for x in r.reasons), r.reasons
+    lead = r.answer.text.split(". ")[0]
+    assert not re.search(r"\b\d+ (?:shots?|passes)\b|\d+% to\b", lead), r.answer.text
+
+
+def test_a_plausible_row_the_model_picks_is_answered_by_code(mi):
     async def planner(prompt):
         return json.dumps({"intent": "possession"})
 
-    q = Question("s", None, "what's going on with the ball out there?", 2050.0)
+    q = Question("s", None, "who's had the ball?", 2050.0)  # possession is the row code reads too
     r = asyncio.run(cm.answer_match(q, mi, planner))
-    assert r.source == "code" and r.answer.headline == "London 63%", (r.reasons, r.answer.text)
+    assert r.source == "code" and r.answer.headline.startswith("London"), (r.reasons, r.answer.text)
 
 
 def test_fastest_is_the_player_stats_leader_named_by_the_feed_once_ranked(mi, monkeypatch):
@@ -373,7 +394,7 @@ def test_fastest_is_the_player_stats_leader_named_by_the_feed_once_ranked(mi, mo
     a, _ = cm.code_match_answer(
         Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
     )
-    assert a.text.startswith("Vision can't measure each player's top speed"), a.text
+    assert a.text.startswith("Vision can't yet measure players' top speeds"), a.text
 
 
 def test_the_phone_s_chips_file_is_the_table_s(mi):
@@ -423,8 +444,8 @@ def test_best_player_is_the_involvement_order_never_best_or_one_player(mi, monke
         Question("s", None, "Who's been Lisbon's best player?", 3600.0), mi, suggest=False
     )
     assert a.text.startswith(
-        "Most involved for Lisbon Esportes, in the moves the video picked up: Ben Vomble, "
-        "then Yusuf Windell, then Tom Keel."
+        "Most involved for Lisbon Esportes: Ben Vomble, then Yusuf Windell, then Tom Keel, "
+        "in the moves the video picked up."
     ), a.text
     assert "Player ID feed" in a.text and not re.search(r"\bis (?:the )?best\b|\bthe most involved\b", a.text)
     _stub_player_stats(mi, monkeypatch, withheld="missed its bar")
@@ -453,3 +474,38 @@ def test_a_named_player_s_running_is_said_while_tracked_with_its_coverage(mi, mo
     _stub_player_stats(mi, monkeypatch)
     a, _ = cm.code_match_answer(Question("s", None, q, 3600.0), mi, suggest=False)
     assert a.text.startswith(said) and "Player ID feed" in a.text, a.text
+
+
+def test_a_named_player_s_withheld_figure_is_said_of_him_never_as_a_ranking(mi, monkeypatch):
+    _stub_player_stats(mi, monkeypatch)
+    row = {
+        "player": "LIS11",
+        "name": "Ben Vomble",
+        "number": 11,
+        "team": "away",
+        "distance_m": None,
+        "top_kmh": None,
+        "footage_coverage": 0.31,
+    }
+    monkeypatch.setattr(
+        mi, "player_stats", lambda minute, player=None, club=None: {"facts": [row]}, raising=False
+    )
+    a, _ = cm.code_match_answer(Question("s", None, "How far has Ben Vomble run?", 3600.0), mi, suggest=False)
+    assert a.text.startswith(
+        "Vision followed Ben Vomble for 31% of the footage we've seen, too little to say how far he has run."
+    ), a.text
+    assert "rank" not in a.text
+
+
+def test_this_match_is_the_match_so_far():
+    w = ask_intents.window_of("who has been on top this match", 5400.0, "now")
+    assert (w.lo, w.hi, w.said) == (1, 90, "so far")
+
+
+@pytest.mark.parametrize(
+    "q", ["How many corners?", "How many shots?", "How many times has the ball gone out of play?"]
+)
+def test_a_zero_count_is_what_vision_spotted_never_a_flat_fact(mi, q):
+    a, _ = cm.code_match_answer(Question("s", None, q, 120.0), mi, suggest=False)
+    assert not re.match(r"There (?:have|has) been no\b|The ball hasn't", a.text), a.text
+    assert "in the footage we've seen" in a.text

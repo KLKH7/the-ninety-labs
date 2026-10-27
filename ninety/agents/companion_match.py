@@ -1544,6 +1544,15 @@ def sheet_name_in(text: str, insights) -> str | None:
     return last[0] if len(last) == 1 else None
 
 
+def plausible_rows(read) -> set[str]:
+    """The table rows a model may pick for a question: those code's patterns give a score, and the row
+    code read it as (on top and momentum are one comparison over two windows)."""
+    rows = {iid for iid, n in read.scores if n > 0} | {read.intent}
+    if rows & {"on_top", "momentum"}:
+        rows |= {"on_top", "momentum"}
+    return rows & set(INTENT_ROWS)
+
+
 def chips(insights, t: float, club: str | None = None) -> list[dict]:
     """The phone's chips at match second t: the intent table's questions (ninety/agents/ask_chips.json)
     with the fan's club filled in, each kept only when code answers it now from a checked fact."""
@@ -2178,10 +2187,16 @@ async def answer_match(
 
         from ninety.agents import ask_answers
 
-        read = _with(read_question(question.text, insights, question.t, history), intent=calls[0]["intent"])
-        got = ask_answers.build(question, insights, read)
+        read = read_question(question.text, insights, question.t, history)
+        picked = calls[0]["intent"]
+        # The model may pick only a row code's own reading finds plausible for this question (a row with
+        # a nonzero score): "Where are Lisbon outnumbering London?" never airs a pass count because a
+        # model said "passes" (review of #432). Any other pick is code's answer, as if it had not planned.
+        if picked not in plausible_rows(read):
+            return fallback(f"model picked row {picked}, which the question does not support")
+        got = ask_answers.build(question, insights, _with(read, intent=picked))
         if got is not None:
-            return MatchResult(got[0], "code", tuple(got[1]), ("model picked row " + read.intent,))
+            return MatchResult(got[0], "code", tuple(got[1]), ("model picked row " + picked,))
         return fallback("model picked a row code leaves to the tools")
     if not calls:
         return fallback("model chose no tool")

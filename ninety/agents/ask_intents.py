@@ -508,8 +508,11 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
         ),
     ),
     "key_moments": (
-        (r"\btalking points?\b|\bwhat(?:'s| has)? been going on\b|\bgoing on so far\b"
-         r"|\bstory of the (?:game|match)\b", 8),
+        (
+            r"\btalking points?\b|\bwhat(?:'s| has)? been going on\b|\bgoing on so far\b"
+            r"|\bstory of the (?:game|match)\b",
+            8,
+        ),
         (
             r"\bkey moments?\b|\bbig moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b"
             r"|\bwhat(?:'s| has)? happened|\bsumm(?:ary|ari[sz]e)\b"
@@ -673,7 +676,12 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
         if lo > done:
             return Window(1, max(1, done), "so far", True, f"Minute {lo} hasn't been played yet.")
         return span(lo, done)
-    if re.search(r"\b(?:so far|whole (?:match|game)|all (?:match|game)|today|overall)\b", s):
+    if re.search(
+        r"\b(?:so far|(?:the )?whole (?:match|game)|all (?:match|game)"
+        r"|(?:this|the|in the|over the) (?:match|game)"
+        r"|today|overall|since kick-?off|from the start)\b",
+        s,
+    ):
         return span(1, done)
     if default == "now" or re.search(r"\b(?:right now|at the moment|lately|recently|currently)\b", s):
         return span(max(half_lo, done - NOW_MIN + 1), done, named=False)
