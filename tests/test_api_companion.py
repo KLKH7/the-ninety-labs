@@ -979,6 +979,60 @@ def test_a_model_step_past_its_budget_gives_the_code_answer_naming_the_step(monk
     assert [(s["step"], s["outcome"]) for s in record["steps"]] == [("answer", "ok"), ("judge", "timeout")]
 
 
+def test_with_azure_monitor_each_question_is_one_span_holding_its_model_calls(monkeypatch, tmp_path):
+    # Deployed (infra/main.bicep sets the connection string), the record is the `ninety.ask` span,
+    # open while the question is answered, so a model call's span (Agent Framework's, in production)
+    # is its child: one trace per question in Foundry's tracing view. No file, no viewer words.
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from ninety.agents import telemetry
+
+    exporter, provider = InMemorySpanExporter(), TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(telemetry, "TRACER_PROVIDER", provider)
+    monkeypatch.setitem(telemetry._monitor, "configured", True)  # Azure Monitor itself is not called
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "InstrumentationKey=test")
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask.jsonl"))
+    client, app, live = live_setup(monkeypatch, [GOOD])
+    built = app.live_factory
+
+    async def build():
+        models = await built()
+
+        async def ask_in_a_span(prompt):
+            with telemetry.tracer().start_as_current_span("chat gpt-4.1-mini"):
+                return await models.ask(prompt)
+
+        return comp.LiveModels(ask_in_a_span, models.judge)
+
+    app.live_factory = build
+    text = "How fast is h7 going? my secret words"
+    ask(client, pair(client), text=text, headers={comp.PASSCODE_HEADER: "letmein"})
+    spans = {s.name: s for s in exporter.get_finished_spans()}
+    question, model = spans["ninety.ask"], spans["chat gpt-4.1-mini"]
+    assert model.parent is not None and model.parent.span_id == question.context.span_id
+    assert question.attributes["ninety.ask.live"] is True
+    assert question.attributes["ninety.ask.path"] == "player"
+    assert "secret" not in json.dumps(dict(question.attributes))
+    assert not (tmp_path / "ask.jsonl").exists()
+
+
+def test_azure_monitor_is_configured_once_and_only_with_a_connection_string(monkeypatch):
+    import azure.monitor.opentelemetry as monitor
+
+    from ninety.agents import telemetry
+
+    calls = []
+    monkeypatch.setattr(monitor, "configure_azure_monitor", lambda **kw: calls.append(kw))
+    monkeypatch.setitem(telemetry._monitor, "configured", False)
+    assert telemetry.monitor_from_env() is False and calls == []
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "InstrumentationKey=test")
+    assert telemetry.monitor_from_env() is True and telemetry.monitor_from_env() is True
+    assert len(calls) == 1
+
+
 def test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit():
     # docs/eval/ask-model-path.md: each budget is 1.5 x the step's measured p95, rounded up to 0.5 s.
     from ninety.eval import ask_model_path as amp

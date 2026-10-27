@@ -24,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ninety.intel.scene import PITCH_Y, depth
-from ninety.intel.teamsheet import LABEL, LINE, ROLES, Fixture
+from ninety.intel.teamsheet import LABEL, LINE, ROLES, Fixture, possessive
 
 # The 4-3-3 as a coach draws it, for a team attacking toward x = 105, in metres: depth from its own
 # goal line and distance across from its right touchline (*design*, a starting point that the
@@ -240,10 +240,10 @@ def say(w: Mapping) -> str:
     if w.get("name"):
         return w["name"]
     if w.get("position"):
-        return f"{club}'s {w['position']}"
+        return f"{possessive(club)} {w['position']}"
     article = "an" if club[:1].lower() in "aeiou" else "a"
     if w.get("line") == "goalkeeper":
-        return f"{club}'s goalkeeper"
+        return f"{possessive(club)} goalkeeper"
     if w.get("line"):
         return f"{article} {club} {w['line']}"
     return f"{article} {club} player"

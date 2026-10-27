@@ -511,6 +511,10 @@ def cmd_truth(args) -> None:
     intents, _ = G.load_intents()
     tab = T.table(tr, [it for it in intents if it["kind"] != "chip"], list(TIMES), G.windows)
     tab["_roster"] = [[v["name"], v["team"]] for v in tr.names.values()]
+    tab["_directions"] = {
+        "first_half_home_right": tr.directions[0],
+        "second_half_home_right": tr.directions[1],
+    }
     T.save(tab, args.out)
     print(f"{args.out}: {len(tab) - 1} truth values")
 
@@ -527,6 +531,19 @@ def cmd_grade(args) -> None:
     insights = load_insights(args.insights)
     intents, clubs = G.load_intents()
     table = T.read(args.truth_table)
+    if args.questions:
+        intents = G.with_questions(intents, args.questions)
+        need = {G.wkey(it, t, w) for it in intents for t in TIMES for w in G.windows(it, t)} - set(table)
+        need = {k for k in need if not k.startswith("tactics_chip|")}
+        if need:
+            # windows the frozen table does not hold: computed from the answer key now (offline only)
+            if not (args.truth_run and args.truth_work and args.truth_cache):
+                raise SystemExit(
+                    f"{len(need)} windows are not in the truth table: pass --truth-run, "
+                    "--truth-work and --truth-cache"
+                )
+            tr = T.load(args.truth_run, args.truth_work, args.truth_cache, insights.fixture)
+            table.update(T.table(tr, [it for it in intents if it["kind"] != "chip"], list(TIMES), G.windows))
     tol = G.load_tolerances()
     log: list[dict] = []
     answer = model_answerer(insights, intents, log) if args.model else None
@@ -536,8 +553,23 @@ def cmd_grade(args) -> None:
             if line.strip():
                 r = json.loads(line)
                 kept[(r["intent"], r["q"], r["t"])] = r
-        drop = ("checks", "scope", "flags", "future_minutes", "pass", "core", "code_core", "parity", "leak",
-                "intent", "q", "chip", "t", "window", "clubs_asked")
+        drop = (
+            "checks",
+            "scope",
+            "flags",
+            "future_minutes",
+            "pass",
+            "core",
+            "code_core",
+            "parity",
+            "leak",
+            "intent",
+            "q",
+            "chip",
+            "t",
+            "window",
+            "clubs_asked",
+        )
 
         def answer(it, q, t):
             return {k: v for k, v in kept[(it["id"], q, t)].items() if k not in drop}
@@ -731,6 +763,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     g.add_argument("--replay", type=Path, default=None, help="re-grade a saved run's answers (rows .jsonl)")
     g.add_argument("--truth-table", type=Path, default=TRUTH_TABLE)
+    g.add_argument(
+        "--questions",
+        type=Path,
+        default=None,
+        help="grade another question set (e.g. a held-out one) on intents.json's intents; never printed",
+    )
+    g.add_argument(
+        "--truth-run", type=Path, default=None, help="with --questions: the full run, for new windows"
+    )
+    g.add_argument(
+        "--truth-work", type=Path, default=None, help="with --questions: the footage's work folder"
+    )
+    g.add_argument("--truth-cache", type=Path, default=None, help="with --questions: the frame cache (.npz)")
     g.add_argument("--label", default="run")
     g.add_argument("--out", type=Path, required=True)
     g.add_argument(

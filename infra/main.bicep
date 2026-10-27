@@ -181,7 +181,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull, apiReadsSecrets, apiSpeaks, mcpKeySecret, passcodeSecret]
+  dependsOn: [apiPull, apiReadsSecrets, apiSpeaks, apiFoundryUser, mcpKeySecret, passcodeSecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -196,6 +196,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       secrets: [
         { name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }
         { name: 'demo-passcode', keyVaultUrl: '${vault.properties.vaultUri}secrets/demo-passcode', identity: apiIdentity.id }
+        // Ingestion only (it cannot read telemetry back), but kept out of the plain env listing.
+        { name: 'appinsights-connection', value: appInsights.properties.ConnectionString }
       ]
     }
     template: {
@@ -216,6 +218,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'NINETY_SPEECH_RESOURCE_ID', value: speech.id }
             // The TTS host is <region>.tts.speech.microsoft.com: the region's name, lowercase, no spaces.
             { name: 'NINETY_SPEECH_REGION', value: toLower(replace(speech.location, ' ', '')) }
+            // Each Ask is one trace in Foundry's tracing view (ninety/agents/telemetry.py, monitor_from_env).
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-connection' }
           ]
           probes: apiExists
             ? [
@@ -273,6 +277,21 @@ resource ciFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if
   name: guid(foundry.id, ciPrincipalId, foundryUser)
   properties: {
     principalId: ciPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUser)
+  }
+}
+
+// The API's Live Ask calls the published Companion, Judge, match Companion and Referee
+// (ninety/api/companion.py, foundry_models): it reads each pinned agent version and runs it, the
+// same data actions the nightly evals use, so the same role on this resource only. The narrower
+// preview roles ("Foundry Project Runtime User": responses only; "Foundry Agent Consumer") list no
+// agent read, and were not tested against these calls before the deadline (Oct 27).
+resource apiFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: foundry
+  name: guid(foundry.id, apiIdentity.id, foundryUser)
+  properties: {
+    principalId: apiIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUser)
   }

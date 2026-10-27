@@ -73,6 +73,29 @@ def load_intents(path: Path = HERE / "intents.json") -> tuple[list[dict], dict]:
     return d["intents"], d["clubs"]
 
 
+def with_questions(intents: list[dict], path: Path) -> list[dict]:
+    """The intents (metric, scope, window rule, relevance) with their questions replaced by another
+    set's: a held-out file shaped like intents.json ({"intents": [{"id", "questions"}]}) or a flat
+    list ([{"intent", "q"}], "question" or "text" for "q"). An intent the file does not name keeps
+    no question; an id the intents do not know is an error. The questions are never printed."""
+    d = json.loads(path.read_text())
+    got: dict[str, list[dict]] = {}
+    if isinstance(d, dict) and "intents" in d:
+        for it in d["intents"]:
+            got.setdefault(it["id"], []).extend(
+                q if isinstance(q, dict) else {"q": q} for q in it["questions"]
+            )
+    else:
+        rows = d["questions"] if isinstance(d, dict) else d
+        for r in rows:
+            q = r.get("q") or r.get("question") or r.get("text")
+            got.setdefault(r["intent"], []).append({"q": q, **({"chip": r["chip"]} if r.get("chip") else {})})
+    unknown = set(got) - {it["id"] for it in intents}
+    if unknown:
+        raise ValueError(f"{path}: intents not in intents.json: {sorted(unknown)}")
+    return [{**it, "questions": got[it["id"]]} for it in intents if got.get(it["id"])]
+
+
 def load_tolerances(path: Path = HERE / "tolerances.json") -> dict:
     return {k: v["value"] for k, v in json.loads(path.read_text()).items() if isinstance(v, dict)}
 
@@ -147,13 +170,22 @@ def club_before(text: str, pos: int, clubs: dict) -> str | None:
 
 
 def minutes_said(text: str) -> list[int]:
-    out = [int(x) for x in re.findall(r"\bminutes? (\d{1,3})\b", text, re.I)]
-    for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and ))+\d{1,3})\b", text, re.I):
+    """The match minutes an answer names, explicit forms only: "minute 34", "minutes 35, 76 and 85",
+    "minutes 20 to 34", "from minute 20 to 34", "34′" or "34'", "the 34th minute", a clock time
+    "33:50" (minute 34). A bare
+    number is never a minute: "15% to 20%", "up to 28", "the last 15 minutes" (a stretch) are not."""
+    out = [int(x) for x in re.findall(r"\bminutes? (\d{1,3})\b(?!\s*%)", text, re.I)]
+    for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and | to | ?[-–] ?))+\d{1,3})\b", text, re.I):
         out += [int(x) for x in re.findall(r"\d{1,3}", run)[1:]]  # "minutes 35, 76 and 85": the rest
+    out += [int(x) for x in re.findall(r"\bto minute (\d{1,3})\b", text, re.I)]
+    # a range's end after one "minute": "from minute 20 to 34", "minute 34 to 40", "minute 41 until 43"
+    out += [
+        int(x)
+        for x in re.findall(r"\bminutes? \d{1,3} ?(?:to|until|through|-|–) ?(\d{1,3})\b(?!\s*%)", text, re.I)
+    ]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:′|')", text)]
-    # "to 34" is a minute, "15% to 20%" is not (a share's range)
-    out += [int(x) for x in re.findall(r"\b(?:to|until|through) (?:minute )?(\d{1,3})\b(?!\s*%)", text, re.I)]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:st|nd|rd|th) minute\b", text, re.I)]
+    out += [int(m) + 1 for m in re.findall(r"\b(\d{1,2}):[0-5]\d\b", text)]
     return out
 
 
@@ -400,6 +432,62 @@ def correct(
     return None, scope
 
 
+COMPARE_LEVEL = re.compile(
+    r"\b(?:level|the same number|as many|equal(?:ly)?|both had|each had|neither had more"
+    r"|neither (?:side|team|club) has|each(?! (?:club|side|team|of)\b))\b",
+    re.I,
+)
+COMPARE_MORE = re.compile(r"\b(?:more|most|ahead|edge)\b", re.I)
+COMPARE_FEWER = re.compile(r"\b(?:fewer|less|behind)\b", re.I)
+
+
+def compared_side(text: str, clubs: dict) -> str | None:
+    """The side an answer's lead sentence says is ahead: "level" for "level", "2 each", "neither side
+    has had"; the club named first with "more"/"most"/"ahead" ("Lisbon have had more shots"), the
+    other club with "fewer"/"less" ("London have had fewer than Lisbon"); None with no comparison."""
+    s = lead(text)
+    if COMPARE_LEVEL.search(s) and not COMPARE_MORE.search(s):
+        return "level"
+    named = clubs_in(s, clubs)
+    if not named or not (COMPARE_MORE.search(s) or COMPARE_FEWER.search(s)):
+        return None
+    if COMPARE_FEWER.search(s) and not COMPARE_MORE.search(s):
+        return "away" if named[0] == "home" else "home"
+    return named[0]
+
+
+def comparison_direction(text: str, tv: dict, clubs: dict, tol: dict | None = None) -> bool:
+    """Detector-bound rows (Kian, Oct 27) lead with a club comparison: the lead sentence names the
+    club that truly has more over the footage shown, or says "level" when the truth is level.
+    - A count (passes, shots, on target, corners, out of play): the footage count with the count
+      tolerance's edge bands (tolerances.json count_edge_s). Where the two clubs' bands overlap the
+      truth cannot order them, so "level" or the club ahead on the central count passes (both clubs
+      and "level" when the central counts are equal).
+    - Completion, said as a direction ("X have passed more accurately than Y"): the footage
+      completion of each club; within completion_points of each other, "level" or either club passes.
+    No comparison in the lead fails."""
+    v = tv["footage"]
+    if "completion" in v:
+        h, a = v["completion"].get("home"), v["completion"].get("away")
+        if h is None or a is None:
+            allowed = {"level", "home", "away"}
+        elif abs(h - a) <= (tol or {}).get("completion_points", 10):
+            allowed = {"level", "home", "away"}
+        else:
+            allowed = {"home" if h > a else "away"}
+    else:
+        c, lo, hi = v["count"], v["count_lo"], v["count_hi"]
+        if lo["home"] > hi["away"]:
+            allowed = {"home"}
+        elif lo["away"] > hi["home"]:
+            allowed = {"away"}
+        elif c["home"] == c["away"]:
+            allowed = {"level", "home", "away"} if lo != hi else {"level"}
+        else:
+            allowed = {"level", "home" if c["home"] > c["away"] else "away"}
+    return compared_side(text, clubs) in allowed
+
+
 def grade(
     it: dict,
     q: str,
@@ -434,6 +522,11 @@ def grade(
     span_clipped = t_to is None or t_to <= t + 1.0
     false_unknown = None if unmeasured or holds is None else not (holds and not answered)
     flags = [k for k, rx in NATURAL.items() if rx.search(text)]
+    compares = (
+        comparison_direction(text, tv, clubs, tol)
+        if it["kind"] in ("count", "pct") and tv is not None and answered
+        else None
+    )
     checks = {
         "answered": answered,
         "relevant": rel,
@@ -443,6 +536,7 @@ def grade(
         "span_clipped": span_clipped,
         "no_false_unknown": false_unknown,
         "natural": not flags,
+        "comparison_direction": compares,
     }
     return {"checks": checks, "scope": scope, "flags": flags, "future_minutes": future}
 
@@ -453,7 +547,7 @@ def headline(text: str) -> str:
 
 
 CORE = ("answered", "relevant", "correct", "no_false_unknown")  # the headline: a right answer to the question
-OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent")
+OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent", "comparison_direction")
 CHECKS = CORE + OTHERS
 
 
