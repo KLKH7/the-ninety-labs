@@ -262,7 +262,8 @@ def _calls(plan: object, insights, minute: int) -> list[dict]:
     none, minutes within the match so far. A call with an unknown tool is dropped; an unknown club
     becomes both clubs, and a malformed window the default one, never another club or minute. Minute
     0 is read as minute 1: "from minute 0" means from kick-off, and football's first minute is 1
-    (the instructions never say so, and without this a first-half question got minutes 31 to 45)."""
+    (the instructions never say so, and without this a first-half question got minutes 31 to 45:
+    lesson 284)."""
     calls = []
     tools = plan.get("tools") if isinstance(plan, dict) else None
     for c in tools if isinstance(tools, list) else []:
