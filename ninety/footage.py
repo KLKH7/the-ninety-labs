@@ -29,10 +29,13 @@ hls.js player is desktop-companion's, in progress); today the viewer and phone p
 
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 from functools import cache
 from pathlib import Path
+
+from ninety.match.timeline import checked_timescale
 
 ENCODER = "h264_videotoolbox"
 KEY_S = 2  # a keyframe every 2 s (design: a seek lands within 2 s, the common web default)
@@ -46,8 +49,10 @@ COLOUR = ("scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix
 TAGS = ["-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
 
 
-def video_args(fps: int) -> list[str]:
-    return ["-c:v", ENCODER, "-profile:v", "high", "-level", "4.0", "-g", str(KEY_S * fps),
+def video_args(fps: float) -> list[str]:
+    # -g rounded up: at a fractional rate (31.25 images a second) a rounded-down group would put a
+    # keyframe just before each forced 2 s one; up, the forced grid is the only one.
+    return ["-c:v", ENCODER, "-profile:v", "high", "-level", "4.0", "-g", str(math.ceil(KEY_S * fps)),
             "-force_key_frames", f"expr:gte(t,n_forced*{KEY_S})", *TAGS]
 
 
@@ -67,22 +72,32 @@ def rungs(height: int, width: int | None = None) -> list[tuple[int, int, int]]:
     return fit or [(height, width or round(height * 16 / 9 / 2) * 2, LADDER[-1][2])]
 
 
-def _input(images: list[Path], fps: int, first: int = 0) -> list[str]:
-    return ["-framerate", str(fps), "-start_number", str(first), "-i", str(images[0].parent / "%05d.jpg")]
+def _input(images: list[Path], fps: float, first: int = 0) -> list[str]:
+    return ["-framerate", f"{fps:g}", "-start_number", str(first), "-i", str(images[0].parent / "%05d.jpg")]
 
 
-def _length(frames: int, fps: int) -> list[str]:
+def _length(frames: int, fps: float) -> list[str]:
     return ["-frames:v", str(frames), "-t", f"{frames / fps:.3f}"]
 
 
+def _sound(timescale: float) -> list[str]:
+    """AAC, and the sound sped up with the picture (atempo: the pitch kept)."""
+    return [*AUDIO, *(["-af", f"atempo={timescale:g}"] if timescale != 1 else [])]
+
+
 def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, height: int = 720,
-          width: int | None = None) -> dict:
-    """video.mp4, the HLS ladder under hls/, and poster.jpg in `out`; returns the manifest's footage."""
+          width: int | None = None, timescale: float = 1.0) -> dict:
+    """video.mp4, the HLS ladder under hls/, and poster.jpg in `out`; returns the manifest's footage.
+    `timescale` (match seconds a video second, Kian Oct 26: the demo plays 1.25x as its 1x): every
+    image is still shown, at fps x timescale a video second, and the sound is sped up with it
+    (`footage.timescale` in the manifest; ninety/match/timeline.py maps through it)."""
     n = len(images)
+    timescale = checked_timescale(timescale)
+    match_fps, fps = fps, fps * timescale  # images a video second, from here on
     sound = [] if audio is None else ["-i", str(audio)]
     shutil.copyfile(images[0], out / "poster.jpg")
     mp4 = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound, "-map", "0:v",
-           *(["-map", "1:a", *AUDIO] if audio else []), "-vf", COLOUR, *video_args(fps),
+           *(["-map", "1:a", *_sound(timescale)] if audio else []), "-vf", COLOUR, *video_args(fps),
            "-b:v", str(MP4_BITRATE), *_length(n, fps), "-movflags", "+faststart", str(out / "video.mp4")]
     subprocess.run(mp4, check=True)
 
@@ -98,7 +113,8 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     hls = out / "hls"
     hls.mkdir(exist_ok=True)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound,
-           "-filter_complex", split + scaled, *maps, *video_args(fps), *rates, *(AUDIO if audio else []),
+           "-filter_complex", split + scaled, *maps, *video_args(fps), *rates,
+           *(_sound(timescale) if audio else []),
            # The video at time 0 on every rung: AAC's priming samples sit before it (players drop them),
            # where shifting both up by 23 ms would put the picture off the MP4's clock.
            *_length(n, fps), "-avoid_negative_ts", "disabled",
@@ -109,14 +125,16 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
            str(hls / "%v" / "index.m3u8")]
     subprocess.run(cmd, check=True)
     return {"kind": "video", "src": "video.mp4", "mp4": "video.mp4", "hls": "hls/master.m3u8",
-            "poster": "poster.jpg", "frames": n, "fps": fps, "duration_s": round(n / fps, 3),
+            "poster": "poster.jpg", "frames": n, "fps": match_fps, "timescale": timescale,
+            "duration_s": round(n / fps, 3),
             "segment_s": SEGMENT_S, "audio": "muxed" if audio else None,
             "renditions": [{"height": h, "width": w, "bitrate": b, "playlist": f"hls/{h}p/index.m3u8"}
                            for h, w, b in ladder]}
 
 
-def clip(images: list[Path], first: int, end: int, fps: int, dest: Path) -> None:
-    """Images [first, end) as an MP4 with the footage's settings (a highlight's window)."""
+def clip(images: list[Path], first: int, end: int, fps: int, dest: Path, timescale: float = 1.0) -> None:
+    """Images [first, end) as an MP4 with the footage's settings and speed (a highlight's window)."""
+    fps = fps * checked_timescale(timescale)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps, first), "-vf", COLOUR, *video_args(fps),
            "-b:v", str(MP4_BITRATE), *_length(end - first, fps), "-movflags", "+faststart", str(dest)]
     subprocess.run(cmd, check=True)

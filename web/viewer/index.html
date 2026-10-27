@@ -45,6 +45,10 @@
             </div>
           </div>
           <p class="captions" id="captions" hidden></p>
+          <!-- The big screen's lower third (src/lowerthird.ts); the live region #on-air says it. -->
+          <div class="lt" id="lower-third" aria-hidden="true" hidden></div>
+          <!-- The big screen's scorebug (src/scorebug.ts), over the broadcast's own; #score says the clubs. -->
+          <div class="sb" id="scorebug" aria-hidden="true" hidden></div>
           <!-- First run only: one pill under the scorebug, pointing at the companion; gone after first use. -->
           <button type="button" class="ask-hint" id="ask-hint" hidden>Ask anything about this match <span aria-hidden="true">→</span></button>
           <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->

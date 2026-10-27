@@ -328,7 +328,8 @@ def record(reel: dict, timeline, images: list[Path], out: Path, encode: bool) ->
     Each moment gets `recording`: the images it covers [first, end), their video times, the strike's
     image and the files, relative to the bundle; a moment wholly outside the footage gets none.
     `timeline` maps match time to the footage (ninety/match/timeline.py), across its cuts."""
-    fps, n = timeline.fps, len(images)
+    # Images a video second (timeline.video_fps): the match's fps times the footage's timescale.
+    fps, n = getattr(timeline, "video_fps", timeline.fps), len(images)
     folder = out / DIR
     can_encode = encode and footage.can_encode()
     for m in reel["moments"]:
@@ -344,7 +345,8 @@ def record(reel: dict, timeline, images: list[Path], out: Path, encode: bool) ->
         clip = None
         if can_encode:
             clip = f"{DIR}/{name}.mp4"
-            footage.clip(images, first, end, fps, out / clip)  # the clip's images, numbered from 0
+            # the clip's images, numbered from 0, at the footage's own speed
+            footage.clip(images, first, end, timeline.fps, out / clip, getattr(timeline, "timescale", 1.0))
         m["recording"] = {"images": [first, end], "video_t": [round(first / fps, 2), round(end / fps, 2)],
                           "shot_image": shot, "poster": f"{DIR}/{name}.jpg", "clip": clip}
     return reel

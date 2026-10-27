@@ -319,7 +319,9 @@ SCORES = [{"t": 0.0, "home": 1, "away": 1, "confident": True},
 def test_the_voices_name_a_player_by_the_feed_and_say_the_score_after_a_goal():
     goal = [ev("g1", 100.4, "goal", "h-t9", x=95.0)]
     track, _ = describe.describe(goal, [], clubs=CLUBS, names=NAMES, scores=SCORES)
-    assert [s.spoken for s in track.said] == ["Goal! Rondell scores, on the right. London lead 2–1."]
+    assert [s.spoken for s in track.said] == [
+        "Goal! Rondell scores for London, on the right. London lead 2–1."
+    ]
     calls = [li["text"] for li in commentary.commentary(goal, [], CLUBS, names=NAMES, scores=SCORES)["lines"]]
     assert calls == ["Goal! Rondell scores! London lead 2–1."]
     # Without the feed, his club; without a reading, no score: never counted from goals.
@@ -348,7 +350,7 @@ def test_a_goal_beside_a_scorebug_that_did_not_change_is_followed_by_no_score():
     steady = [{"t": 0.0, "home": 2, "away": 1, "confident": True},
               {"t": 100.4, "home": 2, "away": 1, "confident": True}]
     track, _ = describe.describe(goal, [], clubs=CLUBS, names=NAMES, scores=steady)
-    assert [s.spoken for s in track.said] == ["Goal! Rondell scores, on the right."]
+    assert [s.spoken for s in track.said] == ["Goal! Rondell scores for London, on the right."]
     calls = [li["text"] for li in commentary.commentary(goal, [], CLUBS, names=NAMES, scores=steady)["lines"]]
     assert calls == ["Goal! Rondell scores!"]
     only = [{"t": 100.4, "home": 2, "away": 1, "confident": True}]  # no earlier reading: unknown

@@ -25,6 +25,9 @@ const TAG = "rgba(235, 235, 245, 0.6)"; // unverified, and the kind label's pill
 export interface DrawOptions {
   t: number;
   reduceMotion: boolean;
+  /** Every cue on air, when `cues` leaves some to another layer (the big screen's lower third):
+   * a fallback among them still gets its badge. */
+  onAir?: Cue[];
 }
 
 /** 0 -> 1 as a cue comes in, 1 -> 0 as it goes out; always 1 with reduced motion. */
@@ -192,6 +195,6 @@ export function drawCues(ctx: CanvasRenderingContext2D, cues: Cue[], o: DrawOpti
     else if (cue.slot === "top_right") drawInsight(ctx, cue, a, W);
     else drawLowerThird(ctx, cue, a, W, H);
   }
-  const fallback = cues.find((c) => c.fallback && c.kind !== "insight");
+  const fallback = (o.onAir ?? cues).find((c) => c.fallback && c.kind !== "insight");
   if (fallback) drawFallback(ctx, fallback.fallback!, presence(fallback, o.t, o.reduceMotion));
 }

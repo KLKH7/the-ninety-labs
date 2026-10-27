@@ -1818,3 +1818,29 @@ def test_live_never_lists_the_team_sheet_whatever_the_focus(browser, site):  # n
     assert "Home Player1" not in page.inner_text("#pane-pitch")
     assert not errors
     ctx.close()
+
+
+def test_a_jump_sets_the_score_and_a_goal_never_counts_through_values_it_never_had(browser, site):  # noqa: F811
+    """On air, Oct 26: after a seek London's score ran 17, -20, -33 before it settled on 4 (the ticker's
+    spring stepped unstably at 1/30 s). A jump sets the read score at once; in play only a goal (+1)
+    ticks, and what shows is always a whole number from the old score to the new."""
+    readings = [reading(60.0, "score_read", 0, 0)] + [
+        reading(t, "score_change", n, 0, team="home")
+        for n, t in enumerate((61.0, 61.4, 61.8, 62.2, 62.7), 1)]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="60.2")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '0'")
+    page.evaluate("""() => { window.shown = []; new MutationObserver(() =>
+      shown.push(document.querySelector('#score-home').textContent)).observe(document.querySelector('#score-home'),
+      { childList: true, characterData: true, subtree: true }); }""")
+    laptop.fill("#seek", "62.4")  # a seek: 0-0 to 4-0 at once, never counted through
+    page.wait_for_function("document.querySelector('#score-home').textContent === '4'", timeout=5000)
+    page.wait_for_timeout(300)
+    assert page.evaluate("shown") == ["4"], page.evaluate("shown")
+    page.evaluate("window.shown = []")
+    laptop.fill("#seek", "62.8")  # a goal in play: 4 to 5, ticking only between them
+    page.wait_for_function("document.querySelector('#score-home').textContent === '5'", timeout=5000)
+    page.wait_for_timeout(1500)
+    seen = page.evaluate("shown")
+    assert seen and all(v in ("4", "5") for v in seen) and seen[-1] == "5", seen
+    assert not errors
+    ctx.close()

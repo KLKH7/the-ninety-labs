@@ -392,3 +392,24 @@ def test_a_player_is_capitalised_only_where_he_opens_a_sentence():
     assert d.event_versions({**unnamed, "type": "goal"})[1] == "Goal! A player scores."
     assert d.event_versions({**unnamed, "type": "shot"})[1] == "A player shoots."
     assert d.event_versions({**unnamed, "type": "kickoff"}) == ["Kick-off, a player."]
+
+
+def test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter():
+    """Preview, Oct 26 (lesson 283): goal 1 was Lisbon's (match.json's goals, the goal event's side
+    from the player-ID feed), but its scorer's track was `h-t9029` and the voice said "Goal! A London
+    player scores". The goal's side is the goal event's, and the scorer is named by the feed."""
+    goal = {"id": "s09-v00003", "t": 1292.12, "frame": 32303, "type": "goal", "team": "away",
+            "team_confidence": 1.0, "team_source": "id_feed", "player": "h-t9029", "x": 0.0, "y": 34.4,
+            "source": "vision", "confidence": 0.999, "outcome": None}
+    clubs = {"home": "London", "away": "Lisbon"}
+    for names, scorer in (({"h-t9029": "Eli Hourrick"}, "Eli Hourrick"), ({}, "A Lisbon player")):
+        track, _ = d.describe([goal], [], clubs=clubs, names=names)
+        (said,) = track.said
+        opening = (f"Goal! {scorer} scores for Lisbon", f"Goal! {scorer} scores,")
+        assert said.spoken.startswith(opening), said.spoken
+        assert "Lisbon" in said.spoken
+        assert "London" not in said.spoken
+    # A goal whose side is not told surely names no side at all.
+    unsure = {**goal, "team_confidence": 0.5, "team_source": None}
+    (said,) = d.describe([unsure], [], clubs=clubs)[0].said
+    assert "London" not in said.spoken and "Lisbon" not in said.spoken, said.spoken

@@ -345,3 +345,100 @@ body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: non
    hit area does not shrink below 44 px. */
 .hud .icon { position: relative; }
 .hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+
+/* ---- The big screen's lower third (src/lowerthird.ts, Kian Oct 26): a broadcast graphic, as Apple
+   TV's MLS or Sky Sports run one. Frosted black glass bottom left in the title-safe area (5%), clear
+   of the scorebug (top left) and of the play (central); sized from the picture's width (cqw), so it
+   is the same graphic docked, full screen or on a laptop. Sizes are for a 1920 px picture. */
+.lt { display: none; }
+body[data-screen="big"] .stage { container-type: inline-size; }
+body[data-screen="big"] .lt { --club: #fff; --u: clamp(0.8px, 0.0521cqw, 1.15px); /* 1px at 1920 */
+  position: absolute; left: 5%; bottom: 9%; z-index: 2; display: grid; align-items: end; max-width: min(62%, calc(860 * var(--u)));
+  pointer-events: none; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+body[data-screen="big"] .lt[hidden] { display: none; }
+body[data-screen="big"] .lt[data-side="home"] { --club: #8fa8e0; } /* London's navy, lifted to read on black (web/phone --accent-ink) */
+body[data-screen="big"] .lt[data-side="away"] { --club: #ff8a90; } /* Lisbon's crimson, the same */
+body[data-screen="big"][data-ui="on"] .lt { bottom: calc(9% + 64px); }
+.lt > * { grid-area: 1 / 1; justify-self: start; margin: 0; border-radius: calc(16 * var(--u));
+  background: rgba(0, 0, 0, 0.7); -webkit-backdrop-filter: blur(24px) saturate(1.5); backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, 0.35); }
+.lt p { margin: 0; }
+.lt-strip { display: grid; gap: calc(6 * var(--u)); padding: calc(16 * var(--u)) calc(24 * var(--u)) calc(18 * var(--u)); min-width: calc(280 * var(--u)); }
+.lt-label { display: flex; align-items: center; gap: calc(8 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 700; letter-spacing: 0.06em;
+  line-height: 1; color: var(--club); }
+.lt-crest { display: inline-flex; width: calc(18 * var(--u)); height: calc(22 * var(--u)); flex: none; }
+.lt-crest svg { width: 100%; height: 100%; }
+.lt-crest[hidden] { display: none; }
+.lt-check { display: inline-flex; width: calc(15 * var(--u)); height: calc(15 * var(--u)); margin-left: calc(2 * var(--u)); flex: none; }
+.lt-check svg { width: 100%; height: 100%; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lt-check[hidden] { display: none; }
+.lt-head { font-size: calc(28 * var(--u)); font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; text-wrap: pretty; }
+.lt-head b, .lt-sub b, .lt-card b { font-weight: 700; color: #fff; }
+.lt-sub { font-size: calc(20 * var(--u)); font-weight: 400; line-height: 1.3; color: rgba(235, 235, 245, 0.6); text-wrap: pretty;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lt-score { display: inline-flex; align-items: baseline; gap: calc(10 * var(--u)); font-variant-numeric: tabular-nums; }
+.lt-score .lt-club { color: rgba(235, 235, 245, 0.6); font-weight: 500; }
+.lt-score .scored { color: #fff; }
+.lt-score .lt-n { font-weight: 700; }
+.lt-dash { color: rgba(235, 235, 245, 0.3); }
+/* A goal: the full card first (crest, GOAL, the club, the new score), then the strip. */
+.lt-card { display: flex; align-items: center; gap: calc(22 * var(--u)); padding: calc(20 * var(--u)) calc(30 * var(--u)) calc(20 * var(--u)) calc(22 * var(--u)); }
+.lt-card > .lt-crest { width: calc(60 * var(--u)); height: calc(74 * var(--u)); }
+.lt-card-text { display: grid; gap: calc(6 * var(--u)); }
+.lt-card-kind { display: flex; align-items: center; gap: calc(8 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 800; letter-spacing: 0.14em; line-height: 1; color: var(--club); }
+.lt-card-min { color: rgba(235, 235, 245, 0.6); font-weight: 600; letter-spacing: 0.04em; }
+.lt-card-club { font-size: calc(36 * var(--u)); font-weight: 700; line-height: 1.1; letter-spacing: -0.015em; white-space: nowrap; }
+.lt-card-scorer { font-size: calc(22 * var(--u)); color: rgba(235, 235, 245, 0.6); }
+.lt-card-score { margin-left: calc(14 * var(--u)) !important; padding-left: calc(26 * var(--u)); border-left: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: calc(56 * var(--u)); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* In and out: a short slide from the left and a fade; the card collapses into the strip. */
+.lt > * { opacity: 0; transform: translateX(calc(-28 * var(--u))); }
+.lt[data-on="1"] > .lt-strip, .lt[data-on="1"][data-card="1"] > .lt-card { opacity: 1; transform: none; }
+.lt[data-on="1"][data-card="1"] > .lt-strip { opacity: 0; transform: none; }
+.lt[data-on="1"][data-card="0"] > .lt-card { opacity: 0; transform: scale(0.97); transform-origin: left bottom; }
+@media (prefers-reduced-motion: no-preference) {
+  .lt:not(.still) > * { transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+
+/* ---- The big screen's scorebug (src/scorebug.ts): an opaque layer over the baked bug's widest box
+   (render.js: 28, 24, 400 by 40 at 720 lines, as % of the picture) with a margin of 6 units for the
+   encode's soft edge and the corners' radius; it scales with the picture exactly, never clamped. */
+.sb { display: none; }
+body[data-screen="big"] .sb { --v: 0.0521cqw; --m: calc(6 * var(--v) + 2px); display: flex; align-items: stretch;
+  position: absolute; z-index: 2; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m));
+  width: calc(31.25% + 2 * var(--m)); height: calc(5.5556% + 2 * var(--m)); overflow: hidden; pointer-events: none;
+  border-radius: calc(10 * var(--v)); background: #0c0d11; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .sb[hidden] { display: none; }
+.sb-plate { flex: 1; display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; column-gap: calc(12 * var(--v)); }
+.sb-team { display: flex; align-items: center; gap: calc(10 * var(--v)); height: 100%; min-width: 0; }
+.sb-away { flex-direction: row-reverse; }
+.sb-bar { align-self: stretch; width: calc(5 * var(--v)); flex: none; }
+.sb-home .sb-bar { background: var(--home); }
+.sb-away .sb-bar { background: var(--away); }
+.sb-crest { display: inline-flex; width: calc(28 * var(--v)); height: calc(34 * var(--v)); flex: none; }
+.sb-crest svg { width: 100%; height: 100%; }
+.sb-crest[hidden] { display: none; }
+.sb-code { font-size: calc(22 * var(--v)); font-weight: 600; letter-spacing: 0.04em; }
+.sb-digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; min-width: 0.62em; text-align: center;
+  font-size: calc(32 * var(--v)); font-weight: 700; }
+.sb-digit > span { display: block; }
+.sb-now { transform: translateY(calc((1 - var(--roll, 1)) * 100%)); }
+.sb-was { position: absolute; inset: 0; transform: translateY(calc(var(--roll, 1) * -100%)); }
+.sb-digit.hot { color: #fff; }
+.sb-home .sb-code, .sb-away .sb-code { color: #fff; }
+.sb-dash { font-size: calc(22 * var(--v)); color: rgba(235, 235, 245, 0.3); }
+.sb-rule { width: 1px; margin: calc(14 * var(--v)) 0; background: rgba(255, 255, 255, 0.12); }
+.sb-clock { flex: none; width: calc(118 * var(--v)); display: grid; place-items: center; font-size: calc(22 * var(--v)); font-weight: 600;
+  color: rgba(235, 235, 245, 0.85); }
+.sb[data-period="HT"] .sb-clock, .sb[data-period="FT"] .sb-clock { color: #fff; font-weight: 700; letter-spacing: 0.06em; }
+/* The goal: the scoring club's colour sweeps in from its side with its crest and GOAL, then out. */
+.sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(14 * var(--v)); }
+.sb[data-goal="home"] .sb-sweep, .sb[data-goal="away"] .sb-sweep { display: flex; }
+.sb[data-goal="home"] .sb-sweep { background: #1b2f5b; clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
+.sb[data-goal="away"] .sb-sweep { background: #e63942; clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
+.sb-sweep .sb-crest { width: calc(32 * var(--v)); height: calc(40 * var(--v)); }
+.sb-goal { font-size: calc(26 * var(--v)); font-weight: 800; letter-spacing: 0.22em; }

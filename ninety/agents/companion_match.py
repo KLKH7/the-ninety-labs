@@ -618,6 +618,26 @@ def clubs_named(text: str, insights) -> list[str]:
             if any(re.search(rf"\b{re.escape(n)}\b", text, re.I) for n in names)]
 
 
+# A pass that goes through a side, said of that side: "broke Lisbon's lines", "cut through Lisbon",
+# "past Lisbon's midfield". There the named club is the one the pass beat; its passer is the other
+# club's (lesson 283). "Which Lisbon pass broke the lines?" names the passer's club, and is not this.
+BEATEN_AFTER = (r"\b(?:through|past|beyond|behind|around|into|split\w*|broke|break\w*|bypass\w*|beat\w*"
+                r"|cut\w*(?: (?:through|open))?|open\w* up|unlock\w*|penetrat\w*)\s+(?:the\s+)?(?:{name})\b")
+BEATEN_BEFORE = (r"\b(?:{name})(?:'s?|s')?\s+(?:lines?|defen[cs]e|defenders?|back (?:line|four|three|five)"
+                 r"|midfield|block|press|shape|rearguard)\b")
+
+
+def beaten_club(text: str, insights) -> str | None:
+    """The club a line-breaking pass beat, when the question names one that way ("Which pass broke
+    Lisbon's lines?"); else None (no club, two, or the named club is the passer's)."""
+    named = clubs_named(text, insights)
+    if len(named) != 1:
+        return None
+    alts = "|".join(re.escape(n) for n in sorted(club_words(insights)[named[0]], key=len, reverse=True))
+    beaten = any(re.search(p.format(name=alts), text, re.I) for p in (BEATEN_AFTER, BEATEN_BEFORE))
+    return named[0] if beaten else None
+
+
 def _short(insights, club: str | None) -> str | None:
 
     fx = insights.fixture
@@ -1187,6 +1207,14 @@ def code_match_answer(
     for f in facts:
         f.setdefault("clubs", clubs)
     named = clubs_named(question.text, insights)
+    beaten = beaten_club(question.text, insights) if any(c["name"] == "line_breaks" for c in calls) else None
+    if beaten is not None:
+        # "Which pass broke Lisbon's lines?" asks for a pass by the other club: its passes first, and no
+        # pass of Lisbon's (nor one whose side is not known) is said in its answer (lesson 283).
+        passer = next(c for c in clubs.values() if c != beaten)
+        facts = [f for f in facts if not str(f.get("metric", "")).startswith("opponents_bypassed")
+                 or f.get("club") == passer]
+        named = [passer]
     if len(named) == 1:
         # A question about one club hears about that club first (its facts before the other's); the
         # fact-check still binds the sentence to the right side.
@@ -1445,6 +1473,15 @@ async def answer_match(
             ):
                 asked = f"{first.get('player_is')}'s {first['metric']}"
                 verdict = Verdict(ok=False, reasons=[f"the question asks for {asked}; it cites another"])
+        breaks = any(c["name"] == "line_breaks" for c in calls)
+        beaten = beaten_club(question.text, insights) if breaks else None
+        if verdict.ok and beaten is not None and any(
+            str(known.get(i, {}).get("metric", "")).startswith("opponents_bypassed")
+            and known[i].get("club") in (None, beaten) for i in claim.evidence
+        ):
+            # A pass that broke Lisbon's lines is never Lisbon's own (lesson 283).
+            verdict = Verdict(ok=False, reasons=[f"the question asks for a pass that beat {beaten}; it cites "
+                                                 f"one of {beaten}'s or of an unknown side"])
         if verdict.ok and judge is not None:
             verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
         return calls, claim, verdict, facts

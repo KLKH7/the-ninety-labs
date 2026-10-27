@@ -3346,6 +3346,26 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
   or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
 
+### 276. An edit that windows events shows whatever surrounds them
+- **What happened:**
+  - demo-match.md's condense rule gave every shot, save and set piece a fixed window. On seed 8080
+    those windows also showed the aimless long balls, lost keeper passes and overhead catches next
+    to them, and Kian called the demo unwatchable.
+  - One window closed at 12:50 with a 54 m ball still in the air.
+  - The match had only one diving save, so a rule that counted saves kept choosing flat-footed
+    catches.
+- **Rule:**
+  - An edit scores what is on screen across the whole window, not the event it is built around. A
+    window holding a flagged moment is never picked.
+  - A window never opens or closes while a pass or shot is in flight. It ends once the play has
+    resolved: the pass has arrived and possession has held for 2.5 s, the shot is over, the ball is
+    dead, or the goal has been celebrated.
+  - Choosing from the answer key is editorial and is stated as such; it never feeds the live path.
+- **Check:** `uv run python scripts/footage_hunt.py <90-min run> <out>`: no `picked` window in
+  `picks.json` contains a flagged moment except a goal's own build-up. The script refuses to start or
+  end a window in flight (`in_flight`). `carries.json` counts the match's long carries and take-ons,
+  so a missing kind of play can be traced to the engine or to the edit.
+
 ### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
 - **What happened:** the test that the live job hands the flight fit's rows to events marked every
   ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
@@ -3356,3 +3376,39 @@ short and actionable. This file is public: no research sources, product names or
   marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
 - **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
   marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 282. A dedupe key built from a field that can be empty merges every item without it
+- **What happened:** the big screen's schedule (`web/viewer/src/match.ts`, `broadcastSchedule`) kept
+  one graphic per moment by the key `kind|evidence`. The INSIGHT bar's overloads are read from
+  positions and carry no event, so every overload had the key `insight|` and only the first of the
+  match ever aired. Separately, the schedule took graphics strictly in time order, so a template "a
+  player scores" shot graphic 1.5 s before a goal took the 30 s slot and the goal's fact-checked
+  insight never aired (seed 8080's first goal). Both surfaced only when the lower third was
+  screenshotted on the real bundle; the schedule's test had one evidence id per cue.
+- **Rule:** a key that identifies an item falls back to the item's own id when its parts are empty;
+  and a schedule that must always show a class of item (every goal) chooses that class first, then
+  fills the gaps, rather than hoping time order puts it first.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is_room`
+  has two evidence-less overloads and a shot just before a goal; reverting either fix turns it red.
+
+### 283. A club named in a question or a track id's letter is not the side that acted
+- **What happened:** two wrong clubs on air in the Oct 26 preview of the final 8080 bundle. (1) Ask:
+  "Which pass broke Lisbon's lines?" was answered "Lisbon … a Lisbon Esportes player played a pass
+  that took 3 London Athletic players out". `code_match_answer` puts the named club's facts first,
+  which is right for "Lisbon's best player" and wrong for a pass through Lisbon: there the named club
+  is the side the pass beat. `code_calls` already read both clubs for `line_breaks` for that reason,
+  but the sort after it undid it, and the model path had no check either. (2) Audio description: goal
+  1 was Lisbon's (the goal event's side from the player-ID feed, which match.json's goals carry), but
+  its scorer's broadcast track was `h-t9029`, and the voice said "Goal! A London player scores": the
+  Describer took the side from the track id's letter (the tracker's side vote), never from the
+  event. Each module's tests used players whose letter matched their side, and questions that named
+  the acting club.
+- **Rule:** a side said on air comes from the event's (or fact's) own side, never a track id's
+  letter, and a goal names its side outright ("Goal! Eli Hourrick scores for Lisbon"). A question that
+  names a club as the one beaten ("broke X's lines", "through X") asks for the other club's pass; the
+  code answer and the model's choice both refuse a pass of the beaten club or of an unknown side.
+- **Check:** `tests/test_describe.py::test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter`
+  (a Lisbon goal by an `h-` track, named and unnamed) and `tests/test_companion_match.py`'s
+  `test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs` (both clubs, both phrasings),
+  `test_no_pass_of_the_beaten_club_answers_it_even_alone` and
+  `test_the_model_citing_the_beaten_clubs_pass_is_refused`; all fail on main 5cd7d524.

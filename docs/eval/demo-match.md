@@ -196,7 +196,9 @@ the weights and the edit rule are unchanged; the rule's pick stays 8076, and its
 The unchanged edit rule cuts 8080 to 16.9 minutes (1,016 s) in 34 segments, inside the target with
 no adjustment. Its chapters are the five goals, 7 saves, 12 shots, 2 corners, 2 free kicks, 4
 passing moves, the kick-off, 45:00 (the half-time whistle at 2700.04 s) and the end. The segments,
-chapters and render commands are in [demo-match-8080.json](demo-match-8080.json), which is what the
-demo renders.
+chapters and render commands are in [demo-match-8080.json](demo-match-8080.json), which was the
+demo's first cut. **Re-cut on Oct 26:** Kian found that cut unwatchable, and the demo now shows the
+footage hunt's edit of the same match ([demo-match-hunt.md](demo-match-hunt.md)), chosen
+editorially for clean play.
 
 **Render checks:** filled in when the segments are rendered.
