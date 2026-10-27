@@ -13,6 +13,9 @@ All clubs, players and matches are synthetic. No real match data or footage is u
 
 Built by Kian, Dominic, Jayden and Carlos.
 
+Player names come from a simulated tracking-provider ID feed, the way a broadcaster licenses
+them; everything else is read from the video ([Where player names come from](#where-player-names-come-from)).
+
 That is the design. What runs and is measured today, and what is still being built, is in
 [Status](#status).
 
@@ -42,7 +45,8 @@ flowchart LR
 ### Architecture
 
 What each part is, where it runs, and what it may read. Solid lines run on `main`; dotted lines
-are the answer key, which only training and grading read; the dashed box is built and evaluated
+are the answer key, which only training and grading read; the player-ID feed is the one engine
+output the live path reads, for names and the side of a named player only; the dashed box is built and evaluated
 live but switched off in the demo path. The deployed demo plays a recorded run of this pipeline (see
 [Status](#status)).
 
@@ -51,6 +55,7 @@ flowchart LR
     subgraph DATA["Synthetic data, offline"]
         ENG["Match engine<br/>ninety/sim"] --> REN["Renderer, three.js<br/>broadcast + 2 tactical views"]
         ENG -.-> TRUTH[("Ground truth<br/>sealed")]
+        ENG --> IDF["Player-ID feed<br/>simulated provider, 25 Hz"]
     end
 
     REN -- video --> VIS["Vision<br/>RF-DETR Small, camera fit,<br/>tracking, team sides,<br/>passes, shots, restarts"]
@@ -64,6 +69,7 @@ flowchart LR
         PHONE["Phone companion<br/>radar, stats, Ask"]
     end
     STATS --> MCP
+    IDF -- "names, side of a named player" --> STATS
 
     subgraph FOUNDRY["Microsoft Foundry: versioned prompt agents, guardrail, tracing"]
         AN["Analyst"] --> TAC["Tactician"]
@@ -86,6 +92,51 @@ flowchart LR
 The agents are orchestrated with Microsoft Agent Framework and read the match only through the
 MCP server; nothing on the live path reads the ground truth (a test fails if it does). Full design,
 agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Where player names come from
+
+**Names come from a simulated tracking-provider ID feed; vision does not identify players.**
+
+**In real football.** Top-flight stadiums run optical tracking from a specialist provider: fixed
+cameras, separate from the TV cameras, follow every player 25 times a second and deliver who is
+where, with names and shirt numbers. Operators correct identity mistakes live, which is why the
+live stream is held back about 15 seconds. The league licenses that feed to broadcasters, clubs
+and apps, so a broadcast's player name comes from the feed, not from reading shirts in the TV
+picture (sources in [GROUNDING.md](docs/GROUNDING.md), rows ID1 to ID3).
+
+**What we built.** The Ninety Labs sits where a broadcaster or a media app sits:
+
+- **Licensed in, simulated here:** the player-ID feed ([feed spec](docs/FEED_SPEC.md),
+  `ninety/sim/identity_feed.py`, #389). Our match engine plays the provider and delivers what a
+  provider does, flaws included:
+  - a match metadata line (teams, team sheets with shirt numbers and names, pitch, periods), then
+    positions for every player at 25 Hz, in metres from the centre spot;
+  - a position error of 0.08 m RMSE, the published accuracy of one real system;
+  - delivery 15 s after capture, with jitter, so rows arrive out of order and are aligned by
+    capture time;
+  - dropouts when players overlap, then a second of low confidence;
+  - identity swaps between team-mates close together, each corrected 2 to 6 s later by a
+    correction row: 15 over the 90 minutes of seed 8080, all corrected ([identity.json](docs/eval/identity.json)).
+
+  GROUNDING says, row by row (ID1 to ID9), which values come from a published source and which are
+  our design. The feed carries no ball, no event, no velocity and no score; its one reader
+  (`ninety/intel/identity.py`) refuses anything else.
+- **Built by us, from the video:** everything else: detection, tracking, the two-camera join,
+  events, the scorebug, statistics, the agents, the fact-checker and the phone.
+
+**What vision alone can do.** Shirt numbers are a few pixels tall on our broadcast renders, too
+small to read. Naming players by where they play scored 0.884 on a held-out half, below the 0.95 we
+require before a name is shown
+([roles.md](docs/eval/roles.md#result-scored-once-oct-25-the-held-out-half-misses-095-so-nothing-is-named)).
+Matched to the feed, vision's tracks are named right 468 times in 471, and event players 58 in 58,
+on the same held-out half (Status, below).
+
+**What the feed is used for, and what not.** A tracked player's name and, for an event whose
+player is named, his side. It is never used for events, statistics, positions, outcomes, scoring
+or any published accuracy number. `tests/test_identity_feed.py::test_only_the_identity_path_touches_the_feed`
+fails if any other module reads it, and `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up`
+checks that, with and without the feed, the event facts, cues, the agents' trace, the bundle's event
+log and every match-file field except the line-up are identical.
 
 ## Documentation
 
@@ -173,12 +224,14 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Audited against `main` at `874f6deb` on Oct 25, 2026 (with #365's shot-outcome result); [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
+Audited against `main` at `14a33133` on Oct 26, 2026; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
 `65247ba3` (#276). **The demo match is a director's pick from the answer key, not a random sample**
 ([demo-match-hunt.md](docs/eval/demo-match-hunt.md)): Kian chose seed 8324 on the demo-only engine v2
 (#403), 1-3, condensed to about 17.7 minutes by an editorial scorer that keeps clean play and drops
-flagged moments. No number measured on the demo footage generalises. The earlier pre-registered
+flagged moments. Engine v2 adds take-ons, aimed long balls and diving keepers; it lives on a draft
+branch, is not on `main`, and no published measurement uses it ([#403](https://github.com/KLKH7/the-ninety-labs/pull/403)).
+No number measured on the demo footage generalises. The earlier pre-registered
 rule's picks (seed 8076, then Kian's 8080) are recorded in [demo-match.md](docs/eval/demo-match.md).
 
 **Measured on `main`:**
@@ -192,11 +245,12 @@ rule's picks (seed 8076, then Kian's 8080) are recorded in [demo-match.md](docs/
 | Passes detected from pixels, frozen test set's five clips | on today's `main`, strict F1 0.25 (2 of 13 found, 1 false): the camera-trust band (#270) rejects most right frames on the test set's older renderer. The earlier 0.67 (7 of 13) no longer holds. Both are below the 0.70 target | [camera-cuts-plan.md](docs/eval/camera-cuts-plan.md), [detector-plan.md](docs/eval/detector-plan.md) |
 | Possession changes in open play, same clips | 1 of 5 found, none false | [possession-change.md](docs/eval/possession-change.md) |
 | Shot outcomes from video (#271), the shot-outcome set's test split, 79 clips, scored once | goals 10 of 15 found, 3 false (precision 0.77, 95% 0.50 to 0.92; recall 0.67, 95% 0.42 to 0.85; one of the false is a true goal timed 1.2 s off); saves 2 of 49 found (recall 0.04): **saves do not work yet**, so the live path writes a detected save as a plain shot (#368) | [shot-outcomes/RESULT.md](docs/eval/shot-outcomes/RESULT.md) |
-| The score read off the broadcast's scorebug from pixels (#356; template matching against our own renderer's digits, no OCR model), 80 validation clips | 16 of 16 goals found (95% 0.81 to 1.00), 0 false, each on the goal's own frame; digits right in 880 of 880 samples read. Held-out check on the demo match: 5 of 5 goals, none false. The phone shows a score only from this reading, never counted from detected goals (#358, #377) | [scorebug-plan.md](docs/eval/scorebug-plan.md#validation-current-reader-passes-the-bar-2026-10-26) |
-| Ball speed from video (#331), the frozen test set's 30 clips, flat (2D) speeds | passes along the ground, 35 pairs: median error 3.5 km/h (7.4%), 90th percentile 7.7 km/h, reading 4.1 km/h slow on average. A ball in the air is placed on the ground (median error 109 km/h), so no speed is shown for it, and the big screen airs no ball speed yet (#378). **Shot speed not measured:** 2 true shots in the 30 clips, none detected | [speed-report-freeze.md](docs/eval/speed-report-freeze.md) |
-| Player names from the whole-pitch tracks, graded on the demo match's own vision (#374), held-out half, scored once | tracks named right 382 / 432 (0.884, 95% 0.85 to 0.91); events by actor 50 / 54 (0.926). Below the pre-registered 0.95, so **nothing is named**: a player is said by club, or "a player" when the side is unsure (before, one name in six was wrong) | [roles.md](docs/eval/roles.md#result-scored-once-oct-25-the-held-out-half-misses-095-so-nothing-is-named) |
+| The score read off the broadcast's scorebug from pixels (#356; template matching against our own renderer's digits, no OCR model), 80 validation clips | 16 of 16 goals found (95% 0.81 to 1.00), 0 false, each on the goal's own frame; digits right in 880 of 880 samples read. Held-out check on the demo match: 5 of 5 goals, none false. The phone shows a score only from this reading, never counted from detected goals (#358, #377); the big screen draws its own scorebug and lower third over the broadcast from the same reading (#411) | [scorebug-plan.md](docs/eval/scorebug-plan.md#validation-current-reader-passes-the-bar-2026-10-26) |
+| Ball speed from video (#331), the frozen test set's 30 clips, flat (2D) speeds | passes along the ground, 35 pairs: median error 3.5 km/h (7.4%), 90th percentile 7.7 km/h, reading 4.1 km/h slow on average. A ball in the air is placed on the ground (median error 109 km/h), so no speed is shown for it. **Speeds are held until measured:** a screen says a ball speed only with this measured error band, only where the error covers it, and never above 40 m/s (GROUNDING P3); otherwise the number is left out (#378, `web/viewer/src/speed.ts`). **Shot speed not measured:** 2 true shots in the 30 clips, none detected | [speed-report-freeze.md](docs/eval/speed-report-freeze.md) |
+| Player names from the whole-pitch tracks, graded on the demo match's own vision (#374), held-out half, scored once | tracks named right 382 / 432 (0.884, 95% 0.85 to 0.91); events by actor 50 / 54 (0.926). Below the pre-registered 0.95, so vision alone names nobody; names come from the ID feed instead (next rows) | [roles.md](docs/eval/roles.md#result-scored-once-oct-25-the-held-out-half-misses-095-so-nothing-is-named) |
 | False claims aired, live ablation on held-out seeds 21 and 33: an unchecked single agent against the multi-agent graph with its fact-checker | the unchecked agent 7 / 10, the graph 1 / 24. This compares against an agent with **no** fact-checker; the third arm, next row, gives the single agent the same fact-checker | [ablation-agents.md](docs/eval/ablation-agents.md) |
 | Ablation third arm (#370): one run, fresh seeds 940001 and 940002, plan fixed before scoring | true and false claims on air: one agent with the same fact-checker 9 and 0 (32 model calls); the graph 16 and 2 (83 calls); the unchecked agent 5 and 5 (10 calls). **Mixed** by the pre-registered rule: the fact-checker does the safety work; the graph's specialists roughly double the true insights at 2.6 times the calls, with 2 false. One run on two matches is a sample, not rates | [ablation-third-arm.md](docs/eval/ablation-third-arm.md) |
+| The agents live on Foundry on the demo match (#417): the graph and the Companion at 8 pre-registered moments (4 goals, a line break, an overload, a quiet spell, half-time), every tool call through the real MCP server | Companion tool choice 8 / 8, arguments 8 / 8 by the rule (7 / 8 in effect: half-time's window was replaced by the default, fixed in #418); context reached the agents 8 / 8; every aired claim cites only ids its agent was given. **1 of 8 graph moments aired:** the fact-checker held the rest, mostly because vision was unsure of the side or the detection, and the template stayed on screen. Four failure drills (Judge down, vision dropout, slow Tactician, slow Companion) recovered with nothing unverified on air; the pre-registered graph Judge-down drill never reached the Judge and was re-run on another minute (lesson 281). 72 calls, $0.033 | [agents-live.md](docs/eval/agents-live.md) |
 | Planted false claims kept off air by the fact-checking agent, on the published `ninety-judge:4`, frozen engine, held-out seeds 21 and 33 | 170 / 170 (code checks alone 56 / 170), of which 6 held by a Judge service error (164 / 164 where a check decided); 0 of the 54 true factual claims the Judge answered wrongly rejected. Tone words ("patient", "bold") are now counted apart, neither true nor false, after the human labels doubted them (#353): the Judge let 57 of 72 air; counted as true, as before, 14 / 129 true claims were wrongly rejected. Runs on different planted sets are not like for like | [fact-checker.md](docs/eval/fact-checker.md) |
 | The fact-checker against one human's blind labels (Kian; 23 decisions sampled by a rule fixed before the run was read) | agreed on 15 of the 18 answered yes or no (83%, 95% 61 to 94%); 1 of 9 false passes, 2 of 9 false holds. About 20 items check the checker; they do not measure its rates | [factcheck-human-labels.md](docs/eval/factcheck-human-labels.md) |
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
@@ -234,14 +288,24 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   v4, where a model answer airs only if it is one of its cited facts' checked sentences (#309),
   is pinned on `main`; its live evaluation is not committed.
 - Event detection at the 0.70 target; the camera-trust band re-derived for the test set's renderer.
-  Saves from video (2 of 49 found, above). Following camera cuts is built but off (it fits a
+  Following camera cuts is built but off (it fits a
   reverse angle as the main camera's mirror).
 - The highlights reel: built and tested on hand-made events (#287), with its filter and fan labels
   off until the shot-flight measurement runs.
 - Team sides good enough to air most team claims (a spatial side model is built, #283, but its sides are right for about 0.75 of tracks on validation and its confidence does not separate right from wrong, so the 0.96 gate still holds back most team-named claims).
-- The demo match's render checks: it is rendered and vision has run on it (#374 graded names on
-  it), but its render checks are not yet in [demo-match.md](docs/eval/demo-match.md).
-- Player names on air (the gate above), player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
+- **Known limits a judge will see:**
+  - **Saves:** vision finds 2 of 49 on the test set, so a detected save is shown as a plain shot
+    (#368; [RESULT.md](docs/eval/shot-outcomes/RESULT.md)).
+  - **Keeper and foul animation:** keepers' dives and catches and players' reactions to a foul are
+    drawn simply; they read as football, not as television.
+  - **Stop-start movement off the ball:** players away from the ball sometimes stop and start
+    rather than drift.
+  - **A2A is not used** in the demo or in the live agent evaluation: the Personalizer over A2A is
+    built and was evaluated live on Oct 21, but it is off in the demo path
+    ([agents-live.md](docs/eval/agents-live.md), honest gaps).
+  - The demo match runs on the demo-only engine v2 (#403, not on `main`); every published
+    measurement is on the frozen engine.
+- Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
 - The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera
   fit is about 14 m wrong in every frame ([gate-b3.md](docs/eval/gate-b3.md)).
 - Known engine gaps at the freeze: too much sideways passing, long shots taken with no defender
