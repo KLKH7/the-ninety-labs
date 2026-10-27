@@ -41,3 +41,10 @@ def pytest_collection_modifyitems(config, items):
     part = shard_of(items, n)
     config.hook.pytest_deselected(items=[item for i, item in enumerate(items) if part[i] != k - 1])
     items[:] = [item for i, item in enumerate(items) if part[i] == k - 1]
+
+
+@pytest.fixture(autouse=True)
+def _ask_trace_in_tmp(tmp_path, monkeypatch):
+    """The API's per-question trace (ninety/agents/telemetry.py) goes to the test's folder, not runs/."""
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask-trace.jsonl"))
+    monkeypatch.delenv("APPLICATIONINSIGHTS_CONNECTION_STRING", raising=False)

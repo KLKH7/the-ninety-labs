@@ -18,7 +18,16 @@ import re
 from dataclasses import dataclass, field, replace
 
 from ninety.agents import referee
-from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, service_errors
+from ninety.agents.companion import (
+    TIMEOUT_S,
+    NoModel,
+    Source,
+    _NotTheFormat,
+    _number,
+    _timeout_reason,
+    service_errors,
+    within,
+)
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict, parse_claim
 from ninety.intel.teamsheet import POSITIONS, short_name
@@ -1606,7 +1615,7 @@ async def answer_match(
     minute = _minute_in(question.t, insights)
 
     async def drafted():
-        plan_reply = await ask(plan_prompt(question, insights, history))
+        plan_reply = await within("plan", ask(plan_prompt(question, insights, history)))
         try:
             plan = first_object(plan_reply)
         except (json.JSONDecodeError, TypeError, AttributeError, ValueError, RecursionError):
@@ -1622,7 +1631,7 @@ async def answer_match(
         # hands the facts over, and the same fact-check gates what comes back.
         rules = any(c["name"] == "referee" for c in calls)
         writer = referee_ask if referee_ask is not None and rules else ask
-        reply = await writer(answer_prompt(question, facts, history, insights))
+        reply = await within("answer", writer(answer_prompt(question, facts, history, insights)))
         try:
             claim = parse_claim(reply)
         except (json.JSONDecodeError, AttributeError, TypeError, ValueError, RecursionError) as exc:
@@ -1659,7 +1668,7 @@ async def answer_match(
             verdict = Verdict(ok=False, reasons=[f"the question asks for a pass that beat {beaten}; it cites "
                                                  f"one of {beaten}'s or of an unknown side"])
         if verdict.ok and judge is not None:
-            verdict = await judge(claim, [_for_prompt(known[i]) for i in claim.evidence])
+            verdict = await within("judge", judge(claim, [_for_prompt(known[i]) for i in claim.evidence]))
         return calls, claim, verdict, facts
 
     def fallback(reason: str, calls=None) -> MatchResult:
@@ -1668,8 +1677,10 @@ async def answer_match(
 
     try:
         calls, claim, verdict, facts = await asyncio.wait_for(drafted(), timeout)
-    except TimeoutError:
-        return fallback("model timeout")
+    except TimeoutError as exc:
+        return fallback(_timeout_reason(exc))
+    except NoModel as exc:
+        return fallback(str(exc))
     except service_errors():
         return fallback("model service error")
     except _NotTheFormat:

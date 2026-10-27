@@ -344,13 +344,13 @@ def test_the_phone_route_answers_a_match_question(monkeypatch):
         "ball": {"x": 52.5, "y": 34.0},
         "players": [{"id": "h7", "team": "home", "x": 10.0, "y": 30.0}],
     }
-    monkeypatch.setattr(
-        comp, "_track", lambda clip: Track("seed7", (frame, {**frame, "frame": 1, "t": 0.04}), (0,))
-    )
+    end = {**frame, "frame": int(Q.t * 25), "t": Q.t}  # the clip runs to the question's time
+    monkeypatch.setattr(comp, "_track", lambda clip: Track("seed7", (frame, end), (0,)))
     monkeypatch.setattr(comp, "_insights", lambda clip: insights())
     app = comp.Companion(passcode="", live=None, allow_truth=True)
     client = TestClient(api.build("k" * 64, app))
     code = client.post("/api/pair", json={"clip": "seed7"}).json()["code"]
+    app.rooms[code].latest["clock"] = {"type": "clock", "t": Q.t, "playing": False}  # the big screen is there
     r = client.post("/api/ask", json={"session": code, "player": None, "text": Q.text, "t": Q.t})
     assert r.status_code == 200, r.text
     body = r.json()
@@ -1419,3 +1419,94 @@ def test_no_window_runs_past_full_time():
                                   f"Tell me about {LB.name.split()[-1]}"])
 def test_a_player_or_a_position_is_not_small_talk(text):
     assert companion.chat_kind(text, insights()) is None
+
+
+# --- the model path's harness: step budgets, the budget taken late, no Judge on code's sentences ----
+
+
+def live_match_client(monkeypatch, match_ask, judge=None, budget=(20, 400)):
+    from starlette.testclient import TestClient
+
+    from ninety.api import app as api
+    from ninety.api import companion as comp
+    from ninety.match.tracking import Track
+
+    frame = {"frame": 0, "t": 0.0, "source": "truth", "ball": {"x": 52.5, "y": 34.0},
+             "players": [{"id": "h7", "team": "home", "x": 10.0, "y": 30.0}]}
+    end = {**frame, "frame": int(Q.t * 25), "t": Q.t}
+    monkeypatch.setattr(comp, "_track", lambda clip: Track("seed7", (frame, end), (0,)))
+    monkeypatch.setattr(comp, "_insights", lambda clip: insights())
+
+    async def models():
+        async def never(*args):
+            raise AssertionError("not this model")
+
+        return comp.LiveModels(never, judge or never, match_ask)
+
+    app = comp.Companion(passcode="letmein", live=models, allow_truth=True)
+    app.budget = comp.Budget(*budget, app.clock)
+    client = TestClient(api.build("k" * 64, app))
+    code = client.post("/api/pair", json={"clip": "seed7"}).json()["code"]
+    app.rooms[code].latest["clock"] = {"type": "clock", "t": Q.t, "playing": False}
+
+    def post(text):
+        body = {"session": code, "player": None, "text": text, "t": Q.t}
+        return client.post("/api/ask", json=body, headers={comp.PASSCODE_HEADER: "letmein"}).json()
+
+    return post, app
+
+
+def test_small_talk_and_code_only_answers_spend_no_model_budget(monkeypatch):
+    # Audit, Oct 27: the budget was taken before answer_match's small-talk and overview returns.
+    ask, prompts = scripted()
+    post, app = live_match_client(monkeypatch, ask)
+    for text in ("hi", "thanks!", "How are London Athletic playing?"):
+        assert post(text)["source"] == "code"
+    assert prompts == [] and app.budget.today == 0
+
+
+def test_a_model_answer_takes_one_from_the_budget_and_none_once_it_is_spent(monkeypatch):
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+    ask, prompts = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
+    post, app = live_match_client(monkeypatch, ask, budget=(1, 400))
+    assert post("Who cut through their lines?")["source"] == "model"
+    assert app.budget.today == 1 and len(prompts) == 2  # two model steps, one question's budget
+    assert post("Who cut through their lines?")["source"] == "code" and len(prompts) == 2
+
+
+def test_the_match_path_runs_no_judge(monkeypatch):
+    # Its sentences are code's own, checked by code (docs/eval/ask-model-path.md): the Judge can only
+    # reject a true one, at about 2 s a call.
+    async def judge(claim, evidence):
+        raise AssertionError("the Judge ran on the match path")
+
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
+    post, _ = live_match_client(monkeypatch, ask, judge)
+    assert post("Who cut through their lines?")["source"] == "model"
+
+
+@pytest.mark.parametrize("step", ["plan", "answer"])
+def test_a_step_past_its_budget_falls_back_to_code_naming_the_step(monkeypatch, step):
+    from ninety.agents import companion as player_companion
+
+    monkeypatch.setitem(player_companion.STEP_S, step, 0.05)
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+
+    async def ask(prompt):
+        if json.loads(prompt)["step"] == step:
+            await asyncio.sleep(1)
+        return plan if step == "answer" else "{}"
+
+    r = asyncio.run(companion.answer_match(Q, insights(), ask))
+    assert r.source == "code" and r.reasons == (f"model timeout ({step})",)
+
+
+def test_a_spent_budget_is_the_recorded_reason():
+    from ninety.agents.companion import NoModel
+
+    async def ask(prompt):
+        raise NoModel("model budget spent")
+
+    r = asyncio.run(companion.answer_match(Q, insights(), ask))
+    assert r.source == "code" and r.reasons == ("model budget spent",) and r.answer.status == "verified"
