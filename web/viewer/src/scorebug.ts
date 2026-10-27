@@ -35,7 +35,7 @@ export interface BugState {
 
 /** What the bug shows at match time `t`, from the gated readings only. `secondHalf`: the second
  * half's detected kick-off, when there is one; `ended`: the footage has played out. */
-export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, ended = false): BugState {
+export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, ended = false, goalS = GOAL_S): BugState {
   const sorted = reads.filter((r) => r.score).sort((a, b) => a.t - b.t);
   let at: ScoreRead | null = null;
   for (const r of sorted) {
@@ -48,13 +48,13 @@ export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, 
   let goal: BugState["goal"] = null;
   // The change that raised a side's count, read within the moment: the read's own `team`, else the
   // side whose count rose.
-  const change = [...sorted].reverse().find((r) => r.type === "score_change" && r.t <= t + 1e-6 && t - r.t < GOAL_S);
+  const change = [...sorted].reverse().find((r) => r.type === "score_change" && r.t <= t + 1e-6 && t - r.t < goalS);
   if (change && at) {
     const idx = sorted.indexOf(change);
     const before = idx > 0 ? sorted[idx - 1].score! : { home: 0, away: 0 };
     const rose = (["home", "away"] as const).find((s) => change.score![s] > before[s]);
     const side = change.team === "home" || change.team === "away" ? change.team : rose;
-    if (side) goal = { side, p: Math.min(1, Math.max(0, (t - change.t) / GOAL_S)), before };
+    if (side) goal = { side, p: Math.min(1, Math.max(0, (t - change.t) / goalS)), before };
   }
   const period = ended || t >= MATCH_S - FT_LEAD_S ? "FT" : secondHalf !== null && t >= HALF_S && t < secondHalf ? "HT" : null;
   return { score, period, goal };
@@ -107,10 +107,13 @@ export function setupScorebug(root: HTMLElement, clockTab: HTMLElement, teams: T
   root.hidden = false;
   let key = "";
   let shownScore: BugState["score"] = null;
+  // The moment's length is a design token (style.css --g-goal-s), so an identity can retime it.
+  const token = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--g-goal-s"));
+  const goalS = token > 0 ? token : GOAL_S;
   return {
     /** What the bug shows at match time t; returns the score it shows, for the stats panel. */
     tick(t: number, ended: boolean, reduceMotion: boolean): BugState["score"] {
-      const s = bugAt(reads, t, secondHalf, ended);
+      const s = bugAt(reads, t, secondHalf, ended, goalS);
       shownScore = s.score;
       const time = s.period ?? clock(t);
       const g = reduceMotion ? null : s.goal;
