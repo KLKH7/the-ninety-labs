@@ -576,6 +576,7 @@ ALLOWED = {
     "ninety/intel/identity.py",  # the one reader: names, and the sided events
     "ninety/intel/match_insights.py",  # names tracks with it, after every fact and stat
     "ninety/eval/identity_eval.py",  # grades the names it gives
+    "ninety/eval/scorer_feed.py",  # grades the shooters step 9 would name
     "ninety/e2e.py",  # copies the line-up rows and the disclosure into match.json
 }
 TOKENS = re.compile(r"\b(identity_feed|identity_tracks|identity_broadcast|identity_source|lineup_tactical"
@@ -632,3 +633,83 @@ def test_only_the_identity_path_touches_the_feed():
 ])
 def test_the_import_scan_sees_every_way_to_import_the_reader(code):
     assert imports(ROOT / "ninety" / "intel" / "stats_table.py", code) & MODULES
+
+
+def test_the_shooter_step_is_off_while_its_committed_score_missed():
+    """Step 9 (the feed player at the ball at a strike) runs on the demo only once its pre-registered
+    gate is met (docs/eval/scorer-feed-plan.md); the committed score says whether it was."""
+    body = json.loads((ROOT / "docs/eval/scorer-feed.json").read_text())
+    assert body["gate"]["precision_at_least"] == 0.95
+    assert identity.SHOOTERS_GATE_MET is body["gate"]["met"]
+
+
+def test_the_shooter_is_the_feed_player_of_the_side_nearest_the_ball_within_1_5_m():
+    def p(pid, team, n):
+        return {"player_id": pid, "team": team, "jersey": n, "name": pid, "position": "striker"}
+
+    meta = {"players": [p("LON09", "home", 9), p("LIS04", "away", 4), p("LON07", "home", 7)]}
+    feed = identity.Feed(meta, {250: {"LON09": (90.0, 30.0), "LIS04": (90.2, 30.0), "LON07": (91.4, 30.0)}},
+                         0)
+    assert identity.at_ball(feed, 10.0, 90.3, 30.0, "home")["player_id"] == "LON09"  # not the nearer rival
+    assert identity.at_ball(feed, 10.0, 92.8, 30.0, "home")["player_id"] == "LON07"  # 1.4 m
+    assert identity.at_ball(feed, 10.0, 93.0, 30.0, "home") is None  # 1.6 m: nobody
+    shot = {"id": "s", "type": "shot", "team": "home", "t": 10.0, "x": 90.3, "y": 30.0, "player": "a-t1"}
+    goal = {"id": "g", "type": "goal", "team": "home", "t": 12.0, "x": 105.0, "y": 34.0, "player": "a-t1"}
+    late = {**goal, "id": "g2", "t": 15.5}  # 5.5 s after the shot: not its strike
+    out = {e["id"]: e for e in identity.ball_named([shot, goal, late], feed, {})}
+    assert out["g"]["player_named"]["player_id"] == "LON09" and "player_named" not in out["g2"]
+    named = identity.ball_named([shot], feed, {"a-t1": {"team": "home", "name": "N"}})[0]
+    assert "player_named" not in named  # a player the feed already names keeps it
+    # A goal's strike is the scoring side's LAST shot before it, and a shot the feed names gives its name.
+    first = {**shot, "id": "s0", "t": 8.0, "x": 50.0, "player": "a-t9"}
+    shooter = {"a-t1": {"team": "home", "name": "N", "player": "LON05", "number": 5, "position": "back"}}
+    goal_named = identity.ball_named([first, {**shot, "player": "a-t1"}, {**goal, "player": "a-t2"}], feed,
+                                     shooter)[2]
+    assert goal_named["player_named"]["by"] == "shot" and goal_named["player_named"]["name"] == "N"
+    assert identity.strike_of(goal, [first, shot])["id"] == "s"
+    # The feed row nearest the strike, within 2 frames: 10.08 s is 2 frames from row 250, 10.12 s is 3.
+    assert identity.at_ball(feed, 10.08, 90.3, 30.0, "home") is not None
+    assert identity.at_ball(feed, 10.12, 90.3, 30.0, "home") is None
+
+
+def test_the_side_step_leaves_shooters_unnamed_while_the_gate_is_off(feed_path, tmp_path, monkeypatch):
+    frames = tracked(engine_frames())
+    (tmp_path / "tracked.json").write_text(json.dumps({"frames": frames}))
+    shot = {"id": "e1", "t": 3.0, "frame": 75, "type": "shot", "team": "home", "team_confidence": 0.6,
+            "player": None, "x": 30.0, "y": 30.0, "confidence": 0.8}
+    (tmp_path / "detected.jsonl").write_text(json.dumps(shot) + "\n")
+    params = {"home_code": "LON", "away_code": "LIS"}
+    (tmp_path / "clip.json").write_text(json.dumps({"seed": 8080, "params": params}))
+    (tmp_path / "association.json").write_text(json.dumps({"tracks": {}}))
+    calls = []
+    monkeypatch.setattr(identity, "ball_named", lambda rows, *a: calls.append(1) or rows)
+    args = ["--tracked", str(tmp_path / "tracked.json"), "--association", str(tmp_path / "association.json"),
+            "--detected", str(tmp_path / "detected.jsonl"), "--fixture", str(tmp_path / "clip.json"),
+            "--feed", str(feed_path), "--out", str(tmp_path / "out.jsonl")]
+    identity.main(args)
+    assert calls == [] and "player_named" not in _lines(tmp_path / "out.jsonl")[0]
+    monkeypatch.setattr(identity, "SHOOTERS_GATE_MET", True)
+    identity.main(args)
+    assert calls == [1]
+
+
+@pytest.mark.parametrize("feed_team, named", [("home", True), ("away", False)])
+def test_a_goal_takes_the_feed_s_name_only_for_a_player_of_its_own_side(feed_path, monkeypatch, feed_team,
+                                                                        named):
+    """A goal is said with the feed's name for its own player only when the feed puts him on the
+    scoring side; a name on the other side is never the scorer, and with the feed no role is either."""
+    frames = tracked(engine_frames())
+    goal = {"id": "g1", "type": "goal", "team": "home", "t": 3.0, "frame": 75, "x": 105.0, "y": 34.0,
+            "player": "h-t7", "confidence": 1.0, "team_confidence": 1.0}
+    shot = {**goal, "id": "s1", "type": "shot", "t": 2.0, "frame": 50, "x": 95.0, "outcome": "goal"}
+    association = {"h-t7": {"track": "h-t2", "confidence": 1.0}}
+    who = {"track": "h-t7", "team": feed_team, "player": "LON09", "name": "Fed Name", "number": 9,
+           "position": "striker", "source": "id_feed"}
+    monkeypatch.setattr(identity, "named_broadcast", lambda *a, **k: {"h-t7": who})
+    mi = MatchInsights.build("c", frames, [shot, goal], FX, association=association,
+                             feed=identity.load(feed_path))
+    g = mi.facts["goal"][0]
+    assert g.get("player")  # vision's scorer, through the join
+    want = ("Fed Name", "id_feed") if named else (None, None)
+    assert (g.get("scorer_is"), g.get("scorer_source")) == want
+

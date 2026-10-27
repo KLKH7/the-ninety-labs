@@ -1,0 +1,190 @@
+{
+ "plan": "docs/eval/scorer-feed-plan.md",
+ "command": "uv run python -m ninety.eval.scorer_feed",
+ "commit": "7258a065b309288abcefa7265dd1de62bf1cee21",
+ "date": "2026-10-27",
+ "gate": {
+  "seed": "8080",
+  "precision_at_least": 0.95,
+  "precision": 0.4,
+  "wilson95": [
+   0.12,
+   0.77
+  ],
+  "named": 5,
+  "met": false
+ },
+ "matches": [
+  {
+   "seed": "8080",
+   "named": 5,
+   "right": 2,
+   "precision": 0.4,
+   "wilson95": [
+    0.12,
+    0.77
+   ],
+   "by_ball": {
+    "named": 5,
+    "right": 2
+   },
+   "goals": [
+    {
+     "event": "s37-v00019",
+     "type": "goal",
+     "t": 4028.24,
+     "by": "ball",
+     "named": "LON07",
+     "truth": "LON07",
+     "right": true
+    }
+   ],
+   "rows": [
+    {
+     "event": "s12-v00004",
+     "type": "shot",
+     "t": 1513.4,
+     "by": "ball",
+     "named": "LON09",
+     "truth": null,
+     "right": false
+    },
+    {
+     "event": "s20-v00006",
+     "type": "shot",
+     "t": 2124.04,
+     "by": "ball",
+     "named": "LON09",
+     "truth": null,
+     "right": false
+    },
+    {
+     "event": "s26-v00012",
+     "type": "shot",
+     "t": 2769.48,
+     "by": "ball",
+     "named": "LON09",
+     "truth": null,
+     "right": false
+    },
+    {
+     "event": "s37-v00018",
+     "type": "shot",
+     "t": 4027.48,
+     "by": "ball",
+     "named": "LON07",
+     "truth": "LON07",
+     "right": true
+    },
+    {
+     "event": "s37-v00019",
+     "type": "goal",
+     "t": 4028.24,
+     "by": "ball",
+     "named": "LON07",
+     "truth": "LON07",
+     "right": true
+    }
+   ]
+  },
+  {
+   "seed": "8324",
+   "named": 6,
+   "right": 6,
+   "precision": 1.0,
+   "wilson95": [
+    0.61,
+    1.0
+   ],
+   "by_ball": {
+    "named": 6,
+    "right": 6
+   },
+   "goals": [
+    {
+     "event": "s07-v00003",
+     "type": "goal",
+     "t": 715.72,
+     "by": "ball",
+     "named": "LON09",
+     "truth": "LON09",
+     "right": true
+    },
+    {
+     "event": "s38-v00003",
+     "type": "goal",
+     "t": 4522.52,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    },
+    {
+     "event": "g00001",
+     "type": "goal",
+     "t": 5068.48,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    }
+   ],
+   "rows": [
+    {
+     "event": "s07-v00002",
+     "type": "shot",
+     "t": 714.72,
+     "by": "ball",
+     "named": "LON09",
+     "truth": "LON09",
+     "right": true
+    },
+    {
+     "event": "s07-v00003",
+     "type": "goal",
+     "t": 715.72,
+     "by": "ball",
+     "named": "LON09",
+     "truth": "LON09",
+     "right": true
+    },
+    {
+     "event": "s38-v00002",
+     "type": "shot",
+     "t": 4520.4,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    },
+    {
+     "event": "s38-v00003",
+     "type": "goal",
+     "t": 4522.52,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    },
+    {
+     "event": "s42-v00009",
+     "type": "shot",
+     "t": 5067.96,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    },
+    {
+     "event": "g00001",
+     "type": "goal",
+     "t": 5068.48,
+     "by": "ball",
+     "named": "LIS11",
+     "truth": "LIS11",
+     "right": true
+    }
+   ]
+  }
+ ]
+}

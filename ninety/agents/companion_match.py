@@ -62,6 +62,7 @@ MATCH_TOOLS = (
     "lineup",
     "possession",
     "territory",
+    "on_top",
     "shots",
     "passing",
     "physical",
@@ -87,9 +88,11 @@ TOOL_HELP = {
     "shots": "the shot map: each shot's spot, metres from goal and the angle the posts make there, "
     "nearest first; each club's shots and those from inside the penalty area. How a shot ended is not "
     "known yet",
-    "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
-    "on the ball); "
-    "unsure when the video could not tell whose some passes were",
+    "possession": "each club's share of the time either side had the ball (time in possession: dead and "
+    "contested time left out), from the first minute a share can be said",
+    "on_top": "which club has been on top over the minutes, by where the ball was: a club leads only when "
+    "its share of the footage with the ball in its attacking third is clearly more than the other's, "
+    "else neither; both clubs' shares beside it",
     "territory": "where the ball was: each club's share of the time with it in its attacking third, as "
     "a range (the ball near a third's line could be on either side)",
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
@@ -136,6 +139,12 @@ TOOL_WORDS = (
         r"|wall pass\w*|how (?:are|is) [\w' ]+ (?:playing|doing|getting on|looking|defending|attacking)"
         r"|how is the (?:game|match) going|going forward"
         r"|goal ?keeper|keeper)\b",
+    ),
+    (
+        "on_top",
+        r"\b(?:on top|the better (?:side|team)|been better(?! (?:in|on) (?:possession|the ball))|bossing"
+        r"|in control(?! of the ball)|momentum|upper hand|better of|finish\w* stronger"
+        r"|(?:team|side) is better|playing better|pushing)\b",
     ),
     (
         "players",
@@ -189,7 +198,8 @@ TOOL_WORDS = (
     ("shots", r"\b(?:shots?|shooting|shoot|efforts? on goal|chances?|attempts?)\b"),
     (
         "possession",
-        r"\b(?:possession|more of the ball|keep(?:ing|s)? the ball|have the ball more|dominat\w*)\b",
+        r"\b(?:possession|more of the ball|keep(?:ing|s)? the ball"
+        r"|(?:have|has|had) (?:had )?the ball (?:more|most)|dominat\w*)\b",
     ),
     (
         "territory",
@@ -469,6 +479,11 @@ def minutes_of(text: str, minute: int) -> tuple[int, int] | None:
     if m:
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_MINUTES[m.group(1)]
         return max(1, minute - n + 1), minute
+    if re.search(r"\b(?:last|past) half(?: an)? hour\b", t):
+        return max(1, minute - 29), minute
+    # "Since the half hour" (in the half hour, since the half-hour mark): from 30:00, football's minute 31.
+    if re.search(r"\b(?:since|in) the half[- ]hour\b|\bsince half an hour\b", t):
+        return (31, minute) if minute >= 31 else None
     if re.search(r"\b(?:so far|whole (?:match|game)|all (?:match|game)|this (?:match|game)|today)\b", t):
         return 1, minute
     return None
@@ -652,6 +667,9 @@ def _match_answer(
     text: str, cited: list[dict], insights=None, calls=(), asked=(), t=None, suggest=True
 ) -> Answer:
     t_from, t_to = _span(cited)
+    if t is not None and t_to is not None and t_to > t:
+        # A window's last minute is its bin's end; the answer is about what was seen by now.
+        t_to = max(float(t), t_from or 0.0)
     # Never the score's counts (option B): an answer's number is from any other fact.
     lead = next((f for f in cited if f.get("value") is not None and f.get("unit")
                  and f.get("metric") not in ("score", "scorebug")), None)
@@ -814,6 +832,16 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     routed = route(question)
     # A score question ("who scored?" too) is headed by the scorebug's reading, never by one scorer.
     asks_score = bool(routed) and routed[0] == "score"
+    top = next((f for f in cited if f.get("metric") == "on_top"), None)
+    if routed and routed[0] == "on_top" and top is None and not any(
+        f.get("metric") == "final_third_share" for f in cited
+    ):
+        return "Not known yet"  # too little footage to compare (ON_TOP_UNKNOWN)
+    if routed and routed[0] == "on_top" and top is not None:
+        # The comparison's verdict, never one club's number (Kian's preview, Oct 27).
+        if top.get("team") is None:
+            return "Too close to call"
+        return short_name(insights.fixture.home_code if top["team"] == "home" else insights.fixture.away_code)
     if routed and routed[0] == "possession" and not any(f.get("metric") == "possession_share" for f in cited):
         return "Not known yet"  # the share is unknown (POSSESSION_UNKNOWN): no figure heads it
     if bug is not None and (kind != "who" or winning or asks_score):  # the scorebug's reading
@@ -853,6 +881,11 @@ def _num(v: float) -> str:
     return _number(round(float(v), 1))
 
 
+def _of(club: str) -> str:
+    """A club's possessive as a fan writes it: "Lisbon Esportes'", "London Athletic's"."""
+    return f"{club}'" if club.endswith("s") else f"{club}'s"
+
+
 def _plural(n, word: str) -> str:
     return f"{_num(n)} {word}" + ("" if n == 1 else "es" if word.endswith("s") else "s")
 
@@ -874,6 +907,13 @@ SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep 
 # least this many passes; fewer is too early to say anything, and the answer says so.
 MIN_SHARE_PASSES = 15
 TOO_EARLY = "It's too early to say: the match has barely started."
+# Fixed text, stating no number but the stretch's minutes: the two clubs' territory ranges overlap, so
+# neither leads.
+ON_TOP_LEVEL = ("Neither side has clearly been on top {span}: the ball was in each side's attacking third "
+                "about as often in the footage we've seen.")
+# Fixed text, stating no fact: under a minute of the ball seen in the stretch (on_top's floor).
+ON_TOP_UNKNOWN = ("It's too early to say who has been on top: under a minute of the ball has been seen "
+                  "in those minutes.")
 SHOTS_SIDE_UNKNOWN = "Vision couldn't tell surely which side took them, so it can't say who has had more."
 
 
@@ -882,9 +922,10 @@ def _sample(fact: dict) -> int | None:
     if isinstance(fact.get("passes"), int):
         return fact["passes"]
     return next((int(v) for v, unit, *_ in fact.get("also") or () if unit == "passes"), None)
-# Fixed text, stating no fact: possession is unknown when too few passes had their side told surely.
-POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: vision could not tell surely "
-                      "which side made most of the passes.")
+# Fixed text, stating no fact: possession is unknown before a minute of either side on the ball was seen.
+POSSESSION_UNKNOWN = ("Possession can't be split between the clubs for those minutes: it is measured "
+                      "from kick-off and from each half's start, once a minute of either side on the ball "
+                      "has been seen.")
 
 
 def code_texts(fact: dict) -> list[str]:
@@ -941,7 +982,7 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "opponents_bypassed_total":
         if not fact["value"]:
             return []
-        return [f"{club}'s completed passes took out {fact['value']} opponents in all {span}."]
+        return [f"{_of(club)} completed passes took out {fact['value']} opponents in all {span}."]
     if metric == "extra_players":
         return [
             f"{span.capitalize()}, {club} had {_plural(fact['own_players'], 'player')} against "
@@ -980,7 +1021,7 @@ def code_texts(fact: dict) -> list[str]:
             next(n for t, n in fact["clubs"].items() if t != fact["team"]) if fact.get("clubs") else ""
         )
         return [
-            f"{club} stretched the play {fact['value']} m wide {span}, against {other_club}'s "
+            f"{club} stretched the play {fact['value']} m wide {span}, against {_of(other_club)} "
             f"{fact['other_width']} m."
         ]
     if metric == "crosses":
@@ -992,7 +1033,7 @@ def code_texts(fact: dict) -> list[str]:
         ]
     if metric == "keeper_long_balls":
         return [
-            f"{club}'s goalkeeper went long {_plural(fact['value'], 'time')} and short "
+            f"{_of(club)} goalkeeper went long {_plural(fact['value'], 'time')} and short "
             f"{_plural(fact['short'], 'time')} {span}."
         ]
     if metric == "regain_to_shot_s":
@@ -1045,11 +1086,19 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "possession_share":
         if fact.get("value") is None:
             return []
-        return [f"{club} had {fact['value']}% of possession {span}, counted by share of passes."]
+        from ninety.intel.ball_share import ERROR_POINTS
+
+        # Coverage-honest and with its window: what was seen, over the minutes measured.
+        return [f"{club} have had {fact['value']}% of the ball in the footage we've seen {span}, "
+                f"by time on the ball, give or take {ERROR_POINTS} points."]
     if metric == "final_third_share":
         lo, hi = fact["lo"], fact["hi"]
-        share = f"{lo}%" if lo == hi else f"between {lo}% and {hi}%"
-        return [f"The ball was in {club}'s attacking third {share} of the footage shown {span}."]
+        from ninety.intel.ball_share import share_words
+
+        # Its bounds (the ball near a line counts for either side), and the plain fraction they make.
+        share, words = (f"{lo}%" if lo == hi else f"{lo}–{hi}%"), share_words(lo, hi)
+        how = f"{words} of the time ({share})" if words else f"{share} of the time"
+        return [f"{club} have had the ball in their attacking third {how} in the footage we've seen {span}."]
     if metric == "one_two":
         a, b = fact.get("passer_is"), fact.get("receiver_is")
         if not a or not b or a == b:  # one name twice is no one-two a fan would believe
@@ -1064,12 +1113,16 @@ def code_texts(fact: dict) -> list[str]:
     if kind == "goal":
         m = fact["minute"]
         out = []
-        if fact.get("scorer_is") and fact.get("assister_is"):
-            out.append(
-                f"{fact['scorer_is']} scored for {club} in minute {m}, from {fact['assister_is']}'s pass."
-            )
-        if fact.get("scorer_is"):
-            out.append(f"{fact['scorer_is']} scored for {club} in minute {m}.")
+        # A scorer is said only by name or role: "a London Athletic player scored for London Athletic"
+        # says the club twice and no one (Kian, Oct 27).
+        clubs_said = {club, *(fact.get("clubs") or {}).values()} - {None}
+        who = fact.get("scorer_is") or ""
+        # Never a label with a club in it: the club twice, or worse, a Lisbon label on a London goal.
+        scorer = who if club and who and not any(c in who for c in clubs_said) else None
+        if scorer and fact.get("assister_is"):
+            out.append(f"{scorer} scored for {club} in minute {m}, from {fact['assister_is']}'s pass.")
+        if scorer:
+            out.append(f"{scorer} scored for {club} in minute {m}.")
         return [*out, f"{club} scored in minute {m}."]
     if fact.get("kind") == "set_pieces":
         from ninety.intel.set_pieces import WORDS
@@ -1092,7 +1145,7 @@ def code_texts(fact: dict) -> list[str]:
             f"{fact['value']} opponents in {_plural(fact['also'][0][0], 'pass')}."
         ]
     if kind == "spell":  # a run vision followed receiver to passer: no side needed
-        whose = f"{club}'s longest" if club else "The longest"
+        whose = f"{_of(club)} longest" if club else "The longest"
         return [f"{whose} run of passing was {fact['value']} passes in a row, in minute {fact['minute']}."]
     if fact.get("type") == "shape":
         return _shape_texts(fact, club or "", span)
@@ -1110,12 +1163,13 @@ def _shape_texts(fact: dict, club: str, span: str) -> list[str]:
     if m == "line_height" and c is not None and abs(c) >= SHAPE_CHANGE_M:
         move = "pushed up" if c > 0 else "dropped back"  # the shape check reads the change right after it
         out.append(
-            f"{span.capitalize()}, {club}'s back line {move} {_num(abs(c))} m, to {v} m from their own goal."
+            f"{span.capitalize()}, {_of(club)} back line {move} {_num(abs(c))} m, "
+            f"to {v} m from their own goal."
         )
     if m == "line_height":
-        out.append(f"{span.capitalize()}, {club}'s back line was {v} m from their own goal.")
+        out.append(f"{span.capitalize()}, {_of(club)} back line was {v} m from their own goal.")
     if m == "width":
-        out.append(f"{span.capitalize()}, {club}'s width was {v} m.")
+        out.append(f"{span.capitalize()}, {_of(club)} width was {v} m.")
     return out
 
 
@@ -1385,6 +1439,38 @@ def code_match_answer(
             t=question.t,
             suggest=suggest,
         ), calls
+    # "Who's been on top since the half hour?": both clubs compared over the stretch asked, each
+    # club's territory its own checked sentence; the headline is the comparison's verdict.
+    if calls and calls[0]["name"] == "on_top":
+        top = next((f for f in facts if f.get("metric") == "on_top"), None)
+        terr = [f for f in facts if f.get("metric") == "final_third_share"]
+        if top is None or not top.get("confident"):
+            return _match_answer(ON_TOP_UNKNOWN, [], insights, calls,
+                                 asked=[*(h["question"] for h in history), question.text], t=question.t,
+                                 suggest=suggest), calls
+        if top is not None:
+            lead = top.get("team")
+            terr.sort(key=lambda f: f.get("team") != (lead or "home"))
+        said = []
+        for f in terr:
+            text = next((t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), known, insights).ok), None)
+            if text is not None:
+                said.append((text, f))
+        if top is not None and len(said) == 2:
+            # The verdict leads, the two clubs' territory under it; it names a club only when the
+            # club leads (the on_top fact's own side), checked like any sentence.
+            span = f"from minute {top['minute_from']} to minute {top['minute_to']}"
+            if top.get("team") is None:
+                verdict = ON_TOP_LEVEL.format(span=span)
+            else:
+                verdict = (f"{top['club']} have been on top {span}, going by how often the ball was in their "
+                           "attacking third in the footage we've seen.")
+                if not _verify(Claim(verdict, [top["id"]]), known, insights).ok:
+                    verdict = None
+            text = " ".join([*([verdict] if verdict else []), *(t for t, _ in said)])
+            return _match_answer(text, [top, *(f for _, f in said)], insights, calls,
+                                 asked=[*(h["question"] for h in history), question.text], t=question.t,
+                                 suggest=suggest), calls
     # "How are Lisbon playing?": an overview, not the first count to hand. Where the ball was and the
     # main route (when its sample allows), then the club's most significant moment, each checked.
     overview = _overview(question, calls, insights, known, history, suggest)
