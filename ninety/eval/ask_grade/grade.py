@@ -443,6 +443,18 @@ COMPARE_MORE = re.compile(r"\b(?:more|most|ahead|edge)\b", re.I)
 COMPARE_FEWER = re.compile(r"\b(?:fewer|less|behind)\b", re.I)
 
 
+COMPLETION_WORDS = r"(?:accura\w*|complet\w*|pass\w*|found a team-?mate)"
+
+
+def compares_metric(it: dict, text: str) -> bool:
+    """Is the lead's comparison about the intent's own metric? "Lisbon played most through the
+    centre" compares a club on something else, so it is no claim about shots on target."""
+    s = lead(text)
+    if it["kind"] == "pct":
+        return bool(re.search(rf"\b{COMPLETION_WORDS}\b", s, re.I))
+    return bool(re.search(rf"\b{METRIC_NOUN[it['metric']]}\b", s, re.I))
+
+
 def compared_side(text: str, clubs: dict) -> str | None:
     """The side an answer's lead sentence says is ahead: "level" for "level", "2 each", "neither side
     has had"; the club named first with "more"/"most"/"ahead" ("Lisbon have had more shots"), the
@@ -528,7 +540,7 @@ def grade_claim(it: dict, text: str, tv: dict, tol: dict, clubs: dict, strict: b
     tolerance of that club's truth (both apply when both are stated); a lead that is no comparison
     is correct as before (`strict`: the stated number within tolerance); an answer stating neither
     a comparison nor a number fails (strict fails it)."""
-    if compared_side(text, clubs) is None:
+    if compared_side(text, clubs) is None or not compares_metric(it, text):
         return bool(strict)
     if not comparison_direction(text, tv, clubs, tol):
         return False
@@ -586,7 +598,7 @@ def grade(
     false_unknown = None if unmeasured or holds is None else not (holds and not answered)
     flags = [k for k, rx in NATURAL.items() if rx.search(text)]
     compares = (
-        comparison_direction(text, tv, clubs, tol)
+        (compares_metric(it, text) and comparison_direction(text, tv, clubs, tol))
         if it["kind"] in ("count", "pct") and tv is not None and answered
         else None
     )

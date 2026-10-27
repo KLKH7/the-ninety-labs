@@ -545,3 +545,15 @@ def test_the_strict_column_stays_beside_the_claim():
         ]
         is None
     )
+
+
+def test_a_comparison_of_something_else_is_no_claim():
+    # found grading main: "most" and the right club, about where Lisbon passed from, not shots on target
+    ot = intent("on_target")
+    text = "Lisbon Esportes played most through the centre: 53% of their passes started there."
+    assert G.compares_metric(ot, text) is False
+    assert G.grade_claim(ot, text, _both(1, 6), TOL, CLUBS, False) is False
+    c = graded("on_target", "how many shots on target", 5400.0, text)
+    assert c["correct"] is False and c["comparison_direction"] is False
+    right = "Lisbon Esportes have had more shots on target in the footage so far."
+    assert G.compares_metric(ot, right) is True

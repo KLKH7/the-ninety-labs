@@ -11,7 +11,8 @@
   "coverage_honest": 0.287,
   "natural": 0.91,
   "consistent": 0.717,
-  "comparison_direction": 0.009,
+  "comparison_direction": 0.0,
+  "correct_strict": 0.0,
   "pass": 0.208
  },
  "chips": {
@@ -26,6 +27,7 @@
   "natural": 0.852,
   "consistent": 0.716,
   "comparison_direction": 0.0,
+  "correct_strict": 0.0,
   "pass": 0.16
  },
  "intents": {
@@ -41,6 +43,7 @@
    "natural": 1.0,
    "consistent": 0.636,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.636
   },
   "scorers": {
@@ -55,6 +58,7 @@
    "natural": 1.0,
    "consistent": 0.556,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.258
   },
   "winning": {
@@ -69,6 +73,7 @@
    "natural": 1.0,
    "consistent": 0.333,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.455
   },
   "on_top": {
@@ -83,6 +88,7 @@
    "natural": 1.0,
    "consistent": 0.639,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.639
   },
   "possession": {
@@ -97,6 +103,7 @@
    "natural": 1.0,
    "consistent": 0.9,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.833
   },
   "passes": {
@@ -111,6 +118,7 @@
    "natural": 1.0,
    "consistent": 0.889,
    "comparison_direction": null,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "completion": {
@@ -125,6 +133,7 @@
    "natural": 0.97,
    "consistent": 0.667,
    "comparison_direction": 0.0,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "shots": {
@@ -139,6 +148,7 @@
    "natural": 0.987,
    "consistent": 0.846,
    "comparison_direction": 0.0,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "on_target": {
@@ -152,7 +162,8 @@
    "coverage_honest": 0.0,
    "natural": 0.985,
    "consistent": 0.537,
-   "comparison_direction": 0.047,
+   "comparison_direction": 0.0,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "territory": {
@@ -167,6 +178,7 @@
    "natural": 0.917,
    "consistent": 0.792,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.792
   },
   "corners": {
@@ -181,6 +193,7 @@
    "natural": 1.0,
    "consistent": 0.923,
    "comparison_direction": 0.0,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "out_of_play": {
@@ -195,6 +208,7 @@
    "natural": 1.0,
    "consistent": 0.6,
    "comparison_direction": 0.0,
+   "correct_strict": 0.0,
    "pass": 0.0
   },
   "momentum": {
@@ -209,6 +223,7 @@
    "natural": 0.955,
    "consistent": 0.873,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.879
   },
   "best_home": {
@@ -223,6 +238,7 @@
    "natural": 0.847,
    "consistent": 0.803,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "best_away": {
@@ -237,6 +253,7 @@
    "natural": 0.736,
    "consistent": 0.742,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "best_overall": {
@@ -251,6 +268,7 @@
    "natural": 0.667,
    "consistent": 0.708,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "fastest": {
@@ -265,6 +283,7 @@
    "natural": 1.0,
    "consistent": 0.75,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "distance": {
@@ -279,6 +298,7 @@
    "natural": 1.0,
    "consistent": 0.917,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "why_goal": {
@@ -293,6 +313,7 @@
    "natural": 0.931,
    "consistent": 0.924,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "key_moments": {
@@ -307,6 +328,7 @@
    "natural": 0.385,
    "consistent": 0.859,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "unmeasured": {
@@ -321,6 +343,7 @@
    "natural": 0.848,
    "consistent": 0.3,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.0
   },
   "tactics_chip": {
@@ -335,6 +358,7 @@
    "natural": 0.872,
    "consistent": 0.41,
    "comparison_direction": null,
+   "correct_strict": null,
    "pass": 0.179
   }
  }
