@@ -11,16 +11,16 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | score | 68% | 83% | 68% |
 | scorers | 44% | 44% | 44% |
 | winning | 46% | 82% | 46% |
-| on_top | 0% | 0% | 19% |
+| on_top | 0% | 0% | 33% |
 | possession | 0% | 0% | 62% |
 | passes | 0% | 0% | 0% |
 | completion | 0% | 0% | 0% |
 | shots | 0% | 0% | 0% |
 | on_target | 0% | 0% | 0% |
-| territory | 67% | 69% | 67% |
+| territory | 79% | 83% | 79% |
 | corners | 0% | 0% | 0% |
 | out_of_play | 0% | 0% | 0% |
-| momentum | 0% | 0% | 20% |
+| momentum | 0% | 0% | 35% |
 | best_home | 0% | 0% | 0% |
 | best_away | 0% | 0% | 0% |
 | best_overall | 0% | 0% | 0% |
@@ -30,17 +30,17 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | key_moments | 22% | 22% | 22% |
 | unmeasured | 0% | 0% | 0% |
 | tactics_chip | 64% | 67% | 64% |
-| **all** | **14%** | **16%** | **19%** |
-| chips | 35% | 36% | 38% |
+| **all** | **15%** | **17%** | **21%** |
+| chips | 36% | 37% | 39% |
 
 ## Every check, all answers
 
 | Check | main | #423 | #424 |
 |---|---|---|---|
-| **core** | 14% | 16% | 19% |
+| **core** | 15% | 17% | 21% |
 | answered | 49% | 49% | 56% |
 | relevant | 64% | 66% | 65% |
-| correct | 11% | 14% | 16% |
+| correct | 12% | 15% | 18% |
 | no_false_unknown | 46% | 45% | 53% |
 | no_future | 97% | 99% | 97% |
 | span_clipped | 78% | 78% | 72% |
@@ -62,7 +62,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | completion | 0% | 29% | 0% | 0% | 29% | 98% | 79% | 0% | 97% | 67% |
 | shots | 0% | 86% | 86% | 0% | 86% | 100% | 30% | 0% | 96% | 85% |
 | on_target | 0% | 65% | 0% | 0% | 65% | 98% | 41% | 0% | 98% | 54% |
-| territory | 67% | 88% | 79% | 67% | 88% | 97% | 28% | 90% | 12% | 79% |
+| territory | 79% | 88% | 79% | 79% | 88% | 97% | 28% | 90% | 12% | 79% |
 | corners | 0% | 92% | 92% | 0% | 92% | 100% | 23% | 0% | 100% | 92% |
 | out_of_play | 0% | 46% | 46% | 0% | 46% | 100% | 62% | 0% | 100% | 60% |
 | momentum | 0% | 27% | 82% | 0% | 27% | 91% | 82% | – | 73% | 51% |
@@ -89,7 +89,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | completion | 0% | 27% | 14% | 0% | 27% | 100% | 77% | 0% | 100% | 67% |
 | shots | 0% | 85% | 85% | 0% | 85% | 100% | 30% | 0% | 96% | 83% |
 | on_target | 0% | 65% | 0% | 0% | 65% | 98% | 39% | 0% | 98% | 54% |
-| territory | 69% | 83% | 83% | 69% | 83% | 100% | 31% | 100% | 11% | 83% |
+| territory | 83% | 83% | 83% | 83% | 83% | 100% | 31% | 100% | 11% | 83% |
 | corners | 0% | 100% | 100% | 0% | 100% | 100% | 17% | 0% | 100% | 100% |
 | out_of_play | 0% | 46% | 46% | 0% | 46% | 100% | 62% | 0% | 100% | 60% |
 | momentum | 0% | 18% | 46% | 0% | 18% | 96% | 86% | – | 76% | 47% |
@@ -110,16 +110,16 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | score | 68% | 86% | 86% | 68% | 86% | 100% | 100% | – | 100% | 64% |
 | scorers | 44% | 74% | 82% | 44% | 74% | 100% | 100% | – | 100% | 56% |
 | winning | 46% | 46% | 46% | 46% | 46% | 100% | 100% | – | 100% | 33% |
-| on_top | 19% | 67% | 67% | 19% | 67% | 100% | 44% | – | 58% | 39% |
+| on_top | 33% | 67% | 67% | 33% | 67% | 100% | 44% | – | 58% | 39% |
 | possession | 62% | 75% | 75% | 62% | 75% | 100% | 38% | 0% | 100% | 80% |
 | passes | 0% | 0% | 0% | 0% | 0% | 100% | 100% | – | 100% | 89% |
 | completion | 0% | 29% | 0% | 0% | 29% | 98% | 79% | 0% | 97% | 67% |
 | shots | 0% | 86% | 86% | 0% | 86% | 100% | 30% | 0% | 99% | 85% |
 | on_target | 0% | 65% | 0% | 0% | 65% | 98% | 41% | 0% | 98% | 54% |
-| territory | 67% | 88% | 79% | 67% | 88% | 97% | 28% | 90% | 12% | 79% |
+| territory | 79% | 88% | 79% | 79% | 88% | 97% | 28% | 90% | 12% | 79% |
 | corners | 0% | 92% | 92% | 0% | 92% | 100% | 23% | 0% | 100% | 92% |
 | out_of_play | 0% | 46% | 46% | 0% | 46% | 100% | 62% | 0% | 100% | 60% |
-| momentum | 20% | 46% | 82% | 20% | 46% | 97% | 64% | – | 55% | 42% |
+| momentum | 35% | 46% | 82% | 35% | 46% | 97% | 64% | – | 55% | 42% |
 | best_home | 0% | 15% | 61% | 0% | 15% | 88% | 86% | 0% | 85% | 80% |
 | best_away | 0% | 26% | 83% | 0% | 26% | 99% | 86% | 0% | 74% | 74% |
 | best_overall | 0% | 33% | 92% | 0% | 33% | 89% | 78% | 0% | 67% | 71% |
@@ -132,25 +132,25 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 
 Answers per column: main 1554, #423 1554, #424 1554.
 
-- **main**: 382996dc, cached insights (runs/demo-8324-final/final-work/insights.json; rebuilding them with main's code gives the same file and the same grades)
+- **main**: 63691e7f (with #425), cached insights (runs/demo-8324-final/final-work/insights.json; rebuilding them with main's code gives the same file)
 - **#423**: 9c2cd777 (claude/dreamy-bassi-380a97), the same cached insights (it changes no insight)
-- **#424**: ff0a17eb (claude/fervent-mcclintock-303a76), insights rebuilt with its code from runs/demo-8324-final (--rebuild-insights; its possession is computed into them)
+- **#424**: ff0a17eb (claude/fervent-mcclintock-303a76), insights rebuilt with its code from runs/demo-8324-final; its saved answers re-graded with today's rules (--replay)
 
 ## The model path (Foundry gpt-4.1-mini Companion and Judge), on a 10% sample
 
-Run on f9cd73d6 (main 382996dc's Ask, the grader after #427's review fixes) on Oct 27 after Kian approved spend; $1.50 cap per run; three runs, $0.17, $0.23 and $0.21 ($0.61 in all). The table is the third. The shared deployment was throttled (HTTP 429) through every run while other sessions called it; the grader backs off on a 429, and those waits count against the Ask's own 10 s timeout as they would on the phone, so "model timeout" is mostly throttling. The sample is stratified by intent: 10% of each intent's (question, time) pairs. Each model answer (`companion_match.answer_match` with the published Companion and the Judge) is graded beside code's answer to the same question. Parity: the same headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the tokens the service reported, at ninety/eval/latency_cost.PRICES.
+Run on f9cd73d6 (main 382996dc's Ask) on Oct 27 after Kian approved spend; $1.50 cap per run; three runs, $0.17, $0.23 and $0.21 ($0.61 in all). The table is the third run, re-graded with the current rules and truth (--replay; no new calls). The shared deployment was throttled (HTTP 429) through every run while other sessions called it; the grader backs off on a 429, and those waits count against the Ask's own 10 s timeout as they would on the phone, so "model timeout" is mostly throttling. The sample is stratified by intent: 10% of each intent's (question, time) pairs. Each model answer (`companion_match.answer_match` with the published Companion and the Judge) is graded beside code's answer to the same question. Parity: the same headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the tokens the service reported, at ninety/eval/latency_cost.PRICES.
 
 | | all sampled | not throttled |
 |---|---|---|
-| answers | 167 | 118 |
-| core pass, model path | 22% | 24% |
-| core pass, code, same questions | 16% | 14% |
-| headline parity | 56% | 38% |
-| fallback rate | 63% | 47% |
-| latency p50 / p95 | 6.9 s / 10.0 s | 5.0 s / 9.7 s |
+| answers | 167 | 119 |
+| core pass, model path | 23% | 24% |
+| core pass, code, same questions | 16% | 15% |
+| headline parity | 57% | 39% |
+| fallback rate | 62% | 47% |
+| latency p50 / p95 | 6.9 s / 10.0 s | 5.0 s / 9.8 s |
 | cost | $0.210 ($0.0013 an answer) | |
 
-Fallback reasons (all sampled): model timeout 49; model: unanswerable 45; not one of the checked sentences of the facts it cites 10; the Judge: unsupported fact 1.
+Fallback reasons (all sampled): model timeout 48; model: unanswerable 45; not one of the checked sentences of the facts it cites 10; the Judge: unsupported fact 1.
 
 ## The 10 worst answers (main), verbatim
 

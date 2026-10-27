@@ -3485,7 +3485,11 @@ short and actionable. This file is public: no research sources, product names or
   The other way round too: the first model-path run's grader read "London Athletic 1 goal, Lisbon
   Esportes 1 goal" (the scorebug's own words) as no score, because it knew only "1-1" and per-goal
   minutes, so a right answer failed (`test_the_scorebugs_wording_is_a_score`). Read the failures as
-  well as the passes.
+  well as the passes. And the truth itself: `truth.py` swapped the teams' ends at half time from
+  memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
+  L3), so every second-half territory truth had the clubs reversed until another session compared it
+  with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
+  the engine's code, not in how football usually goes.
 
 ### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
 - **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
