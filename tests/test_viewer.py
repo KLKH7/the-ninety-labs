@@ -36,7 +36,7 @@ def browser():
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
-            b = p.chromium.launch()
+            b = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
             yield b
             b.close()
     except Exception as e:  # no Chromium installed

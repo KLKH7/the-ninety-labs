@@ -640,9 +640,9 @@ def test_commentary_with_video_times_plays_by_the_video_clock(browser, site):  #
     ctx.close()
 
 
-def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_eight(browser, site):  # noqa: F811
+def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_six(browser, site):  # noqa: F811
     """No lower third for a routine pass (that stays in the phone's All plays); a shot, an insight
-    or a recap, at most one starting every 30 s, each held 8 s at most; one moment told for two
+    or a recap, at most one starting every 30 s, each held 6 s at most; one moment told for two
     personas airs once, and the insight wins a tie."""
     page, errors = open_viewer(browser, site + "?bundle=match/")
 
@@ -656,7 +656,7 @@ def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_h
             cue("recap-analyst", "recap", 80, persona="analyst", ev="e5"),
             cue("said", "audio_description", 90, persona="audio", ev="e6")]
     out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
-    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 18), ("recap", 41, 49)]
+    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 16), ("recap", 41, 47)]
     assert not errors
     page.context.close()
 
@@ -698,11 +698,11 @@ def test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is
     ]
     out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
     assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [
-        ("insight-goal:s1", 101.5, 109.5),
-        ("insight-lb:s10", 204, 212),
-        ("insight-ov:home:a:1", 300, 308),
-        ("insight-ov:home:a:2", 400, 408),
-        ("insight-goal:s21", 444, 452),
+        ("insight-goal:s1", 101.5, 107.5),
+        ("insight-lb:s10", 204, 210),
+        ("insight-ov:home:a:1", 300, 306),
+        ("insight-ov:home:a:2", 400, 406),
+        ("insight-goal:s21", 444, 450),
     ]
     assert not errors
     page.context.close()
@@ -711,6 +711,7 @@ def test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is
 LT_CONTEXT = {
     "teams": {"home": "London", "away": "Lisbon"},
     "names": ["Kai Laiddon", "Ilya Saindell"],
+    "nameSides": {"Kai Laiddon": "home", "Ilya Saindell": "away"},
     "goals": [{"t": 2244.2, "team": "home", "event": "g1"}],
     "scorebug": [
         {"type": "score_read", "t": 2000.0, "score": {"home": 0, "away": 1}},
@@ -735,6 +736,7 @@ LT_CONTEXT = {
                 "head": "Lisbon Esportes had 7 players against 1 player around the ball",
                 "sub": "In their middle third on the left.",
                 "score": None,
+                "brief": "7 against 1 around the ball",
             },
         ),
         (
@@ -751,7 +753,17 @@ LT_CONTEXT = {
                 "score": None,
                 "head": "A Lisbon Esportes player played a pass that took 3 London Athletic players "
                 "out of the game",
+                "brief": "Pass took 3 players out of the game",
             },
+        ),
+        (
+            bar_cue(
+                "insight-lb:s1",
+                1517.4,
+                "In minute 26, Kai Laiddon played a pass that took 4 Lisbon Esportes players "
+                "out of the game.",
+            ),  # led by a feed name: his side (the line-up's track), not the first club the sentence names
+            {"side": "home", "brief": "Kai Laiddon: pass took 4 players out of the game"},
         ),
         (
             bar_cue("insight-spell:s3", 3005.0, "In minute 51, one side strung 8 passes together in a row."),
@@ -760,6 +772,7 @@ LT_CONTEXT = {
                 "side": None,
                 "head": "One side strung 8 passes together in a row",
                 "sub": "",
+                "brief": "8 passes together in a row",
             },
         ),
         (
@@ -779,9 +792,9 @@ LT_CONTEXT = {
         ),
         (
             bar_cue(
-                "insight-goal:g9", 3000.0, "Kai Laiddon scored for Lisbon Esportes in minute 51."
+                "insight-goal:g9", 3000.0, "Ilya Saindell scored for Lisbon Esportes in minute 51."
             ),  # no scorebug change: no score
-            {"goal": True, "side": "away", "score": None, "scorer": "Kai Laiddon"},
+            {"goal": True, "side": "away", "score": None, "scorer": "Ilya Saindell"},
         ),
         (
             bar_cue("cue-s1", 61.0, "A London player takes a shot", kind="shot_speed", persona="casual"),
@@ -798,6 +811,9 @@ def test_the_lower_third_lays_out_the_checked_words_never_new_ones(browser, site
     got = page.evaluate(f"window.ninetyLowerThird.describe({json.dumps(cue)}, {json.dumps(LT_CONTEXT)})")
     assert {k: got[k] for k in want} == want
     # Every word on screen is the sentence's, in its order; only "in minute N" moves to the label.
+    for line in (got["head"] + " " + got["sub"], got["brief"]):
+        said = iter(re.findall(r"[\w']+", cue["text"].lower()))
+        assert all(w in said for w in re.findall(r"[\w']+", line.lower())), line
     words = lambda s: re.findall(r"[\w']+", s.lower())  # noqa: E731
     said = iter(words(cue["text"]))
     assert all(w in said for w in words(got["head"] + " " + got["sub"]))
@@ -805,7 +821,7 @@ def test_the_lower_third_lays_out_the_checked_words_never_new_ones(browser, site
     page.context.close()
 
 
-def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10):  # noqa: F811
+def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10, sure=True):  # noqa: F811
     """The big screen with one line break on air at match time 60.2 s (or `cue`), its passer named by
     the ID feed, between the demo's two clubs (the crests are theirs, src/crests.ts); `scorebug`: the
     bundle's scorebug readings, through a measured reader's gate."""
@@ -823,7 +839,8 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
 
     def match(route):
         body = route.fetch().json()
-        route.fulfill(json={**body, "lineup": [{"id": "h-t1", "name": "Kai Laiddon", "source": "id_feed"}]})
+        feed = [{"id": "h-t1", "name": "Kai Laiddon", "source": "id_feed", "confident": sure}]
+        route.fulfill(json={**body, "lineup": feed})
 
     def manifest(route):
         gate = (
@@ -831,9 +848,10 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
             if scorebug
             else None
         )
-        route.fulfill(
-            json={**route.fetch().json(), "teams": {"home": "LON", "away": "LIS"}, "scorebug": gate}
-        )
+        body = route.fetch().json()
+        vouched = [*(body.get("sides_known") or []), *(["h-t1"] if sure else [])]  # his side, vouched for
+        teams = {"home": "LON", "away": "LIS"}
+        route.fulfill(json={**body, "teams": teams, "scorebug": gate, "sides_known": vouched})
 
     ctx.route("**/match/manifest.json", manifest)
     if scorebug:
@@ -853,42 +871,51 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
     seek(page, image)  # image 10: 60.4 s
     page.wait_for_selector("#lower-third[data-on='1']")
     page.wait_for_function(
-        "!document.querySelector('#lower-third .lt-strip').getAnimations().length"
+        "!document.querySelector('#lower-third .card').getAnimations().length"
     )  # slid in
     return page, errors
 
 
 @pytest.mark.parametrize("dock", ["open", "closed"])
-def test_the_lower_third_is_a_glass_panel_bottom_left_clear_of_the_scorebug(browser, site, dock):  # noqa: F811
-    """No white INSIGHT box: the fact's kind and minute in the club's colour beside its crest, the
-    sentence, a check glyph for the fact-check, the ID feed's name in bold; inside the picture's
-    title-safe area, bottom left, below the scorebug's band, docked or not."""
+def test_the_insight_is_a_flat_stat_card_under_the_scorebug(browser, site, dock):  # noqa: F811
+    """As a league puts up stats mid-game, no pill and no panel over the play: one flat card under the
+    bug's clock tab, as wide as the bug, a dark header strip (the fact's kind, its club's code and
+    crest, the minute, the club's colour down its edge) over a white row with one short line of the
+    sentence's words, the ID feed's name in bold; docked or not."""
     page, errors = lower_third_page(browser, site, dock)
-    lt = page.locator("#lower-third")
     assert page.get_attribute("body", "data-dock") == dock
-    assert page.inner_text("#lower-third .lt-kind") == "LINE BREAK · 2′"
-    assert "INSIGHT" not in lt.inner_text()
-    assert (
-        page.inner_text("#lower-third .lt-head")
-        == "Kai Laiddon played a pass that took 4 Lisbon Esportes players out of the game"
-    )
-    assert page.inner_text("#lower-third .lt-head b") == "Kai Laiddon"
-    assert page.get_attribute("#lower-third .lt-check", "aria-label") == "Fact-checked"
-    assert (
-        page.locator("#lower-third .lt-label .lt-crest svg").count() == 1
-    )  # a club's crest, by the side it names
-    assert page.get_attribute("#lower-third", "data-side") == "away"  # the sentence names Lisbon first
-    style = page.evaluate("getComputedStyle(document.querySelector('#lower-third .lt-strip'))")
-    assert "blur" in (style.get("backdropFilter") or style.get("webkitBackdropFilter") or "")
-    stage = page.locator("#stage").bounding_box()
-    box = page.locator("#lower-third .lt-strip").bounding_box()
-    assert box["x"] >= stage["x"] + 0.05 * stage["width"] - 1  # title-safe, left
-    assert box["y"] + box["height"] <= stage["y"] + 0.95 * stage["height"]  # title-safe, bottom
-    assert box["y"] >= stage["y"] + 0.5 * stage["height"]  # the lower half: never the scorebug's band
-    assert (
-        box["x"] + box["width"] <= stage["x"] + 0.7 * stage["width"]
-    )  # compact: the play keeps the centre-right
+    assert page.inner_text("#lower-third .card-kind") == "LINE BREAK"
+    assert page.inner_text("#lower-third .card-club") == "LON"  # Kai Laiddon's club, by his track
+    assert page.inner_text("#lower-third .card-min") == "2′"
+    assert "INSIGHT" not in page.inner_text("#lower-third")
+    assert page.inner_text("#lower-third .card-line") == "Kai Laiddon: pass took 4 players out of the game"
+    assert page.inner_text("#lower-third .card-line b") == "Kai Laiddon"
+    assert page.locator("#lower-third .card-head .lt-crest svg").count() == 1
+    assert page.get_attribute("#lower-third", "data-side") == "home"
+    head = "document.querySelector('#lower-third .card-head')"
+    edge = page.evaluate(f"getComputedStyle({head}).borderLeftColor")
+    assert edge == "rgb(58, 95, 176)"  # London's bar colour (--g-home-bar)
+    assert page.locator("#lower-third .card").count() == 1  # at most one
+    bug = page.locator("#scorebug").bounding_box()
+    clock = page.locator("#clock-tab").bounding_box()
+    card = page.locator("#lower-third .card").bounding_box()
+    assert clock["y"] >= bug["y"] + bug["height"] - 1.5  # the clock's tab hangs under the bug
+    assert card["y"] >= clock["y"] + clock["height"] - 0.5  # the card under that
+    assert abs(card["x"] - bug["x"]) < 1 and abs(card["width"] - bug["width"]) < 1  # as wide as the bug
+    assert card["height"] <= 0.12 * page.locator("#stage").bounding_box()["height"]  # a strip, not a panel
+    assert page.is_hidden("#stats-card")  # one graphic under the bug at a time
     assert "insight-lb:v1" in page.get_attribute("#overlay", "data-on-air")  # still said to a screen reader
+    assert not errors
+    page.context.close()
+
+
+def test_an_unsure_feed_name_is_not_set_in_bold_nor_gives_a_club(browser, site):  # noqa: F811
+    """The ID feed's name is bold only when the feed is confident of it, and a name gives its club
+    only through a track whose side the fact-checker vouches for (sides_known), never by the track
+    id's letter alone; otherwise the sentence's first club speaks for it."""
+    page, errors = lower_third_page(browser, site, "closed", sure=False)
+    assert page.locator("#lower-third .card-line b").count() == 0
+    assert page.get_attribute("#lower-third", "data-side") == "away"  # Lisbon, the club the sentence names
     assert not errors
     page.context.close()
 
@@ -1142,9 +1169,11 @@ def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site)
     ctx.close()
 
 
-def test_a_goal_is_a_full_card_with_the_scorebug_s_new_score_then_collapses_and_slides_out(browser, site):  # noqa: F811
-    """GOAL, the crest, the club and the score the scorebug changed to; after GOAL_CARD_S the strip;
-    half a second before its time is up it slides out. A reading under the gate gives no score."""
+def test_a_goal_sweeps_the_bug_in_its_club_s_colour_then_one_scorer_card_then_it_collapses(browser, site):  # noqa: F811
+    """The scorebug's read change is the goal: the scoring club's colour sweeps the bug with GOAL,
+    then the score the scorebug changed to; one card under it (the crest, the scorer the feed names,
+    else the club, first word light and the rest bold; GOAL and the minute in its header) once the
+    band has swept, gone by GOAL_PILL_OUT_S. A reading under the gate gives no change at all."""
     goal = bar_cue("insight-goal:v2", 59.0, "London Athletic scored in minute 1.", ["v2"], hold=4.2)
     reads = [
         {"type": "score_read", "t": 0.0, "score": {"home": 0, "away": 0}, "confidence": 0.99},
@@ -1156,25 +1185,27 @@ def test_a_goal_is_a_full_card_with_the_scorebug_s_new_score_then_collapses_and_
             "confidence": 0.99,
         },
     ]
-    page, errors = lower_third_page(browser, site, "closed", cue=goal, scorebug=reads)  # 60.4 s: 1.4 s in
-    assert page.get_attribute("#lower-third", "data-card") == "1"
-    assert page.inner_text("#lower-third .lt-card-kind").startswith("GOAL")
-    assert page.inner_text("#lower-third .lt-card-club") == "London Athletic"
-    assert page.inner_text("#lower-third .lt-card-score") == "1–0"
-    assert page.locator("#lower-third .lt-card > .lt-crest svg").count() == 1
-    seek(page, 50)  # 62.4 s: 3.4 s in, the card still up
-    assert page.get_attribute("#lower-third", "data-card") == "1"
-    seek(page, 63)  # 62.94 s: past GOAL_CARD_S and within half a second of its end
-    assert page.get_attribute("#lower-third", "data-card") == "0"
+    page, errors = lower_third_page(browser, site, "closed", cue=goal, scorebug=reads)  # 60.4 s: 1.3 s in
+    assert page.get_attribute("#scorebug", "data-goal") == "home"
+    assert page.inner_text("#scorebug .sb-goal") == "GOAL"
+    # Said once to a screen reader: the bug itself is drawn for the eye.
+    assert page.text_content("#bug-said") == "Goal, London. London 1, Lisbon 0"
+    assert page.get_attribute("#bug-said", "aria-live") == "polite"
+    assert page.inner_text("#lower-third .card-goal .card-kind") == "GOAL"
+    assert page.inner_text("#lower-third .card-first") == "London"
+    assert page.inner_text("#lower-third .card-last") == "ATHLETIC"
+    assert page.inner_text("#lower-third .card-min") == "1′"
+    assert page.locator("#lower-third .card-goal .lt-crest svg").count() == 1
+    seek(page, 63)  # 62.94 s: the band and the card both over
+    assert page.get_attribute("#scorebug", "data-goal") == ""
+    digits = page.eval_on_selector_all("#scorebug .sb-now", "els => els.map(e => e.textContent)")
+    assert digits == ["1", "0"]
     assert page.get_attribute("#lower-third", "data-on") == "0"
-    assert (
-        page.inner_text("#lower-third .lt-strip .lt-club.scored") == "London"
-    )  # the strip: the score, the scorer's club lit
-    assert page.inner_text("#lower-third .lt-strip .lt-n.scored") == "1"
     page.context.close()
     weak = [{**r, "confidence": MIN_CONFIDENCE - 0.1} for r in reads]
     page, errors2 = lower_third_page(browser, site, "closed", cue=goal, scorebug=weak)
-    assert page.locator("#lower-third .lt-card-score").count() == 0  # no score the gate does not pass
+    assert page.get_attribute("#scorebug", "data-goal") == ""  # no change the gate does not pass
+    assert page.eval_on_selector_all("#scorebug .sb-now", "els => els.map(e => e.textContent)") == ["", ""]
     assert not errors and not errors2
     page.context.close()
 
@@ -1187,20 +1218,38 @@ READS = [
 ]
 
 
-@pytest.mark.parametrize(("reads", "t", "half2", "want"), [
+@pytest.mark.parametrize(
+    ("reads", "t", "half2", "want"),
+    [
+        # A reading lower than one already read is a misread, skipped: the score never goes down.
+    (READS + [{"type": "score_read", "t": 2300.0, "score": {"home": 0, "away": 0}}], 2400.0, None,
+     {"score": {"home": 1, "away": 1}}),
     # Before the first read, 0-0 only because the first read is 0-0.
-    (READS, -1.0, None, {"score": {"home": 0, "away": 0}, "goal": None, "period": None}),
-    (READS[1:], 5.0, None, {"score": None, "goal": None}),  # a clip that starts at 0-1: no digits until read
-    (READS, 2000.0, None, {"score": {"home": 0, "away": 1}, "goal": None}),
-    # The side whose count rose, half-way through the moment.
-    (READS, 2245.2, None, {"score": {"home": 1, "away": 1},
-                           "goal": {"side": "home", "p": 0.5, "before": {"home": 0, "away": 1}}}),
-    (READS, 2246.3, None, {"goal": None}),  # past GOAL_S: settled
-    (READS, 2800.0, 2900.0, {"period": "HT"}),  # 45:00 to the second half's detected kick-off
-    (READS, 2950.0, 2900.0, {"period": None}),
-    (READS, 2800.0, None, {"period": None}),  # no kick-off detected: no half-time card invented
-    (READS, 5398.9, None, {"period": "FT"}),  # the engine's 90:00 (Law 7, no added time)
-])
+        (READS, -1.0, None, {"score": {"home": 0, "away": 0}, "goal": None, "period": None}),
+        (
+            READS[1:],
+            5.0,
+            None,
+            {"score": None, "goal": None},
+        ),  # a clip that starts at 0-1: no digits until read
+        (READS, 2000.0, None, {"score": {"home": 0, "away": 1}, "goal": None}),
+        # The side whose count rose, half-way through the moment.
+        (
+            READS,
+            2245.2,
+            None,
+            {
+                "score": {"home": 1, "away": 1},
+                "goal": {"side": "home", "p": 0.5, "before": {"home": 0, "away": 1}},
+            },
+        ),
+        (READS, 2246.3, None, {"goal": None}),  # past GOAL_S: settled
+        (READS, 2800.0, 2900.0, {"period": "HT"}),  # 45:00 to the second half's detected kick-off
+        (READS, 2950.0, 2900.0, {"period": None}),
+        (READS, 2800.0, None, {"period": None}),  # no kick-off detected: no half-time card invented
+        (READS, 5398.9, None, {"period": "FT"}),  # the engine's 90:00 (Law 7, no added time)
+    ],
+)
 def test_the_scorebug_shows_only_what_the_scorebug_read(browser, site, reads, t, half2, want):  # noqa: F811
     page, errors = open_viewer(browser, site + "?bundle=match/")
     got = page.evaluate(f"window.ninetyScorebug.bugAt({json.dumps(reads)}, {t}, {json.dumps(half2)})")
@@ -1211,8 +1260,24 @@ def test_the_scorebug_shows_only_what_the_scorebug_read(browser, site, reads, t,
     page.context.close()
 
 
-@pytest.mark.parametrize(("size", "dock"),
-                         [((1440, 900), "closed"), ((1920, 1080), "closed"), ((1440, 900), "open")])
+def test_a_detected_goal_whose_score_change_is_unread_leaves_no_stale_score(browser, site):  # noqa: F811
+    """A goal vision detected after the last reading the gate passed (its change unread, or under the
+    gate) makes the old score stale: no digits until a reading says the new one."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    def at(reads, t):
+        args = f"{json.dumps(reads)}, {t}, null, false, 2, [2244.2]"  # a goal detected at 2244.2 s
+        return page.evaluate(f"window.ninetyScorebug.bugAt({args})")
+
+    assert at(READS[:2], 2000)["score"] == {"home": 0, "away": 1}
+    assert at(READS[:2], 2250)["score"] is None  # the 38th-minute goal, its change not read
+    assert at(READS, 2250)["score"] == {"home": 1, "away": 1}  # read: the new score
+    assert not errors
+    page.context.close()
+
+
+@pytest.mark.parametrize(
+    ("size", "dock"), [((1440, 900), "closed"), ((1920, 1080), "closed"), ((1440, 900), "open")]
+)
 def test_the_baked_scorebug_never_shows_through(browser, site, size, dock):  # noqa: F811
     """The bug covers the baked one's widest box (render.js geometry, 2 source px more each side) at
     every size, docked or not, and is opaque: the box is pixel-identical with the footage shown and
@@ -1240,4 +1305,146 @@ def test_the_baked_scorebug_never_shows_through(browser, site, size, dock):  # n
         page.eval_on_selector(footage, "e => (e.style.visibility = '')")
         assert shown == hidden, f"the footage shows through the scorebug at image {image}"
     assert not errors
+    ctx.close()
+
+
+def stats_match(possession_sure=False, passes=(40, 30)):
+    def team(p, shots):
+        return {
+            "passes_attempted": p,
+            "passes_completed": p - 4,
+            "shots": shots,
+            "shots_on_target": shots,
+            "goals": 0,
+        }
+
+    def row(key, home, away, confident=True):
+        return {
+            "group": "x",
+            "key": key,
+            "label": key,
+            "unit": "",
+            "series": [{"minute_to": 5, "home": home, "away": away, "confident": confident}],
+        }
+
+    return {
+        "stats": [{"t": 100.0, "event": None, "home": team(passes[0], 1), "away": team(passes[1], 1)}],
+        "insight_stats": {
+            "rows": [
+                row("possession", 57, 43, possession_sure),
+                row("corner", 2, 1),
+                row("crosses", 3, 3, confident=False),
+            ]
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("match", "score", "want"),
+    [
+        # Unsure possession and an unsure row are not shown; attempts no fewer than the scorebug's goals are.
+        (
+            stats_match(),
+            {"home": 1, "away": 0},
+            [
+                ("shots", 1, 1),
+                ("on_target", 1, 1),
+                ("passes", 40, 30),
+                ("accuracy", 90, 87),
+                ("corner", 2, 1),
+            ],
+        ),
+        (
+            stats_match(possession_sure=True),
+            {"home": 0, "away": 0},
+            [
+                ("possession", 57, 43),
+                ("shots", 1, 1),
+                ("on_target", 1, 1),
+                ("passes", 40, 30),
+                ("accuracy", 90, 87),
+                ("corner", 2, 1),
+            ],
+        ),
+        # Fewer attempts than the scorebug's goals contradicts it (every goal is an attempt): not shown.
+        (stats_match(), {"home": 4, "away": 1}, [("passes", 40, 30), ("accuracy", 90, 87), ("corner", 2, 1)]),
+        # No score read: attempts cannot be checked against it, so not shown; accuracy needs 15 passes a side.
+        (stats_match(passes=(40, 9)), None, [("passes", 40, 9), ("corner", 2, 1)]),
+    ],
+)
+def test_the_stats_graphics_show_only_rows_the_bundle_measured_surely(browser, site, match, score, want):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    rows = page.evaluate(f"window.ninetyScorebug.rowsAt({json.dumps(match)}, 400, {json.dumps(score)})")
+    assert [(r["key"], r["home"], r["away"]) for r in rows] == want
+    assert not errors
+    page.context.close()
+
+
+@pytest.mark.parametrize(
+    ("v", "start", "ended", "want"),
+    [
+        (600.5, 0, False, {"kind": "card", "minute": 10}),  # the card every tenth minute, for CARD_S
+        (608.6, 0, False, None),
+        (2703.0, 0, False, {"kind": "panel", "period": "HT"}),  # the first PANEL_S (8 s) from 45:00
+        (2707.9, 0, False, {"kind": "panel", "period": "HT"}),
+        (2708.1, 0, False, None),
+        (2703.0, 2800, False, None),  # footage that starts after 45:00 has no half-time panel
+        (100.0, 0, True, {"kind": "panel", "period": "FT"}),  # the footage played out
+        (5399.0, 0, False, {"kind": "panel", "period": "FT"}),  # the engine's 90:00 (Law 7)
+    ],
+)
+def test_the_stats_card_airs_every_ten_minutes_and_the_panel_at_half_and_full_time(
+    browser, site, v, start, ended, want  # noqa: F811
+):
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    got = page.evaluate(
+        f"window.ninetyScorebug.statsGraphicAt({v}, {v}, t => t, {start}, {json.dumps(ended)})"
+    )
+    assert got == want
+    assert not errors
+    page.context.close()
+
+
+def test_at_the_footage_s_end_the_full_time_panel_shows_the_match_s_stats_and_the_bug_stays_on(browser, site):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    seek(page, 74)  # the last image
+    page.wait_for_selector("#period-panel:not([hidden])")
+    assert page.get_attribute("#period-panel", "data-period") == "FT"
+    assert page.inner_text("#period-panel .sp-period") == "FULL-TIME"
+    assert page.locator("#period-panel .stat-pill").count() >= 1  # one white pill per measured row
+    assert page.locator("#period-panel .sp-head > .sp-crest").count() == 2  # crests either side of the score
+    assert page.inner_text("#clock-tab") == "FT"
+    assert page.is_visible("#scorebug")  # the bug stays on over the panel
+    assert not errors
+    page.context.close()
+
+
+def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site):  # noqa: F811
+    """manifest footage.timescale = 1.25 (match s per video s, #413): image k still shows one match
+    frame, and the video shows 25 * 1.25 images a second, so the clock, the cues, the chapters and
+    the phone (one timeline, src/radar.ts) run faster."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def manifest(route):
+        body = route.fetch().json()
+        route.fulfill(json={**body, "footage": {**body["footage"], "timescale": 1.25}})
+
+    ctx.route("**/match/manifest.json", manifest)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    rate = FPS * 1.25
+    for image, (index, frame) in ((10, (0, 1500)), (30, (0, 1500)), (50, (40, 1550)), (74, (40, 1550))):
+        v = (image + 0.5) / rate  # the middle of image `image` in the faster video
+        page.evaluate(f"""(() => {{ const s = document.querySelector('#scrub');
+            s.step = 'any'; s.value = {v}; s.dispatchEvent(new Event('input')); }})()""")
+        page.wait_for_function(f"Math.abs(document.querySelector('#scrub').value - {v}) < 0.001")
+        page.wait_for_timeout(150)
+        want = (frame + image + 0.5 - index) / FPS
+        got = float(page.get_attribute("#overlay", "data-t"))
+        assert abs(got - want) < 0.011, (image, got, want)
+    # The second chapter starts at image 40: in the faster video, at 40 / rate, not 40 / 25.
+    assert page.evaluate(f"window.ninetyMatch.chapterAt({40.5 / rate}).n") == 2
+    assert page.evaluate(f"window.ninetyMatch.chapterAt({39.5 / rate}).n") == 1
+    assert float(page.get_attribute("#scrub", "max")) == pytest.approx(75 / rate, abs=0.01)
     ctx.close()

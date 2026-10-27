@@ -17,6 +17,34 @@ from PIL import Image, ImageChops
 from playwright.sync_api import sync_playwright
 
 STEP_S = 5.0
+# Headless WebKit still plays sound through the machine's speakers: every media element muted, the
+# browser's voice silenced and Web Audio held suspended, before the page runs.
+SILENT = """(() => {
+  const P = HTMLMediaElement.prototype;
+  const m = Object.getOwnPropertyDescriptor(P, "muted"), v = Object.getOwnPropertyDescriptor(P, "volume");
+  const mute = (e) => { m.set.call(e, true); v.set.call(e, 0); };
+  // The element's own state, set through the real setters: whatever the page asks, it stays silent.
+  Object.defineProperty(P, "muted",
+    { get() { return m.get.call(this); }, set() { m.set.call(this, true); }, configurable: true });
+  Object.defineProperty(P, "volume",
+    { get() { return v.get.call(this); }, set() { v.set.call(this, 0); }, configurable: true });
+  const play = P.play;
+  P.play = function () { mute(this); return play.call(this); };
+  new MutationObserver(() => document.querySelectorAll("audio, video").forEach(mute))
+    .observe(document, { subtree: true, childList: true });
+  const say = () => {};
+  const quiet = (o) => o && Object.defineProperty(o, "speak", { value: say, configurable: true });
+  quiet(window.SpeechSynthesis?.prototype);
+  quiet(window.speechSynthesis);
+  for (const name of ["AudioContext", "webkitAudioContext"]) {
+    const AC = window[name];
+    if (!AC) continue;
+    window[name] = class extends AC {
+      constructor(...a) { super(...a); this.suspend(); }
+      resume() { return Promise.resolve(); }
+    };
+  }
+})();"""
 
 
 def main(url: str, manifest: str, size: str, dock: bool) -> dict:
@@ -27,6 +55,7 @@ def main(url: str, manifest: str, size: str, dock: bool) -> dict:
         b = p.webkit.launch()
         ctx = b.new_context(viewport={"width": W, "height": H})
         state = "open" if dock else "closed"
+        ctx.add_init_script(SILENT)
         ctx.add_init_script(f"try{{localStorage.setItem('ninety.dock','{state}');"
                             "localStorage.setItem('ninety.askHint','used')}catch(e){}")
         page = ctx.new_page()

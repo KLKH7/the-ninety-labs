@@ -5,6 +5,7 @@
 
 import { type Bundle, type Cue, type Manifest, clock } from "./bundle";
 import { crestOf } from "./crests";
+import { timescaleOf } from "./radar";
 import type { TeamNames } from "./teams";
 
 export type Kind = "goal" | "save" | "shot" | "set_piece" | "build_up";
@@ -30,7 +31,7 @@ export interface MatchData {
   goals: { t: number; team: "home" | "away" | null; event: string }[];
   stats: ({ t: number; event: string | null } & Record<"home" | "away", TeamStats>)[];
   /** The line-up by track; a name with source id_feed is the player-ID feed's (docs/FEED_SPEC.md). */
-  lineup?: { id: string; name?: string | null; source?: string }[];
+  lineup?: { id: string; name?: string | null; source?: string; confident?: boolean }[];
 }
 
 /** How long the "time skip" label stays up after a cut (design: long enough to read, gone before
@@ -57,14 +58,14 @@ export function pairCardAt(v: number, s: { open: boolean; closed: boolean }): "u
 /** The big screen's lower thirds, as a broadcaster runs them: only moments that matter (a shot, a
  * Scout insight, a recap; never a routine pass, which stays in the phone's All plays), at most one
  * starting every BROADCAST_GAP_S, each held BROADCAST_HOLD_S at most (design: a TV graphics
- * cadence, about 8 s on screen). An insight is the analyst's cue; the big screen has no personas, so
+ * cadence, about 6 s on screen, Kian). An insight is the analyst's cue; the big screen has no personas, so
  * it takes it. A producer's order: a goal's insight always airs (as the INSIGHT bar airs every goal,
  * ninety/agents/insight_bar.py), then the other insights, then a shot or a recap where there is room:
  * nothing airs from BROADCAST_HOLD_S before a graphic already chosen (its own shot's among them) to
  * BROADCAST_GAP_S after it, and one on air when the next comes is cut short. */
 export const BROADCAST_KINDS = new Set(["shot_speed", "insight", "recap"]);
 export const BROADCAST_GAP_S = 30;
-export const BROADCAST_HOLD_S = 8;
+export const BROADCAST_HOLD_S = 6;
 export const isGoalInsight = (c: Cue) => c.kind === "insight" && c.id.startsWith("insight-goal:");
 export function broadcastSchedule(cues: Cue[]): Cue[] {
   const rank = (c: Cue) => (c.kind === "insight" ? 0 : c.kind === "shot_speed" ? 1 : 2);
@@ -152,7 +153,8 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     statsPanel.hidden = true;
     return null;
   }
-  const fps = b.manifest.fps;
+  // Chapters count images; the video shows fps * timescale of them a second (the baked speed).
+  const fps = b.manifest.fps * timescaleOf(b.manifest);
   const total = b.manifest.footage.frames;
   root.hidden = false;
   statsPanel.hidden = false;

@@ -101,7 +101,7 @@ def browser():
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
-            b = p.chromium.launch()
+            b = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
             yield b
             b.close()
     except Exception as e:  # no Chromium installed
@@ -623,6 +623,62 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
         phone.wait_for_timeout(500)
         assert_in_step(lap, phone)
     validate_seen(seen(phone))
+    assert not errors
+
+
+@pytest.fixture(scope="module")
+def scaled_site(viewer_www, tmp_path_factory):
+    """The same bundle encoded faster than real time: 1.25 match seconds per video second (the
+    demo's baked speed, manifest footage.timescale)."""
+    www = tmp_path_factory.mktemp("scaled") / "www"
+    shutil.copytree(viewer_www, www)
+    manifest = www / "bundle" / "manifest.json"
+    body = json.loads(manifest.read_text())
+    body["footage"]["timescale"] = 1.25
+    manifest.write_text(json.dumps(body))
+    server, thread, mp, url = serve_api(www, allow_truth=True, source="truth")
+    yield url
+    server.should_exit = True
+    thread.join(timeout=10)
+    mp.undo()
+
+
+def test_at_a_baked_speed_the_phone_stays_in_step_through_play_and_seeks(browser, scaled_site):
+    """Footage at 1.25 match s per video s: the big screen's clock runs 1.25 times as fast, and the
+    phone, running the clock on between messages through the same timeline, stays within
+    TOLERANCE_S of it while it plays and after every seek."""
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+
+    def lap() -> float:
+        fresh(viewer)
+        return float(viewer.get_attribute("#overlay", "data-t"))
+
+    phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
+    viewer.click("#play")
+    phone.wait_for_function("window.ninetyPhone.laptop.isPlaying()")
+    viewer.wait_for_timeout(500)
+    assert_in_step(lap, phone)
+    for v in (0.4, 1.6, 0.2):  # video seconds: seeks back and forth while it plays
+        viewer.evaluate(f"""(() => {{ const s = document.querySelector('#scrub'); s.step = 'any';
+            s.value = {v}; s.dispatchEvent(new Event('input')); }})()""")
+        viewer.wait_for_timeout(300)
+        assert_in_step(lap, phone)
+    assert not errors
+
+
+def test_at_a_baked_speed_the_phone_shows_the_image_of_the_match_time(browser, scaled_site):
+    """The phone's own picture of a moment (How we know) is the image of that match time: at 1.25
+    match s per video s, image k still shows match frame t_start * fps + k, at (k + 0.5) / (fps *
+    1.25) of video, never floor(v * fps) (#412 review)."""
+    from tests.e2e_clip import FPS, T_START
+
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+    phone.wait_for_function("window.ninetyPhone.laptop.cuts !== null", timeout=10_000)
+    for k in (0, 7, 30, 61):
+        t = T_START + (k + 0.5) / FPS  # the middle of match frame T_START * FPS + k
+        got = phone.evaluate(f"window.ninetyPhone.imageAt({t})")
+        assert got["index"] == k, (k, got)
+        assert abs(got["videoT"] - (k + 0.5) / (FPS * 1.25)) < 1e-6
     assert not errors
 
 

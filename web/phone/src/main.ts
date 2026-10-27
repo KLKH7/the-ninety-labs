@@ -8,7 +8,7 @@
 // reads the mock feed.
 
 import "./ionic";
-import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
+import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, timescaleOf, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
@@ -152,6 +152,8 @@ function screenOf(x: number, y: number): [number, number] {
   state,
   laptop,
   positions: () => lastPositions,
+  imageAt: (t: number) => imageAt(t), // read by tests/test_phone.py
+  chapterAt: (t: number) => (state.match ? chapterAt(state.match.chapters, bundleImageRate, laptop.cuts ? laptop.cuts.videoTime(t) : t) : null),
   radar: () => lastState,
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
@@ -386,7 +388,7 @@ interface BundleManifest {
   segments?: { index: number; frame: number; frames: number }[];
   width: number;
   height: number;
-  footage: { kind: "video" | "frames"; src: string; frames: number };
+  footage: { kind: "video" | "frames"; src: string; frames: number; timescale?: number };
   detector?: string | null;
   teams?: unknown;
   sides_known?: unknown;
@@ -398,7 +400,9 @@ interface BundleManifest {
   cards?: unknown;
 }
 
-let bundleFps = 25;
+/** Video images a second: the bundle's fps times its footage's baked speed (footage.timescale, #413).
+ * Chapters and the footage count images, so every image <-> video-time conversion uses this. */
+let bundleImageRate = 25;
 let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
 interface DetectedEvent {
@@ -466,7 +470,7 @@ async function loadBundle() {
     const cuts = timeline(m);
     laptop.cuts = cuts;
     bundle = { base, manifest: m };
-    bundleFps = m.fps;
+    bundleImageRate = cuts.rate;
     const [radar, match, cards] = await Promise.all([
       m.radar ? get("radar.json") : null,
       m.match ? get("match.json") : null,
@@ -1924,12 +1928,22 @@ function howButton(h: How): HTMLButtonElement {
 
 /** The broadcast picture at match time `t`, drawn onto `canvas` from the bundle's footage, with
  * every detection of that frame boxed and its confidence. Resolves to the detections drawn. */
+/** The footage image that shows match time `t`, and where it sits in the video: through the shared
+ * timeline, at the footage's image rate (fps × footage.timescale, #413). */
+function imageAt(t: number): { index: number; videoT: number } | null {
+  if (!bundle) return null;
+  const m = bundle.manifest;
+  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
+  const rate = m.fps * timescaleOf(m);
+  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * rate + 1e-6)));
+  return { index, videoT: (index + 0.5) / rate };
+}
+
 async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"]> {
   if (!bundle) return [];
   const m = bundle.manifest;
   const frame = Math.round(t * m.fps);
-  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
-  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * m.fps)));
+  const { index, videoT } = imageAt(t)!;
   canvas.width = m.width;
   canvas.height = m.height;
   const ctx = canvas.getContext("2d")!;
@@ -1944,7 +1958,7 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
       video.muted = true;
       video.preload = "auto";
       video.src = new URL(m.footage.src, bundle!.base).toString();
-      video.addEventListener("loadedmetadata", () => (video.currentTime = (index + 0.5) / m.fps), { once: true });
+      video.addEventListener("loadedmetadata", () => (video.currentTime = videoT), { once: true });
       video.addEventListener("seeked", () => resolve(video), { once: true });
       video.addEventListener("error", () => resolve(null), { once: true });
     }
@@ -2598,7 +2612,7 @@ function showMatch(t: number) {
   const m = state.match;
   if (!m) return;
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
-  const c = chapterAt(m.chapters, bundleFps, v);
+  const c = chapterAt(m.chapters, bundleImageRate, v);
   const line = $("scoreline");
   line.hidden = !c;
   const chapter = c ? chapterLabel(c, teams) : "";

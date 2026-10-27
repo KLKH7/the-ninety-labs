@@ -20,6 +20,8 @@ type QRCode = ReturnType<typeof qrcode>;
 export interface Playback {
   time(): number; // match time, in seconds
   playing(): boolean;
+  /** Match seconds per second while it plays (the footage's baked speed; 1 if absent). */
+  rate?: number;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -177,7 +179,7 @@ export class PhonePanel {
     const now = performance.now();
     const since = now - this.sentAt;
     if (since < MIN_GAP_MS) return;
-    const expected = this.sentT + (this.sentPlaying ? since / 1000 : 0);
+    const expected = this.sentT + (this.sentPlaying ? (since / 1000) * (this.playback.rate ?? 1) : 0);
     const jumped = Math.abs(this.playback.time() - expected) > JUMP_S;
     if (since >= EVERY_MS || jumped || this.playback.playing() !== this.sentPlaying) this.send();
   }

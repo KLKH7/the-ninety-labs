@@ -293,7 +293,7 @@ body[data-screen="big"][data-dock="closed"] .companion { display: none; }
 
 /* The first-run pill, under the broadcast's scorebug: one quiet line, gone after first use. */
 .ask-hint { display: none; }
-body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 11.5%; z-index: 3;
+body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 15%; z-index: 3;
   padding: 6px 14px; border-radius: 999px; border: 0.5px solid rgba(255, 255, 255, 0.14); background: rgba(28, 28, 30, 0.72); color: #fff;
   -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font: 500 clamp(12px, 1vw, 15px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
 body[data-screen="big"] .ask-hint:hover { background: rgba(44, 44, 46, 0.86); }
@@ -346,99 +346,136 @@ body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: non
 .hud .icon { position: relative; }
 .hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
 
-/* ---- The big screen's lower third (src/lowerthird.ts, Kian Oct 26): a broadcast graphic, as Apple
-   TV's MLS or Sky Sports run one. Frosted black glass bottom left in the title-safe area (5%), clear
-   of the scorebug (top left) and of the play (central); sized from the picture's width (cqw), so it
-   is the same graphic docked, full screen or on a laptop. Sizes are for a 1920 px picture. */
-.lt { display: none; }
-body[data-screen="big"] .stage { container-type: inline-size; }
-body[data-screen="big"] .lt { --club: #fff; --u: clamp(0.8px, 0.0521cqw, 1.15px); /* 1px at 1920 */
-  position: absolute; left: 5%; bottom: 9%; z-index: 2; display: grid; align-items: end; max-width: min(62%, calc(860 * var(--u)));
-  pointer-events: none; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased; }
-body[data-screen="big"] .lt[hidden] { display: none; }
-body[data-screen="big"] .lt[data-side="home"] { --club: #8fa8e0; } /* London's navy, lifted to read on black (web/phone --accent-ink) */
-body[data-screen="big"] .lt[data-side="away"] { --club: #ff8a90; } /* Lisbon's crimson, the same */
-body[data-screen="big"][data-ui="on"] .lt { bottom: calc(9% + 64px); }
-.lt > * { grid-area: 1 / 1; justify-self: start; margin: 0; border-radius: calc(16 * var(--u));
-  background: rgba(0, 0, 0, 0.7); -webkit-backdrop-filter: blur(24px) saturate(1.5); backdrop-filter: blur(24px) saturate(1.5);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, 0.35); }
-.lt p { margin: 0; }
-.lt-strip { display: grid; gap: calc(6 * var(--u)); padding: calc(16 * var(--u)) calc(24 * var(--u)) calc(18 * var(--u)); min-width: calc(280 * var(--u)); }
-.lt-label { display: flex; align-items: center; gap: calc(8 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 700; letter-spacing: 0.06em;
-  line-height: 1; color: var(--club); }
-.lt-crest { display: inline-flex; width: calc(18 * var(--u)); height: calc(22 * var(--u)); flex: none; }
-.lt-crest svg { width: 100%; height: 100%; }
-.lt-crest[hidden] { display: none; }
-.lt-check { display: inline-flex; width: calc(15 * var(--u)); height: calc(15 * var(--u)); margin-left: calc(2 * var(--u)); flex: none; }
-.lt-check svg { width: 100%; height: 100%; fill: none; stroke: rgba(235, 235, 245, 0.6); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.lt-check[hidden] { display: none; }
-.lt-head { font-size: calc(28 * var(--u)); font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; text-wrap: pretty; }
-.lt-head b, .lt-sub b, .lt-card b { font-weight: 700; color: #fff; }
-.lt-sub { font-size: calc(20 * var(--u)); font-weight: 400; line-height: 1.3; color: rgba(235, 235, 245, 0.6); text-wrap: pretty;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.lt-score { display: inline-flex; align-items: baseline; gap: calc(10 * var(--u)); font-variant-numeric: tabular-nums; }
-.lt-score .lt-club { color: rgba(235, 235, 245, 0.6); font-weight: 500; }
-.lt-score .scored { color: #fff; }
-.lt-score .lt-n { font-weight: 700; }
-.lt-dash { color: rgba(235, 235, 245, 0.3); }
-/* A goal: the full card first (crest, GOAL, the club, the new score), then the strip. */
-.lt-card { display: flex; align-items: center; gap: calc(22 * var(--u)); padding: calc(20 * var(--u)) calc(30 * var(--u)) calc(20 * var(--u)) calc(22 * var(--u)); }
-.lt-card > .lt-crest { width: calc(60 * var(--u)); height: calc(74 * var(--u)); }
-.lt-card-text { display: grid; gap: calc(6 * var(--u)); }
-.lt-card-kind { display: flex; align-items: center; gap: calc(8 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 800; letter-spacing: 0.14em; line-height: 1; color: var(--club); }
-.lt-card-min { color: rgba(235, 235, 245, 0.6); font-weight: 600; letter-spacing: 0.04em; }
-.lt-card-club { font-size: calc(36 * var(--u)); font-weight: 700; line-height: 1.1; letter-spacing: -0.015em; white-space: nowrap; }
-.lt-card-scorer { font-size: calc(22 * var(--u)); color: rgba(235, 235, 245, 0.6); }
-.lt-card-score { margin-left: calc(14 * var(--u)) !important; padding-left: calc(26 * var(--u)); border-left: 1px solid rgba(255, 255, 255, 0.14);
-  font-size: calc(56 * var(--u)); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* In and out: a short slide from the left and a fade; the card collapses into the strip. */
-.lt > * { opacity: 0; transform: translateX(calc(-28 * var(--u))); }
-.lt[data-on="1"] > .lt-strip, .lt[data-on="1"][data-card="1"] > .lt-card { opacity: 1; transform: none; }
-.lt[data-on="1"][data-card="1"] > .lt-strip { opacity: 0; transform: none; }
-.lt[data-on="1"][data-card="0"] > .lt-card { opacity: 0; transform: scale(0.97); transform-origin: left bottom; }
-@media (prefers-reduced-motion: no-preference) {
-  .lt:not(.still) > * { transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* ---- The big screen's graphics' design tokens: every colour, radius, duration and the font in one
+   place (Kian, Oct 26: sleek, professional, the phone's family; white pills on dark, club colours only
+   as accents, one easing curve). */
+:root {
+  --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; /* the phone's */
+  --g-home: #1b2f5b; --g-away: #e63942;             /* the clubs' own colours (Kian, Oct 24) */
+  --g-home-bar: #3a5fb0; --g-away-bar: #e63942;     /* the split bars: navy lifted to read beside crimson */
+  --g-bug: #0d0e12; --g-tab: #1c1d22; --g-ink: #fff; --g-ink2: rgba(235, 235, 245, 0.6);
+  --g-pill: #fff; --g-pill-ink: #0d0e12; --g-pill-ink2: rgba(13, 14, 18, 0.5); --g-pill-track: rgba(13, 14, 18, 0.1);
+  --g-dim: rgba(0, 0, 0, 0.7);
+  --g-radius-bug: 16; --g-radius-card: 8; --g-radius-pill: 999; /* in --v units (1 px at a 1920 px picture) */
+  --g-ease: cubic-bezier(0.2, 0.8, 0.2, 1); --g-dur: 0.28s;
+  --g-goal-s: 1.6; /* the GOAL band's sweep across the bug, in match seconds (src/scorebug.ts reads it) */
 }
 
-/* ---- The big screen's scorebug (src/scorebug.ts): an opaque layer over the baked bug's widest box
-   (render.js: 28, 24, 400 by 40 at 720 lines, as % of the picture) with a margin of 6 units for the
-   encode's soft edge and the corners' radius; it scales with the picture exactly, never clamped. */
-.sb { display: none; }
-body[data-screen="big"] .sb { --v: 0.0521cqw; --m: calc(6 * var(--v) + 2px); display: flex; align-items: stretch;
-  position: absolute; z-index: 2; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m));
-  width: calc(31.25% + 2 * var(--m)); height: calc(5.5556% + 2 * var(--m)); overflow: hidden; pointer-events: none;
-  border-radius: calc(10 * var(--v)); background: #0c0d11; color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
-  font-variant-numeric: tabular-nums; }
-body[data-screen="big"] .sb[hidden] { display: none; }
-.sb-plate { flex: 1; display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; column-gap: calc(12 * var(--v)); }
-.sb-team { display: flex; align-items: center; gap: calc(10 * var(--v)); height: 100%; min-width: 0; }
+/* Units: --v is 1 px at a 1920 px picture and scales with it exactly; type never goes below --t's floor. */
+.bugstack, .sb, .sb-tab, .sp { display: none; }
+body[data-screen="big"] .stage { container-type: inline-size; }
+body[data-screen="big"] .bugstack, body[data-screen="big"] .sp { --v: 0.0521cqw; --t: max(var(--v), 0.7px); }
+
+/* 1. The scorebug: a dark capsule, crest | code | score – score | code | crest, the clock's tab under it.
+   It is an opaque layer exactly over the baked bug's widest box (render.js layoutBug: 28, 24, 400 by 40
+   at 720 lines, as % of the picture) with a margin (--m) wider than its corner radius cuts in, so the
+   broadcast's own bug never shows. */
+body[data-screen="big"] .bugstack { --m: calc(6 * var(--v) + 2px);
+  position: absolute; z-index: 4; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m)); width: calc(31.25% + 2 * var(--m));
+  display: flex; flex-direction: column; align-items: stretch; pointer-events: none; color: var(--g-ink);
+  font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .bugstack > [hidden] { display: none; }
+body[data-screen="big"] .sb { display: grid; grid-template-columns: 1fr auto 1fr; position: relative; overflow: hidden;
+  height: calc(5.5556cqw / var(--ar, 1.7778) + 2 * var(--m)); border-radius: calc(var(--g-radius-bug) * var(--v)); background: var(--g-bug); }
+.sb-team { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(22 * var(--v)); min-width: 0; }
 .sb-away { flex-direction: row-reverse; }
-.sb-bar { align-self: stretch; width: calc(5 * var(--v)); flex: none; }
-.sb-home .sb-bar { background: var(--home); }
-.sb-away .sb-bar { background: var(--away); }
-.sb-crest { display: inline-flex; width: calc(28 * var(--v)); height: calc(34 * var(--v)); flex: none; }
+.sb-crest { display: inline-flex; width: calc(30 * var(--v)); height: calc(36 * var(--v)); flex: none; }
 .sb-crest svg { width: 100%; height: 100%; }
 .sb-crest[hidden] { display: none; }
-.sb-code { font-size: calc(22 * var(--v)); font-weight: 600; letter-spacing: 0.04em; }
+.sb-code { font-size: calc(24 * var(--t)); font-weight: 600; letter-spacing: 0.04em; padding-bottom: calc(3 * var(--v));
+  border-bottom: calc(3 * var(--v)) solid transparent; }
+.sb-home .sb-code { border-bottom-color: var(--g-home-bar); }
+.sb-away .sb-code { border-bottom-color: var(--g-away-bar); }
+.sb-score { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(10 * var(--v)); }
 .sb-digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; min-width: 0.62em; text-align: center;
-  font-size: calc(32 * var(--v)); font-weight: 700; }
+  font-size: calc(34 * var(--t)); font-weight: 700; }
 .sb-digit > span { display: block; }
 .sb-now { transform: translateY(calc((1 - var(--roll, 1)) * 100%)); }
 .sb-was { position: absolute; inset: 0; transform: translateY(calc(var(--roll, 1) * -100%)); }
-.sb-digit.hot { color: #fff; }
-.sb-home .sb-code, .sb-away .sb-code { color: #fff; }
-.sb-dash { font-size: calc(22 * var(--v)); color: rgba(235, 235, 245, 0.3); }
-.sb-rule { width: 1px; margin: calc(14 * var(--v)) 0; background: rgba(255, 255, 255, 0.12); }
-.sb-clock { flex: none; width: calc(118 * var(--v)); display: grid; place-items: center; font-size: calc(22 * var(--v)); font-weight: 600;
-  color: rgba(235, 235, 245, 0.85); }
-.sb[data-period="HT"] .sb-clock, .sb[data-period="FT"] .sb-clock { color: #fff; font-weight: 700; letter-spacing: 0.06em; }
-/* The goal: the scoring club's colour sweeps in from its side with its crest and GOAL, then out. */
-.sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(14 * var(--v)); }
+.sb-dash { font-size: calc(22 * var(--t)); color: var(--g-ink2); }
+body[data-screen="big"] .sb-tab { display: block; align-self: center; margin-top: calc(-1 * var(--v)); padding: calc(5 * var(--v)) calc(16 * var(--v)) calc(6 * var(--v));
+  border-radius: 0 0 calc(10 * var(--v)) calc(10 * var(--v)); background: var(--g-tab); }
+.sb-clock { font-size: calc(18 * var(--t)); font-weight: 600; color: var(--g-ink); }
+.sb-tab[data-period="HT"] .sb-clock, .sb-tab[data-period="FT"] .sb-clock { font-weight: 700; letter-spacing: 0.08em; }
+
+/* 2. A goal: the scoring club's colour slides across the bug with its crest and GOAL, out the other
+   way; then the scorer's pill (src/lowerthird.ts). */
+.sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(16 * var(--v)); }
 .sb[data-goal="home"] .sb-sweep, .sb[data-goal="away"] .sb-sweep { display: flex; }
-.sb[data-goal="home"] .sb-sweep { background: #1b2f5b; clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
-.sb[data-goal="away"] .sb-sweep { background: #e63942; clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
-.sb-sweep .sb-crest { width: calc(32 * var(--v)); height: calc(40 * var(--v)); }
-.sb-goal { font-size: calc(26 * var(--v)); font-weight: 800; letter-spacing: 0.22em; }
+.sb[data-goal="home"] .sb-sweep { background: var(--g-home); clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
+.sb[data-goal="away"] .sb-sweep { background: var(--g-away); clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
+.sb-sweep .sb-crest { width: calc(34 * var(--v)); height: calc(42 * var(--v)); }
+.sb-goal { font-size: calc(28 * var(--t)); font-weight: 800; letter-spacing: 0.24em; margin-right: -0.24em; }
+
+/* 3. Under the bug, one card at a time, as a league puts up stats mid-game: flat, a dark header strip
+   (what, whose, when) over white rows; an insight's one short line, its comparison where the Scout
+   has one, a goal's scorer, or the match stats every ten minutes. */
+.lt, .sc { display: none; }
+body[data-screen="big"] .lt, body[data-screen="big"] .sc { display: block; margin-top: calc(8 * var(--v)); }
+body[data-screen="big"] .bugstack > .lt[hidden], body[data-screen="big"] .bugstack > .sc[hidden] { display: none; }
+.card { overflow: hidden; border-radius: calc(var(--g-radius-card) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.card p { margin: 0; }
+.card-head { display: flex; align-items: center; gap: calc(10 * var(--v)); padding: calc(7 * var(--v)) calc(16 * var(--v)) calc(7 * var(--v)) calc(12 * var(--v));
+  border-left: calc(4 * var(--v)) solid transparent; background: var(--g-tab); color: var(--g-ink);
+  font-size: calc(13 * var(--t)); font-weight: 700; letter-spacing: 0.1em; line-height: 1; }
+.lt[data-side="home"] .card-head { border-left-color: var(--g-home-bar); }
+.lt[data-side="away"] .card-head { border-left-color: var(--g-away-bar); }
+.lt[data-side="home"] .card-goal .card-head { background: var(--g-home); }
+.lt[data-side="away"] .card-goal .card-head { background: var(--g-away); }
+.card-head .lt-crest { display: inline-flex; width: calc(18 * var(--v)); height: calc(22 * var(--v)); flex: none; }
+.card-head .lt-crest svg { width: 100%; height: 100%; }
+.card-head .lt-crest[hidden] { display: none; }
+.card-club { color: var(--g-ink2); }
+.card-min { margin-left: auto; color: var(--g-ink2); font-weight: 600; letter-spacing: 0.04em; }
+.card-goal .card-min, .card-goal .card-club { color: var(--g-ink); }
+.card-row { padding: calc(10 * var(--v)) calc(16 * var(--v)); }
+.card-row + .card-row { border-top: 1px solid var(--g-pill-track); }
+.card-line { font-size: calc(20 * var(--t)); font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-line b { font-weight: 800; }
+.card-name { font-size: calc(22 * var(--t)); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-first { font-weight: 300; margin-right: 0.3em; }
+.card-last { font-weight: 800; letter-spacing: 0.01em; }
+.card-teams { display: flex; justify-content: space-between; padding-bottom: 0; font-size: calc(12 * var(--t)); font-weight: 800; letter-spacing: 0.08em; }
+.card-teams span:first-child { color: var(--g-home-bar); }
+.card-teams span:last-child { color: var(--g-away-bar); }
+.card-teams + .card-row { border-top: 0; }
+.card-stat { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; row-gap: calc(6 * var(--v)); }
+.card-stat .stat-h, .card-stat .stat-a { font-size: calc(20 * var(--t)); }
+.card-stat .sbar { grid-column: 1 / -1; }
+.lt[data-on="0"] .card { opacity: 0; transform: translateY(calc(-8 * var(--v))); }
+.lt[data-on="1"] .card { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .lt:not(.still) .card { transition: opacity var(--g-dur) var(--g-ease), transform var(--g-dur) var(--g-ease); }
+  html[data-motion="full"] body[data-screen="big"] .sc:not([hidden]) .card { animation: sc-in var(--g-dur) var(--g-ease); }
+}
+@keyframes sc-in { from { opacity: 0; transform: translateY(calc(-8 * var(--v))); } }
+
+/* A split bar: each side's share in its club's colour, thin. */
+.sbar { display: flex; gap: calc(3 * var(--v)); height: calc(4 * var(--v)); }
+.sbar i { display: block; height: 100%; border-radius: 999px; min-width: calc(3 * var(--v)); }
+.sbar-home { flex: var(--h) 1 0; background: var(--g-home-bar); }
+.sbar-away { flex: calc(1 - var(--h)) 1 0; background: var(--g-away-bar); }
+
+/* 4. Half-time and full time: the picture dimmed, the score large with the crests, a stack of pills. */
+body[data-screen="big"] .sp { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: var(--g-dim);
+  color: var(--g-ink); pointer-events: none; font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .sp[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] body[data-screen="big"] .sp:not([hidden]) { animation: sp-in var(--g-dur) var(--g-ease); }
+}
+@keyframes sp-in { from { opacity: 0; } }
+.sp p { margin: 0; }
+.sp-stack { width: calc(720 * var(--v)); display: grid; gap: calc(10 * var(--v)); }
+.sp-period { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; letter-spacing: 0.2em; color: var(--g-ink2); }
+.sp-head { display: flex; align-items: center; justify-content: center; gap: calc(36 * var(--v)); }
+.sp-crest { display: inline-flex; width: calc(64 * var(--v)); height: calc(76 * var(--v)); }
+.sp-crest svg { width: 100%; height: 100%; }
+.sp-score { font-size: calc(84 * var(--t)); font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.sp-clubs { display: flex; justify-content: space-between; padding: 0 calc(8 * var(--v)) calc(8 * var(--v)); font-size: calc(16 * var(--t)); font-weight: 600;
+  color: var(--g-ink2); }
+.stat-pill { display: grid; grid-template-columns: calc(90 * var(--v)) 1fr calc(90 * var(--v)); align-items: center;
+  padding: calc(10 * var(--v)) calc(24 * var(--v)); border-radius: calc(var(--g-radius-pill) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.stat-h, .stat-a { font-size: calc(22 * var(--t)); font-weight: 700; }
+.stat-a { text-align: right; }
+.stat-mid { display: grid; gap: calc(5 * var(--v)); }
+.stat-label { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; color: var(--g-pill-ink2); }
