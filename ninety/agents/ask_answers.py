@@ -689,9 +689,9 @@ def corners(ctx: Ctx) -> Reply:
     w = _gap_or(ctx, r)
     if w is None:
         return r
-    if re.search(r"\bset[- ]pieces?\b", ctx.read.text, re.I) and not re.search(
-        r"\bcorners?\b", ctx.read.text, re.I
-    ):
+    if re.search(
+        r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", ctx.read.text, re.I
+    ) and not re.search(r"\bcorners?\b", ctx.read.text, re.I):
         got = _restarts(ctx, w, tuple(RESTART_UNITS))
         total = sum(sum(v.values()) for v in got.values())
         # Corners first, always (the row's metric), then each other kind seen.

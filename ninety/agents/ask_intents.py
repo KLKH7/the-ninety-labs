@@ -366,116 +366,154 @@ UNMEASURED_TOPICS = (
     ("tackles", r"\btackl\w*"),
     ("referee", r"\breferee\b|\bref\b|\bvar\b|\bpenalty (?:shout|appeal)"),
 )
+# A goal named any way a fan names one: a goal, scoring, the opener, the equaliser, the winner, a strike.
+GOAL_WORDS = r"\b(?:goals?|scor\w*|opener|equali[sz]\w*|winner|strike|netted|finish)\b"
 PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     "unmeasured": tuple((p, 8) for _, p in UNMEASURED_TOPICS),
     "why_goal": (
-        (r"\b(?:why|how) did\b.{0,40}\b(?:score|get (?:their|the|that) goal|goal)", 9),
+        (r"\b(?:why|how) (?:did|was|were|come)\b.{0,40}" + GOAL_WORDS, 9),
         (
-            r"\b(?:talk|walk) me through\b|\bbreak down\b|\bexplain\b|\bbuild-?up\b|\bled to\b"
-            r"|\bhow did .{0,30}goal happen|\bgoal (?:happen|come about)|\bset (?:it|the goal) up\b",
+            r"\b(?:talk|walk) me through\b|\bbreak down\b|\bexplain\b|\bdescribe\b|\btell me about\b"
+            r"|\bbuild-?up\b|\bled to\b|\bled up to\b|\bhappen\w*\b"
+            r"|\bcome about\b|\bset (?:it|the goal) up\b",
             6,
         ),
         (r"\bassist\w*", 6),
+        (r"\bbuild[- ]?up\b|\bled (?:up )?to\b|\bhow (?:did|was) (?:that|the|their|his) goal\b", 9),
     ),
     "scorers": (
-        (r"\bwho(?:'s| has| have)? (?:scored|got the goals?|netted|got the goal|found the net)", 9),
-        (r"\b(?:goal ?scorers?|scorers?|scoresheet)\b", 8),
+        (r"\bdid\b.{1,30}\bscore\b", 7),
+        (
+            r"\bwho(?:'s| has| have| had)?\b.{0,20}\b(?:scored"
+            r"|got the goals?|got the goal|netted|found the net"
+            r"|put it (?:in|away)|on the scoresheet)",
+            9,
+        ),
+        (r"\b(?:goal ?scorers?|scorers?|scoresheet)\b|\bwhich players? (?:has |have )?scored\b", 8),
     ),
     "score": (
-        (r"\bscore ?(?:line|wise)\b|\bscore\b(?!d|rs?\b)", 6),
-        (r"\bhow many goals\b", 6),
+        (r"\bresult\b|\bnil[- ]nil\b|\bnil all\b", 6),
+        (r"\bscore ?(?:line|wise)\b|\bscore\b(?!d|rs?\b)|\bwhat(?:'s| is) it(?: at)?(?: now)?\W*$", 6),
+        (r"\bhow many goals\b|^\W*goals\W*$", 6),
         (r"\b\d+\s*[-–]\s*\d+\b", 4),
     ),
     "winning": (
+        (r"\b(?:the|a) lead\b", 6),
         # Not "losing the ball", "winning it back", "winning the battle": those are about play.
         (
             r"\b(?:winning|losing|leading)\b(?! (?:the (?:ball|battle|duels?|race)|it|possession"
             r"|out|duels?|headers?|tackles?|back|them)\b)"
-            r"|\b(?:ahead|in the lead|in front|drawing)\b(?! when)",
+            r"|\b(?:ahead|in the lead|in front|drawing|behind)\b(?! when)",
             6,
         ),
-        (r"\bis it (?:level|a draw|all square)\b|\bwho(?:'s| is) up\b", 6),
+        (
+            r"\b(?:is it|are we|are they|is the game) (?:level|a draw|all square|even)\b"
+            r"|\bwho(?:'s| is| has)? (?:up|won)\b"
+            r"|\blevel\W*$",
+            6,
+        ),
     ),
-    "on_target": ((r"\bon target\b|\bkeeper (?:been )?tested\b|\btested the keeper\b", 9),),
+    "on_target": (
+        (
+            r"\bon (?:target|frame)\b|\bhit the target\b"
+            r"|\bkeeper (?:been )?tested\b|\btested the keeper\b"
+            r"|\bforced? (?:a |any )?saves?\b",
+            9,
+        ),
+    ),
     "shots": ((r"\bshots?\b|\battempts?\b|\befforts?\b|\bshoot\w*|\bshot\b", 6),),
     "completion": (
         (
             r"\bcomplet\w*|\baccura\w*|\bfinding a team-?mate|\bpassing better\b|\bgood is the passing"
-            r"|% of passes|\bsuccess\w* pass",
+            r"|% of passes|\bsuccess\w*|\bpass(?:ing)? (?:rate|percentage)\b|\bmisplac\w*",
             8,
         ),
     ),
     # A count of passes, not a kind of pass ("the most penetrating pass" is a tactics question).
     "passes": (
+        (r"\bpasses (?:by|for|per|from) (?:each|both|team|side)", 8),
         (
-            r"\bhow many pass\w*|\bpass count\b|\btotal passes\b|\bnumber of passes\b"
-            r"|\bpasses (?:so far|this half|each|made|played|have there)|^\W*passes\W*$",
+            r"\bhow many pass\w*|\bpass(?:es)? (?:count|total|tally)\b|\btotal passes\b|\bnumber of passes\b"
+            r"|\bpasses (?:so far|this half|each|made|played|have there|have been)|^\W*passes\W*$",
             8,
         ),
     ),
-    "corners": ((r"\bcorners?\b", 8), (r"\bset[- ]pieces?\b", 7)),
+    "corners": ((r"\bcorners?\b", 8), (r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", 7)),
     "out_of_play": (
         (
-            r"\bout of play\b|\b(?:gone|go|went|going) out\b|\bthrow[- ]?ins?\b|\bgoal[- ]kicks?\b"
-            r"|\bstoppages?\b|\brestarts?\b|\bdead ball\b",
+            r"\bout of (?:play|bounds)\b|\b(?:gone|go|went|going|goes) out\b|\bthrow[- ]?ins?\b|\bthrows\b"
+            r"|\bgoal[- ]kicks?\b|\bstoppages?\b|\brestarts?\b|\bdead ball\b",
             8,
         ),
     ),
     "possession": (
+        (r"\bhog\w* (?:the ball|possession)\b|\bthe ball (?:more|most)\b", 8),
         (
-            r"(?<!lose )(?<!lost )(?<!loses )(?<!losing )\bpossession\b(?! back)"
-            r"|\b(?:more|most|much) of the ball\b|\bball more\b|\bkeep(?:ing|s)? the ball\b"
-            r"|\bwho(?:'s| has| have)? (?:had )?the ball\b",
+            r"(?<!lose )(?<!lost )(?<!loses )(?<!losing )\bposs?ess?ion\b(?! back)"
+            r"|\b(?:more|most|much) of the ball\b|\bball more\b"
+            r"|\bkeep(?:ing|s)? (?:the ball|it) (?:more|better)\b"
+            r"|\bkeep(?:ing|s)? the ball\b|\bwho(?:'s| has| have)? (?:had )?the ball\b"
+            r"|\b(?:had|controlled|seeing) (?:more|most) of the ball\b|\bcontroll?ed the ball\b",
             8,
         ),
     ),
     "territory": (
+        (r"\bwhere(?:'s| is| has)? (?:the action|the game|the play)\b", 8),
         (
-            r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play)"
-            r"|\bball (?:has )?been\b"
-            r"|\bcamped\b|\bpinned\b|\battacking third\b|\bball spending\b|\bin the other half\b",
+            r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play|the game|the play)"
+            r"|\bball (?:has )?been\b|\bwhich half\b|\b(?:opposition|other|their|opponents?') half\b"
+            r"|\bcamped\b|\bpinned\b|\battacking third\b|\bball spending\b",
             8,
         ),
     ),
-    "momentum": ((r"\bmomentum\b|\bfinished stronger\b|\bpushing\b", 7),),
+    "momentum": ((r"\bmomentum\b|\bfinish\w* stronger\b|\bpushing\b|\bstronger\b|\bbetter spell\b", 7),),
     "on_top": (
+        (r"\bcontroll?ing (?:it|things|play)\b|\bmore of the (?:game|match)\b|\bstronger side\b", 6),
         (
-            r"\bon top\b|\bdominat\w*|\bin control\b|\bupper hand\b|\bbetter (?:side|team)\b"
-            r"|\bplaying better\b"
-            r"|\bfront foot\b|\bbossing\b|\bbeen better\b"
+            r"\bon top\b|\bdominat\w*|\bdominan\w*|\bin control\b"
+            r"|\bcontroll?ing the (?:game|match)\b|\bin charge\b"
+            r"|\bupper hand\b|\bbetter (?:side|team|football)\b|\bplaying better\b|\bthe edge\b"
+            r"|\bfront foot\b|\bbossing\b|\bbeen better\b|\brunning the (?:game|show)\b|\bpressing forward\b"
             r"|\bbetter (?:right now|at the moment|recently|lately)"
-            r"|\bhad the better\b|\bwhich (?:team|side) is better\b",
+            r"|\bhad the better\b|\bwhich (?:team|side) is better\b"
+            r"|\bplaying well(?:er)?\b(?=.*\b(?:team|side)\b)",
             6,
         ),
     ),
     "fastest": (
         (
-            r"\bfastest\b|\bquickest\b|\btop speed\b|\bhighest speed\b|\bmost pace\b|\bhow fast\b"
-            r"|\bsprinted fastest\b|\bquickest\b",
+            r"\bfastest\b|\bquickest\b|\bspeed\w*|\bmost pace\b"
+            r"|\bhow fast\b|\bpacie\w*|\bquick(?:est)? player\b",
             9,
         ),
     ),
     "distance": (
+        (r"\bhow much\b.{0,30}\b(?:run|ran|running|covered)\b", 9),
         (
-            r"\b(?:run|ran|running) the (?:furthest|farthest|most)\b|\bcovered the most\b|\bmost "
+            r"\b(?:run|ran|running|covered) (?:the )?(?:furthest|farthest|most)\b"
+            r"|\bcovered the most\b|\bmost "
             r"(?:ground|distance|running|kilomet\w*|km)\b|\bdistance\b|\bhardest working\b|\bfurthest\b"
-            r"|\bfarthest\b|\bkilomet\w*|\bkm\b|\bhow far\b|\bmost running\b|\bdone the most running\b",
+            r"|\bfarthest\b|\bkilomet\w*|\bkm\b|\bhow far\b|\bmost running\b|\bwork rate\b|\bhas run most\b",
             9,
         ),
     ),
     "best": (
         (
-            r"\bbest\b|\bstar (?:man|player|of the show)\b|\bstand-?out\b|\bman of the match\b|\bkey man\b"
-            r"|\bmost (?:involved|dangerous|influential)\b|\bplayed well\b|\bplaying (?:well|best)\b"
-            r"|\bunreal\b|\bbeen brilliant\b",
+            r"\bbest\b|\bstar (?:man|player|of the show)\b"
+            r"|\bstand-?out\b|\bstood out\b|\b(?:man|player) of the "
+            r"(?:match|game)\b|\bkey man\b|\bmost (?:involved|dangerous|influential|effective|impressive)\b"
+            r"|\bimpress\w*|\bplayed well\b|\bplaying (?:well|best)\b(?!.*\b(?:team|side)\b)"
+            r"|\bunreal\b|\bbeen brilliant\b|\btop performer\b",
             7,
         ),
     ),
     "key_moments": (
+        (r"\btalking points?\b|\bwhat(?:'s| has)? been going on\b|\bgoing on so far\b"
+         r"|\bstory of the (?:game|match)\b", 8),
         (
-            r"\bkey moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b"
-            r"|\bwhat(?:'s| has)? happened"
-            r"|\brecap\b|\banything (?:big )?happen\w*|\btimeline\b|\bwhat did i miss\b",
+            r"\bkey moments?\b|\bbig moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b"
+            r"|\bwhat(?:'s| has)? happened|\bsumm(?:ary|ari[sz]e)\b"
+            r"|\brecap\b|\banything (?:big |interesting )?happen\w*|\btimeline\b|\bwhat did i miss\b",
             8,
         ),
     ),
@@ -668,6 +706,8 @@ def ordinal_of(text: str) -> str | int | None:
         return "equaliser"
     if re.search(r"\bwinner\b|\bwinning goal\b", s):
         return "winner"
+    if re.search(r"\bopener\b|\bopening goal\b", s):
+        return 0
     m = re.search(
         rf"\b(first|opening|second|third|fourth|fifth|last|latest|most recent)\b[\w' ]{{0,20}}{GOAL_WORD}", s
     )
@@ -728,7 +768,7 @@ def scores(text: str, tactics: bool = False) -> dict[str, int]:
     if out.get("on_top") and RECENT.search(s):
         out["momentum"] += out["on_top"] + 1
     # "Explain quantum physics", "talk me through it": a goal's story only when a goal is asked about.
-    if out.get("why_goal") and not re.search(r"\b(?:goals?|scor\w*|equali[sz]\w*|winner|assist\w*)", s):
+    if out.get("why_goal") and not re.search(GOAL_WORDS + r"|\bassist\w*", s):
         out["why_goal"] = 0
     return {k: v for k, v in out.items() if v > 0}
 
