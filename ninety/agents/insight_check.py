@@ -614,7 +614,8 @@ TEMPLATES = {
     ],
     "final_third_share": [
         r"the ball was in",
-        rf"attacking third for (?:{_N}%|{_N}% to {_N}%) of the time in the footage we've seen",
+        rf"attacking third for (?:{_N}%|at least {_N}% and at most {_N}%) of the time",
+        r"in the footage we've seen",
     ],
 }
 

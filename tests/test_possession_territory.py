@@ -118,7 +118,7 @@ def test_territory_is_the_ball_by_third_along_each_teams_attack():
     assert away["shares"]["final"] == round(100 * 2 / 9)  # away attacks toward x = 0
     assert home["seconds"] == 9 and home["confident"]
     assert cm.code_texts({**home, "club": "London Athletic"}) == [
-        f"The ball was in London Athletic's attacking third for 67% to 78% {SHOWN}"
+        f"The ball was in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}"
     ]
 
 
@@ -130,10 +130,11 @@ XS = [80, 90, 100, 75, 72, 95, 10, 20, 35.5, None]
 @pytest.mark.parametrize(
     "text, ok",
     [
-        (f"The ball was in London Athletic's attacking third for 67% to 78% {SHOWN}", True),
+        (f"The ball was in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}", True),
         (f"The ball was in London Athletic's attacking third for 90% {SHOWN}", False),
-        (f"The ball was rarely in London Athletic's attacking third for 67% to 78% {SHOWN}", False),
-        (f"The ball was in Lisbon Esportes' attacking third for 67% to 78% {SHOWN}", False),
+        (f"The ball was rarely in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}",
+         False),
+        (f"The ball was in Lisbon Esportes' attacking third for at least 67% and at most 78% {SHOWN}", False),
     ],
 )
 def test_a_territory_sentence_is_said_in_its_own_words(text, ok):
