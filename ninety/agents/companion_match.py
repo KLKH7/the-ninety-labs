@@ -116,8 +116,10 @@ TOOL_WORDS = (
     ),
     (
         "score",
-        r"\b(?:what(?:'s| is) the score|the score|scoreline|who scored|scorers?|assists?|assisted|saves?"
-        r"|how many goals|who(?:'s| is) (?:winning|ahead)|are .{1,30} (?:winning|level))\b",
+        r"\b(?:what(?:'s| is) the score|the score|score|scoreline|who scored|scorers?|assists?|assisted"
+        r"|saves?|how many goals|who(?:'s| is) (?:winning(?! (?:the|in|at|on) )|ahead|leading|in front"
+        r"|in the lead)|is it (?:a )?(?:draw|level)"
+        r"|is it \d+ ?[-–] ?\d+|drawing|are .{1,30} (?:winning|level|losing|ahead|behind|in front))\b",
     ),
     ("goal_build_up", r"\b(?:goals?|scor\w*|equali[sz]\w*|that finish)\b"),
     (
@@ -125,7 +127,9 @@ TOOL_WORDS = (
         r"\b(?:style|playing like|play(?:ing)? like this|tactic\w*|approach|long balls?|go(?:ing)? long"
         r"|cross\w*|wings?|down the (?:left|right|middle)|counter[- ]attack\w*|on the break|one-twos?"
         r"|wall pass\w*|how (?:are|is) [\w' ]+ (?:playing|doing|getting on|looking|defending|attacking)"
-        r"|how is the (?:game|match) going|going forward"
+        r"|how is the (?:game|match) going|going forward|direct\w*|out from the back|from the back"
+        r"|play(?:ing)? short"
+        r"|how did [\w' ]+ do"
         r"|goal ?keeper|keeper)\b",
     ),
     (
@@ -149,22 +153,22 @@ TOOL_WORDS = (
     ),
     (
         "pass_options",
-        r"\b(?:options?|open|free|unmarked|decision\w*|choice\w*|should(?:'ve| have)|who to pass|passing)\b",
+        r"\b(?:options?|open|free|unmarked|decision\w*|choice\w*|should(?:'ve| have)|who to pass)\b",
     ),
     (
         "team_shape",
         r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
-        r"|width|spread out)\b",
+        r"|width|wide|spread out)\b",
     ),
     (
         "halves",
-        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|since the break|after the break|half[- ]time"
+        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|the two halves|half[- ]time"
         r"|first half (?:and|v|vs|against) (?:the )?second)\b",
     ),
     (
         "key_moments",
-        r"\b(?:key moments?|highlights?|what (?:have|did) i miss\w*|what happened|catch me up|recap"
-        r"|timeline)\b",
+        r"\b(?:key moments?|highlights?|what (?:have|did) i miss\w*|what(?:'s)? happened|catch me up|recap"
+        r"|timeline|anything happen\w*|how did the (?:first|second) half (?:end|go))\b",
     ),
     (
         "physical",
@@ -175,7 +179,7 @@ TOOL_WORDS = (
     (
         "passing",
         r"\b(?:progressive|into the final third|final[- ]third entr\w*|intercept\w*|pass network"
-        r"|who passes to whom|link(?:ing)? up|combin\w*|partnership|passed to each other)\b",
+        r"|who passes to whom|link(?:ing)? up|combin\w*|partnership|passed to each other|passing)\b",
     ),
     ("shots", r"\b(?:shots?|shooting|shoot|efforts? on goal|chances?|attempts?)\b"),
     (
@@ -185,7 +189,7 @@ TOOL_WORDS = (
     (
         "territory",
         r"\b(?:territory|where (?:has|is) the ball|pinned (?:back|in)|camped|on the front foot"
-        r"|in (?:their|the other) half)\b",
+        r"|in (?:their|the other) half|on top|in control)\b",
     ),
     (
         "lineup",
@@ -228,6 +232,10 @@ def asked_role(text: str) -> str | None:
 def route(text: str) -> list[str]:
     lowered = text.lower()
     tools = [tool for tool, words in TOOL_WORDS if re.search(words, lowered)]
+    if SECOND_HALF.search(lowered):
+        tools = [t for t in tools if t != "halves"]  # a stretch of the match, not the halves compared
+    if re.search(r"\b(?:high|deep|back|defensive|offside) line\b", lowered) and "team_shape" in tools:
+        tools = [t for t in tools if t != "line_breaks"]  # a back line's height is the shape's to answer
     if asked_role(text):
         # Who plays a position is the team sheet's to answer, before any word the position shares
         # with another tool ("wing" with style, "number" with overloads).
@@ -284,12 +292,92 @@ CHAT_REPLIES = {
     "about": ("I'm your match companion: I answer questions about this match from what the cameras "
               "tracked, and every number is checked before you see it. Try one of these:"),
     "other": "I can't answer that one from this match's tracking. Try one of these:",
+    "inject": ("I only answer questions about this match, from what the cameras tracked, and I can't "
+               "change how I answer. Try one of these:"),
+    "future": "I can't predict what will happen: I only know what has happened so far. Try one of these:",
+    "outside": ("The match tracking can't tell that: it sees where the players and the ball are, not "
+                "names, money, the crowd or the weather. Try one of these:"),
 }
+# A message that tries to change the rules or get at what is never shown (lesson 288): never routed
+# to a tool, so its words cannot pick one ("ignore your rules" is no referee question).
+INJECTION = re.compile(
+    r"\b(?:ignore|disregard|forget|override)\b.{0,40}\b(?:rules?|instructions?|prompt|above|previous)\b"
+    r"|^\s*(?:system|assistant|developer)\s*:|\b(?:reveal|print|show|repeat|translate|leak)\b.{0,30}"
+    r"\b(?:instructions?|system prompt|prompt|rules|ground truth|truth|answer key)\b|\byou are now\b"
+    r"|\bpretend\b|\brepeat after me\b|^\s*say\s+['\"]|\btrack ids?\b|\bjailbreak|\bDAN\b"
+    r"|</?\w+>|\{\s*\"", re.I)
+# A question about the future, which no fact answers.
+FUTURE = re.compile(r"\b(?:will (?:win|score|happen|be)|who(?:'s| is)? going to (?:win|score)|predict\w*"
+                    r"|next (?:match|game|goal)|what will|gonna (?:win|score)|final score (?:be|going))\b",
+                    re.I)
+# A question about what the tracking never sees: names it is not given, money, the crowd, the weather,
+# the world outside this match.
+OUTSIDE = re.compile(
+    r"\b(?:referee'?s name|name of the referee|who is the referee|weather|rain\w*|sunny|cold|fans|crowd"
+    r"|attendance|stadium|tickets?|pay|paid|fee|transfer|salary|wages?|xg|expected goals|in the world"
+    r"|of all time|ever|world cup|champions league|premier league table|league table|odds|bet\w*)\b", re.I)
 # A message that continues the last question ("and in the first half?", "what about them?"): it reuses
 # that question's tools. Anything else that routes to no tool is not about the match's facts.
 FOLLOW_ON = re.compile(
     r"^\s*(?:and|but|so|what about|how about|same|then|now|in the|during|since|over|before|after)\b"
-    r"|\b(?:they|them|their|theirs|he|him|his)\b", re.I)
+    r"|\b(?:they|them|their|theirs|he|him|his)\b"
+    # "it" / "that" only in a question that starts like a follow-up ("why is that?", "who assisted it?"):
+    # "will it rain tomorrow?" is no follow-up (#422's probe).
+    r"|^\s*(?:why|really|which|who|how)\b(?:.*\b(?:it|that|this|those|these)\b|\W*$)", re.I)
+
+
+# Typed on a phone, mid-match (lesson 288): text-speak spelled out, and a misspelt word taken as the
+# football word it is closest to. Design: the words the tools' routes and the clubs need, a close match
+# only (difflib ratio 0.85), never a word under five letters (a short typo has too many neighbours).
+SHORTHAND = {"r": "are", "u": "you", "ur": "your", "hw": "how", "wat": "what", "wot": "what", "pls": "please",
+             "plz": "please", "mins": "minutes", "min": "minutes", "whos": "who's", "whats": "what's",
+             "hows": "how's", "1st": "first", "2nd": "second", "3rd": "third", "4th": "fourth", "v": "vs",
+             "gk": "keeper", "tho": "though", "2day": "today", "cuz": "because", "bc": "because"}
+FOOTBALL_WORDS = (
+    "winning", "losing", "playing", "possession", "player", "players", "scored", "score", "scorer", "scoring",
+    "pressing", "press", "shape", "shots", "shot", "goals", "goal", "passes", "passing", "best", "keeper",
+    "goalkeeper", "offside", "corners", "territory", "counter", "overloads", "assist", "assisted", "half",
+    "minutes", "equaliser", "striker", "winger", "defending", "attacking", "ball", "happened", "dangerous",
+    "chances", "compact", "width", "tactics", "formation", "lineup", "referee", "penalty", "possesion",
+    "who's", "what's", "how", "doing", "missed", "recap", "highlights", "first", "second", "third", "last",
+)
+FIX_CUTOFF = 0.85
+FIX_LEN = 5
+
+
+def normalise(text: str, insights=None) -> str:
+    """The question with text-speak spelled out and misspellings of the football words and club names
+    corrected; a word code already knows (or a name on the team sheet) is kept as typed."""
+    import difflib
+
+    known = set(FOOTBALL_WORDS)
+    if insights is not None:
+        for words in club_words(insights).values():
+            known |= {w.lower() for name in words for w in name.split()}
+        known |= {w.lower() for n in insights.sheet_names() for w in n.split()}
+
+    known = {w for w in known if len(w) >= 4}
+    out = re.sub(r"[A-Za-z0-9']+", lambda m: SHORTHAND.get(m.group(0).lower(), m.group(0)), text)
+
+    def reads(t: str) -> tuple:
+        # The team sheet's "who is" reads almost any question: no tool of its own for this.
+        return (tuple(n for n in route(t) if n != "lineup"),
+                tuple(clubs_named(t, insights)) if insights is not None else ())
+
+    for m in reversed(list(re.finditer(r"[A-Za-z']+", out))):
+        low = m.group(0).lower()
+        if low in known or len(low) < FIX_LEN:
+            continue
+        close = difflib.get_close_matches(low, known, n=1, cutoff=FIX_CUTOFF)
+        if not close:
+            continue
+        fixed = out[: m.start()] + close[0] + out[m.end():]
+        # Kept only when it gives a question code could not read a tool, or a club, it lacked: an
+        # ordinary word ("going", "long") that looks like a football word is the fan's own.
+        (tools, clubs), (new_tools, new_clubs) = reads(out), reads(fixed)
+        if set(new_tools) > set(tools) or (not clubs and new_clubs):
+            out = fixed
+    return out
 
 
 def chat_kind(text: str, insights, history=()) -> str | None:
@@ -299,6 +387,9 @@ def chat_kind(text: str, insights, history=()) -> str | None:
     kind = next((k for k, pattern in SMALL_TALK if pattern.search(text)), None)
     if kind is not None:
         return kind
+    for kind, pattern in (("inject", INJECTION), ("future", FUTURE), ("outside", OUTSIDE)):
+        if pattern.search(text):
+            return kind
     if route(text) or clubs_named(text, insights) or minutes_of(text, 90) is not None:
         return None
     # A player or a position ("How much has the left back done?") is about the match, asked with "who"
@@ -448,6 +539,8 @@ def _say_as(fact: dict, known: dict, insights) -> list[str]:
 # When a question names a stretch of the match ("in the first half", "the last ten minutes"), the
 # minutes code looks at; None when it names none. Halves are Law 7's 45 minutes.
 WORD_MINUTES = {"five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30}
+SECOND_HALF = re.compile(r"\b(?:second half|since the break|after the break|since half[- ]?time"
+                         r"|after half[- ]?time)\b", re.I)
 
 
 def minutes_of(text: str, minute: int) -> tuple[int, int] | None:
@@ -456,10 +549,16 @@ def minutes_of(text: str, minute: int) -> tuple[int, int] | None:
         return 1, min(45, minute)
     if re.search(r"\bsecond half\b", t):
         return (46, minute) if minute >= 46 else None
-    m = re.search(r"\blast (\d+|five|ten|fifteen|twenty|thirty) minutes\b", t)
+    if SECOND_HALF.search(t):
+        return (46, minute) if minute >= 46 else None
+    m = re.search(r"\blast (\d+|five|ten|fifteen|twenty|thirty) minutes?\b", t)
     if m:
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_MINUTES[m.group(1)]
         return max(1, minute - n + 1), minute
+    m = re.search(r"\b(?:first|opening) (\d+|five|ten|fifteen|twenty|thirty) minutes?\b", t)
+    if m:
+        n = int(m.group(1)) if m.group(1).isdigit() else WORD_MINUTES[m.group(1)]
+        return 1, max(1, min(n, minute))
     if re.search(r"\b(?:so far|whole (?:match|game)|all (?:match|game)|this (?:match|game)|today)\b", t):
         return 1, minute
     return None
@@ -1110,6 +1209,58 @@ def _shape_texts(fact: dict, club: str, span: str) -> list[str]:
     return out
 
 
+# A goal's story asked for, and which goal (lesson 288): "the 2nd goal", "Lisbon's third", "the
+# equaliser", "the winner"; the latest when none is named.
+GOAL_STORY = re.compile(r"\b(?:how did|why did|explain|what led|led to|set (?:it )?up|build-?up|describe"
+                        r"|tell me about|assist\w*|happen\w*|come about|talk me through|walk me through)\b",
+                        re.I)
+ORDINALS = {"first": 0, "opening": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "fourth": 3,
+            "4th": 3, "fifth": 4, "5th": 4, "last": -1, "latest": -1, "most recent": -1}
+GOAL_WORD = r"(?:goal|strike|finish|equali[sz]er|winner)"
+
+
+def goals_so_far(insights, minute: int, club: str | None = None) -> list[dict]:
+    """The goals up to `minute` whose side code can say, in order (a club's own, when named)."""
+    rows = insights.score(1, minute, club)["facts"]
+    return sorted((g for g in rows if g.get("kind") == "goal" and g.get("club")
+                   and (club is None or g["club"] == club)), key=lambda g: g["t"])
+
+
+def goal_asked(text: str, insights, minute: int, club: str | None) -> dict | str | None:
+    """The goal a question names: its fact, "none" when it names one the match has not had yet, or None
+    when it names no particular goal."""
+    t = text.lower()
+    goals = goals_so_far(insights, minute, club)
+    if re.search(r"\bequali[sz]\w*", t):
+        score, picked = {}, None
+        for g in goals_so_far(insights, minute):
+            score[g["club"]] = score.get(g["club"], 0) + 1
+            if len(set(score.values())) == 1 and len(score) == 2:
+                picked = g
+        return picked or "none"
+    if re.search(r"\bwinner\b|\bwinning goal\b", t):
+        everyone = goals_so_far(insights, minute)
+        n = {}
+        for g in everyone:
+            n[g["club"]] = n.get(g["club"], 0) + 1
+        if len(n) == 0:
+            return "none"
+        lead = max(n, key=n.get)
+        if list(n.values()).count(n[lead]) > 1 or (club is not None and lead != club):
+            return "none"
+        other = sum(v for c, v in n.items() if c != lead)
+        return [g for g in everyone if g["club"] == lead][other] if other < n[lead] else "none"
+    m = re.search(rf"\b(first|opening|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|last|latest|most recent)"
+                  rf"\b(?:[\w' ]{{0,20}})?\b{GOAL_WORD}", t) or (
+        re.search(rf"\b{GOAL_WORD}\b", t) and re.search(r"\b(first|second|third|fourth|last|latest)\b", t))
+    if not m:
+        return None
+    k = ORDINALS[m.group(1)]
+    if not goals:
+        return "none"
+    return goals[k] if -len(goals) <= k < len(goals) else "none"
+
+
 def code_calls(question: Question, insights, history=()) -> list[dict]:
     """Code's plan: the routed tools, or a follow-up's ("and in the first half?") the last turn's
     tools; over the stretch the question names, else the last WINDOW_MIN minutes."""
@@ -1120,17 +1271,32 @@ def code_calls(question: Question, insights, history=()) -> list[dict]:
     lo, hi = minutes_of(question.text, minute) or (max(1, minute - WINDOW_MIN + 1), minute)
     # The club the question is about: named, or "they" / "them" / "their" after a question that named one.
     named = clubs_named(question.text, insights)
-    if not named and re.search(r"\b(?:they|them|their|theirs)\b", question.text, re.I) and history:
+    if not named and history and (re.search(r"\b(?:they|them|their|theirs)\b", question.text, re.I)
+                                  or (not route(question.text) and FOLLOW_ON.search(question.text))):
         named = clubs_named(history[-1].get("question", ""), insights)
     club = named[0] if len(named) == 1 else None
     stretch = minutes_of(question.text, minute)
+    goal = goal_asked(question.text, insights, minute, club)
+    prev = history[-1].get("calls", ()) if history else ()
+    prev_goal = next((c for c in prev if c["name"] == "goal_build_up"), None)
+    if prev_goal is not None and goal is None and re.search(r"\b(?:it|that|the goal|that goal)\b|\bassist",
+                                                            question.text, re.I):
+        # "Who assisted it?" after a goal's story: that goal, not the score (lesson 288).
+        return [dict(prev_goal)]
+    if goal is not None or ("goal_build_up" in names and GOAL_STORY.search(question.text)):
+        # A goal's story ("how did the 2nd goal happen?"): the goal asked for, its build-up first.
+        names = ["goal_build_up", *(n for n in names if n not in ("goal_build_up", "score"))]
+        if isinstance(goal, dict):
+            return [{"name": "goal_build_up", "club": goal["club"], "minute_from": goal["minute"],
+                     "minute_to": goal["minute"]}, *(
+                {"name": n, "club": club, "minute_from": lo, "minute_to": hi} for n in names[1:])]
     # The named club is the side acting ("How are Lisbon playing?", "Lisbon's best player"), except for
     # a pass that cut through a side ("which pass cut through Lisbon?"): there both clubs are read and
     # the fact-check binds the sentence to the right one.
     acted_on = {"line_breaks"}
     # A count or a comparison ("who has had more shots?", "how many corners?") asks about the match so
     # far, unless a stretch is named; "how are they playing?" asks about now.
-    so_far = {"possession", "shots", "set_pieces"}
+    so_far = {"possession", "shots", "set_pieces", "players"}
     return [{"name": n, "club": None if n in acted_on else club,
              "minute_from": 1 if n in so_far and stretch is None else lo, "minute_to": hi}
             for n in names]
@@ -1222,7 +1388,8 @@ def physical_gate(text: str, calls, facts: list[dict], insights) -> tuple[str | 
 # Design (the Coordinator, Oct 26): a count this small, or a stat with no success, says nothing about
 # how a side plays, and never answers on its own ("crossed 1 time and found a teammate 0 times").
 TINY_COUNT = 5
-HOW_PLAYING = re.compile(r"\bhow (?:are|is|have|has)\b[^?]*\b(?:play\w*|do(?:ing)?|getting on|look\w*|going"
+HOW_PLAYING = re.compile(r"\bhow (?:are|is|have|has|did)\b[^?]*\b(?:play\w*|do(?:ing)?|getting on|look\w*"
+                         r"|going"
                          r"|defend\w*|attack\w*)\b", re.I)
 
 
@@ -1240,7 +1407,9 @@ def tiny(fact: dict) -> bool:
 def _overview(question: Question, calls: list[dict], insights, known: dict, history, suggest):
     """The answer to "how are <club> playing?": up to two checked sentences, where the ball was (and
     the route they attack by, when its sample allows), then their most significant moment."""
-    if not calls or calls[0]["name"] != "style" or not HOW_PLAYING.search(question.text):
+    asked = HOW_PLAYING.search(question.text) or (
+        history and HOW_PLAYING.search(history[-1].get("question", "")) and not route(question.text))
+    if not calls or calls[0]["name"] != "style" or not asked:
         return None
     lo, hi = calls[0]["minute_from"], calls[0]["minute_to"]
     club = calls[0].get("club")
@@ -1279,22 +1448,147 @@ def _overview(question: Question, calls: list[dict], insights, known: dict, hist
                          suggest=suggest)
 
 
+SUPPORT_MAX = 1  # design: one more checked sentence after the answer; more reads as a list
+
+
+def supporting(
+    lead: dict, facts: list[dict], known: dict, insights, said: set[str]
+) -> list[tuple[str, dict]]:
+    """The next most telling fact after the one that answers, for depth (lesson 288): the same club's
+    (or the match's, for a fact of no club), another measure, never a tiny count, never a sentence
+    already said."""
+    out = []
+    for f in facts:
+        if len(out) >= SUPPORT_MAX:
+            break
+        if lead.get("kind") in ("sheet", "law", "offside"):
+            break  # who plays a position, or a Law, is the whole answer
+        if f is lead or f.get("club") != lead.get("club") or tiny(f) or f.get("kind") in ("sheet", "law",
+                                                                                         "score"):
+            continue
+        if f.get("metric") == lead.get("metric") or f.get("kind") == "goal":
+            continue
+        text = _checked(f, known, insights)
+        if text is not None and text not in said:
+            out.append((text, f))
+    return out
+
+
+def _checked(f: dict, known: dict, insights, lead: str = "") -> str | None:
+    """The first of code's sentences for a fact that the fact-check passes, after `lead` (fixed words
+    that state no fact: "Just before it, "), or None."""
+    f.setdefault("clubs", insights.fixture.clubs)
+    for text in code_texts(f):
+        if lead:
+            text = lead + (text[0].lower() + text[1:] if text.split()[0] in ("In", "From") else text)
+        if _verify(Claim(text, [f["id"]]), {**known, f["id"]: f}, insights).ok:
+            return text
+    return None
+
+
+SHOT_BEFORE_S = 10.0  # design: the shot a goal came from is the goal's own moment, seconds before it
+
+
+def goal_story(goal: dict, insights, known: dict) -> list[tuple[str, dict]]:
+    """A goal told as it happened (lesson 288): who scored (and from whose pass, when named), the shot
+    it came from, and the strongest thing in the build-up, each its own checked sentence."""
+    said = []
+    text = _checked(goal, known, insights)
+    if text is None:
+        return said
+    said.append((text, goal))
+    m, club = goal["minute"], goal["club"]
+    # The shot just before the goal: the scorer's club's, or one whose side vision could not tell
+    # (said without a club), never the other club's.
+    shots = [f for f in insights.shots(max(1, m - 1), m, None)["facts"]
+             if f.get("t") is not None and goal["t"] - SHOT_BEFORE_S <= f["t"] <= goal["t"] + 1
+             and f.get("club") in (None, club)]
+    shot = max(shots, key=lambda f: f["t"], default=None)
+    if shot is not None:
+        text = _checked(shot, known, insights)
+        if text is not None:
+            said.append((text, shot))
+    for f in insights.goal_build_up(m, club)["facts"]:
+        if f is goal or f.get("kind") == "goal" or f.get("team") != goal["team"] or tiny(f):
+            continue
+        text = _checked(f, known, insights, "Just before it, ")
+        if text is not None:
+            said.append((text, f))
+            break
+    return said
+
+
+def _ordinal(n: int) -> str:
+    return {1: "one goal", 2: "two goals", 3: "three goals", 4: "four goals"}.get(n, f"{n} goals")
+
+
+WHY_RESULT = re.compile(r"^\s*(?:so )?why\b.*\b(?:winning|losing|lose|lost|concede\w*|conced\w*|can'?t score"
+                        r"|cannot score|not scoring"
+                        r"|struggl\w*|behind|ahead|in front|on top|better|worse|leading|level)\b", re.I)
+
+
+def why_result(question: Question, insights, minute: int, known: dict) -> list[tuple[str, dict]] | None:
+    """ "Why are Lisbon winning?", "why did London concede?": the score, then the goals that made it,
+    each told with what led to it. None for any other question."""
+    if not WHY_RESULT.search(question.text):
+        return None
+    named = clubs_named(question.text, insights)
+    goals = goals_so_far(insights, minute)
+    said = []
+    bug = next((f for f in insights.score(1, minute, None)["summary"] if f.get("metric") == "scorebug"
+                and f.get("t", 0) <= 60.0 * minute), None)
+    if bug is not None:
+        text = _checked(bug, known, insights)
+        if text is not None:
+            said.append((text, bug))
+    if not goals:
+        return said or None
+    conceding = re.search(r"\b(?:losing|lose|lost|concede\w*|conced\w*|struggl\w*|behind|worse|can'?t score"
+                          r"|cannot score)\b", question.text, re.I)
+    club = named[0] if len(named) == 1 else None
+    if club is not None and conceding:
+        wanted = [g for g in goals if g["club"] != club]
+    elif club is not None:
+        wanted = [g for g in goals if g["club"] == club]
+    else:
+        wanted = goals
+    for g in wanted[-2:]:
+        said.extend(goal_story(g, insights, known)[:2])
+    return said or None
+
+
 def code_match_answer(
     question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
     """Code's answer: the routed tools' facts, the first one code can say and the check passes. A
     goal is told with the strongest thing that led to it."""
+    question = replace(question, text=normalise(question.text, insights)[:200])
     if calls is None:
         chat = chat_answer(question, insights, history, suggest)
         if chat is not None:  # small talk never gets a statistic (lesson 287)
             return chat, []
+    minute = _minute_in(question.t, insights)
+    asked_all = [*(h["question"] for h in history), question.text]
+    if SECOND_HALF.search(question.text) and minute < 46:
+        return Answer("unanswerable", f"The second half hasn't started yet: it's minute {minute}.", None,
+                      None, None, (), 0.0, float(question.t)), []
+    why = why_result(question, insights, minute, {})
+    if why:
+        return _match_answer(" ".join(t for t, _ in why), [f for _, f in why], insights, calls or [],
+                             asked=asked_all, t=question.t, suggest=suggest), calls or []
     calls = calls if calls is not None else code_calls(question, insights, history)
     facts = run_tools(insights, calls)
     known = {f["id"]: f for f in facts}
     clubs = insights.fixture.clubs
+    before = set(re.split(r"(?<=[.!?])\s+", history[-1].get("answer", ""))) if history else set()
+    if any(c["name"] == "line_breaks" for c in calls) and re.search(
+            r"\b(?:biggest|best|most|largest|furthest)\b", question.text, re.I):
+        facts = sorted(facts, key=lambda f: -(f.get("value") or 0) if f.get("kind") == "line_break" else 1)
     for f in facts:
         f.setdefault("clubs", clubs)
     named = clubs_named(question.text, insights)
+    if not named and history and not route(question.text) and FOLLOW_ON.search(question.text):
+        named = clubs_named(history[-1].get("question", ""), insights)  # "which was the biggest?"
     beaten = beaten_club(question.text, insights) if any(c["name"] == "line_breaks" for c in calls) else None
     if beaten is not None:
         # "Which pass broke Lisbon's lines?" asks for a pass by the other club: its passes first, and no
@@ -1303,6 +1597,10 @@ def code_match_answer(
         facts = [f for f in facts if not str(f.get("metric", "")).startswith("opponents_bypassed")
                  or f.get("club") == passer]
         named = [passer]
+    elif len(named) == 1 and any(c["name"] == "line_breaks" for c in calls):
+        # "Which Lisbon passes broke the lines?": Lisbon's passes only.
+        facts = [f for f in facts if not str(f.get("metric", "")).startswith("opponents_bypassed")
+                 or f.get("club") == named[0]]
     if len(named) == 1:
         # A question about one club hears about that club first (its facts before the other's); the
         # fact-check still binds the sentence to the right side.
@@ -1362,7 +1660,20 @@ def code_match_answer(
         bug = next((f for f in facts if f.get("metric") == "scorebug"), None)
         shown = next((t for t in (code_texts(bug) if bug else [])
                       if _verify(Claim(t, [bug["id"]]), known, insights).ok), None)
-        lines = [shown or SCORE_POINTER, *(t for t, _ in said)]
+        lead = ""
+        if shown and bug is not None:
+            h, a = bug["home"], bug["away"]
+            # Who leads, in words, after the scorebug's own sentence (which the answer leads with).
+            lead = (" It's level." if h == a else
+                    f" {clubs['home'] if h > a else clubs['away']} are ahead.")
+            if re.search(r"\bfinal\b|\bfull[- ]time\b", question.text, re.I) and minute < FULL_TIME_MIN:
+                lead += " It isn't over yet."
+        leads = re.search(r"\b(?:winning|ahead|level|draw|drawing|lead\w*|in front|losing|behind)\b",
+                          question.text, re.I)
+        if leads and not re.search(r"\b(?:who scored|goals?|scor(?:ed|er|ers|ing)|assist\w*)\b",
+                                   question.text, re.I):
+            said, unplaced = [], []  # "who's winning?" hears the score, not every goal again
+        lines = [shown + lead if shown else SCORE_POINTER, *(t for t, _ in said)]
         lines += [f"It spotted a goal in minute {g['minute']} too, without telling whose it was."
                   for g in unplaced]
         if not said and not unplaced:  # a goal below the detection gate is no goal to vouch for
@@ -1423,37 +1734,56 @@ def code_match_answer(
             text = next((t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), known, insights).ok), None)
             if text is not None:
                 said.append((text, f))
-        if len(said) > 1:
+        if not said:
+            lo_, hi_ = calls[0]["minute_from"], calls[0]["minute_to"]
+            return Answer("unanswerable", f"Nothing stood out from minute {lo_} to minute {hi_}: no goal, "
+                          "shot or big pass vision is sure of.", None, None, None, (), 60.0 * (lo_ - 1),
+                          60.0 * hi_), calls
+        if said:
             return _match_answer(" ".join(t for t, _ in said), [f for _, f in said], insights, calls,
                                  asked=[*(h["question"] for h in history), question.text], t=question.t,
                                  suggest=suggest), calls
     # A goal's story ("why did they score?"): the goal with the strongest thing before it, when the
     # goal build-up is what was asked (a "what's the score?" is the score's to answer).
     goal = next((f for f in facts if f.get("kind") == "goal"), None)
-    if goal is not None and calls and calls[0]["name"] == "goal_build_up":
-        for f in facts:
-            if f is goal or f.get("team") != goal["team"] or f.get("kind") == "goal":
-                continue
-            for text in code_texts(f):
-                lead = text[0].lower() + text[1:] if text.split()[0] in ("In", "From") else text
-                combined = f"{goal['club']} scored in minute {goal['minute']}. Just before it, {lead}"
-                if _verify(Claim(combined, [goal["id"], f["id"]]), known, insights).ok:
-                    return _match_answer(
-                        combined,
-                        [goal, f],
-                        insights,
-                        calls,
-                        asked=[*(h["question"] for h in history), question.text],
-                        t=question.t,
-                        suggest=suggest,
-                    ), calls
+    if calls and calls[0]["name"] == "goal_build_up":
+        which = goal_asked(question.text, insights, minute, named[0] if len(named) == 1 else None)
+        so_far = goals_so_far(insights, minute, named[0] if len(named) == 1 else None)
+        if which == "none":
+            # "The 2nd goal" at 1–0: say how many there have been, and tell the latest.
+            whose = f" for {named[0]}" if len(named) == 1 else ""
+            head = (f"There hasn't been a goal{whose} yet." if not so_far else
+                    "Nobody has equalised yet." if re.search(r"equali", question.text, re.I) else
+                    "There's no winner yet." if re.search(r"winn", question.text, re.I) else
+                    f"There has been {_ordinal(len(so_far))}{whose} so far, not that one.")
+            story = goal_story(so_far[-1], insights, known) if so_far else []
+            if not story:
+                return Answer("unanswerable", head, None, None, None, (), 0.0, float(question.t)), calls
+            return _match_answer(" ".join([head, *(t for t, _ in story)]), [f for _, f in story], insights,
+                                 calls, asked=asked_all, t=question.t, suggest=suggest), calls
+        if goal is None and not so_far:
+            whose = f"{named[0]} haven't" if len(named) == 1 else "Nobody has"
+            return Answer("unanswerable", f"{whose} scored yet.", None, None, None, (), 0.0,
+                          float(question.t)), calls
+        if goal is not None:
+            story = goal_story(goal, insights, known)
+            if story and re.search(r"\bassist\w*|set (?:it )?up|who passed", question.text, re.I) and \
+                    not goal.get("assister_is"):
+                story = [("Vision couldn't name who set it up.", None), *story]
+            if story:
+                cited = [f for _, f in story if f is not None]
+                return _match_answer(" ".join(t for t, _ in story), cited, insights, calls,
+                                     asked=asked_all, t=question.t, suggest=suggest), calls
     for f in facts:
         for text in code_texts(f):
             claim = Claim(text, [f["id"]])
+            if text in before:  # a follow-up hears something new, never the answer just given
+                continue
             if _verify(claim, known, insights).ok:
+                more = supporting(f, facts, known, insights, {text, *before})
                 return _match_answer(
-                    text,
-                    [f],
+                    " ".join([text, *(t for t, _ in more)]),
+                    [f, *(g for _, g in more)],
                     insights,
                     calls,
                     asked=[*(h["question"] for h in history), question.text],
@@ -1468,8 +1798,19 @@ def code_match_answer(
             else f"from minute {lo_hi[0]} to minute {lo_hi[1]}")
     thin = next((f for f in facts if f.get("unit") == "%" and f.get("confident") and _sample(f) is not None
                  and _sample(f) < MIN_SHARE_PASSES), None)
+    if thin is not None and calls and calls[0]["minute_from"] > 1 and \
+            minutes_of(question.text, minute) is None:
+        # Too few passes in the last minutes to say: the match so far may have enough (lesson 288).
+        wider = [{**c, "minute_from": 1} for c in calls]
+        return code_match_answer(question, insights, wider, history, suggest)
+    shape_held = calls and calls[0]["name"] == "team_shape" and not any(
+        f.get("confident") for f in facts if f.get("kind") == "shape")
     if calls and _minute_now(question.t) <= 2:
         why = TOO_EARLY  # nothing yet to rank, count or share: say so, not a canned list
+    elif shape_held:
+        whose = f"{named[0]}'s" if len(named) == 1 else "A club's"
+        why = (f"{whose} shape can't be measured {span}: it needs every one of their players in view at "
+               "once, and the cameras didn't have them all.")
     elif thin is not None:
         whose = thin.get("club") or "either side"
         why = (f"Too few of {whose}'s passes {span} to say yet: {_plural(_sample(thin), 'pass')}, and a "
@@ -1480,9 +1821,18 @@ def code_match_answer(
         whose = (f"{club}'" if club.endswith("s") else f"{club}'s") if club else "the"
         why = (f"I can't single out {whose} most dangerous player {span}: tracking missed too many "
                "players, or too many are level, to rank them surely.")
+        scorers = [(t, g) for g in goals_so_far(insights, lo_hi[1] if lo_hi else 90, club)
+                   if g.get("scorer_is") and (t := _checked(g, known, insights)) is not None
+                   and "scored for" in t]
+        if scorers:  # who decided the match so far is still worth saying, each a checked sentence
+            return _match_answer(" ".join([why, "What I can say: ", *(t for t, _ in scorers[-2:])]).replace(
+                ":  ", ": "), [g for _, g in scorers[-2:]], insights, calls, asked=asked_all, t=question.t,
+                suggest=suggest), calls
     elif not facts and calls:
         # The match is tracked (these are its insights): nothing in the stretch answers it yet.
         why = f"Nothing {span} answers that yet."
+    elif calls:
+        why = f"Nothing {span} answers that surely: vision wasn't sure enough of what it saw."
     else:
         why = f"I can answer about {names} and the team sheets."
     t_from, t_to = 0.0, float(question.t)
@@ -1503,6 +1853,7 @@ async def answer_match(
     code's answer over the model's chosen tools (or code's, if the plan was unusable). `history` is
     the session's earlier turns ({question, answer, calls}), so a follow-up has its context."""
     history = list(history)
+    question = replace(question, text=normalise(question.text, insights)[:200])
     # Small talk: code's reply, before any tool or model call (lesson 287). With a model, a message code
     # routes to no tool goes to its planner; an empty plan comes back to code, which says so.
     chat = chat_answer(question, insights, history, small_talk_only=ask is not None)
