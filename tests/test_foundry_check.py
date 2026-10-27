@@ -191,3 +191,13 @@ def test_the_scorer_matches_one_to_one_nearest_first_and_applies_the_bar():
     few = {t: {**row, "true": 4} for t in s.TYPES}
     assert not s.verdict(few, {t: {"recall": 0} for t in s.TYPES})["shot"]["pass"]
     assert not s.verdict({t: row for t in s.TYPES}, {t: {"recall": 0.4} for t in s.TYPES})["shot"]["pass"]
+
+
+def test_the_bar_holds_precision_at_point_eight():
+    from ninety.eval import foundry_event_score as s
+
+    base = {t: {"recall": 0.2} for t in s.TYPES}
+    at = {t: {"true": 5, "precision": 0.80, "recall": 0.4} for t in s.TYPES}
+    under = {t: {"true": 5, "precision": 0.79, "recall": 0.4} for t in s.TYPES}
+    assert s.verdict(at, base)["shot"]["pass"]
+    assert not s.verdict(under, base)["shot"]["pass"]
