@@ -311,6 +311,10 @@ def test_the_teams_do_not_change_ends():
         ("Goals in minutes 35, 76 and 85.", {35, 76, 85}),
         ("From minutes 20 to 34.", {20, 34}),
         ("At 33:50, in the 34th minute.", {34}),
+        ("Lisbon pressed hardest from minute 20 to 34.", {20, 34}),
+        ("From minute 34 to 40 London kept the ball.", {34, 40}),
+        ("Between minute 41 until 43, 15% to 20% of it.", {41, 43}),
+        ("In minute 10, between 22% and 28% of the ball.", {10}),
     ],
 )
 def test_only_explicit_minutes_are_minutes(text, minutes):
@@ -402,3 +406,28 @@ def test_comparison_direction_is_a_count_check_only():
     assert shots["comparison_direction"] is not None
     poss = graded("possession", "possession?", 2700.0, "London Athletic had 57% of the ball in the footage.")
     assert poss["comparison_direction"] is None
+
+
+def test_territory_follows_each_halfs_direction():
+    # A tiny match whose ends change at half time (frame 4): home has the ball throughout, at x = 100
+    # in the first half and at x = 5 in the second. With home attacking right, then left, the ball is
+    # in home's attacking third the whole time; a Truth that ignored the second half's direction
+    # would put it in home's own third after the break.
+    import numpy as np
+
+    tr = T.Truth(
+        events=[],
+        shown=[(0, 7)],
+        side=np.array([1] * 8, np.int8),
+        ball_x=np.array([100.0] * 4 + [5.0] * 4, np.float32),
+        speed=np.zeros((8, 1), np.float32),
+        ids=["h1"],
+        home_right=True,
+        half_frame=4,
+        names={},
+        directions=(True, False),
+    )
+    assert tr.territory(0, 7 / T.FPS, "match")["home"] == 100.0
+    assert tr.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 100.0, "away": 0.0}
+    kept = T.Truth(**{**tr.__dict__, "directions": (True, True)})
+    assert kept.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 0.0, "away": 100.0}

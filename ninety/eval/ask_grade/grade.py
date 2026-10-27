@@ -171,12 +171,18 @@ def club_before(text: str, pos: int, clubs: dict) -> str | None:
 
 def minutes_said(text: str) -> list[int]:
     """The match minutes an answer names, explicit forms only: "minute 34", "minutes 35, 76 and 85",
-    "minutes 20 to 34", "34′" or "34'", "the 34th minute", a clock time "33:50" (minute 34). A bare
+    "minutes 20 to 34", "from minute 20 to 34", "34′" or "34'", "the 34th minute", a clock time
+    "33:50" (minute 34). A bare
     number is never a minute: "15% to 20%", "up to 28", "the last 15 minutes" (a stretch) are not."""
     out = [int(x) for x in re.findall(r"\bminutes? (\d{1,3})\b(?!\s*%)", text, re.I)]
     for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and | to | ?[-–] ?))+\d{1,3})\b", text, re.I):
         out += [int(x) for x in re.findall(r"\d{1,3}", run)[1:]]  # "minutes 35, 76 and 85": the rest
     out += [int(x) for x in re.findall(r"\bto minute (\d{1,3})\b", text, re.I)]
+    # a range's end after one "minute": "from minute 20 to 34", "minute 34 to 40", "minute 41 until 43"
+    out += [
+        int(x)
+        for x in re.findall(r"\bminutes? \d{1,3} ?(?:to|until|through|-|–) ?(\d{1,3})\b(?!\s*%)", text, re.I)
+    ]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:′|')", text)]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:st|nd|rd|th) minute\b", text, re.I)]
     out += [int(m) + 1 for m in re.findall(r"\b(\d{1,2}):[0-5]\d\b", text)]
