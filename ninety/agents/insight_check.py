@@ -339,8 +339,8 @@ def check(
                    if f.get("scorer_source") == "id_feed" and f.get("scorer_is")}
     # A per-player figure keyed by the player-ID feed's name (ninety/intel/player_stats.py) is said by
     # that name, as the scorer's is: the fact names him and says where the name comes from.
-    said_names |= {f["player_name"] for f in cited
-                   if f.get("name_source") == "id_feed" and f.get("player_name")}
+    said_names |= {n for f in cited if f.get("name_source") == "id_feed"
+                   for n in (f.get("player_name"), *(f.get("player_names") or ())) if n}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
         if not re.search(rf"\b{re.escape(name)}\b", claim.text):

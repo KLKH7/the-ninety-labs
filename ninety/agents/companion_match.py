@@ -1526,10 +1526,22 @@ def read_question(text: str, insights, t: float, history=()):
     player = bool(asked_role(text)) or any(re.search(rf"\b(?:{w})", lowered) for _, w in ROLE_WORDS)
     if not player and hasattr(insights, "sheet_names"):
         player = bool(asked_players(text, insights))
-    return ask_intents.classify(
+    read = ask_intents.classify(
         text, clubs=dict(fx.clubs), codes={"home": fx.home_code, "away": fx.away_code}, t=float(t),
         words=set(insights.sheet_names()) if hasattr(insights, "sheet_names") else set(),
         tactics=tactics, player=player, small_talk=small)
+    return replace(read, player=sheet_name_in(read.text, insights))
+
+
+def sheet_name_in(text: str, insights) -> str | None:
+    """The team-sheet name a question names: the full name, or a surname only one player has."""
+    names = insights.sheet_names() if hasattr(insights, "sheet_names") else []
+    full = [n for n in names if re.search(rf"\b{re.escape(n)}\b", text, re.I)]
+    if full:
+        return full[0]
+    last = [n for n in names
+            if len(n.split()[-1]) >= 4 and re.search(rf"\b{re.escape(n.split()[-1])}\b", text, re.I)]
+    return last[0] if len(last) == 1 else None
 
 
 def chips(insights, t: float, club: str | None = None) -> list[dict]:

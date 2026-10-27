@@ -545,7 +545,7 @@ def passes(ctx: Ctx) -> Reply:
             f2,
         )
     r.notes.append(MISSES["passes"])
-    r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
+    r.head = f"{_short(ctx, first)} {n[first]} passes seen"
     return r
 
 
@@ -621,7 +621,7 @@ def shots(ctx: Ctx) -> Reply:
             f1,
             f2,
         )
-    r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
+    r.head = f"{_short(ctx, first)} {n[first]} shots seen"
     return r
 
 
@@ -664,7 +664,7 @@ def on_target(ctx: Ctx) -> Reply:
         rest.append(f"didn't see how {_plural(unknown, 'shot')} ended")
     if rest:
         r.say("It " + " and ".join(rest) + ".", f)
-    r.head = f"{_short(ctx, first)} {on[first]}, {_short(ctx, second)} {on[second]}"
+    r.head = f"{_short(ctx, first)} {on[first]} on target seen"
     return r
 
 
@@ -694,7 +694,13 @@ def corners(ctx: Ctx) -> Reply:
     ):
         got = _restarts(ctx, w, tuple(RESTART_UNITS))
         total = sum(sum(v.values()) for v in got.values())
-        parts = [_plural(sum(v.values()), *RESTART_UNITS[k]) for k, v in got.items() if sum(v.values())]
+        # Corners first, always (the row's metric), then each other kind seen.
+        parts = [_plural(sum(got["corner"].values()), *RESTART_UNITS["corner"], zero=True)]
+        parts += [
+            _plural(sum(v.values()), *RESTART_UNITS[k])
+            for k, v in got.items()
+            if k != "corner" and sum(v.values())
+        ]
         f = ctx.fact(
             "set_pieces:all",
             "ask_set_pieces_all",
@@ -703,9 +709,9 @@ def corners(ctx: Ctx) -> Reply:
             also=[(sum(v.values()), RESTART_UNITS[k][1]) for k, v in got.items()],
             sources=ctx.sources,
         )
-        lead = f"Vision has spotted {_plural(total, 'set piece')} {w.said} {SEEN}"
+        lead = f"Vision has spotted {_plural(total, 'set piece', zero=True)} {w.said} {SEEN}"
         r.say(lead + (": " + ", ".join(parts) + "." if parts else "."), f)
-        r.head = _plural(total, "set piece")
+        r.head = f"{_plural(total, 'set piece', zero=True)} seen"
         return r
     n = _restarts(ctx, w, ("corner",))["corner"]
     lead = None if n["home"] == n["away"] else max(("home", "away"), key=n.get)
@@ -723,14 +729,14 @@ def corners(ctx: Ctx) -> Reply:
     total = sum(n.values())
     if total == 0:
         r.say(f"There have been no corners {w.said} {SEEN}.", f)
-        r.head = "No corners"
+        r.head = "No corners seen"
         return r
     r.say(
         f"{c1} have had {_plural(n[first], 'corner')} {w.said} {SEEN}, and {c2} "
         f"{_plural(n[second], 'corner')}.",
         f,
     )
-    r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
+    r.head = f"{_short(ctx, first)} {n[first]} corners seen"
     return r
 
 
@@ -779,7 +785,7 @@ def out_of_play(ctx: Ctx) -> Reply:
             else f"{ctx.read.club} haven't had any of them.",
             fc,
         )
-    r.head = _plural(total, "time")
+    r.head = f"Out of play {_plural(total, 'time')} seen"
     return r
 
 
@@ -828,11 +834,54 @@ def _cant(ctx: Ctx, why: str, closest: Reply, answers: bool = False) -> Reply:
     return r
 
 
+FEED_NAMES = "Names come from the Player ID feed."
+
+
+def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
+    """A club's three players most involved in the moves the video picked up, in order and with no
+    count (#431's graded order, through the insights' player_rank), or None while it is withheld."""
+    rank = getattr(ctx.mi, "player_rank", None)
+    if rank is None or not getattr(ctx.mi, "per_player", None):
+        return None
+    try:
+        got = rank(ctx.clubs[team], "involvement", ctx.t / 60.0)
+    except ValueError:
+        return None
+    names = [f["name"] for f in got.get("facts") or ()][:3]
+    if got.get("withheld") or len(names) < 3:
+        return None
+    f = ctx.fact(
+        f"involved:{team}",
+        "ask_involvement_order",
+        None,
+        None,
+        team,
+        sources=[],
+        w=_so_far(ctx),
+        player_names=names,
+        name_source="id_feed",
+    )
+    # Never "best", never one player "the most involved": an order, as it was graded (#431).
+    return (
+        f"Most involved for {ctx.clubs[team]}, in the moves the video picked up: {names[0]}, then "
+        f"{names[1]}, then {names[2]}."
+    ), f
+
+
 def best(ctx: Ctx) -> Reply:
+    asked = ctx.read.club
+    teams = [ctx.team_of[asked]] if asked else ["home", "away"]
+    orders = [o for o in (_involved(ctx, t) for t in teams) if o]
+    if orders:
+        r = Reply()
+        for text, f in orders:
+            r.say(text, f)
+        r.say(FEED_NAMES + " Vision can't yet say who has played best, only who was most involved.")
+        r.head = "Most involved"  # an order, never one player
+        return r
     # The players tool's leader, when its least beats every other player's most and the name gate let
     # him be said (by name or position, never "a London Athletic player").
     w = _so_far(ctx)
-    asked = ctx.read.club
     top = next((f for f in ctx.mi.players(w.lo, w.hi, asked)["facts"] if f.get("rank") == 1 or asked), None)
     who = (top or {}).get("player_is") or ""
     if (
@@ -864,6 +913,20 @@ def best(ctx: Ctx) -> Reply:
         closest.say(FEED_NOTE)
     else:
         closest = _bypassed(ctx)
+    top, _ = _ranked(ctx, "fastest")
+    if top is not None:  # and the quickest player, a measured fact about one named player
+        f = ctx.fact(
+            f"fastest:{top['player']}",
+            "ask_top_speed",
+            top["value"],
+            "km/h",
+            top["team"],
+            w=_so_far(ctx),
+            player_name=top["name"],
+            name_source="id_feed",
+        )
+        closest.say(f"The fastest so far is {top['name']}, at {top['value']} km/h {SEEN}.", f)
+        closest.say(FEED_NAMES)
     return _cant(
         ctx,
         "Vision can't name players on these pictures well enough to pick a best player yet.",
@@ -921,7 +984,69 @@ def _ranked(ctx: Ctx, metric: str) -> tuple[dict | None, str | None]:
     return (top if top.get("leads") else None), None
 
 
+def _player_row(ctx: Ctx) -> dict | None:
+    """The named player's stats up to now (ninety/intel/player_stats.py), or None."""
+    fn = getattr(ctx.mi, "player_stats", None)
+    if not ctx.read.player or fn is None or not getattr(ctx.mi, "per_player", None):
+        return None
+    try:
+        rows = fn(ctx.t / 60.0, ctx.read.player)["facts"]
+    except ValueError:
+        return None
+    return rows[0] if len(rows) == 1 else None
+
+
+def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
+    """One player's distance or top speed while the video tracked him, with how much of the footage
+    that was; None when the figure is withheld."""
+    key = "distance_m" if what == "distance" else "top_kmh"
+    if row.get(key) is None:
+        return None
+    r, cover = Reply(), round(100 * (row.get("footage_coverage") or 0))
+    if what == "distance":
+        km = round(row["distance_m"] / 1000, 1)
+        f = ctx.fact(
+            f"km:{row['player']}",
+            "ask_player_km",
+            km,
+            "km",
+            row["team"],
+            also=[(cover, "%")],
+            w=_so_far(ctx),
+            player_name=row["name"],
+            name_source="id_feed",
+        )
+        r.say(
+            f"{row['name']} has covered {km} km so far while the video tracked him, which was {cover}% of "
+            f"the footage we've seen.",
+            f,
+        )
+    else:
+        f = ctx.fact(
+            f"kmh:{row['player']}",
+            "ask_player_kmh",
+            row["top_kmh"],
+            "km/h",
+            row["team"],
+            also=[(cover, "%")],
+            w=_so_far(ctx),
+            player_name=row["name"],
+            name_source="id_feed",
+        )
+        r.say(
+            f"{row['name']} has reached {row['top_kmh']} km/h so far, while the video tracked him for "
+            f"{cover}% of the footage we've seen.",
+            f,
+        )
+    r.say(FEED_NAMES)
+    r.head = row["name"][:48]
+    return r
+
+
 def fastest(ctx: Ctx) -> Reply:
+    row = _player_row(ctx)
+    if row is not None and (got := _player_running(ctx, row, "fastest")) is not None:
+        return got
     top, _ = _ranked(ctx, "fastest")
     if top is not None:
         r = Reply()
@@ -946,6 +1071,9 @@ def fastest(ctx: Ctx) -> Reply:
 
 
 def distance(ctx: Ctx) -> Reply:
+    row = _player_row(ctx)
+    if row is not None and (got := _player_running(ctx, row, "distance")) is not None:
+        return got
     return _cant(
         ctx, "Vision can't yet say how far each player has run well enough to rank them.", _team_km(ctx)
     )
@@ -1238,7 +1366,11 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
     fn = BUILDERS.get(read.intent)
     if fn is None:
         return None
-    if read.window.empty and read.intent not in ("score", "scorers", "winning", "why_goal", "unmeasured"):
+    keeps = ("score", "scorers", "winning", "why_goal", "unmeasured")
+    if not (read.window.empty or "").startswith("The second half"):
+        # "Since the half hour" at minute 10: on top so far, then the note; a half not begun, nothing.
+        keeps += ("on_top", "momentum", "territory")
+    if read.window.empty and read.intent not in keeps:
         # "How many shots in the second half?" at minute 5: no stretch to count, and no other stat.
         text = f"{read.window.empty} Ask me about the match so far."
         return Answer("unanswerable", text, None, None, None, (), None, None, spoken=text), []

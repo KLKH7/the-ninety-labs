@@ -384,3 +384,72 @@ def test_the_phone_s_chips_file_is_the_table_s(mi):
     early = {c["intent"] for c in cm.chips(mi, 300.0)}
     late = {c["intent"] for c in cm.chips(mi, 3600.0)}
     assert "why_goal" not in early and "why_goal" in late  # a chip is offered only once code answers it
+
+
+def _stub_player_stats(mi, monkeypatch, order=("Ben Vomble", "Yusuf Windell", "Tom Keel"), withheld=None):
+    monkeypatch.setattr(mi, "per_player", {"roster": []}, raising=False)
+
+    def rank(club, metric, minute):
+        if metric != "involvement" or withheld:
+            return {"facts": [], "withheld": withheld or "off"}
+        return {
+            "facts": [
+                {"player": f"P{k}", "name": n, "number": k, "team": "away"} for k, n in enumerate(order)
+            ],
+            "withheld": None,
+            "order_only": True,
+        }
+
+    def stats(minute, player=None, club=None):
+        row = {
+            "player": "LIS11",
+            "name": "Ben Vomble",
+            "number": 11,
+            "team": "away",
+            "distance_m": 1412,
+            "top_kmh": 30.4,
+            "footage_coverage": 0.62,
+        }
+        return {"facts": [row] if player in (None, "Ben Vomble") else []}
+
+    monkeypatch.setattr(mi, "player_rank", rank, raising=False)
+    monkeypatch.setattr(mi, "player_stats", stats, raising=False)
+
+
+def test_best_player_is_the_involvement_order_never_best_or_one_player(mi, monkeypatch):
+    """#431: a club's three most involved, in order, with no count; never "best", never one leader."""
+    _stub_player_stats(mi, monkeypatch)
+    a, _ = cm.code_match_answer(
+        Question("s", None, "Who's been Lisbon's best player?", 3600.0), mi, suggest=False
+    )
+    assert a.text.startswith(
+        "Most involved for Lisbon Esportes, in the moves the video picked up: Ben Vomble, "
+        "then Yusuf Windell, then Tom Keel."
+    ), a.text
+    assert "Player ID feed" in a.text and not re.search(r"\bis (?:the )?best\b|\bthe most involved\b", a.text)
+    _stub_player_stats(mi, monkeypatch, withheld="missed its bar")
+    a, _ = cm.code_match_answer(
+        Question("s", None, "Who's been Lisbon's best player?", 3600.0), mi, suggest=False
+    )
+    assert a.text.startswith("Vision can't name players"), a.text  # withheld: the fallback, no router change
+
+
+@pytest.mark.parametrize(
+    "q, said",
+    [
+        (
+            "How far has Ben Vomble run?",
+            "Ben Vomble has covered 1.4 km so far while the video tracked him, which was "
+            "62% of the footage we've seen.",
+        ),
+        (
+            "how fast has Vomble been?",
+            "Ben Vomble has reached 30.4 km/h so far, while the video tracked him for 62% "
+            "of the footage we've seen.",
+        ),
+    ],
+)
+def test_a_named_player_s_running_is_said_while_tracked_with_its_coverage(mi, monkeypatch, q, said):
+    _stub_player_stats(mi, monkeypatch)
+    a, _ = cm.code_match_answer(Question("s", None, q, 3600.0), mi, suggest=False)
+    assert a.text.startswith(said) and "Player ID feed" in a.text, a.text

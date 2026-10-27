@@ -600,7 +600,9 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
         return Window(lo, hi, said, named)
 
     if re.search(r"\bfirst half\b", s):
-        return Window(1, min(HALF_MIN, max(1, done)), "in the first half", True)
+        if done < HALF_MIN:  # the first half so far is the match so far: said the same way
+            return span(1, done)
+        return Window(1, HALF_MIN, "in the first half", True)
     if re.search(
         r"\b(?:second half|since the break|after the break|since half[- ]?time|after half[- ]?time)\b", s
     ):
@@ -608,8 +610,10 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
             return Window(1, max(1, done), "so far", True, "The second half hasn't started yet.")
         return Window(HALF_MIN + 1, done, "in the second half", True)
     if re.search(r"\bthis half\b", s):
-        return Window(
-            half_lo, max(half_lo, done), "this half" if done > HALF_MIN else "in the first half", True
+        return (
+            span(half_lo, max(half_lo, done))
+            if done <= HALF_MIN
+            else Window(half_lo, done, "this half", True)
         )
     m = re.search(rf"\b(?:last|past) {_N}(?: ?min\w*)?\b", s)
     if m:
@@ -687,6 +691,7 @@ class Read:
     topic: str | None
     text: str
     scores: tuple[tuple[str, int], ...] = ()
+    player: str | None = None  # a team-sheet name the question names, else None
 
     @property
     def club(self) -> str | None:
