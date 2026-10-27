@@ -1,0 +1,92 @@
+[
+ {
+  "intent": "score",
+  "q": "What's the score?",
+  "club_slot": false
+ },
+ {
+  "intent": "scorers",
+  "q": "Who scored?",
+  "club_slot": false
+ },
+ {
+  "intent": "winning",
+  "q": "Who's winning?",
+  "club_slot": false
+ },
+ {
+  "intent": "on_top",
+  "q": "Who's on top?",
+  "club_slot": false
+ },
+ {
+  "intent": "possession",
+  "q": "Who has had more of the ball?",
+  "club_slot": false
+ },
+ {
+  "intent": "passes",
+  "q": "How many passes?",
+  "club_slot": false
+ },
+ {
+  "intent": "completion",
+  "q": "Who's passing better?",
+  "club_slot": false
+ },
+ {
+  "intent": "shots",
+  "q": "How many shots?",
+  "club_slot": false
+ },
+ {
+  "intent": "on_target",
+  "q": "How many shots on target?",
+  "club_slot": false
+ },
+ {
+  "intent": "territory",
+  "q": "Where has the ball been?",
+  "club_slot": false
+ },
+ {
+  "intent": "corners",
+  "q": "How many corners?",
+  "club_slot": false
+ },
+ {
+  "intent": "out_of_play",
+  "q": "How often has the ball gone out?",
+  "club_slot": false
+ },
+ {
+  "intent": "best",
+  "q": "Who has been the best player?",
+  "club_slot": false
+ },
+ {
+  "intent": "fastest",
+  "q": "Who is the fastest on the pitch?",
+  "club_slot": false
+ },
+ {
+  "intent": "distance",
+  "q": "Who has run the furthest?",
+  "club_slot": false
+ },
+ {
+  "intent": "why_goal",
+  "q": "Why did {club} score?",
+  "club_slot": true
+ },
+ {
+  "intent": "key_moments",
+  "q": "What have I missed?",
+  "club_slot": false
+ },
+ {
+  "intent": "tactics",
+  "q": "How are {club} playing?",
+  "club_slot": true
+ }
+]

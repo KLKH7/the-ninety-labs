@@ -899,7 +899,41 @@ def _bypassed(ctx: Ctx) -> Reply:
     return r
 
 
+def _ranked(ctx: Ctx, metric: str) -> tuple[dict | None, str | None]:
+    """The leader of a per-player ranking (ninety/intel/player_stats.py, through the insights'
+    player_rank tool), or why there is none: no Player ID feed, or the ranking is withheld."""
+    rank = getattr(ctx.mi, "player_rank", None)
+    if rank is None or not getattr(ctx.mi, "per_player", None):
+        return None, None
+    try:
+        got = rank(ctx.read.club, metric, ctx.t / 60.0)
+    except ValueError:
+        return None, None
+    if got.get("withheld") or not got.get("facts"):
+        return None, got.get("withheld")
+    top = got["facts"][0]
+    return (top if top.get("leads") else None), None
+
+
 def fastest(ctx: Ctx) -> Reply:
+    top, _ = _ranked(ctx, "fastest")
+    if top is not None:
+        r = Reply()
+        f = ctx.fact(
+            f"fastest:{top['player']}",
+            "ask_top_speed",
+            top["value"],
+            "km/h",
+            top["team"],
+            sources=[],
+            w=_so_far(ctx),
+            player_name=top["name"],
+            name_source="id_feed",
+        )
+        r.say(f"{top['name']} has been the fastest so far, at {top['value']} km/h {SEEN}.", f)
+        r.say("Names come from the Player ID feed; speeds are measured while the video tracked each player.")
+        r.head = top["name"][:48]
+        return r
     return _cant(
         ctx, "Vision can't measure each player's top speed well enough to rank them yet.", _team_km(ctx)
     )

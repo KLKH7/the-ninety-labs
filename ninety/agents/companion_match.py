@@ -1507,6 +1507,21 @@ def read_question(text: str, insights, t: float, history=()):
         tactics=tactics, player=player, small_talk=small)
 
 
+def chips(insights, t: float, club: str | None = None) -> list[dict]:
+    """The phone's chips at match second t: the intent table's questions (ninety/agents/ask_chips.json)
+    with the fan's club filled in, each kept only when code answers it now from a checked fact."""
+    from ninety.agents.ask_intents import chips_table
+
+    club = club or insights.fixture.clubs["home"]
+    out = []
+    for c in chips_table():
+        q = c["q"].format(club=club)
+        a, _ = code_match_answer(Question("chips", None, q, float(t)), insights, suggest=False)
+        if a.status == "verified" and a.evidence:  # a checked fact, never only "no goal yet"
+            out.append({**c, "q": q})
+    return out
+
+
 def table_answer(question: Question, insights, history=(), suggest: bool = True):
     """Code's answer from the question's row of the intent table, or None when the row is left to the
     tools' routing (tactics, one player, small talk, a follow-up of the last question)."""

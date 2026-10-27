@@ -343,3 +343,44 @@ def test_a_row_the_model_picks_is_answered_by_code(mi):
     q = Question("s", None, "what's going on with the ball out there?", 2050.0)
     r = asyncio.run(cm.answer_match(q, mi, planner))
     assert r.source == "code" and r.answer.headline == "London 63%", (r.reasons, r.answer.text)
+
+
+def test_fastest_is_the_player_stats_leader_named_by_the_feed_once_ranked(mi, monkeypatch):
+    """Once per-player stats are on (#430), "who's the fastest?" names the ranking's leader, said with
+    the Player ID feed as the name's source; while the ranking is withheld it says why not."""
+    monkeypatch.setattr(mi, "per_player", {"roster": []}, raising=False)
+    top = {
+        "rank": 1,
+        "player": "LIS11",
+        "name": "Ben Vomble",
+        "number": 11,
+        "team": "away",
+        "value": 31.2,
+        "metric": "top_kmh",
+        "leads": True,
+    }
+    monkeypatch.setattr(
+        mi, "player_rank", lambda club, metric, minute: {"facts": [top], "withheld": None}, raising=False
+    )
+    a, _ = cm.code_match_answer(
+        Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
+    )
+    assert a.text.startswith("Ben Vomble has been the fastest so far, at 31.2 km/h"), a.text
+    assert "Player ID feed" in a.text and a.headline == "Ben Vomble"
+    monkeypatch.setattr(
+        mi, "player_rank", lambda club, metric, minute: {"facts": [], "withheld": "off"}, raising=False
+    )
+    a, _ = cm.code_match_answer(
+        Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
+    )
+    assert a.text.startswith("Vision can't measure each player's top speed"), a.text
+
+
+def test_the_phone_s_chips_file_is_the_table_s(mi):
+    path = Path(ask_intents.__file__).with_name(ask_intents.CHIPS_JSON)
+    assert json.loads(path.read_text()) == ask_intents.chips_table(), (
+        "run python -m ninety.agents.ask_intents"
+    )
+    early = {c["intent"] for c in cm.chips(mi, 300.0)}
+    late = {c["intent"] for c in cm.chips(mi, 3600.0)}
+    assert "why_goal" not in early and "why_goal" in late  # a chip is offered only once code answers it

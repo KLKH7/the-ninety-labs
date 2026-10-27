@@ -789,5 +789,10 @@ def model_menu() -> list[dict]:
     return [{"id": i.id, "shape": i.shape, "fallback": i.fallback} for i in INTENTS]
 
 
-if __name__ == "__main__":  # the chips as JSON, for the phone
-    print(json.dumps(chips_table(), indent=1))
+CHIPS_JSON = "ask_chips.json"  # beside this module: the phone reads the table's chips from it
+
+
+if __name__ == "__main__":  # writes the chips as JSON, for the phone
+    from pathlib import Path
+
+    Path(__file__).with_name(CHIPS_JSON).write_text(json.dumps(chips_table(), indent=1) + "\n")

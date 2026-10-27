@@ -3543,3 +3543,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
+
+### 297. A router where the first keyword wins answers the word it matched, not the question asked
+- **What happened:** the Ask chose tools from a keyword list, and the first tool routed picked the
+  handler. On the demo match (8324), "How many passes?" matched no tool and got "There were 3 shots".
+  "Who has had more of the ball?" was sorted towards timed facts and said "Not known yet". "Why did
+  London Athletic score?" said when, and cited a minute-32 pass for a goal in minute 12. The
+  fact-check never saw the question, so a true sentence on another topic passed as verified. The
+  Ask grader (#427) put the core pass at 14%. While fixing it, #423's off-topic pattern `bet\w*`
+  matched "better", so "which team is better right now" got the weather-and-betting refusal.
+- **Rule:** read a question as exactly one row of a table, with its slots (club, window, goal). Each
+  row says what its answer needs, the metric its first sentence must carry, its shape and an honest
+  fallback, and code builds the answer from that row. An answer whose lead does not carry the row's
+  metric is not shown. A pattern that refuses a topic must match whole words, and every
+  paraphrase of each row is a test.
+- **Check:** `tests/test_ask_intents.py` (every paraphrase reads as its row, including "which team is
+  better right now"; Kian's repros; the relevance gate fails a builder that leads with the score);
+  `uv run python -m ninety.eval.ask_grade.run --compare origin/main HEAD` (#427).
