@@ -55,7 +55,11 @@ ion-toolbar.band-bar { --background: var(--bg); --color: var(--text); --border-c
 .pitch-wrap { padding: 8px 16px 0; }
 .map { position: relative; border-radius: 12px; overflow: hidden; touch-action: manipulation; aspect-ratio: 111 / 74; background: var(--pitch); }
 .map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#wind { pointer-events: none; }
+#wind, #team-heat { pointer-events: none; }
+.map-empty { position: absolute; inset: auto 0 12px; margin: 0; text-align: center; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 60%); pointer-events: none; }
+/* A player the ID feed does not name is said by where he is: a longer chip, so it wraps, never clipped. */
+#chips button { white-space: normal; text-align: left; max-width: 100%; padding: 6px 14px; line-height: 1.3; }
+#team-heat-words { margin: 8px 4px 0; }
 .refused { margin: 16px 0 0; color: var(--text-2); }
 .now-said { margin: 16px 20px 0; }
 .now-said:empty, .now-age:empty { display: none; }

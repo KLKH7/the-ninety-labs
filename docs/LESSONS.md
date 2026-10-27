@@ -3526,6 +3526,31 @@ short and actionable. This file is public: no research sources, product names or
   from a half's start); a window it was not measured on is "not known", or a measured one is used.
 - **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
 
+### 294. A track's numbers are one stretch of tracking, not the player's match
+- **What happened:** on the 8324 preview at 29:46, a goalkeeper's player card said "So far: 43 metres
+  run" under "Heat map, 0:00 to 29:46, covering 29 min 46 s of play". The track had been followed
+  for 38 s: vision loses a player behind others and picks him up again as a new track, so each card
+  covers one track's stretch. The label came from the minimap's first frame, not from the track's.
+  On the same phone, 29% of tracked player-frames have no Player ID feed row. Tapping one titled the
+  sheet "A player" and the chips asked "How fast is a player running now?" (Kian, Oct 26).
+- **Rule:** a card states the span its own track covers: "Tracked 29:08–29:46", covering 38 s,
+  from the track's first frame to the last sighting at or before now, never later. A player the
+  feed does not name is said by where he is ("the player on the left of the pitch"). He gets no
+  club: a track id's letter is the tracker's vote, and a bundle may carry no side list, in which
+  case the old `sideUnsure()` named every club. The first version of this PR fell into exactly that
+  (merge review, Oct 27). Never "a player", and never the tracker's number. The heat map is every
+  tracked player together. A club split by the feed's sides would let the feed reach a statistic
+  other than an event's side, which AGENTS.md forbids; the review caught it. A split by
+  `sides_known` would read event track ids against the radar's (lesson 259). Joining tracks into a player's match by feed name is a different
+  change. AGENTS.md forbids stitching on whether a track is named, so that rule must change first.
+- **Check:** `tests/test_phone_companion.py::test_a_cards_numbers_say_the_stretch_its_track_was_followed_not_the_match`,
+  `test_a_player_the_feed_does_not_name_is_said_by_where_he_is_never_a_player` and
+  `test_tapping_a_player_the_id_feed_names_says_his_name_in_the_card_and_every_chip` and
+  `test_the_pitch_shows_positions_movement_and_one_heat_map_of_every_tracked_player`, run on the 8324 shape (no
+  `sides_known`, the feed's side differing from the track's letter). Each fails when its guard is
+  removed (mutation-tested).
+
+
 ### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
 - **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
   one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
