@@ -26,6 +26,8 @@ from tests.test_phone import (  # noqa: F401
     MOCK_DIST,
     PHONE_SIZE,
     browser,
+    open_ask,
+    open_story,
     tap_player,
     turn_on_read_aloud,
     unavailable,
@@ -89,9 +91,17 @@ def site(browser, tmp_path_factory):  # noqa: F811
     server.shutdown()
 
 
-def phone(browser, site, bundle=True, laptop_t: float | None = None):  # noqa: F811
-    """A mock laptop and the phone in one context; with `bundle`, the phone reads the cut clip's."""
+def phone(browser, site, bundle=True, laptop_t: float | None = None, match=None):  # noqa: F811
+    """A mock laptop and the phone in one context; with `bundle`, the phone reads the cut clip's.
+    `match` edits the bundle's match.json before the phone reads it (e.g. drop its team sheets)."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    if match is not None:
+        def edited(route):
+            body = route.fetch().json()
+            match(body)
+            route.fulfill(json=body)
+
+        ctx.route("**/bundle/match.json", edited)
     laptop = ctx.new_page()
     laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
     laptop.wait_for_function("window.ninetyLaptop")
@@ -194,7 +204,7 @@ QUESTIONS = [
 
 
 def ask(page, text: str):
-    page.click("#tab-button-ask")
+    open_ask(page)
     n = page.locator("#answers .answer:not(.pending)").count()
     page.fill("#question", text)
     page.click("#ask-button")
@@ -345,7 +355,7 @@ def test_story_shows_only_cards_up_to_the_clock_and_how_we_know_holds_why(browse
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     cards = page.evaluate("window.ninetyPhone.state.insights")
     assert cards and all(c["t"] <= 50.2 for c in cards)  # never a card from later in the replay
-    page.click("#tab-button-insights")
+    open_story(page)
     assert page.get_attribute("#tab-button-insights", "aria-selected") == "true"
     page.wait_for_selector("#insights-title")
     first = page.locator("#insights .moment").first
@@ -370,7 +380,7 @@ def test_the_tabs_move_with_the_arrow_keys(browser, site):  # noqa: F811
     page.focus("#tab-button-radar")
     page.keyboard.press("ArrowRight")
     focused("ask")
-    page.wait_for_selector("#ask-form")
+    page.wait_for_selector("#ask-content")
     page.keyboard.press("End")
     focused("insights")
     page.wait_for_selector("#insights-title")
@@ -475,7 +485,7 @@ def test_the_phone_shows_the_bundles_cards_up_to_the_clock_with_their_pictures(b
     laptop, page, errors = phone(browser, url, laptop_t=61)
     page.wait_for_function("window.ninetyPhone.state.insights.length > 0")
     assert [c["id"] for c in page.evaluate("window.ninetyPhone.state.insights")] == ["c1"]  # c2 is at 62.5
-    page.click("#tab-button-insights")
+    open_story(page)
     card = page.locator("#insights .moment").first
     assert card.locator("h3").inner_text() == "Crowmere overload early"
     figure = card.locator(".story-body > figure")
@@ -513,7 +523,7 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     words = page.get_attribute("#how-body canvas.seen", "aria-label")
     assert words.startswith("The broadcast picture at 1:01")
     # a code answer: no Judge to claim
-    assert "Checked by code before it was shown" in page.inner_text("#how-body")
+    assert "Computed from tracking" in page.inner_text("#how-body")
     assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
 
@@ -877,7 +887,7 @@ def test_the_play_by_play_names_a_club_only_for_a_side_told_surely(browser, site
     # Merge-queue review of #319: an event with no player was said as its club from its own team
     # field, whatever its side confidence. Now only above the fact-checker's threshold.
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play")
     plays = {li.get_attribute("data-event"): (li.inner_text(), li.get_attribute("class"))
              for li in page.locator("#insights .play").all()}
@@ -893,7 +903,7 @@ def test_a_bundle_that_does_not_carry_the_threshold_names_no_detected_side(brows
     page.context.route("**/bundle/manifest.json", lambda route: route.fulfill(json=manifest))
     page.reload()
     page.wait_for_selector("body[data-state=live]")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play")
     told = page.locator("#insights .play[data-event=e5]").inner_text()
     assert "A player completes a pass." in told  # fail closed: e5's 0.99 counts for nothing without it
@@ -918,7 +928,9 @@ def test_a_goal_on_an_unsure_side_is_a_goal_for_no_club(browser, site):  # noqa:
 
 def test_live_is_one_feed_in_apple_sports_order_and_see_all_opens_the_full_section(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, laptop_t=62.8)
-    js = "[...document.querySelectorAll('#pane-pitch > section')].map(s => s.id || s.className)"
+    # Without a persona (#362's choices) the focus strips are no cards; the feed is Apple Sports' order.
+    sections = "#pane-pitch > section:not(.focus-strip)"
+    js = f"[...document.querySelectorAll('{sections}')].map(s => s.id || s.className)"
     order = page.evaluate(js)
     assert order == ["card pitch-card", "just-now", "momentum", "live-summary", "live-shots", "key-moments",
                      "lineups-teaser"]
@@ -945,6 +957,7 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
 
     def squads(route):
         body = route.fetch().json()
+        body.pop("sheets", None)  # the bundle's own fictional sheets would list eleven shirts
         body["lineup"] = [{"id": "h-t1", "number": 4, "confident": True},
                           {"id": "a-t3", "number": 9, "confident": True}]
         body["player_stats"] = [{"id": "h-t1", "distance_km": 6.2, "top_speed_kmh": 30.1, "involvements": 12},
@@ -963,8 +976,9 @@ def test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
-    page.wait_for_selector("#lineups-teaser:not([hidden])")  # Live's teaser: the shirts the sheet is sure of
-    assert page.inner_text("#teaser-rows .teaser.home .teaser-shirts") == "4"
+    page.wait_for_selector("#teaser-rows .teaser", state="attached")
+    # Line-ups are the Players tab's alone (Kian, Oct 26): Live draws no teaser of the shirts.
+    assert page.is_hidden("#lineups-teaser")
     page.click("#lt-players")
     page.wait_for_selector("#top-players:not([hidden])")
     lists = page.locator("#top-lists .top-list")
@@ -992,6 +1006,7 @@ def test_a_match_without_squad_numbers_shows_no_empty_squad_cards(browser, site)
 def test_ask_opens_on_a_grid_of_questions_then_recent_answers(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
     page.click("#tab-button-ask")
+    page.click(".onboard-skip")  # a first visit opens on the onboarding (tests/test_phone_onboarding.py)
     page.wait_for_selector("#ask-start:visible")
     assert page.locator("#ask-grid .chip").count() >= 4
     assert page.is_hidden("#ask-chips") and page.is_hidden("#recent-title")  # one set of suggestions
@@ -1122,8 +1137,8 @@ def test_no_scoreline_from_detected_goals_shows_anywhere_on_the_phone(browser, s
         for text in page.evaluate(js):
             hit = SCORELINE.search(text or "")
             assert not hit, (tab, pane, hit.group(0), (text or "")[max(0, hit.start() - 60):hit.end() + 60])
-    page.click("#tab-button-insights")
-    assert page.locator("#insights .play.goal").count() >= 1  # goals are in Story, with no running score
+    open_story(page)
+    assert page.locator("#insights .goal-card, #insights .play.goal").count() >= 1  # no running score
     assert not errors
     ctx.close()
 
@@ -1184,10 +1199,11 @@ def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(b
     chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
     bare = {"A player", "Crowmere player", "Dunhollow player"}
     assert chips and not bare & set(chips), chips
+    assert len(set(chips)) == len(chips), chips  # one chip a label (UI inventory #11)
     assert not errors
 
 
-def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # noqa: F811
+def scorebug_phone(browser, site, readings, goals, measured=True, at="61", more=None):  # noqa: F811
     """The cut clip's bundle with the scorebug's readings (#356's scorebug.jsonl, behind the
     manifest's gate, as ninety-e2e --scorebug writes it) and these detected goals."""
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
@@ -1200,6 +1216,7 @@ def scorebug_phone(browser, site, readings, goals, measured=True, at="61"):  # n
     def match(route):
         body = route.fetch().json()
         body["goals"] = goals
+        body.update(more or {})
         route.fulfill(json=body)
 
     ctx.route("**/bundle/manifest.json", manifest)
@@ -1251,13 +1268,30 @@ def test_a_goal_vision_gave_no_side_goes_under_the_club_whose_scorebug_count_ros
     readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 0, 1, team="away")]
     sideless = [{"t": 61.2, "team": None, "event": "e6"}]
     ctx, laptop, page, errors = scorebug_phone(browser, site, readings, sideless, at="61.6")
-    page.wait_for_selector("#goals-away .side-goal")
-    assert page.inner_text("#goals-away .side-goal") == "Dunhollow goal 2′"
-    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
-    assert page.text_content("#score-home") == "0" and page.text_content("#score-away") == "0"  # 0-0 read
+    page.wait_for_function("document.querySelector('#score-away').textContent === '0'")
+    # With readings, the lines are the scorebug's goals (they agree with the numerals): none at 0-0.
+    assert page.locator(".side-goal").count() == 0
     laptop.fill("#seek", "63")
     page.wait_for_function("document.querySelector('#score-away').textContent === '1'")
     assert page.text_content("#score-home") == "0"
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"  # the club, the minute it rose
+    assert page.locator("#goals-unsure .side-goal, #goals-home .side-goal").count() == 0
+    assert not errors
+    ctx.close()
+
+
+def test_the_band_lists_every_goal_the_scorebug_counted_so_the_lines_agree_with_the_score(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: the band read 3-1 over one line each. Every rise in a side's count is a goal
+    under its crest, in minutes ("2′ 2′"), whether or not vision spotted it; a jump of two is two."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 3, 0, team="home"),
+                reading(62.8, "score_change", 3, 1, team="away")]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="63")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '3'")
+    page.wait_for_selector("#goals-away .side-goal")
+    assert page.inner_text("#goals-home .side-goal") == "Crowmere 2′ 2′ 2′"  # 61.9 s, and two at 62.5 s
+    assert page.inner_text("#goals-away .side-goal") == "Dunhollow 2′"
     assert not errors
     ctx.close()
 
@@ -1307,7 +1341,7 @@ def test_a_shot_whose_end_vision_did_not_read_is_said_as_taken_never_wide(browse
     page.click("#lt-stats")
     page.wait_for_selector("#shots circle.shot.open", state="attached")  # a small mark
     assert page.locator("#shots circle.shot.off").count() == 0  # e2 is the clip's one sure shot
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e2]")
     said = page.inner_text("#insights .play[data-event=e2]")
     assert "takes a shot." in said and "wide" not in said
@@ -1333,7 +1367,7 @@ def test_a_saved_shot_by_a_player_vision_cannot_name_reads_lower_case_mid_senten
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("body[data-state=live]")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e2]")
     assert "Shot saved, from a player." in page.inner_text("#insights .play[data-event=e2]")
     assert not errors
@@ -1344,8 +1378,9 @@ def test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track(browser
     """Demo audit: Players listed track fragments (12 London, 6 centre forwards, Lisbon with no keeper).
     With the team sheet (match.json `sheets`, names-by-role), it lists each club's eleven: shirt, name,
     position. Without one, a tracked player is never listed as a player."""
-    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
-    page.click("#lt-players")
+    # The bundle now carries team sheets (ninety-e2e writes fictional ones, #374): drop them here.
+    laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS, match=lambda b: b.pop("sheets", None))
+    page.wait_for_selector("#lt-players", state="hidden")  # nothing to list: no tab (audit 2, row 1)
     assert page.locator("#roster .who").count() == 0  # the cut clip has tracks only and no sheet
     page.context.close()
     ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
@@ -1401,7 +1436,7 @@ def test_a_line_up_name_labels_the_event_s_track_never_the_radar_s_same_string(b
     page.wait_for_function("window.ninetyPhone.state.match !== null")  # the line-up has loaded
     assert page.evaluate("window.ninetyPhone.name('a-t3')") == "Dunhollow player"  # the radar's a-t3
     laptop.fill("#seek", "63")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e4]")
     assert "Dee Named" in page.inner_text("#insights .play[data-event=e4]")  # the event's a-t3
     assert not errors
@@ -1431,9 +1466,381 @@ def test_a_sheet_never_names_an_event_and_a_line_up_entry_without_confident_name
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
     page.wait_for_selector("body[data-state=live]")
     page.wait_for_function("window.ninetyPhone.state.match !== null")
-    page.click("#tab-button-insights")
+    open_story(page)
     page.wait_for_selector("#insights .play[data-event=e4]")
     said = page.inner_text("#insights .play[data-event=e4]")
     assert "Dee Named" not in said and "Player" not in said.replace("player", ""), said
+    assert not errors
+    ctx.close()
+
+
+def test_story_opens_on_key_plays_and_each_goal_is_a_larger_card_with_its_club_and_minute(browser, site):  # noqa: F811
+    """Demo audit 2, rows 8 and 10: goals had a pass's weight in Story, and the shot list said
+    "A player, goal". Story opens on Key plays; each of the match's goals (match.json, reconciled with
+    the scorebug) is a card with the club's crest, "Goal" and "Crowmere · 2′"; its shot is not told
+    twice; and the shot list names the club and minute, a goal vision saw no shot for among them."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def goals(route):  # e2 (home, told surely) went in; an away goal vision saw no shot for
+        if route.request.url.endswith("match.json"):
+            body = route.fetch().json()
+            body["goals"] = [{"t": 61.3, "team": "home", "event": "e2"},
+                             {"t": 62.5, "team": "away", "event": "e4"}]
+            return route.fulfill(json=body)
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "outcome": "goal"} if r["id"] == "e2" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/match.json", goals)
+    ctx.route("**/bundle/events.jsonl", goals)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("#goals-away .side-goal")
+    page.click("#tab-button-insights")
+    assert page.get_attribute("#insights", "data-mode") == "key"
+    page.wait_for_selector("#insights .goal-card")
+    cards = page.locator("#insights .goal-card")
+    assert cards.count() == 2
+    newest, first = cards.nth(0), cards.nth(1)
+    assert newest.locator(".goal-head").inner_text().endswith("Goal")  # after the crest
+    assert newest.locator(".goal-head svg").count() == 1
+    assert "Dunhollow · 2′" in newest.inner_text() and "Crowmere · 2′" in first.inner_text()
+    assert page.locator("#insights .play.goal").count() == 0  # e2's goal card tells it
+    assert page.evaluate("getComputedStyle(document.querySelector('.goal-head')).fontSize") == "28px"
+    page.click("#tab-button-radar")
+    page.click("#lt-stats")
+    shots = page.locator("#shot-list li").all_inner_texts()
+    assert any(s.startswith("Crowmere · 2′, goal") for s in shots), shots
+    assert "Dunhollow · 2′, goal" in shots, shots
+    assert not errors
+    ctx.close()
+
+
+def test_live_s_team_stats_follow_the_clock_after_a_seek_made_while_on_another_tab(browser, site):  # noqa: F811
+    """Demo audit 2, row 4: Live's Team Stats read 20/24 against 0 at 45′ while Stats read 67/80."""
+    laptop, page, errors = phone(browser, site, laptop_t=60.4)
+    page.wait_for_selector("#summary-rows .stat-row")
+    rows = "s => [...document.querySelectorAll(s + ' .stat-row')].map((l) => l.getAttribute('aria-label'))"
+    before = page.evaluate(rows, "#summary-rows")
+    moved = f"({rows})('#summary-rows').join() !== {json.dumps(','.join(before))}"
+    page.click("#tab-button-ask")
+    laptop.fill("#seek", "63")
+    page.wait_for_timeout(1500)
+    page.click("#tab-button-radar")
+    page.click("#lt-pitch")
+    page.wait_for_function(moved)
+    live = page.evaluate(rows, "#summary-rows")
+    assert live == page.evaluate(rows, "#stat-rows")[: len(live)]
+    assert not errors
+
+
+def test_names_from_the_player_id_feed_label_tactical_tracks_and_say_their_source(browser, site):  # noqa: F811
+    """Lesson 269 (identity-feed, Oct 26): `lineup_tactical` names the radar's, the card's and the
+    answers' tracks; `lineup` the events'. The same string in the other space stays unnamed; a name
+    says it came from the Player ID feed, never vision; a scorebug answer says so."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def match(route):
+        body = route.fetch().json()
+        body["lineup"] = []
+        body["lineup_tactical"] = [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "Striker",
+                                    "confident": True, "source": "id_feed"},
+                                   {"id": "h-t4", "name": "Not Sure", "number": 4, "source": "id_feed"}]
+        body["identity"] = {"source": "id_feed", "label": "Player ID feed", "provider": "sim",
+                            "note": "Names come from a simulated tracking-provider ID feed."}
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    assert page.evaluate("window.ninetyPhone.name('a-t3')") == "Tac Named"  # the radar's a-t3
+    assert page.evaluate("window.ninetyPhone.name('h-t4')") != "Not Sure"  # a row not marked confident
+    open_story(page)
+    page.wait_for_selector("#insights .play[data-event=e4]")
+    assert "Tac Named" not in page.inner_text("#insights .play[data-event=e4]")  # the event's a-t3
+    page.click("#tab-button-ask")
+    page.evaluate("""() => window.ninetyPhone.answer("Who has the ball most?", {status: "verified",
+      text: "a-t3 has been on the ball most.", headline: "Tac Named", metric: null, value: null, unit: null,
+      evidence: ["involvements:player_a-t3"], t_from: 0, t_to: 63})""")
+    named = page.locator("#answers .answer:not(.pending)").last
+    named.wait_for()
+    assert named.locator(".badge").text_content() == "Player ID feed"
+    assert "Tac Named" in named.inner_text()
+    named.locator(".how").click()
+    page.wait_for_selector("#how-body .stepper")
+    how = page.inner_text("#how-body")
+    assert "Who the players are" in how and "Player ID feed" in how
+    page.click("#close-how")
+    page.evaluate("""() => window.ninetyPhone.answer("What's the score?", {status: "verified",
+      text: "The broadcast's scorebug shows London 1, Lisbon 0.", metric: "scorebug", value: null, unit: null,
+      evidence: ["scorebug:sb-3"], t_from: 0, t_to: 63})""")
+    badges = page.locator("#answers .answer:not(.pending) .badge")
+    page.wait_for_function("document.querySelectorAll('#answers .answer:not(.pending) .badge').length >= 2")
+    assert badges.last.text_content() == "Read from the broadcast's scorebug"
+    assert not errors
+    ctx.close()
+
+
+def test_the_shot_map_is_no_card_while_it_draws_no_shot(browser, site):  # noqa: F811
+    """UI inventory #8: a shot is placed only on a side told surely; with none, the card was empty."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def unsure(route):
+        rows = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        rows = [{**r, "team_confidence": 0.3} if r["type"] == "shot" else r for r in rows]
+        route.fulfill(body="".join(json.dumps(r) + "\n" for r in rows), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/events.jsonl", unsure)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.click("#lt-stats")
+    page.wait_for_selector("#live-stats:not([hidden])")
+    assert page.is_hidden("#shot-map") and page.is_hidden("#live-shots")
+    assert not errors
+    ctx.close()
+
+
+def persona_phone(browser, site, fan, goals=None, more=None):  # noqa: F811
+    """The cut clip's phone as London v Lisbon, with #362's stored choices (`fan`) set before it loads."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    ctx.add_init_script(f"localStorage.setItem('ninety.fan', {json.dumps(json.dumps(fan))})")
+
+    def manifest(route):
+        body = route.fetch().json()
+        body["teams"] = {"home": "LON", "away": "LIS"}
+        route.fulfill(json=body)
+
+    def match(route):
+        body = route.fetch().json()
+        if goals is not None:
+            body["goals"] = goals
+        body.update(more or {})
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/manifest.json", manifest)
+    ctx.route("**/bundle/match.json", match)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_selector("#summary-rows .stat-row", state="attached")
+    return ctx, page, errors
+
+
+def top(page, sel):
+    return page.locator(sel).bounding_box()["y"]
+
+
+def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_every_number(browser, site):  # noqa: F811
+    """Kian, Oct 26 ("make personalisation more visible"): the same moment, two layouts at a glance;
+    the pitch leads Live for every persona."""
+    goals = [{"t": 61.3, "team": "away", "event": "e2"}]
+    fan = {"club": "LIS", "mode": "casual", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#key-moments:not([hidden])")
+    assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
+    assert top(page, ".pitch-card") < top(page, "#key-moments")  # the pitch leads, then the moments
+    assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
+    assert "Lisbon goal" in page.inner_text("#key-rows")  # the club, in the third person (Kian, Oct 26)
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(1).bounding_box()["x"] < sides.nth(0).bounding_box()["x"]  # your club on the left
+    assert not errors
+    ctx.close()
+    fan = {"club": "LON", "mode": "analyst", "focus": "moments"}
+    ctx, page, errors = persona_phone(browser, site, fan, goals)
+    page.wait_for_selector("#live-summary:not([hidden])")
+    assert top(page, ".pitch-card") < min(top(page, "#live-summary"), top(page, "#key-moments"))
+    assert page.locator("#summary-rows .stat-row").count() == page.locator("#stat-rows .stat-row").count() > 4
+    assert "Lisbon goal" in page.inner_text("#key-rows") and "You" not in page.inner_text("#key-rows")
+    sides = page.locator(".band .fixture > .side")
+    assert sides.nth(0).bounding_box()["x"] < sides.nth(1).bounding_box()["x"]
+    assert not errors
+    ctx.close()
+
+
+def test_the_persona_switches_in_one_tap_from_the_more_sheet(browser, site):  # noqa: F811
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "casual", "focus": "tactics"})
+    page.click(".settings-open >> nth=0")
+    page.wait_for_selector("#persona-mode")
+    page.click("#persona-mode ion-segment-button[value=analyst]")
+    page.wait_for_function("document.body.dataset.mode === 'analyst'")
+    page.click("#persona-club ion-segment-button[value=LIS]")
+    page.wait_for_function("document.body.dataset.us === 'away'")
+    saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))
+    assert saved == {"club": "LIS", "mode": "analyst", "focus": "tactics"}  # #362's choices, kept
+    assert not errors
+    ctx.close()
+
+
+def test_the_focus_leads_live_tactics_with_its_moments_and_players_with_their_cards(browser, site):  # noqa: F811
+    """Coordinator, Oct 26: two analysts must not look alike. Tactics: the latest overload, line break
+    and shape as large cards above the pitch. Players: the players most in the game, named by the ID
+    feed, above the pitch; a tap opens his card."""
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "tactics"})
+    page.wait_for_selector("#tactics-strip .focus-row")
+    assert page.is_hidden("#players-strip")
+    assert top(page, ".pitch-card") < top(page, "#tactics-strip") < top(page, "#live-summary")
+    kinds = page.locator("#tactics-strip .focus-label").all_inner_texts()
+    assert len({k.split(" · ")[0] for k in kinds}) == len(kinds) <= 3, kinds  # one card a kind
+    assert not errors
+    ctx.close()
+    more = {"lineup_tactical": [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "Striker",
+                                 "confident": True, "source": "id_feed"}],
+            "player_stats": [{"id": "a-t3", "involvements": 12}, {"id": "h-t4", "involvements": 7}]}
+    fan = {"club": "LON", "mode": "analyst", "focus": "players"}
+    ctx, page, errors = persona_phone(browser, site, fan, more=more)
+    page.wait_for_selector("#players-strip .player-row")
+    assert page.is_hidden("#tactics-strip")
+    assert top(page, ".pitch-card") < top(page, "#players-strip")
+    first = page.locator("#players-strip .player-row").first
+    assert first.locator(".focus-text").inner_text() == "Tac Named"
+    assert first.locator(".shirt-dot").inner_text() == "9"
+    assert first.locator(".focus-label").inner_text() == "Striker · 12 involvements"
+    # Apple Sports' restraint (Kian, Oct 26): 17 pt regular rows, 13 pt labels, no coloured borders.
+    style = first.evaluate("""(b) => { const t = getComputedStyle(b.querySelector('.focus-text'));
+      const l = getComputedStyle(b.querySelector('.focus-label'));
+      return [t.fontSize, t.fontWeight, l.fontSize]; }""")
+    assert style == ["17px", "400", "13px"], style
+    first.click()
+    page.wait_for_selector("#player:not([hidden])")
+    assert page.inner_text("#player-title").startswith("Tac Named, #9 · Striker")
+    assert not errors
+    ctx.close()
+
+
+def test_a_team_stats_row_on_fewer_than_ten_events_is_not_drawn(browser, site):  # noqa: F811
+    """Coordinator, Oct 26 (inventory #7): counted only on sides told surely, a row of 0 and 1 says
+    nothing; under MIN_ROW_EVENTS (10) events a row of counts is not drawn. The clip has a few."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.add_init_script("delete window.__ninetyMinRowEvents")  # the phone's own threshold
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_function("window.ninetyPhone.state.match !== null")
+    page.wait_for_timeout(500)
+    rows = "[...document.querySelectorAll('#stat-rows .stat-row')]"
+    labels = page.evaluate(f"{rows}.map((l) => l.getAttribute('aria-label'))")
+    assert not [x for x in labels if x.startswith(("Shots", "Passes", "Pass accuracy"))], labels
+    assert not errors
+    ctx.close()
+
+
+def test_a_goal_under_the_score_names_its_scorer_from_the_player_id_feed(browser, site):  # noqa: F811
+    """Kian, Oct 26: "Rondell 38′" where the player-ID feed names the scorer (#389's line-up of
+    broadcast tracks), the club otherwise; never a label made from the tracker's id."""
+    readings = [reading(60.0, "score_read", 0, 0), reading(61.9, "score_change", 1, 0, team="home"),
+                reading(62.5, "score_change", 2, 0, team="home")]
+    goals = [{"t": 61.2, "team": "home", "event": "e2"}]
+    more = {"lineup": [{"id": "h8", "name": "Zane Rondell", "number": 2, "position": "Right-back",
+                        "confident": True, "source": "id_feed"}]}
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, goals, at="63", more=more)
+    page.wait_for_function("document.querySelector('#score-home').textContent === '2'")
+    lines = page.locator("#goals-home .side-goal").all_inner_texts()
+    assert lines == ["Rondell 2′", "Crowmere 2′"], lines  # e2's scorer h8 by name; the other by club
+    assert not errors
+    ctx.close()
+
+
+def test_embedded_beside_the_big_screen_the_phone_opens_on_live_silent_and_answers_its_parent(browser, site):  # noqa: F811
+    """desktop-companion, Oct 26: the big screen docks the phone in an iframe (?embed=1), already
+    paired, the big screen playing every sound. No pairing screen, no sound controls, no first-run
+    choices over Live; tab changes go to the parent page, and the parent can open Ask."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    src = f"phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/&embed=1"
+    host = f"""<!doctype html><body style="margin:0;background:#000">
+      <iframe id="phone" src="{site}{src}" style="width:380px;height:860px;border:0"></iframe>
+      <script>window.got = []; addEventListener("message", (e) => got.push(e.data));</script></body>"""
+    ctx.route("**/embed-host.html", lambda r: r.fulfill(body=host, content_type="text/html"))
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", "63")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}embed-host.html")
+    phone = page.frame_locator("#phone")
+    frame = page.frame(url=lambda u: "embed=1" in u)
+    frame.wait_for_selector("body[data-state=live][data-embed='1']")
+    assert frame.is_hidden("#pair") and frame.locator(".speak:visible, .listening:visible").count() == 0
+    assert frame.is_hidden("#onboard")  # a first visit, yet Live is not covered by the choices
+    assert frame.evaluate("document.body.dataset.tab") in ("radar", None)
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-open', tab: 'ask'}, location.origin)")
+    frame.wait_for_function("document.body.dataset.tab === 'ask'")
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'ask')")
+    phone.locator("#tab-button-insights").click()
+    page.wait_for_function("got.some((m) => m && m.type === 'ninety-tab' && m.tab === 'insights')")
+    # The passcode entered on the big screen reaches the panel's Ask (kept on this device only).
+    page.evaluate("document.getElementById('phone').contentWindow"
+                  ".postMessage({type: 'ninety-passcode', passcode: 'from-big'}, location.origin)")
+    frame.wait_for_function("localStorage.getItem('ninety.passcode') === 'from-big'")
+    # A message from anywhere but the parent page opens nothing.
+    frame.evaluate("window.postMessage({type: 'ninety-open', tab: 'ask'}, '*')")
+    page.wait_for_timeout(300)
+    assert frame.evaluate("document.body.dataset.tab") == "insights"
+    assert not errors
+    ctx.close()
+
+
+def test_live_never_lists_the_team_sheet_whatever_the_focus(browser, site):  # noqa: F811
+    """Kian, Oct 26: line-ups and team sheets only in the Players tab. A players focus with no
+    per-player numbers adds nothing under the pitch, never the sheet."""
+    lines = ["goalkeeper"] + ["defender"] * 4 + ["midfielder"] * 3 + ["forward"] * 3
+    row = lambda side, n, line: {"number": n + 1, "name": f"{side.title()} Player{n + 1}", "position": line,  # noqa: E731
+                                 "line": line}
+    sheets = {side: [row(side, n, line) for n, line in enumerate(lines)] for side in ("home", "away")}
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": "analyst", "focus": "players"},
+                                      more={"sheets": sheets, "player_stats": []})
+    page.wait_for_timeout(500)
+    assert page.is_hidden("#players-strip") and page.is_hidden("#lineups-teaser")
+    assert "Home Player1" not in page.inner_text("#pane-pitch")
+    assert not errors
+    ctx.close()
+
+
+def test_a_jump_sets_the_score_and_a_goal_never_counts_through_values_it_never_had(browser, site):  # noqa: F811
+    """On air, Oct 26: after a seek London's score ran 17, -20, -33 before it settled on 4 (the ticker's
+    spring stepped unstably at 1/30 s). A jump sets the read score at once; in play only a goal (+1)
+    ticks, and what shows is always a whole number from the old score to the new."""
+    readings = [reading(60.0, "score_read", 0, 0)] + [
+        reading(t, "score_change", n, 0, team="home")
+        for n, t in enumerate((61.0, 61.4, 61.8, 62.2, 62.7), 1)]
+    ctx, laptop, page, errors = scorebug_phone(browser, site, readings, [], at="60.2")
+    page.wait_for_function("document.querySelector('#score-home').textContent === '0'")
+    page.evaluate("""() => { window.shown = []; new MutationObserver(() =>
+      shown.push(document.querySelector('#score-home').textContent)).observe(document.querySelector('#score-home'),
+      { childList: true, characterData: true, subtree: true }); }""")
+    laptop.fill("#seek", "62.4")  # a seek: 0-0 to 4-0 at once, never counted through
+    page.wait_for_function("document.querySelector('#score-home').textContent === '4'", timeout=5000)
+    page.wait_for_timeout(300)
+    assert page.evaluate("shown") == ["4"], page.evaluate("shown")
+    page.evaluate("window.shown = []")
+    laptop.fill("#seek", "62.8")  # a goal in play: 4 to 5, ticking only between them
+    page.wait_for_function("document.querySelector('#score-home').textContent === '5'", timeout=5000)
+    page.wait_for_timeout(1500)
+    seen = page.evaluate("shown")
+    assert seen and all(v in ("4", "5") for v in seen) and seen[-1] == "5", seen
     assert not errors
     ctx.close()

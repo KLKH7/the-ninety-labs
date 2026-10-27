@@ -120,7 +120,7 @@ agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
-| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (a streaming player: video, graphics on the footage, match mode, the audio menu; `?dev=1` keeps the persona switch and the agent trace). `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
+| `web` | `web/render`: the broadcast and tactical renderer. `web/viewer`: the big screen (a streaming player: video, graphics on the footage, match mode, the audio menu; `?dev=1` keeps the persona switch and the agent trace). The broadcast feed carries its own scorebug, which vision reads; the player draws its own graphics from that read. `web/phone`: the phone companion (radar, Insights, Ask, read-aloud) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
@@ -175,9 +175,11 @@ replay. Team members refresh the recording with
 
 Audited against `main` at `874f6deb` on Oct 25, 2026 (with #365's shot-outcome result); [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md)
 has every requirement with its status (built, partial or planned). The match engine is frozen at
-`65247ba3` (#276). The demo plays seed 8080, a 4-1 condensed to 16.9 minutes: Kian chose it after
-seeing the pre-registered rule's result, including when the goals came; the rule's pick was seed
-8076, and both are recorded in [demo-match.md](docs/eval/demo-match.md).
+`65247ba3` (#276). **The demo match is a director's pick from the answer key, not a random sample**
+([demo-match-hunt.md](docs/eval/demo-match-hunt.md)): Kian chose seed 8324 on the demo-only engine v2
+(#403), 1-3, condensed to about 17.7 minutes by an editorial scorer that keeps clean play and drops
+flagged moments. No number measured on the demo footage generalises. The earlier pre-registered
+rule's picks (seed 8076, then Kian's 8080) are recorded in [demo-match.md](docs/eval/demo-match.md).
 
 **Measured on `main`:**
 
@@ -199,6 +201,7 @@ seeing the pre-registered rule's result, including when the goals came; the rule
 | The fact-checker against one human's blind labels (Kian; 23 decisions sampled by a rule fixed before the run was read) | agreed on 15 of the 18 answered yes or no (83%, 95% 61 to 94%); 1 of 9 false passes, 2 of 9 false holds. About 20 items check the checker; they do not measure its rates | [factcheck-human-labels.md](docs/eval/factcheck-human-labels.md) |
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look on the tactical lenses resolved 0 / 81, and asking the broadcast camera instead resolved 0 of 13 (#366), so both stay off | [re-perceive.md](docs/eval/re-perceive.md), [re-perceive-broadcast-plan.md](docs/eval/re-perceive-broadcast-plan.md) |
+| Player names: names come from a simulated tracking-provider ID feed; vision does not identify players. We simulate that feed, including occasional identity swaps that get corrected | vision's tracks matched to the feed's players, demo seed 8080, held-out half: 468 / 471 tracks right (0.994, 95% 0.98 to 1.00), 58 / 58 event actors right through the camera join; matched to the broadcast camera directly too (pre-registered), 106 / 106 held-out and 224 of 345 events named, 226 with a sure side (5 without the feed) | [identity.json](docs/eval/identity.json), [FEED_SPEC.md](docs/FEED_SPEC.md), [EVALUATION.md](docs/EVALUATION.md#player-names-from-the-id-feed) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
 | Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | ninety-personalizer:1 run of 21 Oct, now stale (a newer version is published, not measured): the report counts 19 claims above tables of 20 requests per row (8 rows, 160 variants); p95 4.6 s (equal to the maximum) in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
 | Read-aloud in the pinned neural voice, pre-generated (not yet in the deployed Replay bundle) | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
@@ -210,7 +213,11 @@ vision from pixels to events, with the tactical views giving the players and the
 and the events, including kick-offs and set pieces (#347) and shot outcomes (#271), and team sides
 from the kit reader and the spatial side model (#283); the score read off the broadcast's
 scorebug (#356), never counted from detected goals; the live detection job for one clip (built, not deployed); the stats engine and the
-hidden stats; the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
+hidden stats; player names from a simulated tracking-provider ID feed, as broadcasts license
+identity (vision does not identify players: shirt numbers are too small on our renders, and names
+by role missed their gate). We simulate that feed, including occasional identity swaps that get
+corrected; it is the one engine output the live path reads, for identity and side only
+(AGENTS.md); the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
 replayable without Azure); the Personalizer over A2A (evaluated live; off in `ninety-e2e` and not
 deployed).
 

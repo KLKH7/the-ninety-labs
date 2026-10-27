@@ -1,0 +1,631 @@
+{
+ "rule": "footage hunt (Oct 26, Kian's request): editorial watchability scorer (v1 of scripts/footage_hunt.py) over the answer key, replacing the demo-match edit rule for seed 8080; same seed, same engine",
+ "engine_sha": "65247ba3",
+ "seed": 8080,
+ "render_flags": "--set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical",
+ "segments": [
+  {
+   "start_s": 0.0,
+   "end_s": 13.96,
+   "video_start_s": 0.0
+  },
+  {
+   "start_s": 74.32,
+   "end_s": 84.4,
+   "video_start_s": 14.0
+  },
+  {
+   "start_s": 326.16,
+   "end_s": 344.04,
+   "video_start_s": 24.12
+  },
+  {
+   "start_s": 373.52,
+   "end_s": 386.76,
+   "video_start_s": 42.04
+  },
+  {
+   "start_s": 411.44,
+   "end_s": 422.6,
+   "video_start_s": 55.32
+  },
+  {
+   "start_s": 690.78,
+   "end_s": 701.84,
+   "video_start_s": 66.52
+  },
+  {
+   "start_s": 834.0,
+   "end_s": 862.76,
+   "video_start_s": 77.6
+  },
+  {
+   "start_s": 1084.36,
+   "end_s": 1110.0,
+   "video_start_s": 106.4
+  },
+  {
+   "start_s": 1256.16,
+   "end_s": 1271.0,
+   "video_start_s": 132.08
+  },
+  {
+   "start_s": 1285.82,
+   "end_s": 1300.24,
+   "video_start_s": 146.96
+  },
+  {
+   "start_s": 1377.92,
+   "end_s": 1397.88,
+   "video_start_s": 161.4
+  },
+  {
+   "start_s": 1465.84,
+   "end_s": 1481.8,
+   "video_start_s": 181.4
+  },
+  {
+   "start_s": 1502.56,
+   "end_s": 1519.4,
+   "video_start_s": 197.4
+  },
+  {
+   "start_s": 1592.48,
+   "end_s": 1629.88,
+   "video_start_s": 214.28
+  },
+  {
+   "start_s": 1646.92,
+   "end_s": 1657.0,
+   "video_start_s": 251.72
+  },
+  {
+   "start_s": 1749.04,
+   "end_s": 1759.92,
+   "video_start_s": 261.84
+  },
+  {
+   "start_s": 1815.92,
+   "end_s": 1828.24,
+   "video_start_s": 272.76
+  },
+  {
+   "start_s": 1911.48,
+   "end_s": 1926.8,
+   "video_start_s": 285.12
+  },
+  {
+   "start_s": 1997.6,
+   "end_s": 2009.08,
+   "video_start_s": 300.48
+  },
+  {
+   "start_s": 2085.3,
+   "end_s": 2095.88,
+   "video_start_s": 312.0
+  },
+  {
+   "start_s": 2119.06,
+   "end_s": 2252.24,
+   "video_start_s": 322.6
+  },
+  {
+   "start_s": 2407.14,
+   "end_s": 2418.64,
+   "video_start_s": 341.84
+  },
+  {
+   "start_s": 2539.44,
+   "end_s": 2550.4,
+   "video_start_s": 353.4
+  },
+  {
+   "start_s": 2595.84,
+   "end_s": 2610.96,
+   "video_start_s": 364.4
+  },
+  {
+   "start_s": 2666.08,
+   "end_s": 2683.36,
+   "video_start_s": 379.56
+  },
+  {
+   "start_s": 2690.04,
+   "end_s": 2709.0,
+   "video_start_s": 396.88
+  },
+  {
+   "start_s": 2750.24,
+   "end_s": 2772.72,
+   "video_start_s": 415.88
+  },
+  {
+   "start_s": 2956.96,
+   "end_s": 2982.52,
+   "video_start_s": 438.4
+  },
+  {
+   "start_s": 2994.88,
+   "end_s": 3034.44,
+   "video_start_s": 464.0
+  },
+  {
+   "start_s": 3162.44,
+   "end_s": 3191.6,
+   "video_start_s": 503.6
+  },
+  {
+   "start_s": 3276.8,
+   "end_s": 3296.64,
+   "video_start_s": 532.8
+  },
+  {
+   "start_s": 3388.72,
+   "end_s": 3401.96,
+   "video_start_s": 552.68
+  },
+  {
+   "start_s": 3461.04,
+   "end_s": 3498.24,
+   "video_start_s": 565.96
+  },
+  {
+   "start_s": 3626.92,
+   "end_s": 3641.2,
+   "video_start_s": 603.2
+  },
+  {
+   "start_s": 3714.92,
+   "end_s": 3725.16,
+   "video_start_s": 617.52
+  },
+  {
+   "start_s": 3752.96,
+   "end_s": 3765.56,
+   "video_start_s": 627.8
+  },
+  {
+   "start_s": 3919.16,
+   "end_s": 3943.28,
+   "video_start_s": 640.44
+  },
+  {
+   "start_s": 3997.72,
+   "end_s": 4036.28,
+   "video_start_s": 664.6
+  },
+  {
+   "start_s": 4102.12,
+   "end_s": 4134.96,
+   "video_start_s": 703.2
+  },
+  {
+   "start_s": 4183.28,
+   "end_s": 4244.76,
+   "video_start_s": 736.08
+  },
+  {
+   "start_s": 4319.04,
+   "end_s": 4333.52,
+   "video_start_s": 771.44
+  },
+  {
+   "start_s": 4359.0,
+   "end_s": 4372.08,
+   "video_start_s": 785.96
+  },
+  {
+   "start_s": 4474.92,
+   "end_s": 4485.08,
+   "video_start_s": 799.08
+  },
+  {
+   "start_s": 4525.64,
+   "end_s": 4536.44,
+   "video_start_s": 809.28
+  },
+  {
+   "start_s": 4561.32,
+   "end_s": 4589.8,
+   "video_start_s": 820.12
+  },
+  {
+   "start_s": 4943.72,
+   "end_s": 4953.88,
+   "video_start_s": 848.64
+  },
+  {
+   "start_s": 4974.56,
+   "end_s": 4986.56,
+   "video_start_s": 858.84
+  },
+  {
+   "start_s": 5034.16,
+   "end_s": 5071.44,
+   "video_start_s": 870.88
+  },
+  {
+   "start_s": 5197.84,
+   "end_s": 5221.12,
+   "video_start_s": 908.2
+  },
+  {
+   "start_s": 5254.56,
+   "end_s": 5283.88,
+   "video_start_s": 931.52
+  },
+  {
+   "start_s": 5387.96,
+   "end_s": 5399.92,
+   "video_start_s": 960.88
+  }
+ ],
+ "chapters": [
+  {
+   "type": "kickoff",
+   "clock": "00:00",
+   "match_s": 0.0,
+   "video_s": 0.0
+  },
+  {
+   "type": "save",
+   "clock": "01:16",
+   "match_s": 76.72,
+   "video_s": 14.0
+  },
+  {
+   "type": "move",
+   "clock": "05:26",
+   "match_s": 326.16,
+   "video_s": 24.12
+  },
+  {
+   "type": "move",
+   "clock": "06:13",
+   "match_s": 373.52,
+   "video_s": 42.04
+  },
+  {
+   "type": "move",
+   "clock": "06:51",
+   "match_s": 411.44,
+   "video_s": 55.32
+  },
+  {
+   "type": "free_kick",
+   "clock": "11:32",
+   "match_s": 692.28,
+   "video_s": 66.52
+  },
+  {
+   "type": "move",
+   "clock": "13:54",
+   "match_s": 834.0,
+   "video_s": 77.6
+  },
+  {
+   "type": "move",
+   "clock": "18:04",
+   "match_s": 1084.36,
+   "video_s": 106.4
+  },
+  {
+   "type": "move",
+   "clock": "20:56",
+   "match_s": 1256.16,
+   "video_s": 132.08
+  },
+  {
+   "type": "goal",
+   "clock": "21:32",
+   "match_s": 1292.24,
+   "video_s": 146.96
+  },
+  {
+   "type": "move",
+   "clock": "22:57",
+   "match_s": 1377.92,
+   "video_s": 161.4
+  },
+  {
+   "type": "move",
+   "clock": "24:25",
+   "match_s": 1465.84,
+   "video_s": 181.4
+  },
+  {
+   "type": "move",
+   "clock": "25:02",
+   "match_s": 1502.56,
+   "video_s": 197.4
+  },
+  {
+   "type": "move",
+   "clock": "26:32",
+   "match_s": 1592.48,
+   "video_s": 214.28
+  },
+  {
+   "type": "shot",
+   "clock": "27:34",
+   "match_s": 1654.12,
+   "video_s": 251.72
+  },
+  {
+   "type": "move",
+   "clock": "29:09",
+   "match_s": 1749.04,
+   "video_s": 261.84
+  },
+  {
+   "type": "shot",
+   "clock": "30:26",
+   "match_s": 1826.68,
+   "video_s": 272.76
+  },
+  {
+   "type": "move",
+   "clock": "31:51",
+   "match_s": 1911.48,
+   "video_s": 285.12
+  },
+  {
+   "type": "shot",
+   "clock": "33:28",
+   "match_s": 2008.32,
+   "video_s": 300.48
+  },
+  {
+   "type": "move",
+   "clock": "34:45",
+   "match_s": 2085.3,
+   "video_s": 312.0
+  },
+  {
+   "type": "goal",
+   "clock": "37:24",
+   "match_s": 2244.24,
+   "video_s": 322.6
+  },
+  {
+   "type": "move",
+   "clock": "40:07",
+   "match_s": 2407.14,
+   "video_s": 341.84
+  },
+  {
+   "type": "shot",
+   "clock": "42:28",
+   "match_s": 2548.0,
+   "video_s": 353.4
+  },
+  {
+   "type": "move",
+   "clock": "43:15",
+   "match_s": 2595.84,
+   "video_s": 364.4
+  },
+  {
+   "type": "goal",
+   "clock": "44:31",
+   "match_s": 2671.4,
+   "video_s": 379.56
+  },
+  {
+   "type": "half",
+   "clock": "45:00",
+   "match_s": 2700.04,
+   "video_s": 396.88
+  },
+  {
+   "type": "move",
+   "clock": "45:50",
+   "match_s": 2750.24,
+   "video_s": 415.88
+  },
+  {
+   "type": "move",
+   "clock": "49:16",
+   "match_s": 2956.96,
+   "video_s": 438.4
+  },
+  {
+   "type": "move",
+   "clock": "49:54",
+   "match_s": 2994.88,
+   "video_s": 464.0
+  },
+  {
+   "type": "move",
+   "clock": "52:42",
+   "match_s": 3162.44,
+   "video_s": 503.6
+  },
+  {
+   "type": "move",
+   "clock": "54:36",
+   "match_s": 3276.8,
+   "video_s": 532.8
+  },
+  {
+   "type": "shot",
+   "clock": "56:38",
+   "match_s": 3398.52,
+   "video_s": 552.68
+  },
+  {
+   "type": "move",
+   "clock": "57:41",
+   "match_s": 3461.04,
+   "video_s": 565.96
+  },
+  {
+   "type": "move",
+   "clock": "60:26",
+   "match_s": 3626.92,
+   "video_s": 603.2
+  },
+  {
+   "type": "shot",
+   "clock": "62:04",
+   "match_s": 3724.88,
+   "video_s": 617.52
+  },
+  {
+   "type": "shot",
+   "clock": "62:42",
+   "match_s": 3762.24,
+   "video_s": 627.8
+  },
+  {
+   "type": "move",
+   "clock": "65:19",
+   "match_s": 3919.16,
+   "video_s": 640.44
+  },
+  {
+   "type": "goal",
+   "clock": "67:08",
+   "match_s": 4028.28,
+   "video_s": 664.6
+  },
+  {
+   "type": "move",
+   "clock": "68:22",
+   "match_s": 4102.12,
+   "video_s": 703.2
+  },
+  {
+   "type": "goal",
+   "clock": "70:36",
+   "match_s": 4236.76,
+   "video_s": 736.08
+  },
+  {
+   "type": "move",
+   "clock": "71:59",
+   "match_s": 4319.04,
+   "video_s": 771.44
+  },
+  {
+   "type": "move",
+   "clock": "72:39",
+   "match_s": 4359.0,
+   "video_s": 785.96
+  },
+  {
+   "type": "save",
+   "clock": "74:37",
+   "match_s": 4477.52,
+   "video_s": 799.08
+  },
+  {
+   "type": "move",
+   "clock": "75:25",
+   "match_s": 4525.64,
+   "video_s": 809.28
+  },
+  {
+   "type": "move",
+   "clock": "76:01",
+   "match_s": 4561.32,
+   "video_s": 820.12
+  },
+  {
+   "type": "shot",
+   "clock": "82:33",
+   "match_s": 4953.52,
+   "video_s": 848.64
+  },
+  {
+   "type": "shot",
+   "clock": "82:57",
+   "match_s": 4977.96,
+   "video_s": 858.84
+  },
+  {
+   "type": "move",
+   "clock": "83:54",
+   "match_s": 5034.16,
+   "video_s": 870.88
+  },
+  {
+   "type": "move",
+   "clock": "86:37",
+   "match_s": 5197.84,
+   "video_s": 908.2
+  },
+  {
+   "type": "move",
+   "clock": "87:34",
+   "match_s": 5254.56,
+   "video_s": 931.52
+  },
+  {
+   "type": "end",
+   "clock": "89:59",
+   "match_s": 5399.96,
+   "video_s": 960.88
+  }
+ ],
+ "total_s": 972.88,
+ "adjust": [],
+ "render": [
+  "uv run ninety-render --seed 8080 --start 0.0 --seconds 14.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 74.32 --seconds 10.12 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 326.16 --seconds 17.92 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 373.52 --seconds 13.28 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 411.44 --seconds 11.2 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 690.78 --seconds 11.08 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 834.0 --seconds 28.8 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1084.36 --seconds 25.68 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1256.16 --seconds 14.88 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1285.82 --seconds 14.44 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1377.92 --seconds 20.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1465.84 --seconds 16.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1502.56 --seconds 16.88 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1592.48 --seconds 37.44 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1646.92 --seconds 10.12 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1749.04 --seconds 10.92 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1815.92 --seconds 12.36 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1911.48 --seconds 15.36 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 1997.6 --seconds 11.52 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2085.3 --seconds 10.6 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2119.06 --seconds 19.24 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2407.14 --seconds 11.56 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2539.44 --seconds 11.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2595.84 --seconds 15.16 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2666.08 --seconds 17.32 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2690.04 --seconds 19.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2750.24 --seconds 22.52 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2956.96 --seconds 25.6 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 2994.88 --seconds 39.6 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3162.44 --seconds 29.2 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3276.8 --seconds 19.88 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3388.72 --seconds 13.28 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3461.04 --seconds 37.24 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3626.92 --seconds 14.32 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3714.92 --seconds 10.28 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3752.96 --seconds 12.64 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3919.16 --seconds 24.16 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 3997.72 --seconds 38.6 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4102.12 --seconds 32.88 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4183.28 --seconds 35.36 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4319.04 --seconds 14.52 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4359.0 --seconds 13.12 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4474.92 --seconds 10.2 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4525.64 --seconds 10.84 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4561.32 --seconds 28.52 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4943.72 --seconds 10.2 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 4974.56 --seconds 12.04 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 5034.16 --seconds 37.32 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 5197.84 --seconds 23.32 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 5254.56 --seconds 29.36 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu",
+  "uv run ninety-render --seed 8080 --start 5387.96 --seconds 12.0 --set dead_ball_cut=true --set stadium=broadcast --set kit_contrast=broadcast --set home_kit=#1B2F5B/#ffffff/#1B2F5B --set away_kit=#E63942/#7A0F16/#E63942 --set home_pattern=solid --set away_pattern=solid --set home_gk=#F2E205/#111111/#F2E205 --set away_gk=#7FE8FF/#111111/#7FE8FF --set edge_stingers=true --set views=tactical --mp4 --gpu"
+ ],
+ "notes": [
+  "Each segment is its own clip (edge_stingers: one stinger across every join).",
+  "Chosen editorially from the answer key (a director's choice of what to show); nothing on the live path reads it.",
+  "Chapters come from the edit (truth events): show as the edit's chapters, never as detections, never to an agent."
+ ]
+}

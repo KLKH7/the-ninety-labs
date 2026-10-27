@@ -3176,6 +3176,35 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_run_where_no_model_answered_is_void_and_writes_no_report`; the record in
   `docs/eval/ablation-third-arm-plan.md`.
 
+### 261. A goal is said by its own line, and a shot is skipped only for its own goal
+- **What happened:** the Describer says a verified claim in the place of the event it is about, but at
+  a claim's priority. On the demo, the claims about two goals ("a player scores.") were at a lower
+  priority than the shot line just before each, so the shot's line pushed them out and a blind fan
+  heard "A player shoots from the right." and never that it went in (67:08, 70:36). The commentary
+  called the goal first by priority, then the shot two seconds later ("Goal!", then "A shot.").
+- **Rule:** a goal is said by its own line ("Goal! ..."), never replaced by a claim about it. A shot
+  that went in is not said as well only when its own goal event follows (the next goal, with no play
+  between) and is confident enough to be said; otherwise the shot is said as the goal. An
+  independent review found the first version of this rule could leave a goal unsaid (a goal event
+  under the gate) or say it twice (a goal more than 2 s after its shot): both are tested now.
+- **Check:** `tests/test_spoken_variety.py::test_a_goal_with_a_verified_claim_is_said_as_a_goal_and_not_crowded_out_by_its_shot`,
+  `::test_a_shot_its_goal_follows_is_not_said_before_the_goal`.
+
+### 262. A bound from a study is the population's limit, not its sample's maximum
+- **What happened:** the fact-checker's pass-speed bound was derived twice, wrongly both times.
+  First it was 85% of the fastest kick in a seven-player laboratory study (34.48 m/s, so 105.5 km/h): a
+  sample's maximum, not the fastest a ball is kicked. That bound rejected a true 112 km/h pass in our
+  own engine's seed 7. It was set again at 85% of GROUNDING P3 (122.4 km/h), just above the demo's
+  fastest claimed pass, but P3 is a design bound for our engine (real kicks reach about 58 m/s), so 85%
+  of it bounds no population either. An independent review found both.
+- **Rule:** a bound taken from a study states which population it bounds; a sample's largest value
+  is not that population's limit, and a fraction of a design bound is a design bound. With no sourced
+  pass bound for our world, the gate keeps one bound, P3's, the same constant the live path drops a
+  detection's speed at (`detected.MAX_BALL_KMH`). A bound changed after a test result is disclosed
+  with its reason, and the change must be to the derivation, never to fit the result.
+- **Check:** `ninety/agents/factcheck.py` `MAX_BALL_KMH is detected.MAX_BALL_KMH`;
+  `tests/test_factcheck.py::test_a_stated_ball_speed_the_ball_cannot_reach_is_rejected`.
+
 ### 263. A scorer that defaults a missing truth field to zero grades nothing and says it graded
 - **What happened:** the speed-error scorer read the true ball's velocity as `vx`, `vy`, `vz` with
   a default of 0. The simulator's frames have them; a rendered clip's frames hold only the ball's
@@ -3188,3 +3217,227 @@ short and actionable. This file is public: no research sources, product names or
   frames in the shape the real files have.
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
+
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
+### 268. Two pull requests green separately can be red together
+- **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
+  #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
+  other, two phone tests that assumed a bundle without sheets (the no-sheet roster and the Live teaser's
+  shirts) failed on `main` and on every open branch that took `main` (#380).
+- **Rule:** when two pull requests overlap in what they read or write (a shared bundle field, fixture
+  or helper), the second is merged only after CI has run on its head with the first already in `main`,
+  not on a green that predates the first. A test of the no-sheet path removes the sheets it does not want
+  rather than relying on what a fixture happens to hold.
+- **Check:** `tests/test_phone_companion.py::test_players_is_the_team_sheet_eleven_a_side_and_never_lists_a_track`
+  and `::test_players_shows_the_pass_network_and_top_performers_only_from_the_match_s_numbers` drop the
+  bundle's `sheets` first and still assert the no-sheet results (0 rows; the line-up's 4 shirts).
+
+### 269. When vision cannot do a job the product needs, take a disclosed input; never a hidden one
+- **What happened:** the demo had to name players, and vision cannot: shirt numbers are a few
+  pixels tall on our renders, and naming by role missed its 0.95 gate (held-out 0.884, #374).
+  The tempting shortcut was to read the simulator's ids where vision's tracks are, quietly, and
+  call the names vision's. Kian decided (Oct 26) to name players openly the way broadcasts do,
+  from a licensed tracking provider's player-ID feed.
+- **Rule:** an input the live path takes from the engine is a separate, named artifact
+  (`identity_feed.jsonl`) carrying only what that job needs (here identity: who, and where to
+  match him), read by one module, for one purpose (identity, and the side it implies), allowed by name in AGENTS.md's hard rules, and
+  disclosed wherever its output is shown ("Player ID feed"; README, EVALUATION, CHALLENGE_MAP).
+  Everything else the pipeline computes must be the same with it and without it, and its matching
+  is graded like any vision result, without claiming it as vision's.
+- **Check:** `uv run pytest tests/test_identity_feed.py`:
+  `::test_only_the_identity_path_touches_the_feed` fails if any other module imports the feed's
+  reader (any import form) or reads a field made from it;
+  `::test_the_bundle_is_the_same_with_the_feed_but_for_its_named_line_up` fails if a cue, claim,
+  fact, event or match.json field other than the line-up changes;
+  `::test_a_feed_carrying_more_than_identity_is_refused` fails if the feed grows a ball or events.
+
+### 270. A goal is the goal event, not the shot that went in
+- **What happened:** match mode (`ninety/condensed.py`), the highlight reel and the team goal
+  count (`ninety/intel/stats.py`) counted a goal only as a shot whose outcome was a goal. GROUNDING
+  I24 already said a goal is a detected `goal` event (Law 10). On the demo match (seed 8080) vision
+  logged 5 goal events. Two had no shot before them, so match.json, its chapters (the scrubber's
+  ticks) and the reel showed 3 goals. Those 3 took their side from the shot, whose side confidence
+  (0.16 to 0.65) is under the fact-checker's gate, so all 3 showed no club. The goal events' own
+  side confidence was 0.94 to 1.0. The demo audit found it, not a test: every test built goals as
+  shots.
+- **Rule:** one function says what a goal is (`stats.goal_moments`), and every screen and fact
+  reads it. A `goal` event is the goal. The shot just before it, if that shot went in, is the same
+  goal (the pairing `scoring.goals` already uses, so no new time window). The goal event's side and
+  confidence decide the goal's club and whether it counts; the shot gives where it was struck and
+  how fast. A shot that went in with no goal event after it still counts. A goal with no shot has no
+  distance, so no distance is said.
+- **Check:** `uv run pytest tests/test_match_mode.py -k goal tests/test_captioner.py -k strike`.
+  `test_a_goal_event_is_the_goal_merged_with_its_shot_and_a_goal_without_a_shot_still_counts`
+  fails if a goal event without a shot is dropped, if a pair counts twice, or if the club comes from
+  the shot. On a bundle, match.json's `goals` and its goal chapters each match the goal events.
+
+### 271. A name that reaches events through one bridge is capped by that bridge
+- **What happened:** #389 named the broadcast's tracks, which events name, only through the camera
+  join to the tactical tracks. Its precision was high, but 232 of 345 events stayed unnamed and
+  side-unsure, because most broadcast tracks have no join pairing at the gate. The broadcast
+  camera is calibrated and its tracks are already in pitch metres, so they could be matched to the
+  feed directly, as real broadcasts do. Doing that named 224 events (106 of 106 held-out right).
+- **Rule:** before shipping a coverage number, count what stops the rest and check that the limit
+  is the data, not the route: every unnamed event gets one reason, and a fix is pre-registered with
+  its precision gate before it runs.
+- **Check:** `docs/eval/identity.json` `direct.reasons` covers all 345 events;
+  `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
+  fails if the direct path is on without its gate met.
+
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:**
+  - **The footage** is the codec every browser and phone decodes in hardware: H.264/AAC MP4 with
+    +faststart (`ninety/footage.py`), plus an HLS ladder. The ladder is so that a slow connection drops
+    a rung instead of freezing; that is *planned*: nothing plays it until the viewer's hls.js player
+    lands.
+  - **The encoder** is the producer's system ffmpeg, run as an external tool on their Mac and never
+    shipped, with Apple's VideoToolbox H.264 encoder (libx264 is GPL, AGENTS.md) and ffmpeg's own AAC
+    encoder (THIRD_PARTY_NOTICES.md).
+  - **Macs only:** Linux CI and the Azure image ship JPEG frames.
+  - **H.264/AAC patents:** whether they need anything for our distribution is Kian's question.
+  - **Every encode is checked** by probing the file it writes: codec and profile, frame count,
+    duration, the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and
+    the sound.
+  - **A browser test** seeks a real encoded file, served with byte ranges as the API serves it.
+  - **What CI skips:** these tests need a Mac and, for the browser one, a built viewer (`npm run
+    build --prefix web/viewer`). CI's Linux runner skips them, and a pull request that relies on them
+    says so and gives the local run.
+  - **A playback claim** about real browsers needs a run in one (live-preview), and the result is
+    stated.
+- **Check:** on a Mac, after building the viewer, run
+  `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  (none skipped). On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes
+  50 frames apart, and `hls/master.m3u8` lists every rung.
+
+### 273. Watch the frames before naming the cause
+- **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
+  frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
+  at P16's rate and the stride already follows distance. Crops of seed 8080's carriers showed the
+  real causes: a first touch on the move stood the other foot on the grass for 0.76 s while the body
+  ran on at 3.5 m/s (he skated stiff-legged), a ball in close control rode at his shins with no foot
+  ever playing it, and a carried ball jumped 0.4 m round him in a frame with no foot on it. The first
+  fix tried (taps in close control) changed no box in the test window: every carry there sat inside
+  the engine's own touch windows, so the stance was the glitch.
+- **Rule:** diagnose a look problem from per-frame engine data and crops of the drawn frames, and
+  check that a fix changes the frames it is meant to (diff the labels before and after) before
+  building on it.
+- **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
+  or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 276. An edit that windows events shows whatever surrounds them
+- **What happened:**
+  - demo-match.md's condense rule gave every shot, save and set piece a fixed window. On seed 8080
+    those windows also showed the aimless long balls, lost keeper passes and overhead catches next
+    to them, and Kian called the demo unwatchable.
+  - One window closed at 12:50 with a 54 m ball still in the air.
+  - The match had only one diving save, so a rule that counted saves kept choosing flat-footed
+    catches.
+- **Rule:**
+  - An edit scores what is on screen across the whole window, not the event it is built around. A
+    window holding a flagged moment is never picked.
+  - A window never opens or closes while a pass or shot is in flight. It ends once the play has
+    resolved: the pass has arrived and possession has held for 2.5 s, the shot is over, the ball is
+    dead, or the goal has been celebrated.
+  - Choosing from the answer key is editorial and is stated as such; it never feeds the live path.
+- **Check:** `uv run python scripts/footage_hunt.py <90-min run> <out>`: no `picked` window in
+  `picks.json` contains a flagged moment except a goal's own build-up. The script refuses to start or
+  end a window in flight (`in_flight`). `carries.json` counts the match's long carries and take-ons,
+  so a missing kind of play can be traced to the engine or to the edit.
+
+### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 281. A failure drill that never reaches its failure point tests nothing
+- **What happened:** the live agent run on seed 8324 pre-registered a "Judge down" drill on goal 1's
+  minute: every Judge call fails, so every claim must be held. The claim came out held, as expected,
+  but by a code check (a ball speed vision measures only for ground passes) before the Judge was
+  ever called. The trace showed no Judge call, so the drill had tested nothing. It was re-run,
+  labelled, on goal 2's minute, where the same claim path had reached the Judge and aired: there
+  the Judge was tried twice and the claim held (`service`), with the template kept.
+- **Rule:** a drill passes only when the trace shows the injected fault was hit (the failing call
+  made, the timeout reached) and the expected recovery followed. An expected end state reached by
+  another route is not the drill passing. Choose the drill's moment where the path reaches the
+  fault, or check that it did before reporting.
+- **Check:** `docs/eval/agents-live.md`'s drill table lists each drill's failed calls from the trace
+  (`ninety/eval/agents_live.py` `drill_scores`, `failed_calls`); a drill row with no failed call of
+  the injected role is reported as not exercised.
+
+### 282. A dedupe key built from a field that can be empty merges every item without it
+- **What happened:** the big screen's schedule (`web/viewer/src/match.ts`, `broadcastSchedule`) kept
+  one graphic per moment by the key `kind|evidence`. The INSIGHT bar's overloads are read from
+  positions and carry no event, so every overload had the key `insight|` and only the first of the
+  match ever aired. Separately, the schedule took graphics strictly in time order, so a template "a
+  player scores" shot graphic 1.5 s before a goal took the 30 s slot and the goal's fact-checked
+  insight never aired (seed 8080's first goal). Both surfaced only when the lower third was
+  screenshotted on the real bundle; the schedule's test had one evidence id per cue.
+- **Rule:** a key that identifies an item falls back to the item's own id when its parts are empty;
+  and a schedule that must always show a class of item (every goal) chooses that class first, then
+  fills the gaps, rather than hoping time order puts it first.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is_room`
+  has two evidence-less overloads and a shot just before a goal; reverting either fix turns it red.
+
+### 283. A club named in a question or a track id's letter is not the side that acted
+- **What happened:** two wrong clubs on air in the Oct 26 preview of the final 8080 bundle. (1) Ask:
+  "Which pass broke Lisbon's lines?" was answered "Lisbon … a Lisbon Esportes player played a pass
+  that took 3 London Athletic players out". `code_match_answer` puts the named club's facts first,
+  which is right for "Lisbon's best player" and wrong for a pass through Lisbon: there the named club
+  is the side the pass beat. `code_calls` already read both clubs for `line_breaks` for that reason,
+  but the sort after it undid it, and the model path had no check either. (2) Audio description: goal
+  1 was Lisbon's (the goal event's side from the player-ID feed, which match.json's goals carry), but
+  its scorer's broadcast track was `h-t9029`, and the voice said "Goal! A London player scores": the
+  Describer took the side from the track id's letter (the tracker's side vote), never from the
+  event. Each module's tests used players whose letter matched their side, and questions that named
+  the acting club.
+- **Rule:** a side said on air comes from the event's (or fact's) own side, never a track id's
+  letter, and a goal names its side outright ("Goal! Eli Hourrick scores for Lisbon"). A question that
+  names a club as the one beaten ("broke X's lines", "through X") asks for the other club's pass; the
+  code answer and the model's choice both refuse a pass of the beaten club or of an unknown side.
+- **Check:** `tests/test_describe.py::test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter`
+  (a Lisbon goal by an `h-` track, named and unnamed) and `tests/test_companion_match.py`'s
+  `test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs` (both clubs, both phrasings),
+  `test_no_pass_of_the_beaten_club_answers_it_even_alone` and
+  `test_the_model_citing_the_beaten_clubs_pass_is_refused`; all fail on main 5cd7d524.
+
+### 284. A value the instructions never ruled out is not malformed
+- **What happened:** live on seed 8324, asked at half-time "Who had more of the ball in the first
+  half?", the published Companion planned `possession` from minute 0 to 45. `companion_match._calls`
+  accepts only windows starting at minute 1, so it replaced this one with the default (minutes 31 to
+  45) and said nothing. The model then saw no first-half facts and said unanswerable. The
+  instructions never say minutes start at 1, so minute 0 was a fair way to say "from kick-off". Its
+  docstring said a bad call is "never repaired", while the code silently substituted a window.
+- **Rule:** when code rejects a model's argument, check first that the instructions ruled the value
+  out. Read a value with one clear meaning in football (minute 0 is kick-off, in minute 1) as that
+  meaning; fall back only for values with none, and say in the docstring what the fallback is.
+- **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
+  with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
+

@@ -23,7 +23,7 @@ def main(out: Path) -> str:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:  # a real JPEG, so the viewer draws every frame without an error
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
         page = browser.new_page(viewport={"width": W, "height": H})
         page.set_content('<body style="margin:0;background:#2e7d32"></body>')
         jpeg = page.screenshot(type="jpeg")

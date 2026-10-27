@@ -45,7 +45,7 @@ Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
 Every card must be verified and match the schema, or the bundle is not written.
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
-radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
+radar.json and match.json when asked for, and the footage as video.mp4 + hls/ or frames/) is all the
 viewer reads. This module never opens the clip's events.jsonl or frames.jsonl: they are the answer
 key (tests/test_e2e.py checks).
 """
@@ -66,11 +66,18 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ninety import condensed, highlights, radar
-from ninety.agents import live, telemetry
+from ninety import condensed, footage, highlights, radar
+from ninety.agents import factcheck, insight_bar, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
-from ninety.agents.factcheck import MIN_CONFIDENCE, MIN_TEAM_CONFIDENCE, Claim, Verdict, side_known
+from ninety.agents.factcheck import (
+    MIN_CONFIDENCE,
+    MIN_TEAM_CONFIDENCE,
+    WITHOUT_SPEED,
+    Claim,
+    Verdict,
+    side_known,
+)
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.scoring import SCOREBUG_MEASURED
 from ninety.intel.stats import calculate_facts
@@ -131,7 +138,9 @@ def read_cards(path: Path) -> list[dict]:
 def read_team_stats(path: Path) -> dict:
     """The MatchInsights bundle's `team_stats` (insight-scout, #269): each team's tracked distance
     with how much of its players' time was tracked. Only measured rows go on: a team's km must come
-    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed)."""
+    with its coverage (a share, 0 to 1); possession only if the insights wrote it (its gate passed).
+    A coverage above 1 is a double count (more tracks than players on a side), not a malformed row:
+    the distance, and how close it is measured, are left out and every other team stat ships."""
     body = json.loads(path.read_text())
     stats = body.get("team_stats", body)
     out: dict = {"from_footage": bool(stats.get("from_footage", True)), "bin_min": stats.get("bin_min")}
@@ -147,23 +156,29 @@ def read_team_stats(path: Path) -> dict:
             raise SystemExit(f"{path}: team_stats.distance has no {side}")
         km, coverage = d.get("km"), d.get("coverage")
         sound_km = isinstance(km, (int, float)) and km >= 0
-        if not sound_km or not isinstance(coverage, (int, float)) or not 0 <= coverage <= 1:
-            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage from 0 to 1")
-    out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
-                       for side in ("home", "away")}
+        if not sound_km or not isinstance(coverage, (int, float)) or coverage < 0:
+            raise SystemExit(f"{path}: team_stats.distance.{side} needs km >= 0 and a coverage of 0 or more")
+    if all(distance[side]["coverage"] <= 1 for side in ("home", "away")):
+        out["distance"] = {side: {"km": distance[side]["km"], "coverage": distance[side]["coverage"]}
+                           for side in ("home", "away")}
+    else:
+        out.pop("within_pct", None)
+        print(f"{path}: team distance left out: its coverage is above 1 (a double count)")
     if "possession" in stats:
         out["possession"] = {side: {"share": stats["possession"][side]["share"]} for side in ("home", "away")}
     return out
 
 
-def read_lineup(path: Path) -> list[dict] | None:
+def read_lineup(path: Path, key: str = "lineup") -> list[dict] | None:
     """MatchInsights' team sheet (the line-up tool, insight-scout): per player id a name, shirt and
-    position, with whether the tool is confident of it. The phone shows only confident entries. A
-    row without an id, or with a name, shirt or position of the wrong type, stops the bundle."""
-    rows = json.loads(path.read_text()).get("lineup")
+    position, with whether the tool is confident of it and where the name comes from (`source`
+    id_feed: the player-ID feed, ninety/intel/identity.py). The phone shows only confident entries.
+    `lineup` names broadcast tracks (events); `lineup_tactical` the tactical ones (radar, player
+    card). A row without an id, or with a field of the wrong type, stops the bundle."""
+    rows = json.loads(path.read_text()).get(key)
     if rows is None:
         return None
-    kinds = {"name": str, "number": int, "position": str, "confident": bool}
+    kinds = {"name": str, "number": int, "position": str, "confident": bool, "source": str}
     out = []
     for r in rows:
         wrong = [k for k, t in kinds.items() if k in r and not isinstance(r[k], t)]
@@ -176,10 +191,17 @@ def read_lineup(path: Path) -> list[dict] | None:
 GROUPS = ("Attack", "Passing", "Pressing", "Shape", "Physical")
 
 
+def over_counted(coverage) -> bool:
+    """A coverage (a number, or one per side) above 1: more tracked time than players had."""
+    values = coverage.values() if isinstance(coverage, dict) else [coverage]
+    return any(isinstance(c, (int, float)) and c > 1 for c in values)
+
+
 def read_stats(path: Path) -> dict | None:
     """MatchInsights' `stats` block (insight-scout, #269): per-team rows by group, each a series of
     values "so far" to a minute, with whether the value is confident. A row missing its group, key,
-    label or series stops the bundle; the block is optional."""
+    label or series stops the bundle; the block is optional. A row with a coverage above 1 (a double
+    count, as read_team_stats) is left out."""
     body = json.loads(path.read_text())
     block = body.get("stats")
     if block is None:
@@ -194,6 +216,9 @@ def read_stats(path: Path) -> dict | None:
                 raise SystemExit(f"{path}: stats.{row['key']}: each value needs minute_to and confident")
             keep = ("minute_to", "home", "away", "confident", "evidence", "coverage")
             series.append({k: v[k] for k in keep if k in v})
+        if any(over_counted(v.get("coverage")) for v in series):
+            print(f"{path}: stats.{row['key']} left out: its coverage is above 1 (a double count)")
+            continue
         rows.append({"group": row["group"], "key": row["key"], "label": row["label"],
                      "unit": row.get("unit"), "series": sorted(series, key=lambda v: v["minute_to"])})
     return {"bin_min": block.get("bin_min"), "from_footage": bool(block.get("from_footage", True)),
@@ -320,7 +345,9 @@ def offline_analyst(events: list[dict], plant: bool):
         event = most_interesting(by_minute.get(minute, []))
         if event is None:
             return json.dumps({"text": "", "evidence": []})
-        claim = Claim(describe.as_sentence(_text(event, "analyst") + "."), [event["id"]])
+        if WITHOUT_SPEED in prompt:  # sent back for its speed: said again without it (offline_models)
+            event = {k: v for k, v in event.items() if k != "ball_speed_kmh"}
+        claim = Claim(describe.as_sentence(_text(event, "analyst", speed=True) + "."), [event["id"]])
         if plant and calls == 1:
             claim = tamper(claim)
         return json.dumps({"text": claim.text, "evidence": claim.evidence})
@@ -353,8 +380,13 @@ def trace_step(line: str, moment: str, judged: bool) -> dict:
         action, detail = "hold", detail.removeprefix("rejected, out of rewrites: ")
     elif detail.startswith("rejected: "):
         action, detail = "reject", detail.removeprefix("rejected: ")
-    else:
+    elif detail.startswith(("held: ", "held, out of rewrites: ")):
+        # The confidence gate held it (slice.FactCheckExecutor): a hold, never shown as verified.
+        action, detail = "hold", detail.split(": ", 1)[1]
+    elif detail == "accepted":
         action = "verify"
+    else:
+        raise ValueError(f"an unknown fact-checker step: {line!r}")
     return {"role": role, "moment": moment, "action": action, "ms": ms, "detail": detail}
 
 
@@ -440,8 +472,14 @@ def offline_models(events: list[dict]) -> Models:
     async def tactician(prompt: str) -> str:
         # A sentence, as a co-commentator would say it, from the event's own fields; not the graphic's
         # compact form ("h11 → h8, 17 m, 53 km/h"), which the template already shows.
-        event = by_id[json.loads(prompt)["moment"]["main_event"]]
-        text = describe.as_sentence(_text(event, "analyst") + ".")
+        body = json.loads(prompt)
+        event = by_id[body["moment"]["main_event"]]
+        reasons = (body.get("rejected") or {}).get("reasons", [])
+        if any(r.endswith(WITHOUT_SPEED) for r in reasons):
+            # Sent back for its speed (none a kick gives, or vision's, not yet measured): said again
+            # without it, as a writer would. A first draft states it, as a writer may.
+            event = {k: v for k, v in event.items() if k != "ball_speed_kmh"}
+        text = describe.as_sentence(_text(event, "analyst", speed=True) + ".")
         return json.dumps({"text": text, "evidence": [event["id"]]})
 
     async def challenger(prompt: str) -> str:
@@ -646,20 +684,21 @@ def load_views(views: Path):
 # ---------------------------------------------------------------- footage
 
 
-def write_footage(clip: Clip, out: Path, encode: bool) -> dict:
-    """The clip as video.webm (VP9: plays in every browser, Playwright's Chromium included) when
-    ffmpeg is there, else the JPEG frames themselves. The viewer plays either."""
+def write_footage(clip: Clip, out: Path, encode: bool, audio: Path | None = None) -> dict:
+    """The clip as web video (ninety/footage.py: video.mp4, H.264/AAC, and an HLS ladder under hls/)
+    when ffmpeg has the H.264 encoder, else the JPEG frames themselves. The viewer plays either.
+    `audio` (any file ffmpeg reads with a sound track, such as the render's crowd bed) is muxed in,
+    cut to the picture's length so the frames and the duration are the images' own."""
     images = clip.images
     if not images:
         raise SystemExit(f"{clip.dir}/images has no frames")
     fps = clip.meta["fps"]
-    if encode and shutil.which("ffmpeg"):
-        video = out / "video.webm"
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i",
-               str(clip.dir / "images" / "%05d.jpg"), "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32",
-               "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1", "-pix_fmt", "yuv420p", str(video)]
-        subprocess.run(cmd, check=True)
-        return {"kind": "video", "src": video.name, "frames": len(images)}
+    if encode and footage.can_encode():
+        params = clip.meta.get("params", {})
+        return footage.write(images, fps, out, audio, height=int(params.get("height", 720)),
+                             width=params.get("width"), timescale=clip.meta.get("timescale", 1.0))
+    if encode:
+        print(f"no {footage.ENCODER} in ffmpeg: shipping the JPEG frames (ninety/footage.py)")
     frames = out / "frames"
     frames.mkdir(exist_ok=True)
     for image in images:
@@ -676,6 +715,9 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 async def run(args: argparse.Namespace) -> dict:
     clip = load_clip(args.clip)
+    # Footage played faster as its 1x (Kian, Oct 26: 1.25): only video is; JPEG frames play as made.
+    # Every Timeline.of_clip(clip.meta) then maps video time through it (ninety/match/timeline.py).
+    clip.meta["timescale"] = args.timescale if not args.frames and footage.can_encode() else 1.0
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
 
@@ -710,6 +752,36 @@ async def run(args: argparse.Namespace) -> dict:
         cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant,
                                                                         perceiver=perceiver)
         agents_mode = "graph offline"
+    # The match's insights, when the bundle has them: the INSIGHT bar's facts, the feed's names by track
+    # (#389: only this path reads them, and hands the screens and the voices names alone) and the
+    # scorebug's measured readings (#356).
+    insights_file = args.insights or args.team_stats
+    mi, names, fact_names, scores = None, {}, {}, []
+    if insights_file is not None:
+        from ninety.intel.match_insights import MatchInsights
+
+        mi = MatchInsights.from_dict(json.loads(insights_file.read_text()))
+        # Two id spaces (lesson 259): the detected events and the cues name BROADCAST tracks, the insights'
+        # facts the tactical camera's. A name crosses only through the association (identity_broadcast).
+        names = {t: w["name"] for t, w in (mi.identity_broadcast or {}).items() if w.get("name")}
+        fact_names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
+        scores = [r for r in mi.facts.get("scorebug", ()) if r.get("confident")]
+    # What the screens show: a tracked player by the feed's name or as "a London player", never his raw
+    # track id (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
+    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta), names)
+    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta), names)
+    # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
+    cues, claims = onair.gate_speeds(cues, claims, events)
+    # The INSIGHT bar shows only what the broadcast can't (ninety/agents/insight_bar.py): the agents'
+    # single-event claims stay in the trace and the audio description (`spoken_cues`), never on the
+    # bar, in the bundle's cues or in the commentary.
+    kinds = {e["id"]: e["type"] for e in events}
+    spoken_cues = cues
+    cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
+    if mi is not None:
+        bar, bar_claims = insight_bar.build(mi, Timeline.of_clip(clip.meta).to_video, sides_known(events),
+                                            clubs_of(clip.meta), fact_names)
+        cues, claims, spoken_cues = cues + bar, claims + bar_claims, spoken_cues + bar
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
@@ -717,29 +789,39 @@ async def run(args: argparse.Namespace) -> dict:
 
         try:
             async with describer.foundry_model(tokens) as (model, judge):
-                upgrades, model_calls = await describer.upgrades(events, cues, model, judge)
+                upgrades, model_calls = await describer.upgrades(events, spoken_cues, model, judge)
         except RegistryDrift:
             raise  # a changed prompt must never run under an old version's name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades,
-                                       clubs=clubs_of(clip.meta))
+    track, refused = describe.describe(events, spoken_cues, voice or describe.estimate, upgrades,
+                                       clubs=clubs_of(clip.meta), names=names, scores=scores,
+                                       timescale=clip.meta["timescale"])
     if voice is not None:
         voice.save(track, out)
+    # Every text the track writes, as a screen may show it: the checked form names track ids, which never
+    # air (ninety/agents/onair.py); what is said (`spoken`) never named them.
+    sure, clubs = sides_known(events), clubs_of(clip.meta)
+    for line in track.said:
+        line.text = onair.render(line.text, sure, clubs, names)
+    refused = [{**r, "text": onair.render(r["text"], sure, clubs, names)}
+               if isinstance(r.get("text"), str) else r
+               for r in refused]
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
 
     commentary_info = commentary.write(
-        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta)), out)
+        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta), names, scores),
+        out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)
     audio = describe.write_track(track, refused, out, clip.meta["t_start"], timeline=timeline)
     audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
                           "unavailable": unavailable}
-    footage = write_footage(clip, out, encode=not args.frames)
+    footage_info = write_footage(clip, out, encode=not args.frames, audio=args.footage_audio)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
     radar_body = None
@@ -754,7 +836,8 @@ async def run(args: argparse.Namespace) -> dict:
         verdict = None
         if args.highlights_verdict:
             verdict = highlights.verdict_from_report(json.loads(args.highlights_verdict.read_text()))
-        body = condensed.build(clip.meta, events, verdict)
+        body = condensed.build(clip.meta, events, verdict,
+                               read_scorebug(args.scorebug) if args.scorebug else None)
         if radar_body is not None:
             # Where the ball was per five minutes, from vision's tracked ball (the phone's strip).
             body["territory"] = territory.build(radar_body, clip.meta["fps"])
@@ -766,11 +849,20 @@ async def run(args: argparse.Namespace) -> dict:
             lineup = read_lineup(args.team_stats)
             if lineup is not None:
                 body["lineup"] = lineup
+            tactical = read_lineup(args.team_stats, "lineup_tactical")
+            if tactical is not None:
+                body["lineup_tactical"] = tactical
+            source = json.loads(args.team_stats.read_text()).get("identity")
+            if source is not None:  # where the names come from, said on every screen that shows one
+                body["identity"] = {k: source.get(k) for k in ("source", "label", "provider", "note",
+                                                               "id_corrections")}
         sheets = sheets_of(clip.meta)
         if sheets is not None:  # pre-match, from the seed and codes: never gated on a tracked stat
             body["sheets"] = sheets
         body["highlights"]["captioner"] = await caption_reel(body["highlights"], condensed.confident(events),
-                                                             args.captioner)
+                                                             args.captioner, sides_known(events),
+                                                             clubs_of(clip.meta),
+                                                             names_of(body.get("lineup")))
         # Each moment recorded from the footage: a still and, unless --frames, its clip.
         highlights.record(body["highlights"], Timeline.of_clip(clip.meta), clip.images, out, not args.frames)
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
@@ -810,7 +902,14 @@ async def run(args: argparse.Namespace) -> dict:
         # The track ids a screen may name by club (`sides_known`); every other one is "a player".
         "sides_known": sides_known(events),
         "min_team_confidence": MIN_TEAM_CONFIDENCE,  # the phone names an event's side only above it
-        "footage": footage,
+        # Whether vision's ball speed is measured, and its band: the screens say a speed only with it
+        # (web/viewer/src/speed.ts); the bundle's words state only the speeds it covers.
+        # Measured only when one of its speeds is one vision's error covers: the screens' gate opens
+        # for the whole bundle, so it stays shut while none is.
+        "speed": {"measured": any(factcheck.measured_speed(e) and factcheck.plausible_speed(e)
+                                  for e in events),
+                  "error_kmh": factcheck.SPEED_ERROR_KMH},
+        "footage": footage_info,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
         "events": {"source": events_source, "count": len(events), "standin": "stand-in" in events_source,
@@ -846,9 +945,16 @@ async def run(args: argparse.Namespace) -> dict:
 
 
 
-async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
+def names_of(lineup: list[dict] | None) -> dict[str, str]:
+    """Each named broadcast track's name, from the line-up's confident rows (the player-ID feed)."""
+    return {r["id"]: r["name"] for r in lineup or [] if r.get("confident") and r.get("name")}
+
+
+async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str] | None = None,
+                       clubs: dict[str, str] | None = None, names: dict[str, str] | None = None) -> dict:
     """Each highlight's caption (ninety/agents/captioner.py): code-written, or with `foundry` the
-    published Captioner's line where the fact-checker passes it. Returns the run's record."""
+    published Captioner's line where the fact-checker passes it, then said as every screen says a
+    player (onair.render: by club, never a track id). Returns the run's record."""
     from ninety.agents import captioner
 
     tokens, unavailable, results = {}, None, None
@@ -857,16 +963,28 @@ async def caption_reel(reel: dict, events: list[dict], mode: str) -> dict:
 
         try:
             async with captioner.foundry_model(tokens) as (model, judge):
-                results = await captioner.captions(reel["moments"], events, model, judge)
+                results = await captioner.captions(reel["moments"], events, model, judge, clubs=clubs,
+                                                   names=names)
         except RegistryDrift:
             raise  # a changed or unpublished prompt never runs under an old name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code captions still air
             unavailable = type(e).__name__  # the type only: no endpoint or token
     if results is None:
-        results = await captioner.captions(reel["moments"], events, None, None)
+        results = await captioner.captions(reel["moments"], events, None, None, clubs=clubs, names=names)
+    results = [{**r, "text": onair.render(r["text"], sure or [], clubs)} for r in results]
     captioner.apply(reel, results)
     return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
             "tokens": tokens, "unavailable": unavailable}
+
+def _timescale_arg(value: str) -> float:
+    """--timescale as argparse checks it: refused before anything runs, --frames or not."""
+    from ninety.match.timeline import checked_timescale
+
+    try:
+        return checked_timescale(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
 
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Run the chain on one clip and write a bundle for the viewer.")
@@ -918,7 +1036,15 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--team-stats", type=Path, default=None,
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")
-    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
+    ap.add_argument("--insights", type=Path, default=None,
+                    help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
+                         "either, the bar stays empty: it never restates one event")
+    ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
+    ap.add_argument("--timescale", type=_timescale_arg, default=1.0,
+                    help="match seconds a video second: the video plays this much faster as its 1x, "
+                         "every image kept (ninety/footage.py); the bundle's times follow")
+    ap.add_argument("--footage-audio", type=Path, default=None,
+                    help="a sound track for the video (e.g. the render's crowd bed), muxed in as AAC")
     return ap
 
 

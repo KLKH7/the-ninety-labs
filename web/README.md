@@ -28,7 +28,8 @@ npm run build --prefix web/viewer        # static site in web/viewer/dist; open 
 | Match mode | `match.json` | with `--match`, for a condensed match (one clip cut from passage to passage): `ninety/condensed.py` makes a chapter per segment named from its most telling confident detected event (goal, shot saved, shot, set piece or kick-off, else build-up), the scoreline from confident detected goals, and each team's stats after every event, the same team facts the agents read |
 | Describe | `audio.json`, `description.vtt`, `audio` cues | the Describer (`ninety/speech/describe.py`): one spoken line per confident pass, shot, goal, tackle or interception, or the verified claim in its event's place; every line passes the fact-checker's code half, starts within 2 s of its event and never overlaps the last; `pan` from the ball's pitch x. Timing is estimated offline; `--speech azure` synthesises each line through Azure AI Speech and measures it (off by default) |
 
-Footage is `video.webm` (VP9, when ffmpeg is installed) or the JPEG frames (`--frames`).
+Footage is `video.mp4` (H.264/AAC) with an HLS ladder under `hls/` (ninety/footage.py, when ffmpeg has
+VideoToolbox's H.264 encoder) or the JPEG frames (`--frames`).
 
 **Match mode** (a bundle with `match.json`): the segments play back to back at real speed and the
 match clock jumps at each cut; the footage carries the broadcast's stinger, and the viewer adds a

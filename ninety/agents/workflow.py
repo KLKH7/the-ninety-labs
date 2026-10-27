@@ -21,7 +21,8 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    is not verified (once it is, the reading cannot air, so it is not checked or rewritten). A
    claim may cite only its moment's evidence. A rejected claim goes back to its author with the
    reasons, at most MAX_REWRITES times. A held claim (the check could not be done, or it rests on
-   an unsure detection) is not rewritten.
+   an unsure detection) is not rewritten, except one held only for a speed vision has not
+   measured: its writer says it without the speed.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
    With `shape` (team-shape facts from tracked positions, ninety/intel/shape.py), code adds the
@@ -78,7 +79,7 @@ from ninety.agents.credentials import (  # noqa: F401  (FOUNDRY_SCOPE, TOKEN_MAR
     sign_in_then_load,
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
-from ninety.agents.factcheck import Claim, Verdict, confidence_gate
+from ninety.agents.factcheck import WITHOUT_SPEED, Claim, Verdict, confidence_gate
 from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
@@ -227,10 +228,13 @@ ACTION = {"verified": "verify", "rejected": "reject", "held": "hold"}
 
 
 def sent_back(verdict: Verdict) -> bool:
-    """A claim goes back to its author only when it is wrong (status_for: rejected). A held claim
-    is not rewritten: neither a failed check nor an unsure detection (`low_confidence`) is
-    something the writer can fix. The slice sends a low-confidence claim back; its replay pins
-    that, so the slice keeps it."""
+    """A claim goes back to its author when it is wrong (status_for: rejected), or when it is held
+    only for stating a speed vision has not measured (factcheck.SPEED_MEASURED): the writer can say
+    it without the speed. Any other held claim is not rewritten: neither a failed check nor an
+    unsure detection (`low_confidence`) is something the writer can fix. The slice sends a
+    low-confidence claim back; its replay pins that, so the slice keeps it."""
+    if status_for(verdict) == "held":
+        return bool(verdict.reasons) and all(r.endswith(WITHOUT_SPEED) for r in verdict.reasons)
     return status_for(verdict) == "rejected"
 
 
@@ -845,6 +849,7 @@ async def run_live(
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
     personalizer: Personalize | None = None, shape: list[dict] | None = None, perceiver=None,
+    wrap: Callable[[str, str, str, object], object] | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
@@ -854,16 +859,18 @@ async def run_live(
     that calls the match tools anyway fails its call (foundry.ReadTheTools). `inject` swaps one of
     the live models for a failing one (ninety/eval/workflow_failures.py --live). A run of several
     minutes passes its one `credential`, signed in at its start (agents-live's sign-in lasts five
-    minutes); else this run makes and signs in its own."""
+    minutes); else this run makes and signs in its own. `wrap(role, name, version, agent)` returns
+    the object each role calls in place of the published agent: an observer that times and counts
+    each call (ninety/eval/agents_live.py), or one that injects a failure at the agent itself."""
     async with contextlib.AsyncExitStack() as owned:
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject, personalizer, shape, perceiver)
+                               content, personalize, inject, personalizer, shape, perceiver, wrap)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject, given_personalizer, shape=None, perceiver=None):
+                    personalize, inject, given_personalizer, shape=None, perceiver=None, wrap=None):
     from ninety import config
     from ninety.agents import foundry
 
@@ -883,6 +890,8 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
                 credential=credential,
             )
             agents[role] = await stack.enter_async_context(published)
+            if wrap is not None:
+                agents[role] = wrap(role, name, version, agents[role])
 
         def ask(role: str):
             async def answer(prompt: str) -> str:

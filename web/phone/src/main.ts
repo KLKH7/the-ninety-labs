@@ -8,15 +8,17 @@
 // reads the mock feed.
 
 import "./ionic";
-import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
+import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, timescaleOf, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
 import { crestOf } from "../../viewer/src/crests";
 import * as prefs from "./settings";
+import * as fans from "./fan";
+import { mountOnboarding } from "./onboarding";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, sideUnsure, teamNames } from "../../viewer/src/teams";
+import { CLUBS, DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, short, sideUnsure, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -37,6 +39,7 @@ import {
   shirt,
   team,
   teams,
+  tacticalSheet,
   teamSheet,
   type SheetEntry,
   unnamedTrack,
@@ -46,6 +49,38 @@ import { describeVisual, drawVisual, drawable, fromScout, headline, title } from
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
+/** Docked beside the big screen on a desktop (`?embed=1`, web/viewer's companion panel): already
+ * paired by the page around it, which plays every sound; it opens on Live and talks to its parent
+ * page about tabs, same origin only. */
+const embed = params.get("embed") === "1" && window.parent !== window;
+if (embed) document.body.dataset.embed = "1";
+
+/** The demo passcode (ninety/api/companion.py): with it the server's agents answer Ask. Kept on this
+ * device only (localStorage, guarded: a private window refuses it); taken once from `?pass=` and
+ * struck from the address bar at once; never logged, never sent but as Ask's header. */
+const PASS_KEY = "ninety.passcode";
+let passcode: string | null = (() => {
+  try {
+    return localStorage.getItem(PASS_KEY);
+  } catch {
+    return null;
+  }
+})();
+function setPasscode(value: string | null) {
+  passcode = value ? value.trim() || null : null;
+  try {
+    if (passcode) localStorage.setItem(PASS_KEY, passcode);
+    else localStorage.removeItem(PASS_KEY);
+  } catch {
+    // a private window: the passcode lasts for this visit only
+  }
+}
+if (params.has("pass")) {
+  setPasscode(params.get("pass"));
+  params.delete("pass");
+  const rest = params.toString();
+  history.replaceState(history.state, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+}
 
 const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/window.py)
 // design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
@@ -117,6 +152,8 @@ function screenOf(x: number, y: number): [number, number] {
   state,
   laptop,
   positions: () => lastPositions,
+  imageAt: (t: number) => imageAt(t), // read by tests/test_phone.py
+  chapterAt: (t: number) => (state.match ? chapterAt(state.match.chapters, bundleImageRate, laptop.cuts ? laptop.cuts.videoTime(t) : t) : null),
   radar: () => lastState,
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
@@ -224,14 +261,21 @@ function onRelay(m: RelayMessage) {
   }
 }
 
+/** How long a phone that lost its screen keeps asking for the same code when the server does not know
+ * it (design: a restarted server, whose big screen claims its code back within about 2 s,
+ * desktop-companion, Oct 26); a code typed or scanned still fails at once. */
+const RECLAIM_S = 30;
+let reclaimUntil = 0; // while reconnecting, an unknown code is the server coming back, not a wrong code
 function onClosed(why: Closed) {
-  if (why === "lost") {
+  const reclaiming = (w: unknown) => w === "unknown-code" && Date.now() < reclaimUntil;
+  if (why === "lost" || reclaiming(why)) {
+    if (Date.now() >= reclaimUntil) reclaimUntil = Date.now() + RECLAIM_S * 1000;
     setStatus("lost", "Reconnecting…");
     const retry = async () => {
       try {
         link = await feed.join(state.code, onRelay, onClosed);
       } catch (again) {
-        if (again === "lost" || again === "not-joined") setTimeout(retry, 2000);
+        if (again === "lost" || again === "not-joined" || reclaiming(again)) setTimeout(retry, 2000);
         else backToPairing(again as Closed);
       }
     };
@@ -286,6 +330,7 @@ function showTab(tab: Tab, focus = false) {
   // ion-tabs shows the panel; keyboard focus follows once it has.
   void ($("live") as IonTabs).select(tab).then(() => focus && $(`tab-button-${tab}`).focus());
   document.body.dataset.tab = tab;
+  if (embed) window.parent.postMessage({ type: "ninety-tab", tab }, location.origin);
   if (tab === "insights") {
     unread = 0;
     showUnread();
@@ -293,6 +338,19 @@ function showTab(tab: Tab, focus = false) {
   if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
 }
 
+// The big screen around an embedded phone may open a tab ("Ask anything about this match →").
+const OPEN_TABS: Record<string, Tab> = { live: "radar", radar: "radar", ask: "ask", story: "insights", insights: "insights" };
+if (embed) {
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || e.source !== window.parent) return; // the parent page only
+    const m = e.data as { type?: unknown; tab?: unknown } | null;
+    // The passcode entered on the big screen, so the docked panel's Ask is the agents' too.
+    const pm = e.data as { type?: unknown; passcode?: unknown } | null;
+    if (pm && pm.type === "ninety-passcode" && (typeof pm.passcode === "string" || pm.passcode === null)) setPasscode(pm.passcode);
+    const tab = m && m.type === "ninety-open" && typeof m.tab === "string" ? OPEN_TABS[m.tab] : undefined;
+    if (tab && document.body.dataset.state === "live") showTab(tab, true);
+  });
+}
 $("live").addEventListener("ionTabsDidChange", (e) => {
   const tab = (e as CustomEvent<{ tab: Tab }>).detail.tab;
   if (tab !== state.tab) showTab(tab);
@@ -330,7 +388,7 @@ interface BundleManifest {
   segments?: { index: number; frame: number; frames: number }[];
   width: number;
   height: number;
-  footage: { kind: "video" | "frames"; src: string; frames: number };
+  footage: { kind: "video" | "frames"; src: string; frames: number; timescale?: number };
   detector?: string | null;
   teams?: unknown;
   sides_known?: unknown;
@@ -342,7 +400,9 @@ interface BundleManifest {
   cards?: unknown;
 }
 
-let bundleFps = 25;
+/** Video images a second: the bundle's fps times its footage's baked speed (footage.timescale, #413).
+ * Chapters and the footage count images, so every image <-> video-time conversion uses this. */
+let bundleImageRate = 25;
 let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
 interface DetectedEvent {
@@ -410,7 +470,7 @@ async function loadBundle() {
     const cuts = timeline(m);
     laptop.cuts = cuts;
     bundle = { base, manifest: m };
-    bundleFps = m.fps;
+    bundleImageRate = cuts.rate;
     const [radar, match, cards] = await Promise.all([
       m.radar ? get("radar.json") : null,
       m.match ? get("match.json") : null,
@@ -451,10 +511,14 @@ async function loadBundle() {
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
     // The team sheet: names, shirts and positions the line-up tool is confident of (never a guess).
-    for (const k of Object.keys(teamSheet)) delete teamSheet[k];
-    for (const e of ((match as { lineup?: (SheetEntry & { id: string; confident?: boolean })[] } | null)?.lineup ?? [])) {
-      if (e.confident === true) teamSheet[e.id] = { name: e.name, number: e.number, position: e.position };
+    type Rows = { lineup?: Row[]; lineup_tactical?: Row[]; identity?: { label?: string; note?: string } } | null;
+    type Row = SheetEntry & { id: string; confident?: boolean };
+    for (const [sheet, rows] of [[teamSheet, (match as Rows)?.lineup], [tacticalSheet, (match as Rows)?.lineup_tactical]] as const) {
+      for (const k of Object.keys(sheet)) delete sheet[k];
+      for (const e of rows ?? []) if (e.confident === true) sheet[e.id] = { name: e.name, number: e.number, position: e.position };
     }
+    const id = (match as Rows)?.identity;
+    identity = id?.label ? { label: id.label, note: id.note } : null;
     $("match-card").hidden = !state.match;
     renderChips(); // the Ask grid's player questions come from the match's numbers
   } catch {
@@ -560,6 +624,7 @@ function buildRadar() {
   mapCanvas.dataset.from = state.radarFrom ?? "";
   $("map-box").hidden = !on;
   for (const id of ["pick-hint", "roster-box", "now-box", "legend"]) $(id).hidden = !on;
+  syncPlayersTab();
   $("legend-view").hidden = state.radarFrom !== "bundle";
   $("wind-toggle").hidden = !state.minimap;
   if (on) {
@@ -684,6 +749,7 @@ function renderRoster(roster: string[]) {
   }
   roster = roster.filter((id) => !isTrack(id));
   $("roster-box").hidden = roster.length === 0;
+  syncPlayersTab();
   // One card per club, home first (Apple Sports and FotMob line-ups): crest and full name, the
   // club's players at their average positions on a small pitch, then #, name and where he plays.
   $("roster").replaceChildren(
@@ -744,6 +810,7 @@ const LINE_X: Record<SheetPlayer["line"], number> = { goalkeeper: 6, defender: 2
  * tracked number is attached to anyone unless the line-up names the track (none on the demo). */
 function renderSheets(sheets: Record<"home" | "away", SheetPlayer[]>) {
   $("roster-box").hidden = false;
+  syncPlayersTab();
   const svgNS = "http://www.w3.org/2000/svg";
   $("roster").replaceChildren(
     ...(["home", "away"] as const).map((side) => {
@@ -912,6 +979,7 @@ let settings = prefs.load();
 let captionTimer = 0;
 /** Speaks a line with the fan's voice and rate; with the transcript on, shows it as a caption too. */
 function say(text: string) {
+  if (embed) return; // the big screen around it plays all sound
   speakAloud(text, { rate: settings.rate, voice: settings.voice });
   if (!settings.transcript) return;
   const caption = $("caption");
@@ -965,7 +1033,7 @@ function renderSettings() {
       play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10l8-5z"/></svg>';
       play.addEventListener("click", () => {
         if ("speechSynthesis" in window) speechSynthesis.cancel();
-        speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
+        if (!embed) speakAloud(SAMPLE, { rate: settings.rate, voice: v.name }); // a preview: only on this tap
       });
       return radioRow("voice", v.name, settings.voice === v.name, () => (settings.voice = v.name), play);
     }),
@@ -1025,6 +1093,10 @@ playerSheet.addEventListener("ionModalDidDismiss", () => {
 });
 /** Close the sheet for the Ask tab, keeping its player as the question's subject. */
 function askAboutPlayer() {
+  if (onboard.isOpen && !onboard.editing) {
+    onboard.close(); // a question about a player wins over the choices: they wait for next visit
+    syncAsk();
+  }
   keepSelection = true;
   $("player").hidden = true;
   void playerSheet.dismiss();
@@ -1088,7 +1160,11 @@ function select(id: string | null, fromLaptop = false) {
   showSheet(id !== null);
   $("pick-hint").hidden = state.radar === null;
   if (id) {
-    $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
+    // The ID feed's shirt and position beside the name (lesson 269); vision's numbers below as before.
+    const row = tacticalSheet[id];
+    const shirt = row?.name ? [row.number !== undefined ? `#${row.number}` : "", row.position ?? ""].filter(Boolean).join(" · ") : "";
+    const title = shirt ? `${playerName(id)}, ${shirt}` : playerName(id);
+    $("player-title").textContent = fromLaptop ? `${title} · followed from the big screen` : title;
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
     // Nothing shows until the player's numbers have loaded: no dashes, no empty heat map.
@@ -1220,6 +1296,8 @@ function renderCompareChips(id: string) {
   const others = rosterIds()
     .filter((o) => o !== id)
     .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
+    // One chip a label (UI inventory #11): unnamed players who read alike are one choice, not a dozen.
+    .filter(((seen) => (o: string) => !seen.has(distinctName(o)) && !!seen.add(distinctName(o)))(new Set<string>()))
     .filter((o) => ++side[team(o)] <= 11);
   $("compare-box").hidden = others.length === 0;
   $("compare-rows").hidden = true;
@@ -1282,6 +1360,82 @@ async function compare(a: string, b: string) {
   $("compare-rows").hidden = false;
 }
 
+// --- the fan's choices (fan.ts, onboarding.ts): club, mode, focus; on this device only ----------
+
+let fan = fans.load();
+const chosen = () => (fan && fan !== "skipped" ? fan : null);
+let storyTouched = false; // the fan picked All or Key plays this visit: their pick stands
+const onboard = mountOnboarding($("onboard"), (picked, editing) => {
+  if (picked) fan = picked;
+  else if (!editing) fan = "skipped"; // not now: Personalise in the settings sheet reopens it
+  if (picked || !editing) fans.save(fan!);
+  applyFan(true);
+});
+
+/** What the choices shape: Ask's questions and which come first, the Story feed's starting filter,
+ * and the settings row. */
+function applyFan(rerender = false) {
+  const f = chosen();
+  $("fan-value").textContent = f ? fans.summary(f) : "";
+  // The persona (Kian, Oct 26: "make personalisation more visible"): the fan's club, mode and focus
+  // lay Live out (style.css, body[data-mode], [data-focus], [data-us]); no number changes.
+  const us = usSide();
+  document.body.dataset.mode = f?.mode ?? "";
+  document.body.dataset.focus = f?.focus ?? "";
+  document.body.dataset.us = us ?? "";
+  document.body.dataset.club = f?.club ?? "";
+  for (const [id, v] of [["persona-mode", f?.mode], ["persona-club", f?.club]] as const)
+    ($(id) as HTMLElement & { value: string }).value = v ?? "";
+  if (rerender) { statsKey = ""; spottedKey = ""; squadKey = ""; if (state.match) showMatch(viewTime()); renderJustNow(); renderSquad(); }
+  $("ask-start").dataset.focus = f?.focus ?? "";
+  if (f && !storyTouched) {
+    const mode = fans.storyMode(f);
+    ($("story-mode") as HTMLElement & { value: string }).value = mode;
+    $("insights").dataset.mode = mode;
+    if (rerender) renderInsights();
+  }
+  syncAsk();
+  if (rerender) renderChips();
+}
+
+/** The side of this match the fan supports, when it is one of its two clubs. */
+function usSide(): "home" | "away" | null {
+  const f = chosen();
+  if (!f) return null;
+  const us = short(CLUBS[f.club]);
+  return teams.home === us ? "home" : teams.away === us ? "away" : null;
+}
+
+/** The one-tap persona switch in the ••• sheet: the mode and the club, kept as #362's choices. */
+function setPersona(change: Partial<fans.Fan>) {
+  const base: fans.Fan = chosen() ?? { club: "LON", mode: "casual", focus: "moments" };
+  fan = { ...base, ...change };
+  fans.save(fan);
+  storyTouched = false;
+  applyFan(true);
+}
+// The demo passcode field (••• sheet): blank removes it. Its value is never echoed anywhere.
+const passField = $<HTMLInputElement>("passcode");
+passField.value = passcode ?? "";
+passField.addEventListener("change", () => setPasscode(passField.value));
+
+$("persona-mode").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "casual" || v === "analyst") && v !== chosen()?.mode) setPersona({ mode: v });
+});
+$("persona-club").addEventListener("ionChange", (e) => {
+  const v = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((v === "LON" || v === "LIS") && v !== chosen()?.club) setPersona({ club: v });
+});
+
+$("fan-edit").addEventListener("click", () => {
+  void settingsSheet.dismiss();
+  showTab("ask");
+  onboard.open(chosen(), true);
+  syncAsk();
+  void ($("ask-content") as HTMLElement & { scrollToTop(ms?: number): Promise<void> }).scrollToTop(0);
+});
+
 // --- questions -------------------------------------------------------------------------------
 
 function playerQuestions(id: string): string[] {
@@ -1291,6 +1445,8 @@ function playerQuestions(id: string): string[] {
 
 /** The match questions the Companion's tools answer with a picture. */
 function matchQuestions(): string[] {
+  const f = chosen();
+  if (f) return fans.questions(f, teams); // the fan's club and focus first
   return [
     `Where are ${teams.home} overloading?`,
     `Which pass broke ${teams.away}'s lines?`,
@@ -1313,6 +1469,42 @@ function chip(q: string, onTab: Tab | null) {
   return b;
 }
 
+/** A starter card's glyph: its topic's (SF Symbols' shapes, drawn here), else its kind's
+ * (fan.ts, `kindOf`), so a grid of one kind still reads as six different questions. */
+const KIND_GLYPHS: Record<fans.Kind, string> = {
+  moments: '<path d="M12 3.5 14.5 9l6 .5-4.6 3.9 1.4 5.9L12 16.2l-5.3 3.1 1.4-5.9L3.5 9.5l6-.5z"/>',
+  tactics: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.6"/>',
+  players: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6"/>',
+  numbers: '<path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/>',
+};
+const TOPIC_GLYPHS: [RegExp, string][] = [
+  [/overload/i, '<circle cx="6" cy="8" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><circle cx="12" cy="11.5" r="1"/>'], // three round the ball
+  [/lines/i, '<path d="M3.5 11h5M15.5 11h5M3.5 17h5M15.5 17h5M12 20.5V4M8.5 7.5 12 4l3.5 3.5"/>'], // a pass up through the gap in two lines
+  [/options/i, '<circle cx="6" cy="12" r="2.2"/><path d="M8.2 12h12M7.9 10.8 19 5M7.9 13.2 19 19"/>'], // three passes from one man
+  [/shape/i, '<path d="M5 6h.01M12 6h.01M19 6h.01M5 12h.01M12 12h.01M19 12h.01M8.5 18h.01M15.5 18h.01" stroke-width="3"/>'], // a formation
+  [/ball back/i, '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17.5 3v4h-4"/>'], // the ball won back
+  [/compact/i, '<path d="M3 12h6M21 12h-6M6.5 9.5 9 12l-2.5 2.5M17.5 9.5 15 12l2.5 2.5M12 4v16"/>'], // squeezed together
+  [/missed/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>'],
+  [/shots/i, '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>'],
+  [/corners/i, '<path d="M6 21V3l11 4.5L6 12"/>'],
+  [/furthest|run/i, '<circle cx="4.8" cy="19.2" r="1.8"/><circle cx="19.2" cy="4.8" r="1.8"/><path d="M6.6 19.2c3.4 0 3.4-7.2 5.4-7.2s2-7.2 5.4-7.2"/>'],
+  [/fastest|speed/i, '<path d="M13.5 3 6 13.5h5.5L10.5 21 18 10.5h-5.5z"/>'],
+  [/linking/i, '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'],
+  [/more of the ball/i, '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12l6 6"/>'],
+  [/halves/i, '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M12 5v14M7 12h.01M17 12h.01" stroke-width="2"/>'],
+];
+const glyphFor = (q: string) => TOPIC_GLYPHS.find(([re]) => re.test(q))?.[1] ?? KIND_GLYPHS[fans.kindOf(q)];
+function card(q: string) {
+  const b = chip(q, null);
+  b.classList.add("q-card");
+  b.textContent = "";
+  const text = document.createElement("span");
+  text.textContent = q;
+  b.insertAdjacentHTML("afterbegin", `<svg class="q-glyph" viewBox="0 0 24 24" aria-hidden="true">${glyphFor(q)}</svg>`);
+  b.append(text);
+  return b;
+}
+
 /** Questions this fan has already asked: never suggested back to them. */
 const asked = new Set<string>();
 
@@ -1320,7 +1512,12 @@ const asked = new Set<string>();
  * answer, the answers under "Recent" and the chips (or an answer's follow-ups) above the composer. */
 function syncAsk() {
   const any = $("answers").children.length > 0;
-  $("ask-start").hidden = any;
+  if (any && onboard.isOpen && !onboard.editing) onboard.close(); // they asked instead: next visit
+  // The composer waits for the choices (Kian, Oct 25), then rises in once they are made or skipped.
+  const panel = $("panel-ask");
+  if (panel.classList.contains("onboarding") && !onboard.isOpen) panel.classList.add("composer-in");
+  panel.classList.toggle("onboarding", onboard.isOpen);
+  $("ask-start").hidden = any || onboard.isOpen;
   $("recent-title").hidden = !any;
   if (!any) $("ask-chips").hidden = true;
   else if ($("ask-chips").dataset.started !== "1") {
@@ -1329,7 +1526,9 @@ function syncAsk() {
   }
 }
 new MutationObserver(syncAsk).observe($("answers"), { childList: true });
-syncAsk();
+$("panel-ask").addEventListener("animationend", () => $("panel-ask").classList.remove("composer-in"));
+if (fan === null && !embed) onboard.open(null, false); // the first visit opens on the three choices
+applyFan();
 
 function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
@@ -1337,13 +1536,13 @@ function renderChips() {
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
   $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
   // An empty conversation opens on a grid of questions (never a blank page), then the answers.
-  $("ask-grid").replaceChildren(...all.slice(0, 6).map((q) => chip(q, null)));
+  $("ask-grid").replaceChildren(...all.slice(0, 6).map(card));
   // And about the players most in the game (the Scout's per-player numbers), when there are any.
   const sq = state.match as (MatchData & Squads & { insight_stats?: StatsBlock }) | null;
   const ps = (sq?.insight_stats?.player_stats ?? sq?.player_stats ?? []).filter((p) => typeof p.involvements === "number");
   const most = [...ps].sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
   const theirs = most.map((p, i) => playerQuestions(p.id)[i % 3]).filter((q) => !asked.has(q));
-  $("ask-players").replaceChildren(...theirs.map((q) => chip(q, null)));
+  $("ask-players").replaceChildren(...theirs.map(card));
   $("ask-players").hidden = $("ask-players-title").hidden = theirs.length === 0;
 }
 
@@ -1359,6 +1558,9 @@ const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
 function badgeFor(a: ViewerAnswer): string {
   if (a.status !== "verified") return STATUS_WORDS[a.status];
   if (a.source === "model") return STATUS_WORDS.verified;
+  // By what the answer rests on: the scorebug's reading, a name from the ID feed, or tracking.
+  if (a.metric === "scorebug" || a.evidence.some((e) => e.startsWith("scorebug:"))) return "Read from the broadcast's scorebug";
+  if (identity && feedNamed(a.headline)) return identity.label;
   return feed.mock ? "Computed from mock positions" : "Computed from tracked positions";
 }
 
@@ -1376,7 +1578,18 @@ const METRIC_WORDS: Record<string, string> = {
 /** An answer's or a card's text, its player ids said as the payload names them (tactical ids: never
  * the team sheet's line-up, which names broadcast tracks; names-by-role, Oct 25). */
 function named(text: string, names?: Record<string, string>): string {
-  return nameIds(text, teams, names);
+  // Answers and cards name TACTICAL tracks: the ID feed's rows for them, under what a payload says.
+  const feed: Record<string, string> = {};
+  for (const [id, e] of Object.entries(tacticalSheet)) if (e.name) feed[id] = e.name;
+  return nameIds(text, teams, { ...feed, ...names });
+}
+
+/** The player-ID feed (match.json `identity`): where names come from, never vision (lesson 269). */
+let identity: { label: string; note?: string } | null = null;
+/** Whether any of these words carry a name the ID feed gave. */
+function feedNamed(...texts: (string | null | undefined)[]): boolean {
+  const all = [...Object.values(teamSheet), ...Object.values(tacticalSheet)].map((e) => e.name).filter((n): n is string => !!n);
+  return all.some((n) => texts.some((t) => !!t && t.includes(n)));
 }
 
 /** A detected event's text (broadcast track ids): the team sheet names a track the line-up is sure
@@ -1394,6 +1607,7 @@ async function ask(text: string) {
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
   asked.add(q);
+  if (onboard.isOpen) onboard.close(); // a typed question wins over the choices: they wait
   renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
   // About the shown player, ask at the card's time, so the answer and the card agree.
@@ -1407,8 +1621,8 @@ async function ask(text: string) {
   let answer: ViewerAnswer | null = null;
   let failed = "";
   try {
-    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at });
-    answer = { ...message.answer, source: message.source ?? message.answer.source };
+    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at }, passcode);
+    answer = { ...message.answer, source: message.source ?? message.answer.source, ...(message.model_off ? { model_off: true } : {}) };
   } catch (e) {
     failed =
       e instanceof ApiError && e.status === 429
@@ -1419,7 +1633,10 @@ async function ask(text: string) {
   } finally {
     button.removeAttribute("aria-disabled");
   }
-  if (input.value.trim() === q) input.value = "";
+  if (input.value.trim() === q) {
+    input.value = "";
+    fitQuestion();
+  }
   pending.replaceWith(renderAnswer(q, at, answer, failed));
   // The new question at the top, whole, with its answer under it (Messages scrolls a new thread
   // turn into view; it never leaves the question cut under the bar).
@@ -1632,6 +1849,20 @@ $("ask-form").addEventListener("submit", (e) => {
   e.preventDefault();
   void ask($<HTMLInputElement>("question").value);
 });
+// The composer grows with the question, up to five lines, then scrolls; Return sends, as in
+// Messages (Shift-Return for a new line).
+function fitQuestion() {
+  const q = $<HTMLTextAreaElement>("question");
+  q.style.height = "auto";
+  q.style.height = `${Math.min(q.scrollHeight, 22 * 5 + 18)}px`;
+}
+$("question").addEventListener("input", fitQuestion);
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    $<HTMLFormElement>("ask-form").requestSubmit();
+  }
+});
 
 // --- "How do we know?": what the cameras saw, what was measured, what checked it ---------------
 
@@ -1697,12 +1928,22 @@ function howButton(h: How): HTMLButtonElement {
 
 /** The broadcast picture at match time `t`, drawn onto `canvas` from the bundle's footage, with
  * every detection of that frame boxed and its confidence. Resolves to the detections drawn. */
+/** The footage image that shows match time `t`, and where it sits in the video: through the shared
+ * timeline, at the footage's image rate (fps × footage.timescale, #413). */
+function imageAt(t: number): { index: number; videoT: number } | null {
+  if (!bundle) return null;
+  const m = bundle.manifest;
+  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
+  const rate = m.fps * timescaleOf(m);
+  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * rate + 1e-6)));
+  return { index, videoT: (index + 0.5) / rate };
+}
+
 async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"]> {
   if (!bundle) return [];
   const m = bundle.manifest;
   const frame = Math.round(t * m.fps);
-  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
-  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * m.fps)));
+  const { index, videoT } = imageAt(t)!;
   canvas.width = m.width;
   canvas.height = m.height;
   const ctx = canvas.getContext("2d")!;
@@ -1717,7 +1958,7 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
       video.muted = true;
       video.preload = "auto";
       video.src = new URL(m.footage.src, bundle!.base).toString();
-      video.addEventListener("loadedmetadata", () => (video.currentTime = (index + 0.5) / m.fps), { once: true });
+      video.addEventListener("loadedmetadata", () => (video.currentTime = videoT), { once: true });
       video.addEventListener("seeked", () => resolve(video), { once: true });
       video.addEventListener("error", () => resolve(null), { once: true });
     }
@@ -1826,11 +2067,15 @@ async function openHow(h: How) {
       canvas.setAttribute("aria-label", `The broadcast picture at ${clock(h.t)}: ${found.map((d) => `${d.cls} ${Math.round(d.score * 100)} percent`).join(", ")}.`);
     });
   }
+  // A name in it came from the player-ID feed (lesson 269): say so, never that vision named him.
+  if (identity && feedNamed(h.why?.text, h.answer?.text, h.answer?.headline, ...Object.values(h.names ?? {})))
+    steps.push(step("Who the players are", p(identity.label, "said")));
   const measured = p("Measured from player tracking", "said");
   if (h.visual && !isVar(h)) steps.push(step("What was measured", picture(h.visual, h.t, h.names), measured));
   else steps.push(step("What was measured", measured));
-  const checked = h.source === "model" ? "Written by the Companion, checked by code and the Judge before it was shown" : "Checked by code before it was shown";
-  steps.push(step("What the fact-checker did", p(checked, "said"), ...(h.answer ? evidence(h.answer) : [])));
+  const checked = h.source === "model" ? "Answered by our agents, checked by the fact-checker" : "Computed from tracking";
+  const off = h.answer?.model_off ? [p("Model off", "fine model-off")] : [];
+  steps.push(step("What the fact-checker did", p(checked, "said"), ...off, ...(h.answer ? evidence(h.answer) : [])));
   const count = p(`${steps.length} checks · all passed`, "count-line");
   list.replaceChildren(...steps);
   body.replaceChildren(...top, count, list);
@@ -1894,7 +2139,83 @@ async function refreshInsights(force = false) {
 }
 
 /** Live's "Just now": the newest Story moment, its sentence, chip and minute. */
+/** The tactics focus: the latest card of each tactical kind (overload, line break, passing options,
+ * shape), newest first, as large cards above the pitch; each opens How we know. */
+const TACTICAL: Record<string, string> = { overload: "Overload", line_break: "Line break", pass_options: "Passing options", team_shape: "Shape", shape: "Shape" };
+function renderTacticsStrip() {
+  const seen = new Set<string>();
+  const latest = state.insights.filter((c) => TACTICAL[c.kind] && !seen.has(c.kind) && !!seen.add(c.kind)).slice(0, 3);
+  $("tactics-strip").hidden = latest.length === 0;
+  $("tactics-strip").replaceChildren(
+    focusList(latest.map((c) => {
+      const row = focusRow(`${TACTICAL[c.kind]} · ${c.minute}′`, named(c.headline || c.text, c.names), c.team);
+      row.addEventListener("click", () => void openHow({ t: c.t, visual: c.visual, source: c.source, evidence: c.evidence, names: c.names, why: c.why ? { question: c.why.question, text: named(c.why.answer.text, c.names) } : undefined }));
+      return row;
+    })),
+  );
+}
+
+/** One rounded group of rows, hairlines between them (Apple Sports' lists). */
+function focusList(rows: HTMLElement[]): HTMLUListElement {
+  const ul = document.createElement("ul");
+  ul.className = "focus-list";
+  ul.append(...rows.map((r) => { const li = document.createElement("li"); li.append(r); return li; }));
+  return ul;
+}
+/** A row: a small grey label (a club's dot where its side is sure) over one line of text, a chevron. */
+function focusRow(label: string, text: string, side: string | null, lead?: HTMLElement): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "focus-row";
+  const body = document.createElement("span");
+  body.className = "focus-body";
+  const small = document.createElement("span");
+  small.className = `focus-label ${side === "home" || side === "away" ? side : ""}`;
+  small.textContent = label;
+  const line = document.createElement("span");
+  line.className = "focus-text";
+  line.textContent = text;
+  body.append(small, line);
+  const chev = document.createElement("span");
+  chev.className = "focus-chev";
+  chev.setAttribute("aria-hidden", "true");
+  chev.textContent = "›";
+  b.append(...(lead ? [lead] : []), body, chev);
+  return b;
+}
+const shirtCircle = (n: number | undefined, side: string) => {
+  const c = document.createElement("span");
+  c.className = `shirt-dot ${side}`;
+  c.setAttribute("aria-hidden", "true");
+  c.textContent = n !== undefined ? String(n) : "";
+  return c;
+};
+
+/** The players focus: the players most in the game (the Scout's per-player numbers), named as the
+ * radar names them (the ID feed's name, shirt and position where it has a row); a tap opens his card,
+ * with Compare. Never the team sheet: line-ups are the Players tab's alone (Kian, Oct 26). */
+function renderPlayersStrip(ps: PlayerStats[]) {
+  const most = ps.filter((p) => typeof p.involvements === "number").sort((a, b) => b.involvements! - a.involvements!).slice(0, 4);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  let rows: HTMLButtonElement[] = [];
+  if (most.length) {
+    rows = most.map((p) => {
+      const row = tacticalSheet[p.id];
+      const d = distinctName(p.id); // "London player, left of the pitch": where he plays, when unnamed
+      const where = row?.name ? cap(row.position ?? "") : d.includes(", ") ? d.slice(d.indexOf(", ") + 2) : "";
+      const s = sideUnsure(p.id) ? "neutral" : team(p.id);
+      const r = focusRow(where ? `${where} · ${Math.round(p.involvements!)} involvements` : `${Math.round(p.involvements!)} involvements`, playerName(p.id), s, shirtCircle(row?.name ? row.number : undefined, s));
+      r.classList.add("player-row");
+      r.addEventListener("click", () => select(p.id));
+      return r;
+    });
+  }
+  $("players-strip").hidden = rows.length === 0;
+  $("players-strip").replaceChildren(...(rows.length ? [focusList(rows)] : []));
+}
+
 function renderJustNow() {
+  renderTacticsStrip();
   const c = state.insights[0];
   $("just-now").hidden = !c;
   if (!c) return;
@@ -1949,6 +2270,7 @@ function playsUpTo(t: number): DetectedEvent[] {
   return [...bundleEvents.values()].filter((e) => e.t <= t + 1e-6 && (e.confidence ?? 0) >= min && playSentence(e)).sort((a, b) => b.t - a.t);
 }
 let playsShown = -1;
+let goalsShown = -1;
 
 function storyItem(team: "home" | "away" | null, text: string, t: number): { li: HTMLLIElement; body: HTMLDivElement } {
   const li = document.createElement("li");
@@ -1971,9 +2293,14 @@ function storyItem(team: "home" | "away" | null, text: string, t: number): { li:
  * key plays); "See all" opens Story. Hidden until there is one. */
 function renderKeyMoments(plays: DetectedEvent[]) {
   type Moment = { t: number; team: "home" | "away" | null; text: string; goal: boolean };
-  const goals: Moment[] = plays
-    .filter((e) => e.type === "shot" && e.outcome === "goal")
-    .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })); // a club's colour only on a side told surely
+  // The match's goals (reconciled with the scorebug), then any detected goal none of them tells.
+  const now = viewTime();
+  const goals: Moment[] = [
+    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? `${teams[side]} goal` : "Goal", goal: true }; }),
+    ...plays
+      .filter((e) => e.type === "shot" && e.outcome === "goal" && !toldByGoal(e, now))
+      .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })), // a club's colour only on a side told surely
+  ];
   const cards: Moment[] = state.insights.map((c) => ({ t: c.t, team: c.team, text: named(c.headline || c.text, c.names), goal: false }));
   const moments = [...goals, ...cards].sort((a, b) => b.t - a.t).slice(0, 4);
   $("key-moments").hidden = moments.length === 0;
@@ -2002,6 +2329,7 @@ function renderInsights() {
   const now = viewTime();
   const plays = playsUpTo(now);
   playsShown = plays.length;
+  goalsShown = goalsUpTo(now).length;
   renderKeyMoments(plays);
   const key = list.dataset.mode === "key";
   type Row = { t: number; el: HTMLLIElement };
@@ -2021,8 +2349,26 @@ function renderInsights() {
     if (c.visual) body.append(picture(c.visual, c.t, c.names));
     return { t: c.t, el: li };
   });
+  // Goals first in weight (demo audit 2, row 8): each of the match's goals as a larger card with its
+  // club's crest, "Goal", the club and minute, and the scorer where the team sheet names him.
+  for (const g of goalsUpTo(now)) {
+    const side = goalSide(g);
+    const who = bundleEvents.get(g.event)?.player;
+    const scorer = who && !unnamedTrack(who, undefined, true) ? eventName(who) : "";
+    const { li, body } = storyItem(side, scorer ? `${goalLine(g)} · ${scorer}` : goalLine(g), g.t);
+    li.classList.add("goal-card");
+    if (side && side === usSide()) li.classList.add("ours");
+    li.dataset.goal = g.event;
+    const head = document.createElement("h3");
+    head.className = "goal-head";
+    head.innerHTML = side ? `<span class="crest" aria-hidden="true">${crestSvg(teams[side], side)}</span>` : "";
+    head.append("Goal");
+    body.prepend(head);
+    rows.push({ t: g.t, el: li });
+  }
   for (const e of plays) {
     const goal = e.type === "shot" && e.outcome === "goal";
+    if (goal && toldByGoal(e, now)) continue; // its goal's card says it
     if (key && !goal) continue;
     const { li } = storyItem(sureSide(e), playSentence(e)!, e.t);
     li.classList.add("play");
@@ -2052,10 +2398,14 @@ function renderInsights() {
     list.replaceChildren(li);
     return;
   }
-  list.replaceChildren(...rows.sort((a, b) => b.t - a.t).map((r) => r.el));
+  // In Key plays the fan's club's moments come first (newest first within each), then the rest.
+  const us = key ? usSide() : null;
+  const mine = (r: Row) => (us && r.el.classList.contains(us) ? 1 : 0);
+  list.replaceChildren(...rows.sort((a, b) => mine(b) - mine(a) || b.t - a.t).map((r) => r.el));
 }
 
 $("story-mode").addEventListener("ionChange", (e) => {
+  storyTouched = true;
   $("insights").dataset.mode = (e as CustomEvent<{ value: string }>).detail.value;
   renderInsights();
   requestAnimationFrame(redrawPictures);
@@ -2077,19 +2427,57 @@ function renderSpotted(m: MatchData, t: number) {
   const goals = m.goals.filter((g) => g.t <= t);
   // Redrawn when a goal, a club's name or a scorer's name (the team sheet loads later) changes.
   const names = goals.map((g) => { const p = bundleEvents.get(g.event)?.player; return p ? playerName(p) : ""; });
-  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}`;
+  const key = `${goals.map((g) => g.event).join()}|${teams.home}|${teams.away}|${names.join()}|${scorebugEvents.length}|${scorebugGoals(t)?.length ?? -1}`;
   if (key === spottedKey) return;
   spottedKey = key;
-  const minute = (g: { t: number }) => `${Math.floor(g.t / 60) + 1}′`;
-  // A goal vision could not give a side takes the side whose count the broadcast's scorebug raised
-  // within SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels).
-  const sideOf = (g: { t: number; team?: string | null }): "home" | "away" | null => {
-    if (g.team === "home" || g.team === "away") return g.team;
-    const change = scorebugEvents.find(
-      (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
-    );
-    return change ? (change.team as "home" | "away") : null;
-  };
+  const minute = (g: { t: number }) => `${momentum.minuteOf(g.t)}′`;
+  const sideOf = goalSide;
+  // With the scorebug's readings, every goal it counted, under its club (Coordinator, Oct 26: the
+  // score and the lines agree): each rise in a side's count is a goal at that minute; a scorer only
+  // where a goal vision spotted beside it is named by the team sheet.
+  const bug = scorebugGoals(t);
+  if (bug) {
+    for (const side of ["home", "away"] as const) {
+      const mine = bug.filter((g) => g.side === side);
+      // Each goal by its scorer's surname where the player-ID feed names him (#389, through the
+      // line-up of broadcast tracks), else by the club ("Rondell 38′", "London 22′ 68′").
+      // One spotted goal a scorebug goal, the nearest within SCOREBUG_MATCH_S, each used once.
+      const used = new Set<(typeof goals)[number]>();
+      const nearOf = new Map(mine.map((g) => {
+        const near = goals
+          .filter((v) => !used.has(v) && sideOf(v) === side && Math.abs(v.t - g.t) <= SCOREBUG_MATCH_S)
+          .sort((a, b) => Math.abs(a.t - g.t) - Math.abs(b.t - g.t))[0];
+        if (near) used.add(near);
+        return [g, near] as const;
+      }));
+      const label = (g: (typeof mine)[number]) => {
+        const near = nearOf.get(g);
+        const who = near ? bundleEvents.get(near.event)?.player : undefined;
+        const name = who ? teamSheet[who]?.name : undefined; // the line-up's (the ID feed's), never a label
+        return name ? name.split(" ").slice(-1)[0] : teams[side];
+      };
+      const lines = new Map<string, typeof mine>();
+      for (const g of mine) lines.set(label(g), [...(lines.get(label(g)) ?? []), g]);
+      $(`goals-${side}`).replaceChildren(
+        ...[...lines].map(([who, gs]) => {
+          const li = document.createElement("li");
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "side-goal";
+          b.textContent = `${who} ${gs.map(minute).join(" ")}`;
+          const named = who !== teams[side];
+          b.addEventListener("click", () => {
+            void openHow({ t: gs[gs.length - 1].t, visual: null, source: "code", evidence: [],
+              why: { question: "", text: `${teams[side]}'s goals, read from the broadcast's score graphic: ${gs.map(minute).join(", ")}.${named && identity ? ` The scorer's name is from the ${identity.label}.` : ""}` } });
+          });
+          li.append(b);
+          return li;
+        }),
+      );
+    }
+    $("goals-unsure").replaceChildren();
+    return;
+  }
   for (const side of ["home", "away", null] as const) {
     const mine = goals.filter((g) => sideOf(g) === side);
     // One line per scorer, his goals' minutes in order.
@@ -2120,6 +2508,60 @@ function renderSpotted(m: MatchData, t: number) {
   }
 }
 
+/** Each goal the scorebug counted up to t: a rise in a side's count between readings (one goal a rise
+ * of one); null when the bundle carries no readings that pass the gate. */
+function scorebugGoals(t: number): { t: number; side: "home" | "away" }[] | null {
+  const reads = scorebugEvents.filter((e) => (e.type === "score_change" || e.type === "score_read") && e.score && e.t <= t + 1e-6);
+  if (!reads.length) return null;
+  const out: { t: number; side: "home" | "away" }[] = [];
+  let prev = { home: 0, away: 0 };
+  for (const e of [...reads].sort((a, b) => a.t - b.t)) {
+    const now = e.score!;
+    for (const side of ["home", "away"] as const) for (let k = prev[side]; k < now[side]; k++) if (e.type === "score_change") out.push({ t: e.t, side });
+    prev = { home: Math.max(prev.home, now.home), away: Math.max(prev.away, now.away) };
+  }
+  return out;
+}
+
+/** A goal's club: its own side, or else the side whose count the broadcast's scorebug raised within
+ * SCOREBUG_MATCH_S of it (the scorebug is the broadcast's own graphic, read from pixels). */
+function goalSide(g: { t: number; team?: string | null }): "home" | "away" | null {
+  if (g.team === "home" || g.team === "away") return g.team;
+  const change = scorebugEvents.find(
+    (e) => e.type === "score_change" && (e.team === "home" || e.team === "away") && Math.abs(e.t - g.t) <= SCOREBUG_MATCH_S,
+  );
+  return change ? (change.team as "home" | "away") : null;
+}
+
+/** "London · 38′": a goal's club (when known) and minute, as Apple Sports heads a goal. */
+function goalLine(g: { t: number; team?: string | null }): string {
+  const side = goalSide(g);
+  return side ? `${teams[side]} · ${momentum.minuteOf(g.t)}′` : `${momentum.minuteOf(g.t)}′`;
+}
+
+/** The match's goals up to t (match.json `goals`, reconciled with the scorebug, #356). */
+const goalsUpTo = (t: number) => (state.match?.goals ?? []).filter((g) => g.t <= t);
+const GOAL_SHOT_S = 5; // design: a shot that goes in is followed by its goal event within seconds
+type GoalRow = MatchData["goals"][number];
+/** Each detected goal shot up to t with the match's goal that tells it: one goal a shot, the nearest
+ * after it within GOAL_SHOT_S and of the same club (either side may be unknown). */
+function goalShots(t: number): Map<string, GoalRow> {
+  const out = new Map<string, GoalRow>();
+  const used = new Set<GoalRow>();
+  const shots = [...bundleEvents.values()].filter((e) => e.type === "shot" && e.outcome === "goal" && e.t <= t).sort((a, b) => a.t - b.t);
+  for (const s of shots) {
+    const side = sureSide(s);
+    const g = goalsUpTo(t)
+      .filter((g) => !used.has(g) && g.t >= s.t - 1 && g.t - s.t <= GOAL_SHOT_S)
+      .filter((g) => { const gs = goalSide(g); return gs === null || side === null || gs === side; })
+      .sort((a, b) => Math.abs(a.t - s.t) - Math.abs(b.t - s.t))[0];
+    if (g) { used.add(g); out.set(s.id, g); }
+  }
+  return out;
+}
+/** A detected goal shot that one of the match's goals already tells. */
+const toldByGoal = (e: { id: string }, t: number) => goalShots(t).has(e.id);
+
 /** The score, only as vision read it off the broadcast's own scorebug: the latest `score_change`
  * (#356) at or before t; nothing before the first reading. Never counted from detected goals
  * (Kian, Oct 25): vision can miss a goal, the scorebug cannot. */
@@ -2132,7 +2574,13 @@ export function scorebugAt(events: Iterable<{ type: string; t: number; score?: {
   return best;
 }
 let scorebugKey = "";
+let scorebugT = Number.NaN; // the clock the band last drew at
+/** A jump in the clock (a seek, a late join) larger than this sets the score at once (design: play
+ * runs at a second a second, so a few seconds between draws is a jump, never play). */
+const SCORE_JUMP_S = 3;
 function renderScorebug(t: number) {
+  const jumped = !(Math.abs(t - scorebugT) <= SCORE_JUMP_S);
+  scorebugT = t;
   const read = scorebugAt(scorebugEvents, t);
   const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
   if (key === scorebugKey) return;
@@ -2141,8 +2589,9 @@ function renderScorebug(t: number) {
   for (const side of ["home", "away"] as const) {
     const el = $(`score-${side}`);
     el.hidden = !read;
-    // The first reading is set, not counted up from 0; a change after it ticks.
-    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
+    // The first reading, and any after a jump in the clock, is set; in play only a goal (+1) ticks.
+    const to = Math.max(0, Math.round(read ? read.score[side] : 0));
+    if (read) tickTo(el, to, jumped || el.textContent === "" ? to : undefined, 1);
   }
   const btn = $("score-read");
   btn.hidden = !read;
@@ -2163,7 +2612,7 @@ function showMatch(t: number) {
   const m = state.match;
   if (!m) return;
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
-  const c = chapterAt(m.chapters, bundleFps, v);
+  const c = chapterAt(m.chapters, bundleImageRate, v);
   const line = $("scoreline");
   line.hidden = !c;
   const chapter = c ? chapterLabel(c, teams) : "";
@@ -2174,7 +2623,7 @@ function showMatch(t: number) {
   renderScorebug(t);
   renderShots(t);
   renderSquad();
-  if (playsUpTo(t).length !== playsShown) renderInsights();
+  if (playsUpTo(t).length !== playsShown || goalsUpTo(t).length !== goalsShown) renderInsights();
   const st = statsAt(m, t);
   const key = `${JSON.stringify(st)}|${momentum.minuteOf(t)}`; // the Scout's rows step by minute
   if (key === statsKey) return;
@@ -2201,6 +2650,18 @@ interface TeamStatsFacts {
   possession?: Record<"home" | "away", { share: number }>;
 }
 const shownStats = new Map<string, [number, number]>();
+/** A row's label with its unit, unless the unit says nothing new: a count of what the label names
+ * ("Corners", not "Corners (corners)") or one of the plain counting units. */
+function withUnit(label: string, unit: string | null): string {
+  if (!unit || /^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(unit)) return label;
+  const stem = (w: string) => w.toLowerCase().replace(/s$/, "");
+  return label.toLowerCase().split(/[^a-z-]+/).some((w) => w && stem(w) === stem(unit)) ? label : `${label} (${unit})`;
+}
+
+/** Events a row of counts must rest on before it shows (Coordinator, Oct 26: counted only on sides told
+ * surely, a row of 0 and 1 says nothing; design): fewer, and the row is not drawn. */
+const MIN_ROW_EVENTS = (window as { __ninetyMinRowEvents?: number }).__ninetyMinRowEvents ?? 10; // tests' seam: tests/test_phone.py watch()
+const enough = (total: number) => total >= MIN_ROW_EVENTS;
 function renderStats(st: MatchData["stats"][number]) {
   type Row = [string, number, number];
   const pct = (n: number, d: number) => (d > 0 ? Math.round((100 * n) / d) : NaN);
@@ -2212,14 +2673,16 @@ function renderStats(st: MatchData["stats"][number]) {
       ...(ts?.possession ? [["Possession %", Math.round(ts.possession.home.share), Math.round(ts.possession.away.share)] as Row] : []),
       // Counted from what vision saw: it can miss a shot or a goal the broadcast showed, so the
       // label says so (video-prep, Oct 25: 3 goals seen under a 4-1 scorebug).
-      ["Shots seen", st.home.shots, st.away.shots],
-      ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ...(enough(st.home.shots + st.away.shots) ? [
+        ["Shots seen", st.home.shots, st.away.shots],
+        ["Shots on target seen", st.home.shots_on_target, st.away.shots_on_target],
+      ] as Row[] : []),
     ]],
-    ["Passing", [
+    ["Passing", enough(st.home.passes_attempted + st.away.passes_attempted) ? [
       ["Passes completed", st.home.passes_completed, st.away.passes_completed],
       ["Passes tried", st.home.passes_attempted, st.away.passes_attempted],
       ["Pass accuracy %", pct(st.home.passes_completed, st.home.passes_attempted), pct(st.away.passes_completed, st.away.passes_attempted)],
-    ]],
+    ] : []],
     ["Pressing", []],
     ["Shape", []],
     ["Physical", ts?.distance ? [["Distance (km)", Math.round(ts.distance.home.km * 10) / 10, Math.round(ts.distance.away.km * 10) / 10]] : []],
@@ -2233,7 +2696,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const v = [...r.series].reverse().find((x) => x.minute_to <= minute);
     if (!v || v.home === null || v.away === null || v.home === undefined || v.away === undefined) continue;
     if (r.key === "distance_km" && groups.some(([, rows]) => rows.some(([l]) => l === "Distance (km)"))) continue;
-    const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+    const label = withUnit(r.label, r.unit);
     if (!v.confident) unsure.add(label);
     groups.find(([g]) => g === r.group)?.[1].push([label, round1(v.home), round1(v.away)]);
   }
@@ -2295,7 +2758,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
     for (const r of half.rows) {
       if (r.home === null || r.away === null) continue;
-      const label = r.unit && !/^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(r.unit) ? `${r.label} (${r.unit})` : r.label;
+      const label = withUnit(r.label, r.unit);
       if (!r.confident) unsure.add(label);
       byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
     }
@@ -2303,7 +2766,8 @@ function renderStats(st: MatchData["stats"][number]) {
   } else $("stat-rows").replaceChildren(...items);
   $("live-stats").hidden = items.length === 0;
   // Live shows the first rows under the pitch, as Apple Sports shows Team Stats under its band.
-  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, 4).map((li) => li.cloneNode(true) as HTMLLIElement);
+  // An analyst's Live carries every row (a dense strip); everyone else the first four.
+  const summary = items.filter((li) => li.classList.contains("stat-row")).slice(0, chosen()?.mode === "analyst" ? undefined : 4).map((li) => li.cloneNode(true) as HTMLLIElement);
   $("summary-rows").replaceChildren(...summary);
   $("live-summary").hidden = summary.length === 0;
 }
@@ -2324,7 +2788,8 @@ function renderShots(t: number) {
   const all: (shotMap.Shot & { sure: boolean })[] = [...bundleEvents.values()]
     .filter((e) => e.type === "shot" && e.t <= t && (e.team === "home" || e.team === "away") && e.x !== undefined && e.y !== undefined && (e.confidence ?? 0) >= min)
     .map((e) => ({ id: e.id, t: e.t, team: e.team as "home" | "away", x: e.x!, y: e.y!, outcome: e.outcome ?? null, player: e.player ?? null, sure: sureSide(e) !== null }));
-  $("shot-map").hidden = all.length === 0;
+  // The card shows only what it draws (UI inventory #8): a shot is placed only on a side told surely.
+  $("shot-map").hidden = !all.some((s) => s.sure);
   // A shot on an unsure side is in "All" only: no club's filter claims it.
   const shown = all.filter((s) => shotFilter === "all" || (s.sure && s.team === shotFilter));
   // Live's card draws what the Stats map draws: a shot only on a sure side (its place on the half
@@ -2338,7 +2803,7 @@ function renderShots(t: number) {
     // Shots counted, never goals: a goal count is a score (Kian, Oct 25), and the broadcast carries it.
     $("live-shots-said").textContent = `${all.length} ${all.length === 1 ? "shot" : "shots"}.`;
   }
-  const key = `${shotFilter}|${shown.map((s) => s.id).join()}`;
+  const key = `${shotFilter}|${shown.map((s) => s.id).join()}|${goalsUpTo(t).length}|${scorebugEvents.length}`;
   if (key === shotsKey) return;
   shotsKey = key;
   const svg = $("shots") as unknown as SVGSVGElement;
@@ -2346,14 +2811,27 @@ function renderShots(t: number) {
   // direction its side attacks. An unsure one is listed, not drawn.
   shotMap.draw(svg, shown.filter((s) => s.sure));
   svg.setAttribute("aria-label", `Shot map: ${shown.length} ${shown.length === 1 ? "shot" : "shots"}. The list follows.`);
+  const paired = goalShots(t);
   $("shot-list").replaceChildren(
     ...shown.map((s) => {
       const li = document.createElement("li");
       // Who and where only on a sure side: the zone is read from that side's direction of attack.
-      const who = s.player ? eventName(s.player) : s.sure ? teams[s.team] : "A shot";
-      li.textContent = `${momentum.minuteOf(s.t)}′ ${who}, ${shotMap.label(s.outcome)}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
+      // "London · 38′" (demo audit 2, row 10): the club where it is known, a goal's from its
+      // reconciled goal; the scorer only where the team sheet names him.
+      const goal = paired.get(s.id);
+      const side = s.sure ? s.team : goal ? goalSide(goal) : null;
+      const named = s.player && !unnamedTrack(s.player, undefined, true) ? `, ${eventName(s.player)}` : "";
+      li.textContent = `${side ? `${teams[side]} · ` : ""}${momentum.minuteOf(s.t)}′, ${shotMap.label(s.outcome)}${named}` + (s.sure ? `, from the ${zoneFor(s.team, s.x, s.y)}` : "");
       return li;
     }),
+    // The match's goals vision has no shot for (missed shots, #356's reconciled goals).
+    ...(shotFilter === "all" ? goalsUpTo(t) : goalsUpTo(t).filter((g) => goalSide(g) === shotFilter))
+      .filter((g) => ![...paired.values()].includes(g))
+      .map((g) => {
+        const li = document.createElement("li");
+        li.textContent = `${goalLine(g)}, goal`;
+        return li;
+      }),
   );
 }
 
@@ -2361,6 +2839,13 @@ function renderShots(t: number) {
 
 const LIVE_PANES = ["pitch", "stats", "players"] as const;
 type LivePane = (typeof LIVE_PANES)[number];
+/** Players is a tab only while it has something to show (demo audit 2, row 1: a blank pane reads as
+ * a crash): the team sheet or the line-up, the pass network, the top performers. */
+function syncPlayersTab() {
+  const empty = ["roster-box", "pass-network", "top-players"].every((id) => $(id).hidden);
+  $("lt-players").hidden = empty;
+  if (empty && document.body.dataset.pane === "players") showPane("pitch");
+}
 function showPane(pane: LivePane, focus = false) {
   for (const p of LIVE_PANES) {
     const tab = $(`lt-${p}`);
@@ -2378,11 +2863,12 @@ for (const p of LIVE_PANES) {
   const tab = $(`lt-${p}`);
   tab.addEventListener("click", () => showPane(p));
   tab.addEventListener("keydown", (e) => {
-    const i = LIVE_PANES.indexOf(p);
-    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? LIVE_PANES.length - 1 : null;
+    const shown = LIVE_PANES.filter((q) => !$(`lt-${q}`).hidden);
+    const i = shown.indexOf(p);
+    const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? shown.length - 1 : null;
     if (to === null) return;
     e.preventDefault();
-    showPane(LIVE_PANES[(to + LIVE_PANES.length) % LIVE_PANES.length], true);
+    showPane(shown[(to + shown.length) % shown.length], true);
   });
 }
 
@@ -2405,9 +2891,10 @@ function renderSquad() {
   const sheet = Object.entries(teamSheet);
   const net0 = m?.pass_network?.[networkSide];
   const sheetsN = ((m0 as { sheets?: Record<string, unknown[]> } | null)?.sheets?.home?.length ?? 0);
-  const key = `${sheet.length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
+  const key = `${sheet.length}|${Object.keys(tacticalSheet).length}|${sheetsN}|${m?.player_stats?.length ?? 0}|${networkSide}|${teams.home}|${net0?.nodes.length ?? 0}|${net0?.links.length ?? 0}`;
   if (key === squadKey) return;
   squadKey = key;
+  renderPlayersStrip(m?.player_stats ?? []);
   // Live's teaser: each club's crest, name and the shirts the team sheet is sure of.
   const rows = (["home", "away"] as const).map((side) => {
     // The team sheet's shirts (match.json `sheets`), else the line-up's.
@@ -2472,6 +2959,7 @@ function renderSquad() {
   const net = m?.pass_network?.[networkSide];
   // The card shows while either club has a network; a club without one shows an empty pitch never.
   $("pass-network").hidden = !(m?.pass_network?.home?.nodes.length || m?.pass_network?.away?.nodes.length);
+  syncPlayersTab();
   $("network").toggleAttribute("hidden", !net?.nodes.length);
   $("network-rows").hidden = !net?.nodes.length;
   if (!net?.nodes.length) return;

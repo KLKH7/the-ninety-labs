@@ -442,3 +442,30 @@ def test_the_served_match_reads_its_scorebug_too(monkeypatch, tmp_path):
     match_server.insights_of.cache_clear()
     assert match_server.insights_of(clip).facts["scorebug"] == []
     match_server.insights_of.cache_clear()  # leave no patched build behind for other tests
+
+
+def test_no_answer_to_a_fan_names_a_raw_track_id():
+    # Every player here is a tracked one (h-t1 ...): Ask names him by name, role or club, never by
+    # the tracker's label (ninety/agents/onair.py, TRACK_ID).
+    import asyncio
+
+    from ninety.agents import companion_match as cm
+    from ninety.agents.companion import Question
+    from ninety.agents.onair import TRACK_ID
+    from ninety.intel.match_insights import MatchInsights
+
+    frames = [frame(n, parked("home"), parked("away")) for n in range(0, 25 * 120, 25)]
+    events = [pass_event(f"v{i}", "home", frame_n=100 + 50 * i, player=f"h-t{i + 1}",
+                         receiver=f"h-t{i + 2}") for i in range(6)]
+    events += [ev("s1", 60.0, "shot", "home", player="h-t7", outcome="goal", team_confidence=0.99),
+               ev("g1", 60.4, "goal", "home", player="h-t7", team_confidence=0.99)]
+    mi = MatchInsights.build("x", frames, events, teamsheet.Fixture(7, "OAK", "FEN"), {})
+    # Ask names a player only through his `say` (ninety/intel/roles.py): never a track id, gated or not.
+    assert mi.people and all(not TRACK_ID.search(p["say"]) for p in mi.people.values()), mi.people
+    answers = []
+    questions = ("What's the score?", "Who scored the goals?", "Why did that goal happen?",
+                 "Who made the most passes?", "Who is running the most?", "Any line breaks?",
+                 "Who assisted the goal?")
+    for q in questions:
+        answers.append(asyncio.run(cm.answer_match(Question("s1", None, q, 110.0), mi)).answer.text)
+    assert not [t for t in answers if TRACK_ID.search(t)], answers

@@ -1,0 +1,99 @@
+{
+ "moments": {},
+ "totals": {
+  "tool_choice": "0/0",
+  "args": "0/0",
+  "plans_not_returned": 0,
+  "companion_target_given": "0/0",
+  "companion_model_verified": 0,
+  "companion_grounded": "0/0",
+  "anchor_given": "0/0",
+  "analyst_picked_anchor": "0/0",
+  "analyst_tool_calls": 0,
+  "tactician_context": "0/0",
+  "graph_aired": 0,
+  "graph_grounded": "0/0",
+  "graph_ends": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 0
+  },
+  "graph_verdicts": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 0,
+   "rewrites": 0
+  },
+  "graph_errors": 0
+ },
+ "drills": {
+  "drill:judge-down": {
+   "injected": "every Judge call raises ServiceRequestError (added after the run: the pre-registered one on goal-1 never reached the Judge)",
+   "model_calls": 5,
+   "failed_calls": [
+    "judge: ServiceRequestError: drill: the Judge's endpoint cannot be reached",
+    "judge: ServiceRequestError: drill: the Judge's endpoint cannot be reached"
+   ],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 1
+   },
+   "aired": [],
+   "steps": [
+    "producer templates -: 498 template graphics on air",
+    "analyst pick m-s18-v00011: evidence ['s18-v00011', 's18-v00012']",
+    "tactician draft m-s18-v00011: 'The goal by a-t18090 at 34:01 shows the away team successfully capitalizing on their shot to change the scoreline in minute 35.' evidence=['s18-v00011']",
+    "challenger agree m-s18-v00011: ",
+    "judge hold m-s18-v00011: service",
+    "fact_checker hold m-s18-v00011: tactician's claim: judge service error; claim held back",
+    "producer template m-s18-v00011: cue-s18-v00011-analyst stays: held"
+   ],
+   "ms": 5702.9,
+   "exercised": true
+  }
+ },
+ "latency": {
+  "model:analyst": {
+   "n": 1,
+   "p50_ms": 1541,
+   "max_ms": 1541
+  },
+  "model:challenger": {
+   "n": 1,
+   "p50_ms": 982,
+   "max_ms": 982
+  },
+  "model:tactician": {
+   "n": 1,
+   "p50_ms": 1296,
+   "max_ms": 1296
+  },
+  "mcp_call": {
+   "n": 0
+  },
+  "graph_minute": {
+   "n": 0
+  },
+  "companion_answer": {
+   "n": 0
+  }
+ },
+ "cost": {
+  "calls": 5,
+  "usd": 0.0007,
+  "tokens_in": 1645,
+  "tokens_out": 85,
+  "tokens_reported": true,
+  "prices": "2026-10-19"
+ },
+ "mcp": {
+  "calls": 0,
+  "same_as_in_process": true
+ },
+ "stopped": null,
+ "run": {
+  "calls": 5,
+  "usd": 0.0007
+ }
+}

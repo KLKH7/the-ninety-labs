@@ -36,7 +36,7 @@ def browser():
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
-            b = p.chromium.launch()
+            b = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
             yield b
             b.close()
     except Exception as e:  # no Chromium installed
@@ -115,18 +115,18 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
+    page.keyboard.press("2")  # the analyst's graphics
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-m-e2" in on_air(page):
+        if "cue-e2-analyst" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
-    assert set(on_air(page)) == {"insight-m-e2"}
-    # The fixture's speed is not measured, so the graphic leaves it out (src/speed.ts).
-    assert "Crowmere 8 shoots, on target" in page.locator("#on-air").inner_text()
-    assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
+    # The agents' claim about the shot only restates it, so it is not an INSIGHT (ninety/agents/
+    # insight_bar.py): the shot's own graphic airs, and the claim stays in the trace (How we know).
+    assert set(on_air(page)) == {"cue-e2-analyst"}
+    assert "insight" not in page.locator("#on-air").inner_text().lower()
+    assert page.locator("#claims .claim").count() >= 1
 
     page.keyboard.press("1")
     page.wait_for_function("document.querySelector('#overlay').dataset.onAir === 'cue-e2-casual'")
@@ -304,34 +304,46 @@ def test_no_ball_speed_airs_while_vision_s_speed_error_is_unmeasured(browser, tr
     assert not errors
 
 
-def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, tracked_site):
+@pytest.fixture(scope="module")
+def ground_site(browser, tmp_path_factory):
+    # The tracked clip with its pass marked along the ground by vision (`lofted` false), and that mark
+    # taken as measured, as it will be (factcheck.LOFTED_FLAG_MEASURED): the one speed vision's measured
+    # error covers, so the bundle's manifest.speed opens.
+    from ninety.agents import factcheck
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(factcheck, "LOFTED_FLAG_MEASURED", True)
+        yield from serve_site(browser, tmp_path_factory,
+                              events=[{**e, "lofted": False} if e["type"] == "pass" else e for e in TRACKED])
+
+
+def test_a_measured_ball_speed_airs_with_its_band_and_never_above_p3(browser, ground_site):
     # Once measured (manifest.speed), a speed shows with its error band; 147 km/h is above P3's
     # 40 m/s (144 km/h), so no ball went that fast and it never airs (the demo's 4-1 graphic).
     import json
-    import re
+
+    from ninety.agents import factcheck
 
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
 
-    def measured(route):
-        m = json.loads(route.fetch().text())
-        route.fulfill(body=json.dumps({**m, "speed": {"measured": True, "error_kmh": 3.5}}),
-                      content_type="application/json")
-
     def fast(route):
         cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
-        cues = [{**c, "text": re.sub(r"101(\.4)? km/h", "147 km/h", c["text"])} for c in cues]
+        first = next(c for c in cues if "48" in c["text"] and "km/h" in c["text"])
+        fast_text = first["text"].replace("48.0 km/h", "147 km/h")
+        cues.append({**first, "id": first["id"] + "-fast", "text": fast_text})
         route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
 
-    ctx.route("**/bundle/manifest.json", measured)
     ctx.route("**/bundle/cues.jsonl", fast)
     page = ctx.new_page()
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(tracked_site)
+    page.goto(ground_site)
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
     speeds = aired_speeds(page)
-    assert speeds and all(s.endswith(" ± 4 km/h") for s in speeds), speeds  # 48 km/h, with its band
+    band = f" ± {factcheck.SPEED_ERROR_KMH} km/h"
+    assert speeds and all(s.endswith(band) for s in speeds), speeds  # 48 km/h, with its band
     assert not any(s.startswith("147") for s in speeds), speeds
+    assert not any(s.startswith("101") for s in speeds), speeds  # the shot's speed is not measured
     assert not errors
 
 

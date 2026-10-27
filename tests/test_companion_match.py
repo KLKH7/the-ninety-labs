@@ -225,6 +225,16 @@ def test_a_bad_club_or_minutes_is_not_repaired_into_another_call():
     assert calls == [{"name": "overloads", "club": None, "minute_from": 14, "minute_to": 28}]
 
 
+def test_minute_zero_is_kick_off_not_a_bad_window():
+    # Asked at half-time "who had more of the ball in the first half?", the live Companion planned
+    # possession from minute 0 to 45; read as malformed, it was answered over minutes 31 to 45.
+    plan = {"tools": [{"name": "possession", "club": None, "minute_from": 0, "minute_to": 45}]}
+    assert companion._calls(plan, insights(), 45) == [
+        {"name": "possession", "club": None, "minute_from": 1, "minute_to": 45}]
+    bad = {"tools": [{"name": "possession", "club": None, "minute_from": False, "minute_to": 45}]}
+    assert companion._calls(bad, insights(), 45)[0]["minute_from"] == 31
+
+
 @pytest.mark.parametrize(
     "draft, why",
     [
@@ -977,9 +987,9 @@ def _bug(sid, minute, home, away, confidence=0.95):
 
 @pytest.mark.parametrize("bugs, measured, said", [
     ([_bug("s1", 23, 1, 0), _bug("s2", 61, 2, 0)], True,
-     "The broadcast's scorebug shows London Athletic 2 goals, Lisbon Esportes 0 goals."),  # the latest
+     "London Athletic 2 goals, Lisbon Esportes 0 goals, read from the broadcast's scorebug."),  # the latest
     ([_bug("s1", 23, 1, 0), _bug("s2", 85, 2, 0)], True,
-     "The broadcast's scorebug shows London Athletic 1 goal, Lisbon Esportes 0 goals."),  # none from later
+     "London Athletic 1 goal, Lisbon Esportes 0 goals, read from the broadcast's scorebug."),  # none later
     ([_bug("s1", 23, 1, 0, confidence=0.3)], True, companion.SCORE_POINTER),  # under the gate
     ([_bug("s1", 23, 1, 0)], False, companion.SCORE_POINTER),  # not measured yet: never said
     ([], True, companion.SCORE_POINTER),
@@ -1013,3 +1023,191 @@ def test_a_scorebug_sentence_cannot_swap_its_numbers():
     swapped = f"The broadcast's scorebug shows {clubs['home']} 1 goal, {clubs['away']} 2 goals."
     assert verify(Claim(ok, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
     assert not verify(Claim(swapped, [bug["id"]]), {bug["id"]: bug}, clubs, {}, names).ok
+
+
+# -- Round-2 audit rows 6 and 7 (the score first, a club's player, possession) ----------------------
+
+
+def test_the_score_answer_leads_with_the_score_and_says_where_it_was_read(monkeypatch):
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
+    lead = "London Athletic 1 goal, Lisbon Esportes 0 goals, read from the broadcast's scorebug."
+    assert a.text.startswith(lead)
+    assert "minute 23" in a.text  # then the goal by minute
+
+
+def test_a_clubs_best_player_is_ranked_within_that_club_and_never_another_clubs():
+    calls = companion.code_calls(Question("s1", None, "Who is Lisbon's most dangerous player?", 60 * 60.0),
+                                 insights())
+    players = next(c for c in calls if c["name"] == "players")
+    assert players["club"] == "Lisbon Esportes"
+    others = companion.code_calls(Question("s1", None, "Which pass cut through Lisbon Esportes?", 60 * 60.0),
+                                  insights())
+    assert all(c["club"] is None for c in others)  # a club acted on: both clubs' facts are read
+
+
+def test_a_ranked_player_without_a_name_is_his_club_and_an_unsure_ranking_says_why():
+    leader = {"id": "top:a-t3:m46-60", "kind": "players", "metric": "opponents_bypassed_by_player",
+              "team": "away", "club": "Lisbon Esportes", "minute_from": 46, "minute_to": 60,
+              "player": "a-t3", "player_is": None, "rank": 1, "value": 5, "unit": "opponents", "lo": 5,
+              "hi": 5, "confident": True, "also": [[1, "passes"]], "leads": True}
+    (text,) = companion.code_texts(leader)
+    assert text.startswith("A Lisbon Esportes player has taken the most opponents") and "a-t3" not in text
+    assert companion.code_texts({**leader, "leads": False}) == []
+
+
+def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing():
+    mi = insights()
+    mi.facts["spell"] = [{"id": "spell:v9", "kind": "spell", "metric": "spell_passes", "team": None,
+                          "minute": 31, "t": 1850.0, "value": 7, "unit": "passes", "confident": True,
+                          "club": None, "events": []}]
+    # Every pass's side unsure: the share is unknown (bounds 0 to 100), not 0 or 100.
+    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
+                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+                              for i in range(20)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0),
+                                           mi)).answer
+    assert a.text.startswith(companion.POSSESSION_UNKNOWN), a.text
+    assert "7 passes in a row, in minute 31" in a.text
+    assert "%" not in a.text  # no share said
+
+
+def test_the_refusal_says_build_up_with_its_hyphen():
+    joke = Question("s1", None, "Tell me a joke", 80 * 60.0)
+    a = asyncio.run(companion.answer_match(joke, insights())).answer
+    assert a.status == "unanswerable" and "goal build-up" in a.text and "build up" not in a.text
+
+
+def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known():
+    # The video session's probe: "Who scored?" was headed "Lisbon" (the first scorer's club) for a 4-1.
+    mi = insights()
+    mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
+    assert a.headline == "London 1, Lisbon 0", a.headline
+    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
+                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+                              for i in range(20)]
+    for q in ("Who has more of the ball?", "Who has had more possession?"):
+        a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
+        assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)
+
+
+# -- Kian's preview probe (Oct 26): the named club, a share's sample, no degenerate window -----------
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("text", ["How are Lisbon Esportes playing?", "How are Lisbon playing?",
+                                   "How are {code} playing?", "How are Esportes playing?",
+                                   "Are Lisbon pressing high?"])
+def test_a_question_about_one_club_is_routed_by_any_name_a_fan_uses(text):
+    mi = insights()
+    text = text.format(code=mi.fixture.away_code)  # its code, as the scorebug shows it ("LIS")
+    assert companion.clubs_named(text, mi) == ["Lisbon Esportes"]
+    calls = companion.code_calls(Question("s1", None, text, 60 * 60.0), mi)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls), calls
+
+
+def test_they_follows_the_club_the_last_question_named_and_a_club_cut_through_reads_both():
+    mi = insights()
+    history = [{"question": "How are Lisbon playing?", "answer": "", "calls": []}]
+    calls = companion.code_calls(Question("s1", None, "Are they pressing?", 60 * 60.0), mi, history)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls)
+    cut = companion.code_calls(Question("s1", None, "Which pass cut through Lisbon?", 60 * 60.0), mi)
+    assert all(c["club"] is None for c in cut if c["name"] == "line_breaks")
+
+
+def test_counts_and_comparisons_are_over_the_match_so_far():
+    calls = companion.code_calls(Question("s1", None, "Who has had more shots?", 80 * 60.0), insights())
+    assert next(c for c in calls if c["name"] == "shots")["minute_from"] == 1
+
+
+def test_a_share_needs_its_sample_and_a_one_minute_window_is_said_as_one_minute():
+    share = {"id": "style:channels:home:m1-1", "kind": "channels", "metric": "pass_share_by_channel",
+             "team": "home", "club": "London Athletic", "minute_from": 1, "minute_to": 1, "value": 67,
+             "unit": "%", "lo": 67, "hi": 67, "confident": True, "most": "centre",
+             "shares": {"left": 22, "centre": 67, "right": 11}, "also": [[67, "%", "x"], [9, "passes"]]}
+    assert companion.code_texts(share) == []  # 9 passes: too few for a share
+    enough = share | {"also": [[67, "%", "x"], [20, "passes"]]}
+    (text,) = companion.code_texts(enough)
+    assert "in minute 1" in text and "minute 1 to minute 1" not in text
+
+
+def test_at_kick_off_the_answer_is_too_early_not_a_canned_list():
+    early = Question("s1", None, "How are Lisbon playing?", 1.0)
+    a = asyncio.run(companion.answer_match(early, insights())).answer
+    assert a.text == companion.TOO_EARLY
+
+
+# -- "How are they playing?": an overview ranked by what matters, never a tiny count -----------------
+
+
+def test_how_a_club_is_playing_is_an_overview_led_by_its_biggest_moment_not_a_small_count():
+    a = asyncio.run(companion.answer_match(Question("s1", None, "How are London playing?", 60 * 60.0),
+                                           insights())).answer
+    assert a.status == "verified" and "London Athletic's biggest moment: in minute 23" in a.text, a.text
+    tiny = {"kind": "crosses", "metric": "crosses", "value": 1, "unit": "crosses", "completed": 0}
+    assert companion.tiny(tiny) and companion.tiny(tiny | {"value": 7})  # none found: says nothing
+    assert not companion.tiny(tiny | {"value": 7, "completed": 3})
+    assert not companion.tiny({"value": 2, "unit": "%"})
+    assert not companion.tiny({"kind": "line_break", "value": 4, "unit": "opponents"})  # a moment
+
+
+def test_live_mode_answers_how_they_are_playing_with_the_overview_and_spends_no_model_call():
+    async def ask(prompt):  # the model: never asked for an overview
+        raise AssertionError("a model call was made")
+
+    q = Question("s1", None, "How is London Athletic's attack looking?", 60 * 60.0)
+    r = asyncio.run(companion.answer_match(q, insights(), ask=ask, judge=ask))
+    assert r.source == "code" and "biggest moment" in r.answer.text
+
+
+def _both_sides_broke_lines() -> MatchInsights:
+    """A London pass and a later Lisbon one, each taking 3 out: the Lisbon one is newer and would lead."""
+    mi = insights()
+    lb = next(f for f in mi.facts["line_break"] if f["id"] == "lb:v1")
+    lisbon = {**lb, "id": "lb:v2", "team": "away", "club": "Lisbon Esportes", "minute": 26, "t": 1530.0,
+              "value": 3, "lo": 3, "hi": 3, "event": "v2", "passer": "a-t7", "receiver": "a-t9",
+              "passer_is": None}
+    mi.facts["line_break"] = [{**lb, "value": 3, "lo": 3, "hi": 3}, lisbon]
+    return mi
+
+
+@pytest.mark.parametrize(
+    "text, passer",
+    [
+        ("Which pass broke Lisbon's lines?", "London Athletic"),
+        ("Which pass cut through Lisbon Esportes?", "London Athletic"),
+        ("Which pass broke London's lines?", "Lisbon Esportes"),
+        ("Which Lisbon pass broke the lines?", "Lisbon Esportes"),
+    ],
+)
+def test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs(text, passer):
+    """Preview, Oct 26 (lesson 283): "Which pass broke Lisbon's lines?" was answered with a Lisbon
+    pass ("a Lisbon Esportes player played a pass that took 3 London Athletic players out"): the named
+    club was read as the passer's. A club whose lines were broken is the one the pass beat."""
+    q = Question("s1", None, text, 28 * 60.0)
+    a, _ = companion.code_match_answer(q, _both_sides_broke_lines())
+    beaten = "Lisbon Esportes" if passer == "London Athletic" else "London Athletic"
+    assert a.status == "verified" and f"took 3 {beaten} players" in a.text, a.text
+
+
+def test_no_pass_of_the_beaten_club_answers_it_even_alone():
+    """With only Lisbon's pass in the stretch, "Which pass broke Lisbon's lines?" is not answered with it."""
+    mi = _both_sides_broke_lines()
+    mi.facts["line_break"] = [f for f in mi.facts["line_break"] if f["team"] == "away"]
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    a, _ = companion.code_match_answer(q, mi)
+    assert "Lisbon Esportes player" not in a.text, a.text
+
+
+def test_the_model_citing_the_beaten_clubs_pass_is_refused():
+    mi = _both_sides_broke_lines()
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v2", mi), "evidence": ["lb:v2"]}))
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    r = asyncio.run(companion.answer_match(q, mi, ask))
+    assert r.source == "code" and r.reasons[0].startswith("the question asks for a pass that beat Lisbon")
+    assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
