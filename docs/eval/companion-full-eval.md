@@ -138,19 +138,19 @@ Answers per column: main 1554, #423 1554, #424 1554.
 
 ## The model path (Foundry gpt-4.1-mini Companion and Judge), on a 10% sample
 
-Run on main 382996dc (this branch) on Oct 27 ~03:10 PT after Kian approved spend; $1.50 cap; two runs, $0.17 and $0.23 ($0.39 in all). The first lost 64 answers to HTTP 429 throttling of the shared deployment (other sessions were calling it), and its grader scored the scorebug's per-club wording as no score (fixed, lesson 293); the table is the second run, with backoff on 429, whose waits count against the Ask's own 10 s timeout as they would on the phone. The sample is stratified by intent: 10% of each intent's (question, time) pairs. Each model answer (`companion_match.answer_match` with the published Companion and the Judge) is graded beside code's answer to the same question. Parity: the same headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the tokens the service reported, at ninety/eval/latency_cost.PRICES.
+Run on f9cd73d6 (main 382996dc's Ask, the grader after #427's review fixes) on Oct 27 after Kian approved spend; $1.50 cap per run; three runs, $0.17, $0.23 and $0.21 ($0.61 in all). The table is the third. The shared deployment was throttled (HTTP 429) through every run while other sessions called it; the grader backs off on a 429, and those waits count against the Ask's own 10 s timeout as they would on the phone, so "model timeout" is mostly throttling. The sample is stratified by intent: 10% of each intent's (question, time) pairs. Each model answer (`companion_match.answer_match` with the published Companion and the Judge) is graded beside code's answer to the same question. Parity: the same headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the tokens the service reported, at ninety/eval/latency_cost.PRICES.
 
 | | all sampled | not throttled |
 |---|---|---|
-| answers | 167 | 128 |
-| core pass, model path | 22% | 23% |
+| answers | 167 | 118 |
+| core pass, model path | 22% | 24% |
 | core pass, code, same questions | 16% | 14% |
-| headline parity | 52% | 38% |
-| fallback rate | 57% | 45% |
-| latency p50 / p95 | 5.8 s / 10.0 s | 5.0 s / 9.2 s |
-| cost | $0.225 ($0.0013 an answer) | |
+| headline parity | 56% | 38% |
+| fallback rate | 63% | 47% |
+| latency p50 / p95 | 6.9 s / 10.0 s | 5.0 s / 9.7 s |
+| cost | $0.210 ($0.0013 an answer) | |
 
-Fallback reasons (all sampled): model: unanswerable 47; model timeout 39; not one of the checked sentences of the facts it cites 8; the Judge: unsupported fact 2.
+Fallback reasons (all sampled): model timeout 49; model: unanswerable 45; not one of the checked sentences of the facts it cites 10; the Judge: unsupported fact 1.
 
 ## The 10 worst answers (main), verbatim
 
