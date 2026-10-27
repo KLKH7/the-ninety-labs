@@ -60,7 +60,8 @@ def test_channels_are_named_as_each_team_attacks():
 
 
 def test_a_channel_share_is_said_of_its_channel():
-    rows = style.passes([p("v1", 1, "home", 40, 60, 50, 60)] * 3 + [p("v4", 4, "home", 40, 10, 50, 10)])
+    # 16 passes, 75% and 25%: a share is said only over MIN_SHARE_PASSES (15) passes or more.
+    rows = style.passes([p("v1", 1, "home", 40, 60, 50, 60)] * 12 + [p("v4", 4, "home", 40, 10, 50, 10)] * 4)
     fact = {**style.channels(rows, "home", 1, 5, "London Athletic"), "clubs": CLUBS}
     known = {fact["id"]: fact}
     [text] = companion.code_texts(fact)

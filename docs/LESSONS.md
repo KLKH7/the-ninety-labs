@@ -3218,6 +3218,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
 
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
 ### 268. Two pull requests green separately can be red together
 - **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
   #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
@@ -3330,3 +3345,14 @@ short and actionable. This file is public: no research sources, product names or
   building on it.
 - **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
   or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.

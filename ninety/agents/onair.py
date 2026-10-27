@@ -19,14 +19,20 @@ TRACK_ID = re.compile(r"\b([ha])-t(\d+)\b")
 SENTENCE_START = re.compile(r"(^['\"]?|[.!?]\s+['\"]?)([a-z])")  # a quoted draft starts a sentence too
 
 
-def render(text: str, sure: Iterable[str], clubs: dict[str, str] | None = None) -> str:
-    """The text with each track id said as a fan reads it (module docstring)."""
+def render(text: str, sure: Iterable[str], clubs: dict[str, str] | None = None,
+           names: dict[str, str] | None = None) -> str:
+    """The text with each track id said as a fan reads it (module docstring); by the player-ID feed's
+    name for it when `names` has one (#389)."""
     sure = set(sure)
+    names = names or {}
     seen: dict[str, str] = {}
     sides: set[str] = set()
 
     def say(m: re.Match) -> str:
         track = m[0]
+        if names.get(track):
+            seen[track] = names[track]
+            return names[track]
         if track in seen:
             return "the same player"
         side = "home" if m[1] == "h" else "away"
@@ -43,18 +49,20 @@ def render(text: str, sure: Iterable[str], clubs: dict[str, str] | None = None) 
     return SENTENCE_START.sub(lambda m: m[1] + m[2].upper(), out) if out != text else out
 
 
-def cues(rows: list[dict], sure: Iterable[str], clubs: dict[str, str] | None = None) -> list[dict]:
+def cues(rows: list[dict], sure: Iterable[str], clubs: dict[str, str] | None = None,
+         names: dict[str, str] | None = None) -> list[dict]:
     """Every cue with its shown text rendered."""
     sure = set(sure)
-    return [{**c, "text": render(c["text"], sure, clubs)} if isinstance(c.get("text"), str) else c
+    return [{**c, "text": render(c["text"], sure, clubs, names)} if isinstance(c.get("text"), str) else c
             for c in rows]
 
 
-def trace(claims: list[dict], sure: Iterable[str], clubs: dict[str, str] | None = None) -> list[dict]:
+def trace(claims: list[dict], sure: Iterable[str], clubs: dict[str, str] | None = None,
+          names: dict[str, str] | None = None) -> list[dict]:
     """The claim trace as the viewer shows it: each claim's text and each step's detail rendered."""
     sure = set(sure)
-    return [{**c, "text": render(c.get("text") or "", sure, clubs),
-             "steps": [{**s, "detail": render(s.get("detail") or "", sure, clubs)}
+    return [{**c, "text": render(c.get("text") or "", sure, clubs, names),
+             "steps": [{**s, "detail": render(s.get("detail") or "", sure, clubs, names)}
                        for s in c.get("steps", [])]}
             for c in claims]
 

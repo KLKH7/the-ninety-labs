@@ -356,3 +356,58 @@ def test_a_real_broadcast_clip_places_players(tmp_path):
     rows = [json.loads(x) for x in (tmp_path / "observations.jsonl").read_text().splitlines()]
     players = [p for r in rows for p in r["players"]]
     assert sum(p["x"] is not None for p in players) >= 0.9 * len(players) > 0
+
+
+def test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened(tmp_path):
+    # The flight fit itself is tested in tests/test_vision_flight.py; here, that the job runs it
+    # between observe and events, writes what it gave, and hands exactly that to events. Its
+    # heights are a stand-in that marks every ball, so the test does not hang on a 2-frame clip
+    # holding no flight.
+    clip, dets = clean_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import events, flight, live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
+        seen = []
+        def marked(rows):
+            return [r | {{"fitted": True}} for r in rows]  # every row, ball seen or not
+        flight.heights = marked
+        real = events.detect
+        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
+        found = read_detections({str(dets)!r})
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found),
+                              {{"commit": "test"}}, fit_flight=True)
+        OUT = {{"report": report, "files": sorted(p.name for p in Path({str(out)!r}).iterdir()),
+               "seen": seen}}
+    """)
+    got = run["out"]
+    assert got["files"] == sorted([*OUTPUTS, "observations-flight.jsonl"])
+    assert got["report"]["flight"] is True and "flight" in got["report"]["seconds"]
+    written = [json.loads(x) for x in (out / "observations-flight.jsonl").read_text().splitlines()]
+    assert got["seen"] == [written]
+    assert written and all(r["fitted"] for r in written)
+    assert truth_reads(run) == []
+
+
+def test_without_flight_the_events_read_observe_s_rows_unchanged(tmp_path):
+    clip, dets = clean_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import events, flight, live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)
+        seen = []
+        def never(rows):
+            raise AssertionError("the flight fit ran without --flight")
+        flight.heights = never
+        real = events.detect
+        events.detect = lambda rows, *a, **k: (seen.append(rows), real(rows, *a, **k))[1]
+        found = read_detections({str(dets)!r})
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}), lambda: (lambda rows: found))
+        OUT = {{"report": report, "seen": seen}}
+    """)
+    written = [json.loads(x) for x in (out / "observations.jsonl").read_text().splitlines()]
+    assert run["out"]["seen"] == [written] and run["out"]["report"]["flight"] is False

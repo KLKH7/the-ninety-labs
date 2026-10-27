@@ -763,27 +763,29 @@ def test_after_a_server_restart_the_big_screen_claims_its_same_code_back(browser
 
 
 def _hls_bundle(www, out: str) -> bool:
-    """The match bundle with an H.264 HLS ladder and MP4 (as #397 writes them), made by ffmpeg."""
+    """The match bundle with an H.264 HLS ladder and MP4 (as #397 writes them), made by ffmpeg with the
+    encoder ninety/footage.py uses (VideoToolbox: never the GPL libx264, which this repo does not run)."""
     import subprocess
 
-    if not shutil.which("ffmpeg"):
+    if not footage.can_encode():
         return False
     dst = www / out
     if dst.exists():
         return True
     shutil.copytree(www / "match", dst)
-    x264 = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "50", "-keyint_min", "50", "-sc_threshold", "0"]
+    h264 = ["-c:v", footage.ENCODER, "-b:v", "1M", "-pix_fmt", "yuv420p", "-g", "50",
+            "-force_key_frames", "expr:gte(t,n_forced*2)"]
     src = ["-f", "lavfi", "-i", "testsrc=size=320x180:rate=25", "-t", "12"]
     rungs = []
     for h in (360, 180):
         (dst / "hls" / f"{h}p").mkdir(parents=True)
         hls = ["-f", "hls", "-hls_time", "2", "-hls_segment_type", "fmp4", "-hls_playlist_type", "vod"]
-        subprocess.run(["ffmpeg", "-v", "error", "-y", *src, "-vf", f"scale=-2:{h}", *x264, *hls,
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *src, "-vf", f"scale=-2:{h}", *h264, *hls,
                         str(dst / "hls" / f"{h}p" / "index.m3u8")], check=True, timeout=120)
         rungs.append(f"#EXT-X-STREAM-INF:BANDWIDTH={h * 4000},RESOLUTION={h * 16 // 9}x{h},"
                      f'CODECS="avc1.640028"\n{h}p/index.m3u8\n')
     (dst / "hls" / "master.m3u8").write_text("#EXTM3U\n#EXT-X-VERSION:7\n" + "".join(rungs))
-    subprocess.run(["ffmpeg", "-v", "error", "-y", *src, *x264, "-movflags", "+faststart",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *src, *h264, "-movflags", "+faststart",
                     str(dst / "video.mp4")], check=True, timeout=120)
     m = json.loads((dst / "manifest.json").read_text())
     m["footage"] = {"kind": "video", "src": "video.mp4", "mp4": "video.mp4", "hls": "hls/master.m3u8",

@@ -67,7 +67,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ninety import condensed, footage, highlights, radar
-from ninety.agents import factcheck, live, onair, telemetry
+from ninety.agents import factcheck, insight_bar, live, onair, telemetry
 from ninety.agents.contracts import Models, Review, schema_validator
 from ninety.agents.cues import TEMPLATE_TYPES, _text
 from ninety.agents.factcheck import (
@@ -749,12 +749,36 @@ async def run(args: argparse.Namespace) -> dict:
         cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant,
                                                                         perceiver=perceiver)
         agents_mode = "graph offline"
-    # What the screens show: a tracked player as "a London player", never his raw track id
-    # (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
-    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta))
-    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta))
+    # The match's insights, when the bundle has them: the INSIGHT bar's facts, the feed's names by track
+    # (#389: only this path reads them, and hands the screens and the voices names alone) and the
+    # scorebug's measured readings (#356).
+    insights_file = args.insights or args.team_stats
+    mi, names, fact_names, scores = None, {}, {}, []
+    if insights_file is not None:
+        from ninety.intel.match_insights import MatchInsights
+
+        mi = MatchInsights.from_dict(json.loads(insights_file.read_text()))
+        # Two id spaces (lesson 259): the detected events and the cues name BROADCAST tracks, the insights'
+        # facts the tactical camera's. A name crosses only through the association (identity_broadcast).
+        names = {t: w["name"] for t, w in (mi.identity_broadcast or {}).items() if w.get("name")}
+        fact_names = {t: w["name"] for t, w in (mi.identity or {}).items() if w.get("name")}
+        scores = [r for r in mi.facts.get("scorebug", ()) if r.get("confident")]
+    # What the screens show: a tracked player by the feed's name or as "a London player", never his raw
+    # track id (ninety/agents/onair.py). Before the Describer and the commentary read the cues.
+    cues = onair.cues(cues, sides_known(events), clubs_of(clip.meta), names)
+    claims = onair.trace(claims, sides_known(events), clubs_of(clip.meta), names)
     # Only the speeds a cited event may state stay in the words (a screen bands them, manifest.speed).
     cues, claims = onair.gate_speeds(cues, claims, events)
+    # The INSIGHT bar shows only what the broadcast can't (ninety/agents/insight_bar.py): the agents'
+    # single-event claims stay in the trace and the audio description (`spoken_cues`), never on the
+    # bar, in the bundle's cues or in the commentary.
+    kinds = {e["id"]: e["type"] for e in events}
+    spoken_cues = cues
+    cues = [c for c in cues if not insight_bar.restates_one_event(c, kinds)]
+    if mi is not None:
+        bar, bar_claims = insight_bar.build(mi, Timeline.of_clip(clip.meta).to_video, sides_known(events),
+                                            clubs_of(clip.meta), fact_names)
+        cues, claims, spoken_cues = cues + bar, claims + bar_claims, spoken_cues + bar
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
@@ -762,29 +786,31 @@ async def run(args: argparse.Namespace) -> dict:
 
         try:
             async with describer.foundry_model(tokens) as (model, judge):
-                upgrades, model_calls = await describer.upgrades(events, cues, model, judge)
+                upgrades, model_calls = await describer.upgrades(events, spoken_cues, model, judge)
         except RegistryDrift:
             raise  # a changed prompt must never run under an old version's name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades,
-                                       clubs=clubs_of(clip.meta))
+    track, refused = describe.describe(events, spoken_cues, voice or describe.estimate, upgrades,
+                                       clubs=clubs_of(clip.meta), names=names, scores=scores)
     if voice is not None:
         voice.save(track, out)
     # Every text the track writes, as a screen may show it: the checked form names track ids, which never
     # air (ninety/agents/onair.py); what is said (`spoken`) never named them.
     sure, clubs = sides_known(events), clubs_of(clip.meta)
     for line in track.said:
-        line.text = onair.render(line.text, sure, clubs)
-    refused = [{**r, "text": onair.render(r["text"], sure, clubs)} if isinstance(r.get("text"), str) else r
+        line.text = onair.render(line.text, sure, clubs, names)
+    refused = [{**r, "text": onair.render(r["text"], sure, clubs, names)}
+               if isinstance(r.get("text"), str) else r
                for r in refused]
     # The commentary track (ninety/speech/commentary.py): a commentator's calls from the same checked
     # output, for the phone's commentary toggle.
     from ninety.speech import commentary
 
     commentary_info = commentary.write(
-        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta)), out)
+        commentary.commentary(events, cues, clubs_of(clip.meta), Timeline.of_clip(clip.meta), names, scores),
+        out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)
@@ -996,6 +1022,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--team-stats", type=Path, default=None,
                     help="with --match: MatchInsights' insights.json, whose team_stats (tracked distance "
                          "with its coverage) go into match.json for the phone's Team Stats")
+    ap.add_argument("--insights", type=Path, default=None,
+                    help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
+                         "either, the bar stays empty: it never restates one event")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
     ap.add_argument("--footage-audio", type=Path, default=None,
                     help="a sound track for the video (e.g. the render's crowd bed), muxed in as AAC")
