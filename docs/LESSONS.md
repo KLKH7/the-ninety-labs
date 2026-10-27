@@ -3463,3 +3463,21 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_question_code_does_not_route_is_answered_by_the_models_plan`,
   `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
   on main 14a33133, and each fails when its guard is removed.
+
+### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
+- **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
+  one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
+  another of those sentences and is never judged. The Judge still ran on every model draft: about 2 s
+  and $0.0006 a question, under one 10 s limit that also had to hold the plan and answer steps, so its
+  own 15 s timeout and retry could never run. Measured on the demo match (docs/eval/ask-model-path.md),
+  the published Judge rejected 2 of 66 true sentences the code check passed, and the code check had
+  already caught every planted defect. Its only effect was a wrong reject and the
+  wait. While measuring this, a capped judge run gathered all its calls at once and lost every
+  answer when the cap stopped one ($0.08 spent, nothing recorded).
+- **Rule:** before adding (or keeping) a check on a path, name the output it would stop and what is
+  shown instead when it does. If the fallback is the same kind of output, unchecked, the check
+  cannot block anything: drop it or move it onto the final answer. Give each model step its own time
+  budget from measured latency, and make a paid run record each answer as it arrives.
+- **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
+  passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
+  and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.

@@ -1,0 +1,96 @@
+{
+ "match": "seed8324-match",
+ "steps": {
+  "plan": {
+   "n": 14,
+   "p50_ms": 2336.75,
+   "p95_ms": 3474.4,
+   "max_ms": 3474.4,
+   "budget_s": 5.5
+  },
+  "answer": {
+   "n": 14,
+   "p50_ms": 1017.3499999999999,
+   "p95_ms": 1393.8,
+   "max_ms": 1393.8,
+   "budget_s": 2.5
+  },
+  "judge": {
+   "n": 9,
+   "p50_ms": 2062.3,
+   "p95_ms": 3949.7,
+   "max_ms": 3949.7,
+   "budget_s": 6.0
+  }
+ },
+ "before": {
+  "questions": 3,
+  "code_fallbacks": 1,
+  "fallback_reasons": [
+   "model: unanswerable"
+  ],
+  "ms_p50": 5362.3,
+  "ms_p95": 5489.8,
+  "usd_per_answer": 0.001748
+ },
+ "after": {
+  "questions": 3,
+  "code_fallbacks": 1,
+  "fallback_reasons": [
+   "model: unanswerable"
+  ],
+  "ms_p50": 4209.1,
+  "ms_p95": 4655.2,
+  "usd_per_answer": 0.001506
+ },
+ "before_all": {
+  "questions": 11,
+  "code_fallbacks": 2,
+  "fallback_reasons": [
+   "model: unanswerable"
+  ],
+  "ms_p50": 5503.8,
+  "ms_p95": 6669.7,
+  "usd_per_answer": 0.001951
+ },
+ "judge": {
+  "events": {
+   "true, code passed": {
+    "claims": 66,
+    "judge_rejected": 2
+   },
+   "true, code rejected": {
+    "claims": 1,
+    "judge_rejected": 0
+   },
+   "planted, code passed": {
+    "claims": 0,
+    "judge_rejected": 0
+   },
+   "planted, code rejected": {
+    "claims": 32,
+    "judge_rejected": 26
+   }
+  },
+  "insights": {
+   "true, code passed": {
+    "claims": 66,
+    "judge_rejected": 0
+   },
+   "true, code rejected": {
+    "claims": 1,
+    "judge_rejected": 0
+   },
+   "planted, code passed": {
+    "claims": 0,
+    "judge_rejected": 0
+   },
+   "planted, code rejected": {
+    "claims": 32,
+    "judge_rejected": 25
+   }
+  }
+ },
+ "judge_escapes": [],
+ "spend_usd": 0.3104
+}
