@@ -1,10 +1,8 @@
-import { speakAloud } from "./speech";
-
 // The big screen's audio tracks, as a streaming app's audio menu offers them: "Stadium" (the crowd
 // and whistles bed alone) or "Commentary" (the bundle's commentary lines over it, the bed ducked
 // under each line), and optional captions for the commentary. Commentary is on by default when the
 // bundle has it (Kian, Oct 26: "no stadium noise and no commentary"). A line with no recorded audio
-// is said by the browser's voice (src/speech.ts), once, as it starts.
+// is silent, its caption kept: the browser's voice is never used (Kian, Oct 27: "robotic").
 //
 // The bed is the footage's own sound track when the render has one, else the bundle's `stadium`
 // file, else a placeholder crowd murmur made here (filtered noise, no data in it) until the
@@ -32,7 +30,6 @@ export interface Commentary {
 export type Track = "stadium" | "commentary" | "described";
 const DUCK = 0.3; // design: the crowd under a line, as a broadcast mix sits it
 const DRIFT_S = 0.3; // re-align an audio element further than this from the picture
-const LATE_S = 0.6; // design: a line reached later than this into it (a seek) is captioned, not said
 const MURMUR_GAIN = 0.16; // design: the placeholder crowd, well under a voice
 const DESCRIBED_BED = 0.5; // design: the bed under the audio description's lines
 
@@ -64,7 +61,6 @@ export class AudioTracks {
   captions = false;
   muted = false;
   private line: CommentaryLine | null = null;
-  private said = ""; // the line the browser's voice is saying
   private voice = new Audio();
   private bed: HTMLAudioElement | null;
   private murmur: Murmur | null = null;
@@ -110,14 +106,9 @@ export class AudioTracks {
       this.line = on;
       this.voice.pause();
       if (on?.audio) this.voice.src = new URL(on.audio, new URL(this.base, location.href)).href;
-      this.hush();
-      // Not recorded: the browser says it, once, from its start; a seek into its middle only captions it.
-      if (on && !on.audio && playing && !this.muted && into(on, t, v, this.timescale) < LATE_S) {
-        this.said = on.id;
-        speakAloud(on.text, { lang: "en-GB", rate: 1.05 });
-      }
+      // Not recorded: silent, its caption only (Kian, Oct 27: the browser's voice sounds robotic).
+      // Commentary is the bundle's voiced audio (ninety/speech/bundle.py) or nothing.
     }
-    if (this.said && (!playing || this.muted)) this.hush();
     const shown = this.captions && on ? on.text : "";
     if (this.captionEl.textContent !== shown) this.captionEl.textContent = shown;
     this.captionEl.hidden = !shown;
@@ -147,12 +138,6 @@ export class AudioTracks {
     this.murmur?.set(playing && !this.muted, level);
     document.body.dataset.bed = on ? "ducked" : "full";
     document.body.dataset.bedSource = this.bedSource;
-  }
-
-  private hush() {
-    if (!this.said) return;
-    this.said = "";
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
   }
 }
 
