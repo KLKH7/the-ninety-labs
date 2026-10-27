@@ -142,25 +142,37 @@ def test_a_hard_cut_keeps_every_rung_on_the_2_s_keyframe_grid(tmp_path):
         assert lengths == pytest.approx([4.0, 4.0, 1.2], abs=1 / FPS), rung
 
 
-def test_a_quiet_crowd_bed_is_brought_to_broadcast_loudness_without_its_whistles_clipping(tmp_path):
-    # The 8324 bed was rendered at -28.2 LUFS, peaks at -2.7 dBFS: raised by one gain to BED_LUFS, the
-    # whistles would clip but for the true-peak limiter (EBU R128).
-    clip = clip_of(tmp_path)
+def r128(path) -> tuple[float, float]:
+    """Integrated loudness (LUFS) and true peak (dBFS) of a file's sound, by ffmpeg's ebur128."""
+    cmd = ["ffmpeg", "-nostats", "-i", str(path), "-vn", "-af", "ebur128=framelog=quiet:peak=true",
+           "-f", "null", "-"]
+    err = subprocess.run(cmd, capture_output=True, text=True).stderr
+    return (float(re.findall(r"I:\s+(-?[\d.]+) LUFS", err)[-1]),
+            float(re.findall(r"Peak:\s+(-?[\d.]+) dBFS", err)[-1]))
+
+
+def bed_of(tmp_path, expr: str):
     bed = tmp_path / "bed.wav"
-    crowd = "anoisesrc=color=pink:amplitude=0.006:d=9.2:r=48000"
-    whistle = "sine=f=3200:d=9.2:r=48000,volume='if(lt(mod(t,3),0.4),0.25,0)':eval=frame"
-    mix = ["-f", "lavfi", "-i", crowd, "-f", "lavfi", "-i", whistle,
-           "-filter_complex", "amix=inputs=2:normalize=0", "-ac", "1"]
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *mix, str(bed)], check=True)
-    before = footage.loudness(bed)
-    assert before is not None and before < footage.BED_LUFS - 5  # quiet, as the rendered beds were
+    source = ["-f", "lavfi", "-i", f"aevalsrc={expr}:s=48000:d=9.2"]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *source, "-ac", "1", str(bed)], check=True)
+    return bed
+
+
+def test_a_quiet_crowd_bed_is_brought_to_broadcast_loudness(tmp_path):
+    # The 8324 bed was rendered at -28.2 LUFS, too quiet to hear on a laptop: one gain to BED_LUFS.
+    bed = bed_of(tmp_path, "0.02*(random(0)*2-1)")  # a crowd's hiss, about -33 LUFS
+    assert r128(bed)[0] < footage.BED_LUFS - 5
     out = tmp_path / "bundle"
     out.mkdir()
-    e2e.write_footage(clip, out, encode=True, audio=bed)
-    err = subprocess.run(["ffmpeg", "-nostats", "-i", str(out / "video.mp4"), "-vn", "-af",
-                          "ebur128=framelog=quiet:peak=true", "-f", "null", "-"],
-                         capture_output=True, text=True).stderr
-    integrated = float(re.findall(r"I:\s+(-?[\d.]+) LUFS", err)[-1])
-    true_peak = float(re.findall(r"Peak:\s+(-?[\d.]+) dBFS", err)[-1])
-    assert integrated == pytest.approx(footage.BED_LUFS, abs=1.0)
-    assert true_peak <= footage.PEAK_DBTP + 0.5  # AAC's own overshoot is allowed half a dB
+    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
+    assert r128(out / "video.mp4")[0] == pytest.approx(footage.BED_LUFS, abs=1.0)
+
+
+def test_the_gain_never_clips_the_whistles(tmp_path, monkeypatch):
+    # A whistle near full scale in a bed the gain lifts a long way: the true-peak limiter holds it.
+    bed = bed_of(tmp_path, "0.8*sin(2*PI*3200*t)*between(t\\,4\\,4.4)+0.02*(random(0)*2-1)")
+    monkeypatch.setattr(footage, "loudness", lambda audio: -40.0)  # +19 dB of gain
+    out = tmp_path / "bundle"
+    out.mkdir()
+    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
+    assert r128(out / "video.mp4")[1] <= footage.PEAK_DBTP + 0.5  # AAC's own overshoot: half a dB
