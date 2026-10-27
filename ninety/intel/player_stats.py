@@ -354,4 +354,24 @@ def rank(rows: Sequence[Mapping], metric: str, cal: Mapping | None = None) -> di
     return out
 
 
-__all__ = ["BEST_FORMULA", "METRICS", "build", "calibration", "find", "rank", "stats"]
+ORDER_WORDING = "of the moves the video picked up"  # what the order is of, said with it
+
+
+def order(raw_rows: Sequence[Mapping], cal: Mapping | None = None) -> dict:
+    """Players by involvement in the detected events the feed names them in, most first, with no
+    count (docs/eval/player-involvement-rank-plan.md): said only while that order's held-out grading
+    met its bar. `raw_rows` are stats(..., withhold=False); no value leaves here."""
+    cal = calibration() if cal is None else cal
+    flag = cal.get("rank:involvement_order") or {}
+    out = {"metric": "involvement", "order_only": True, "of": ORDER_WORDING, "source": identity.SOURCE,
+           "source_label": identity.SOURCE_LABEL, "facts": [], "withheld": None}
+    if not flag.get("on"):
+        out["withheld"] = flag.get("why") or "not yet measured against the truth"
+        return out
+    ranked = sorted(raw_rows, key=lambda r: (-r["involvements"], r["name"]))
+    out["facts"] = [{"rank": i, "player": r["player"], "name": r["name"], "number": r["number"],
+                     "team": r["team"]} for i, r in enumerate(ranked[:3], 1)]
+    return out
+
+
+__all__ = ["BEST_FORMULA", "METRICS", "build", "calibration", "find", "order", "rank", "stats"]

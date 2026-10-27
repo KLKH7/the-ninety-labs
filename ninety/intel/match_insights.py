@@ -463,7 +463,15 @@ class MatchInsights:
         formula, never a model's view); fastest and furthest rank only players tracked enough."""
         team = self.team(club)
         rows = [r for r in self._player_rows(minute) if team in (None, r["team"])]
-        return {**player_stats_mod.rank(rows, metric), "summary": [], "club": club}
+        got = player_stats_mod.rank(rows, metric)
+        if got["withheld"] and metric == "involvement" and team is not None:
+            # The count is off, but the order alone was graded on a held-out match: the top three,
+            # with no number, "of the moves the video picked up" (player-involvement-rank-plan.md).
+            raw = player_stats_mod.stats(self.per_player, 60.0 * float(minute), withhold=False)
+            ordered = player_stats_mod.order([r for r in raw if r["team"] == team])
+            if not ordered["withheld"]:
+                got = ordered
+        return {**got, "summary": [], "club": club}
 
     def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Each kind of restart over the minutes: the total, and each club's count with bounds."""
