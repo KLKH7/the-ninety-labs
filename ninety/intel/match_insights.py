@@ -139,8 +139,8 @@ class MatchInsights:
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
         facts["one_two"] = style.one_twos(facts["pass"])
-        # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
-        facts["possession"] = ball_share.possession_rows(events)
+        # Possession share (time in possession) and territory (where the ball was): GROUNDING I17b, I18.
+        facts["possession"] = ball_share.possession_rows(f.frames)
         facts["territory"] = ball_share.territory_rows(f.frames)
         facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
         facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
@@ -339,7 +339,7 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession;
+        """Each club's share of the time either had the ball over the minutes (time in possession);
         and the longest spells of passes in a row (a run vision followed receiver to passer, which
         needs no side told), longest first."""
         out = self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)

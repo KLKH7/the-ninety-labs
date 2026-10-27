@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -326,6 +327,75 @@ def sided(events: Sequence[Mapping], named_broadcast: Mapping[str, Mapping]) -> 
     return out
 
 
+# Step 9, the shooter from the ball (pre-registered: docs/eval/scorer-feed-plan.md). A shot vision
+# detected, or a goal, whose player the feed does not name (a tracker loses the striker in the
+# crowd of the box, or reads the strike from the wrong man) takes the feed player nearest to the
+# ball vision saw at the strike, on the shooting side, within BALL_M: the ball at a player's feet
+# (GROUNDING P6, ninety/vision/events.CONTROL_M). Identity only: the ball's place is vision's, the
+# event, its time, its side and its outcome are vision's, and the feed's position only says who
+# stood at the ball (AGENTS.md, the player-ID feed). A goal's strike is its shot: the last shot of
+# the scoring side within GOAL_SHOT_S before it.
+BALL_M = 1.5
+GOAL_SHOT_S = 5.0  # design: as the phone pairs a goal with its shot (web/phone GOAL_SHOT_S)
+NEAR_FRAMES = 2  # the feed row nearest the strike's frame, no more than this many frames away
+SHOOTS = ("shot", "goal")
+
+
+def _at(feed: Feed, t: float) -> Mapping[str, tuple[float, float]]:
+    for d in sorted(range(-NEAR_FRAMES, NEAR_FRAMES + 1), key=abs):
+        got = feed.at.get(_key(t) + d)
+        if got:
+            return got
+    return {}
+
+
+def at_ball(feed: Feed, t: float, x: float, y: float, team: str, ball_m: float = BALL_M) -> dict | None:
+    """The feed player of `team` nearest to the ball at (x, y) at capture time t, within ball_m."""
+    best, best_d = None, ball_m
+    for pid, (px, py) in _at(feed, t).items():
+        p = feed.roster.get(pid)
+        if p is None or p["team"] != team:
+            continue
+        d = math.hypot(px - x, py - y)
+        if d <= best_d:
+            best, best_d = p, d
+    if best is None:
+        return None
+    return {"player_id": best["player_id"], "name": best["name"], "number": best["jersey"],
+            "position": best["position"], "team": best["team"], "source": SOURCE, "by": "ball",
+            "distance_m": round(best_d, 2)}
+
+
+def strike_of(goal: Mapping, events: Sequence[Mapping]) -> Mapping | None:
+    """A goal's shot: the scoring side's last shot within GOAL_SHOT_S before it."""
+    shots = [e for e in events if e.get("type") == "shot" and e.get("team") == goal.get("team")
+             and 0 <= float(goal["t"]) - float(e["t"]) <= GOAL_SHOT_S]
+    return max(shots, key=lambda e: float(e["t"])) if shots else None
+
+
+def ball_named(events: Sequence[Mapping], feed: Feed, named_broadcast: Mapping[str, Mapping]) -> list[dict]:
+    """The events, each shot and goal whose player the feed does not name given `player_named`,
+    the feed player at the ball at its strike (step 9); nothing else changes."""
+    out = []
+    for e in events:
+        e = dict(e)
+        if e.get("type") in SHOOTS and e.get("team") in ("home", "away") and not named_broadcast.get(
+                e.get("player") or ""):
+            strike = e if e["type"] == "shot" else strike_of(e, events)
+            if strike is not None and strike.get("x") is not None and strike.get("y") is not None:
+                w = named_broadcast.get(strike.get("player") or "")
+                if w:  # the goal's shot names its player: he scored
+                    e["player_named"] = {"player_id": w.get("player"), "name": w["name"],
+                                         "number": w["number"], "position": w["position"],
+                                         "team": w["team"], "source": SOURCE, "by": "shot"}
+                else:
+                    who = at_ball(feed, float(strike["t"]), float(strike["x"]), float(strike["y"]), e["team"])
+                    if who:
+                        e["player_named"] = who
+        out.append(e)
+    return out
+
+
 def lineup(named: Mapping[str, Mapping]) -> list[dict]:
     """match.json line-up rows (ninety/e2e.read_lineup): one per named track, marked by its source."""
     return [{"id": t, "name": w["name"], "number": w["number"], "position": w["position"],
@@ -347,8 +417,36 @@ def load_for(path: Path, frames: Sequence[Mapping], fixture: Fixture) -> Feed:
     return feed
 
 
+def shooters_main(argv: list[str] | None = None) -> None:
+    """Step 9 alone, on a file the side step already wrote: `python -m ninety.intel.identity shooters`."""
+    ap = argparse.ArgumentParser(description="Give shots and goals the feed player at the ball (step 9).")
+    ap.add_argument("--sided", type=Path, required=True, help="the side step's detected.sided.jsonl")
+    ap.add_argument("--insights", type=Path, required=True,
+                    help="match_insights' json with --identity-feed: its identity_broadcast names")
+    ap.add_argument("--feed", type=Path, required=True)
+    ap.add_argument("--out", type=Path, required=True)
+    args = ap.parse_args(argv)
+    events = [json.loads(x) for x in args.sided.read_text().splitlines() if x.strip()]
+    events = [{k: v for k, v in e.items() if k != "player_named"} for e in events]
+    named = json.loads(args.insights.read_text()).get("identity_broadcast") or {}
+    times = [float(e["t"]) + d / FPS for e in events if e.get("type") in SHOOTS
+             for d in range(-NEAR_FRAMES, NEAR_FRAMES + 1)]
+    times += [float(s["t"]) + d / FPS for e in events if e.get("type") == "goal"
+              for s in [strike_of(e, events)] if s for d in range(-NEAR_FRAMES, NEAR_FRAMES + 1)]
+    rows = ball_named(events, load(args.feed, times), named)
+    args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    m = [r for r in rows if "player_named" in r]
+    print(f"{args.out}: {len(m)} shots and goals named, "
+          f"{sum(r['player_named']['by'] == 'ball' for r in m)} from the ball")
+
+
 def main(argv: list[str] | None = None) -> None:
     """Write the detected events with the feed's sides (step 8), for match_insights and ninety-e2e."""
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["shooters"]:
+        return shooters_main(argv[1:])
     from ninety.intel.match_insights import load_fixture
 
     ap = argparse.ArgumentParser(description="Give detected events their player's side from the ID feed.")
@@ -368,13 +466,16 @@ def main(argv: list[str] | None = None) -> None:
     association = json.loads(args.association.read_text())["tracks"]
     events = [json.loads(x) for x in args.detected.read_text().splitlines() if x.strip()]
     named = named_broadcast(association, tactical(frames, feed), feed, events, b_frames)
-    rows = sided(events, named)
+    rows = ball_named(sided(events, named), feed, named)
     args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     n = sum(r.get("team_source") == SOURCE for r in rows)
-    print(f"{args.out}: {n} of {len(rows)} events given their player's side by the feed")
+    m = sum("player_named" in r for r in rows)
+    print(f"{args.out}: {n} of {len(rows)} events given their player's side by the feed, "
+          f"{m} shots and goals their shooter from the ball")
 
 
-__all__ = ["CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
+__all__ = ["BALL_M", "CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "at_ball", "ball_named", "strike_of",
+           "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
            "broadcast_frames", "combined", "event_ids", "named_broadcast",
            "disclosure", "gate", "lineup", "load", "load_for", "sided", "tactical"]
 

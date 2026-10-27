@@ -1,11 +1,14 @@
-"""Possession share and territory by third, from the video alone (GROUNDING I17, I18). (The phone's
+"""Possession share and territory by third, from the video alone (GROUNDING I17b, I18). (The phone's
 momentum strip, by half and per five minutes, is ninety/match/territory.py.)
 
-Possession share is the pass ratio Opta publishes as possession: a team's passes over both teams' passes, as
-Opta counts possession (I17), not time on the ball. A detected pass counts for its team only when
-its side was told past the fact-checker's side gate (factcheck.side_known); a pass whose side is not
-known could be either team's, so the share is given as bounds, and stated only when they agree (no
-pass of the window has an unknown side), as every count here is (I1).
+Possession share is time in possession (GROUNDING I17b), the broadcast standard beside Opta's pass
+ratio (I17): of the seconds either team had the ball, each team's share. A team has the ball from
+the moment one of its players has it at his feet (the detector's own possession: within 1.5 m and
+moving with him, ninety/vision/events) until the other team does, while the ball is in play and for
+at most HOLD_S after its last touch; a dead ball, a cut in the footage and a loose ball are nobody's.
+The side is the player's track's, as vision reads it (a track the player-ID feed names is matched
+on its own side, so the feed never changes it). It is always stated once MIN_POSSESSION_S of
+possession were seen in the window, with its measured error beside it (docs/eval/possession-time.md).
 
 Territory is where the ball was: of the seconds of footage shown (the tracked frames hold the ball
 wherever the footage does, gaps within the tracker's own limit filled, ninety/vision/tracked_frames),
@@ -18,43 +21,120 @@ and the share is said as them ("between 25% and 31% of the footage shown"), like
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import math
+from collections.abc import Mapping, Sequence
 
-from ninety.agents.factcheck import side_known
-from ninety.intel.scene import PITCH_X, POSITION_ERROR_M, TEAMS, minute_of
+from ninety.intel.possession import HOLD_S
+from ninety.intel.scene import PITCH_X, PITCH_Y, POSITION_ERROR_M, TEAMS, minute_of
+from ninety.vision.events import (
+    BALL_R,
+    CARRY_MPS,
+    CONTROL_M,
+    MIN_SPELL_FRAMES,
+    SPEED_FRAMES,
+    SPELL_GAP_FRAMES,
+)
 
 STEP_S = 1.0  # one ball position a second: the tracked frames' own smoothing (team_stats.STEP_S)
 THIRD_M = PITCH_X / 3
 EDGE_M = POSITION_ERROR_M
 THIRDS = ("own", "middle", "final")
+FPS = 25  # the tracked frames' rate (ninety/intel/scene)
+# Pre-registered (docs/eval/possession-time-plan.md): a share is said once either team has had the
+# ball this long in the window (design: about two minutes of play, at the half of it a team is
+# seen with the ball); before it, "—".
+MIN_POSSESSION_S = 60.0
 
 
-def possession_rows(events: Iterable[Mapping]) -> list[dict]:
-    """One row per detected pass: its minute, its detected team, and whether that side is known."""
-    return [
-        {
-            "id": f"poss:{e['id']}",
-            "kind": "possession_pass",
-            "team": e["team"],
-            "minute": minute_of(float(e["t"])),
-            "side_known": side_known(e),
-        }
-        for e in events
-        if e.get("type") == "pass" and e.get("team") in TEAMS
-    ]
+def _control(frames: Sequence[Mapping]) -> list[tuple[int, float, str | None, bool]]:
+    """Per tracked frame: its number, its time, the side of the player with the ball at his feet
+    (nearest within CONTROL_M, moving with it within CARRY_MPS), or None, and whether the ball is
+    in play (seen, and not beyond a line by more than its radius, Law 9)."""
+    rows = sorted(frames, key=lambda f: int(f["frame"]))
+    ball = {}
+    for fr in rows:
+        b = fr.get("ball")
+        if b and b.get("x") is not None and b.get("y") is not None:
+            ball[int(fr["frame"])] = (float(b["x"]), float(b["y"]))
+    where = {int(fr["frame"]): {p["id"]: (float(p["x"]), float(p["y"]), p.get("team")) for p in fr["players"]}
+             for fr in rows}
+
+    def vel(pos: Mapping[int, tuple], n: int) -> tuple[float, float] | None:
+        a, b = pos.get(n - SPEED_FRAMES), pos.get(n + SPEED_FRAMES)
+        if a is None or b is None:
+            return None
+        dt = 2 * SPEED_FRAMES / FPS
+        return (b[0] - a[0]) / dt, (b[1] - a[1]) / dt
+
+    out = []
+    for fr in rows:
+        n, t = int(fr["frame"]), float(fr["t"])
+        at = ball.get(n)
+        if at is None:
+            out.append((n, t, None, False))
+            continue
+        x, y = at
+        live = -BALL_R <= x <= PITCH_X + BALL_R and -BALL_R <= y <= PITCH_Y + BALL_R
+        best, best_d = None, CONTROL_M
+        for pid, (px, py, team) in where[n].items():
+            d = math.hypot(px - x, py - y)
+            if d <= best_d and team in TEAMS:
+                best, best_d = (pid, team), d
+        side = None
+        if best is not None and live:
+            vb = vel(ball, n)
+            vp = vel({k: where[k][best[0]] for k in (n - SPEED_FRAMES, n + SPEED_FRAMES)
+                      if k in where and best[0] in where[k]}, n)
+            if vb is None or vp is None or math.hypot(vb[0] - vp[0], vb[1] - vp[1]) <= CARRY_MPS:
+                side = best[1]
+        out.append((n, t, side, live))
+    return out
+
+
+def possession_rows(frames: Sequence[Mapping]) -> list[dict]:
+    """One row per minute: the seconds each team had the ball, time in possession (GROUNDING I17b).
+
+    A team gains possession when one of its players has the ball at his feet for MIN_SPELL_FRAMES
+    frames running, and keeps it until the other team does, while the ball is in play and for no
+    more than HOLD_S after its last touch: a pass or a dribble between its players stays its time;
+    a ball loose longer, or contested, is nobody's. A dead ball (over a line) and a cut in the
+    footage end it: the restart's taker gains it afresh. Dead and contested seconds count for
+    neither side, so the two shares are of the seconds a team had the ball."""
+    by: dict[int, dict] = {}
+    team, last_touch, prev_n, run_side, run = None, None, None, None, 0
+    for n, t, side, live in _control(frames):
+        if prev_n is not None and n - prev_n > SPELL_GAP_FRAMES:
+            team, run_side, run = None, None, 0  # a cut: nothing seen before it carries over
+        prev_n = n
+        if not live:
+            team, run_side, run = None, None, 0
+        if side is not None:
+            run = run + 1 if side == run_side else 1
+            run_side = side
+            if run >= MIN_SPELL_FRAMES:
+                team, last_touch = side, n
+        if team is not None and last_touch is not None and (n - last_touch) / FPS > HOLD_S:
+            team = None
+        m = minute_of(t)
+        r = by.setdefault(m, {"id": f"poss:m{m}", "kind": "possession_minute", "minute": m,
+                              "frames": 0, **{k: 0 for k in TEAMS}})
+        r["frames"] += 1
+        if team is not None and live:
+            r[team] += 1
+    return [{**r, **{k: round(r[k] / FPS, 2) for k in (*TEAMS, "frames")}} for r in by.values()]
 
 
 def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
-    """Each team's pass share in the window, with bounds from the passes whose side is unknown."""
+    """Each team's share of the seconds either team had the ball in the window; no share before
+    MIN_POSSESSION_S of them (too early to say), and then always one."""
     window = [r for r in rows if minute_from <= r["minute"] <= minute_to]
-    unknown = sum(not r["side_known"] for r in window)
-    total = len(window)
+    secs = {k: sum(float(r[k]) for r in window) for k in TEAMS}
+    total = sum(secs.values())
+    if not window:
+        return {}
     out = {}
     for team in TEAMS:
-        known = sum(r["side_known"] and r["team"] == team for r in window)
-        if not total:
-            continue
-        lo, hi = known / total, (known + unknown) / total
+        stated = total >= MIN_POSSESSION_S
         out[team] = {
             "id": f"poss:{team}:m{minute_from}-{minute_to}",
             "kind": "possession",
@@ -62,14 +142,15 @@ def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dic
             "team": team,
             "minute_from": minute_from,
             "minute_to": minute_to,
-            "value": round(100 * known / (total - unknown)) if total > unknown else None,
+            "value": round(100 * secs[team] / total) if stated else None,
             "unit": "%",
-            "lo": round(100 * lo),
-            "hi": round(100 * hi),
-            "confident": unknown == 0,
-            "passes": total,
-            "also": [[total, "passes"]],
+            "seconds": round(secs[team], 1),
+            "confident": stated,
+            "method": "time",
+            "also": [[round(total), "seconds"]],
         }
+    if all(out[t]["value"] is not None for t in TEAMS) and out["home"]["value"] + out["away"]["value"] != 100:
+        out["away"]["value"] = 100 - out["home"]["value"]  # rounded halves always make 100
     return out
 
 
