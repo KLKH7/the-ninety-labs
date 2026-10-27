@@ -44,6 +44,7 @@ FPS = 25  # the tracked frames' rate (ninety/intel/scene)
 # have had the ball this long in the window (design: about two minutes of play, at the half of it a team is
 # seen with the ball); before it, "—".
 MIN_POSSESSION_S = 60.0
+MEASURED_FROM = (1, 46)  # kick-off and the second half's first minute (Law 7): the windows measured
 # Measured, not a target: the largest error of the home share against the answer key, over the six
 # pre-registered windows and every "so far" value the Stats tab shows (docs/eval/possession-time.json:
 # 8.1 and 9.2, rounded up). It missed its 5-point MAE gate (5.75), so the number is said with this
@@ -143,7 +144,10 @@ def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dic
         return {}
     out = {}
     for team in TEAMS:
-        stated = total >= MIN_POSSESSION_S
+        # Measured only from kick-off and from each half's start (docs/eval/possession-time.json): a
+        # stretch starting elsewhere is not said (on 8324, minutes 31 to 35 read 65% where the answer
+        # key has 36%).
+        stated = total >= MIN_POSSESSION_S and minute_from in MEASURED_FROM
         out[team] = {
             "id": f"poss:{team}:m{minute_from}-{minute_to}",
             "kind": "possession",

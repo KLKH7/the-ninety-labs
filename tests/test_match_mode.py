@@ -1347,25 +1347,28 @@ def stats_match(possession_sure=False, passes=(40, 30)):
             stats_match(),
             {"home": 1, "away": 0},
             [
-                ("shots", 1, 1),
-                ("on_target", 1, 1),
                 ("passes", 40, 30),
                 ("accuracy", 90, 87),
+                ("shots", 1, 1),
+                ("on_target", 1, 1),
                 ("corner", 2, 1),
             ],
         ),
+        # In the order leagues put them up (the Coordinator, Oct 27): possession, passes, accuracy, attempts.
         (
             stats_match(possession_sure=True),
             {"home": 0, "away": 0},
             [
                 ("possession", 57, 43),
-                ("shots", 1, 1),
-                ("on_target", 1, 1),
                 ("passes", 40, 30),
                 ("accuracy", 90, 87),
+                ("shots", 1, 1),
+                ("on_target", 1, 1),
                 ("corner", 2, 1),
             ],
         ),
+        # A row of 0 and 0 reads as broken on air: not shown (Kian's 8324 full-time panel).
+        (stats_match(passes=(0, 0)), None, [("corner", 2, 1)]),
         # Fewer attempts than the scorebug's goals contradicts it (every goal is an attempt): not shown.
         (stats_match(), {"home": 4, "away": 1}, [("passes", 40, 30), ("accuracy", 90, 87), ("corner", 2, 1)]),
         # No score read: attempts cannot be checked against it, so not shown; accuracy needs 15 passes a side.

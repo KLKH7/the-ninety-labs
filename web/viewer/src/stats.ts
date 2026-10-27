@@ -61,8 +61,15 @@ export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
     const v = scoutAt(m, key, t);
     if (v) out.push({ key, label, ...v, unit });
   }
-  return out;
+  // A row of 0 and 0 reads as broken on air (Kian's 8324 full-time panel: "Corners 0–0"); then the
+  // order leagues put them up in (the Coordinator, Oct 27), anything else after.
+  const rank = (k: string) => { const i = ROW_ORDER.indexOf(k); return i < 0 ? ROW_ORDER.length : i; };
+  return out.filter((r) => r.home !== 0 || r.away !== 0).sort((a, b) => rank(a.key) - rank(b.key));
 }
+
+/** The rows' order on the card and the half-time and full-time panels. */
+export const ROW_ORDER = ["possession", "passes", "accuracy", "shots", "on_target", "overload_moments",
+  "regains_within_5s", "crosses", "corner", "one_twos"];
 
 /** Which stats graphic is up at video time v (match time t): the panel at half-time (the first
  * PANEL_S of footage from the clock's 45:00) or full time (from the engine's 90:00, Law 7, or the

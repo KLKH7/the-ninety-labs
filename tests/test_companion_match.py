@@ -1223,3 +1223,60 @@ def test_the_model_citing_the_beaten_clubs_pass_is_refused():
     r = asyncio.run(companion.answer_match(q, mi, ask))
     assert r.source == "code" and r.reasons[0].startswith("the question asks for a pass that beat Lisbon")
     assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
+
+
+# -- "Who's been on top?" (Kian and Jayden's 8324 preview, Oct 27): both clubs, over the stretch asked --
+
+
+def _territory_minute(team, minute, final, near=0, seen=60):
+    return {"id": f"terr:{team}:m{minute}", "kind": "territory_minute", "team": team, "minute": minute,
+            "seconds": 60, "seen": seen, "near_line": near, "own": seen - final - near, "middle": 0,
+            "final": final, "club": None}
+
+
+def _on_top_insights(home_final, away_final, home_early=50):
+    mi = insights()
+    # Minutes 1 to 30: London camped in Lisbon's half; from minute 31, the shares asked about.
+    rows = [_territory_minute("home", m, home_early) for m in range(1, 31)]
+    rows += [_territory_minute("away", m, 2) for m in range(1, 31)]
+    rows += [_territory_minute("home", m, home_final, near=2) for m in range(31, 36)]
+    rows += [_territory_minute("away", m, away_final, near=2) for m in range(31, 36)]
+    mi.facts["territory"] = rows
+    return mi
+
+
+@pytest.mark.parametrize("q, t, window", [
+    ("Who's been on top since the half hour?", 2050.0, (31, 35)),
+    ("Who has been on top in the half hour", 2030.0, (31, 34)),  # 33:50, the second repro
+    ("Who has been on top in the last half hour?", 2050.0, (6, 35)),
+])
+def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
+    mi = _on_top_insights(home_final=6, away_final=15)  # Lisbon's least (25%) beats London's most (13%)
+    r = asyncio.run(companion.answer_match(Question("s1", None, q, t), mi))
+    assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
+    a = r.answer
+    span = f"from minute {window[0]} to minute {window[1]}"
+    assert "Lisbon Esportes's attacking third" in a.text and "London Athletic's attacking third" in a.text
+    assert a.text.count(span) == 2, a.text  # both clubs, over the stretch asked, never minutes 1 to now
+    if window[0] == 31:
+        assert a.headline == "Lisbon", a.headline  # the comparison's verdict, not one club's number
+        assert a.text.index("Lisbon") < a.text.index("London")  # the leader first
+
+
+def test_on_top_is_too_close_to_call_when_the_ranges_overlap():
+    mi = _on_top_insights(home_final=10, away_final=11)
+    a = asyncio.run(companion.answer_match(
+        Question("s1", None, "Who's been on top since the half hour?", 2050.0), mi)).answer
+    assert a.headline == "Too close to call", a.headline
+    assert a.text.endswith(companion.ON_TOP_LEVEL)
+
+
+def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():
+    from ninety.intel import ball_share
+
+    rows = [{"id": f"poss:m{m}", "kind": "possession_minute", "team": None, "minute": m, "frames": 60.0,
+             "home": 30.0, "away": 20.0} for m in range(1, 40)]
+    assert ball_share.possession(rows, 1, 35)["home"]["value"] == 60  # from kick-off: measured
+    assert ball_share.possession(rows, 46, 39) == {}  # nothing in the window yet
+    late = ball_share.possession(rows, 31, 35)["home"]
+    assert late["value"] is None and not late["confident"]  # minutes 31 to 35: never measured

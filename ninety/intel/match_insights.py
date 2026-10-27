@@ -358,6 +358,24 @@ class MatchInsights:
         """Where the ball was over the minutes: each club's share with it in its attacking third."""
         return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
 
+    def on_top(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Which club has been on top over the minutes, by where the ball was (territory, I18): a club
+        leads only when the least share of the footage with the ball in its attacking third is more
+        than the other's most; else neither. Both clubs' territory beside it. Possession over an
+        arbitrary stretch is not used: it is measured only from kick-off and per half (I17b)."""
+        got = self._window_summary(ball_share.territory, "territory", minute_from, minute_to, None)
+        terr = {r["team"]: r for r in got["summary"]}
+        lead = None
+        if len(terr) == 2:
+            h, a = terr["home"], terr["away"]
+            lead = "home" if h["lo"] > a["hi"] else "away" if a["lo"] > h["hi"] else None
+        clubs = self.fixture.clubs
+        row = {"id": f"on_top:m{minute_from}-{minute_to}", "kind": "on_top", "metric": "on_top",
+               "team": lead, "club": clubs.get(lead), "clubs": clubs, "minute_from": minute_from,
+               "minute_to": minute_to, "confident": len(terr) == 2,
+               "evidence": [r["id"] for r in terr.values()]}
+        return {"facts": [], "summary": [row, *got["summary"]]}
+
     def shots(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """The shot map over the minutes: each shot's spot, its distance from the goal and the angle
         the posts make there, nearest first; and each club's shots and those from inside the penalty area."""

@@ -53,6 +53,7 @@ MATCH_TOOLS = (
     "lineup",
     "possession",
     "territory",
+    "on_top",
     "shots",
     "passing",
     "physical",
@@ -80,6 +81,9 @@ TOOL_HELP = {
     "known yet",
     "possession": "each club's share of the time either side had the ball (time in possession: dead and "
     "contested time left out), from the first minute a share can be said",
+    "on_top": "which club has been on top over the minutes, by where the ball was: a club leads only when "
+    "its share of the footage with the ball in its attacking third is clearly more than the other's, "
+    "else neither; both clubs' shares beside it",
     "territory": "where the ball was: each club's share of the time with it in its attacking third, as "
     "a range (the ball near a third's line could be on either side)",
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
@@ -126,6 +130,11 @@ TOOL_WORDS = (
         r"|wall pass\w*|how (?:are|is) [\w' ]+ (?:playing|doing|getting on|looking|defending|attacking)"
         r"|how is the (?:game|match) going|going forward"
         r"|goal ?keeper|keeper)\b",
+    ),
+    (
+        "on_top",
+        r"\b(?:on top|the better (?:side|team)|been better|bossing"
+        r"|in control of (?:the|this) (?:game|match))\b",
     ),
     (
         "players",
@@ -381,6 +390,11 @@ def minutes_of(text: str, minute: int) -> tuple[int, int] | None:
     if m:
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_MINUTES[m.group(1)]
         return max(1, minute - n + 1), minute
+    if re.search(r"\b(?:last|past) half(?: an)? hour\b", t):
+        return max(1, minute - 29), minute
+    # "Since the half hour" (in the half hour, since the half-hour mark): from 30:00, football's minute 31.
+    if re.search(r"\b(?:since|in) the half[- ]hour\b|\bsince half an hour\b", t):
+        return (31, minute) if minute >= 31 else None
     if re.search(r"\b(?:so far|whole (?:match|game)|all (?:match|game)|this (?:match|game)|today)\b", t):
         return 1, minute
     return None
@@ -726,6 +740,12 @@ def headline(question: str, cited: list[dict], insights) -> str | None:
     routed = route(question)
     # A score question ("who scored?" too) is headed by the scorebug's reading, never by one scorer.
     asks_score = bool(routed) and routed[0] == "score"
+    top = next((f for f in cited if f.get("metric") == "on_top"), None)
+    if routed and routed[0] == "on_top" and top is not None:
+        # The comparison's verdict, never one club's number (Kian's preview, Oct 27).
+        if top.get("team") is None:
+            return "Too close to call"
+        return short_name(insights.fixture.home_code if top["team"] == "home" else insights.fixture.away_code)
     if routed and routed[0] == "possession" and not any(f.get("metric") == "possession_share" for f in cited):
         return "Not known yet"  # the share is unknown (POSSESSION_UNKNOWN): no figure heads it
     if bug is not None and (kind != "who" or winning or asks_score):  # the scorebug's reading
@@ -786,6 +806,8 @@ SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep 
 # least this many passes; fewer is too early to say anything, and the answer says so.
 MIN_SHARE_PASSES = 15
 TOO_EARLY = "It's too early to say: the match has barely started."
+# Fixed text, stating no number: the two clubs' territory ranges overlap, so neither leads.
+ON_TOP_LEVEL = "That is too close to call: neither side clearly had more of the ball in the other's half."
 SHOTS_SIDE_UNKNOWN = "Vision couldn't tell surely which side took them, so it can't say who has had more."
 
 
@@ -795,8 +817,9 @@ def _sample(fact: dict) -> int | None:
         return fact["passes"]
     return next((int(v) for v, unit, *_ in fact.get("also") or () if unit == "passes"), None)
 # Fixed text, stating no fact: possession is unknown before a minute of either side on the ball was seen.
-POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: too little of the match has "
-                      "been seen with either side on the ball.")
+POSSESSION_UNKNOWN = ("Possession can't be split between the clubs for those minutes: it is measured "
+                      "from kick-off and from each half's start, once a minute of either side on the ball "
+                      "has been seen.")
 
 
 def code_texts(fact: dict) -> list[str]:
@@ -1294,6 +1317,25 @@ def code_match_answer(
             t=question.t,
             suggest=suggest,
         ), calls
+    # "Who's been on top since the half hour?": both clubs compared over the stretch asked, each
+    # club's territory its own checked sentence; the headline is the comparison's verdict.
+    if calls and calls[0]["name"] == "on_top":
+        top = next((f for f in facts if f.get("metric") == "on_top"), None)
+        terr = [f for f in facts if f.get("metric") == "final_third_share"]
+        if top is not None:
+            lead = top.get("team")
+            terr.sort(key=lambda f: f.get("team") != (lead or "home"))
+        said = []
+        for f in terr:
+            text = next((t for t in code_texts(f) if _verify(Claim(t, [f["id"]]), known, insights).ok), None)
+            if text is not None:
+                said.append((text, f))
+        if top is not None and len(said) == 2:
+            verdict = ON_TOP_LEVEL if top.get("team") is None else None
+            text = " ".join([*(t for t, _ in said), *([verdict] if verdict else [])])
+            return _match_answer(text, [top, *(f for _, f in said)], insights, calls,
+                                 asked=[*(h["question"] for h in history), question.text], t=question.t,
+                                 suggest=suggest), calls
     # "How are Lisbon playing?": an overview, not the first count to hand. Where the ball was and the
     # main route (when its sample allows), then the club's most significant moment, each checked.
     overview = _overview(question, calls, insights, known, history, suggest)
