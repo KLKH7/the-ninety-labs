@@ -78,7 +78,10 @@ COPY infra/served.py /tmp/served.py
 RUN python -c "import sys,urllib.request as u; open(sys.argv[2], 'wb').write(u.urlopen(sys.argv[1], timeout=120).read())" \
     "$SERVED_URL" /tmp/served.tar.gz \
     && python /tmp/served.py unpack /tmp/served.tar.gz /app/served "$SERVED_SHA256" \
-    && test -f /app/served/seed8324-match/tracked.json && rm /tmp/served.tar.gz /tmp/served.py
+    && test -f /app/served/seed8324-match/tracked.json && rm /tmp/served.tar.gz /tmp/served.py \
+    && mkdir -p /app/matches/insights \
+    && for d in /app/served/*/; do c=$(basename "$d"); \
+         if [ -f "$d/insights.json" ]; then mv "$d/insights.json" "/app/matches/insights/$c.json"; fi; done
 COPY --from=viewer /viewer/dist /app/viewer
 COPY --from=phone /phone/dist /app/phone
 

@@ -63,3 +63,16 @@ def test_clip_json_is_cut_to_what_a_served_clip_reads(tmp_path):
 def test_a_simulator_name_or_a_path_is_not_a_served_clip(tmp_path, clip):
     with pytest.raises(SystemExit):
         served.pack(package(tmp_path / "pkg"), clip, tmp_path / "a.tar.gz")
+
+
+def test_the_offline_insights_ride_along_only_for_their_own_clip(tmp_path):
+    # Built with the Player ID feed and the camera join, which the API cannot rebuild at runtime.
+    p = package(tmp_path / "pkg")
+    (tmp_path / "insights.json").write_text(json.dumps({"clip": "demo-match", "per_player": {}}))
+    sha = served.pack(p, "demo-match", tmp_path / "a.tar.gz", insights=tmp_path / "insights.json")
+    served.unpack(tmp_path / "a.tar.gz", tmp_path / "served", sha)
+    unpacked = tmp_path / "served" / "demo-match" / "insights.json"
+    assert json.loads(unpacked.read_text())["clip"] == "demo-match"
+    (tmp_path / "other.json").write_text(json.dumps({"clip": "seed8080-match"}))
+    with pytest.raises(SystemExit, match="not this clip's"):
+        served.pack(p, "demo-match", tmp_path / "b.tar.gz", insights=tmp_path / "other.json")
