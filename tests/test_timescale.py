@@ -137,9 +137,9 @@ def test_a_commentary_line_lasts_its_heard_seconds_times_the_timescale_in_match_
 
 
 def test_refit_keeps_the_timescale_once_the_audio_is_measured():
-    from ninety.speech import commentary
-
     from dataclasses import asdict
+
+    from ninety.speech import commentary
 
     calls = [commentary.Call("v1", 61.0, "shot", ["v1"], ["A shot from distance."], True)]
     lines, _ = commentary.schedule(calls, timeline=Timeline(SEGS, 25, K), duration=lambda text: 1.6)
