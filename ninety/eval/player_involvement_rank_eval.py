@@ -27,6 +27,7 @@ from ninety.match import detected
 MINUTES = (45, 90)
 MEAN_BAR = 2.0  # mean top-3 overlap over the four cases (design, pre-registered)
 CASE_FLOOR = 1  # and no case below 1 of 3
+ORDER_ON = {"rank:involvement_order": {"on": True}}  # grading reads the order whatever the flag says
 
 
 def truth_top3(counts: Counter, pool: list[str]) -> set[str]:
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> None:
                     truth[pid] += 1
         for team in ("home", "away"):
             rows = [r for r in raw if r["team"] == team]
-            ours = [f["player"] for f in player_stats.order(rows, {"rank:involvement_order": {"on": True}})["facts"]]
+            ours = [f["player"] for f in player_stats.order(rows, ORDER_ON)["facts"]]
             pool = [r["player"] for r in rows]
             top = truth_top3(truth, pool)
             lead = max(truth[p] for p in pool)
