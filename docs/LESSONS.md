@@ -3525,3 +3525,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** say a statistic only over the windows its measurement covered (here: from kick-off and
   from a half's start); a window it was not measured on is "not known", or a measured one is used.
 - **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
+
+### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
+- **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
+  one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
+  another of those sentences and is never judged. The Judge still ran on every model draft: about 2 s
+  and $0.0006 a question, under one 10 s limit that also had to hold the plan and answer steps, so its
+  own 15 s timeout and retry could never run. Measured on the demo match (docs/eval/ask-model-path.md),
+  the published Judge rejected 2 of 66 true sentences the code check passed, and the code check had
+  already caught every planted defect. Its only effect was a wrong reject and the
+  wait. While measuring this, a capped judge run gathered all its calls at once and lost every
+  answer when the cap stopped one ($0.08 spent, nothing recorded).
+- **Rule:** before adding (or keeping) a check on a path, name the output it would stop and what is
+  shown instead when it does. If the fallback is the same kind of output, unchecked, the check
+  cannot block anything: drop it or move it onto the final answer. Give each model step its own time
+  budget from measured latency, and make a paid run record each answer as it arrives.
+- **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
+  passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
+  and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
