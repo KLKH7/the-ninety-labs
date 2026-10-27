@@ -19,6 +19,8 @@ import { type Side, type TeamNames, CLUBS, short } from "./teams";
 
 /** The baked bug's widest box, as fractions of the picture (render.js, at 1280 by 720). */
 export const BAKED = { x: 28 / 1280, y: 24 / 720, w: 400 / 1280, h: 40 / 720 };
+/** A detected goal and the scorebug's change for it, at most this far apart (web/phone, SCOREBUG_MATCH_S). */
+const SCOREBUG_MATCH_S = 3;
 /** The goal moment's length and its phases, as fractions of it (design: ~2 s, Kian). */
 export const GOAL_S = 2.0;
 const SWEEP_IN = 0.15, SWEEP_OUT = 0.65, ROLL = 0.8;
@@ -35,8 +37,15 @@ export interface BugState {
 
 /** What the bug shows at match time `t`, from the gated readings only. `secondHalf`: the second
  * half's detected kick-off, when there is one; `ended`: the footage has played out. */
-export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, ended = false, goalS = GOAL_S): BugState {
-  const sorted = reads.filter((r) => r.score).sort((a, b) => a.t - b.t);
+export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, ended = false, goalS = GOAL_S,
+  goals: number[] = []): BugState {
+  // A score never goes down in a match: a reading lower than one already read is a misread, skipped
+  // (as the phone's scorebugGoals does).
+  const sorted: ScoreRead[] = [];
+  for (const r of reads.filter((x) => x.score).sort((a, b) => a.t - b.t)) {
+    const last = sorted[sorted.length - 1]?.score;
+    if (!last || (r.score!.home >= last.home && r.score!.away >= last.away)) sorted.push(r);
+  }
   let at: ScoreRead | null = null;
   for (const r of sorted) {
     if (r.t > t + 1e-6) break;
@@ -44,7 +53,11 @@ export function bugAt(reads: ScoreRead[], t: number, secondHalf: number | null, 
   }
   const first = sorted[0];
   const kickoff = first && first.score!.home === 0 && first.score!.away === 0;
-  const score = at ? at.score! : kickoff ? { home: 0, away: 0 } : null;
+  // A goal vision detected after the last reading (its change unread, or under the gate) leaves that
+  // score stale: no digits until a reading says the new one.
+  const since = at ? at.t : -Infinity;
+  const stale = goals.some((g) => g > since + SCOREBUG_MATCH_S && g <= t + 1e-6);
+  const score = stale ? null : at ? at.score! : kickoff ? { home: 0, away: 0 } : null;
   let goal: BugState["goal"] = null;
   // The change that raised a side's count, read within the moment: the read's own `team`, else the
   // side whose count rose.
@@ -78,7 +91,7 @@ export const codesOf = (teams: TeamNames, codes?: Partial<Record<Side, string>>)
 
 /** `root`: the bug's row, over the baked one; `clockTab`: the clock's tab under it. */
 export function setupScorebug(root: HTMLElement, clockTab: HTMLElement, teams: TeamNames, reads: ScoreRead[],
-  secondHalf: number | null, codes?: Partial<Record<Side, string>>) {
+  secondHalf: number | null, codes?: Partial<Record<Side, string>>, goals: number[] = [], said: HTMLElement | null = null) {
   const digit: Record<Side, { now: HTMLElement; was: HTMLElement; box: HTMLElement }> = {} as never;
   const score = el("span", "sb-score");
   const tabs: Record<Side, HTMLElement> = {} as never;
@@ -107,13 +120,14 @@ export function setupScorebug(root: HTMLElement, clockTab: HTMLElement, teams: T
   root.hidden = false;
   let key = "";
   let shownScore: BugState["score"] = null;
+  let lastSay = "";
   // The moment's length is a design token (style.css --g-goal-s), so an identity can retime it.
   const token = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--g-goal-s"));
   const goalS = token > 0 ? token : GOAL_S;
   return {
     /** What the bug shows at match time t; returns the score it shows, for the stats panel. */
     tick(t: number, ended: boolean, reduceMotion: boolean): BugState["score"] {
-      const s = bugAt(reads, t, secondHalf, ended, goalS);
+      const s = bugAt(reads, t, secondHalf, ended, goalS, goals);
       shownScore = s.score;
       const time = s.period ?? clock(t);
       const g = reduceMotion ? null : s.goal;
@@ -121,6 +135,15 @@ export function setupScorebug(root: HTMLElement, clockTab: HTMLElement, teams: T
       if (k === key) return shownScore;
       key = k;
       clockEl.textContent = time;
+      // The score to a screen reader, when it or the period changes (never the running clock).
+      const text = s.score
+        ? `${s.goal ? `Goal, ${teams[s.goal.side]}. ` : ""}${teams.home} ${s.score.home}, ${teams.away} ${s.score.away}${s.period === "HT" ? ", half-time" : s.period === "FT" ? ", full time" : ""}`
+        : `${teams.home} v ${teams.away}`;
+      const sayKey = `${s.score?.home}-${s.score?.away}|${s.period}`;
+      if (said && sayKey !== lastSay) {
+        lastSay = sayKey;
+        said.textContent = text;
+      }
       clockTab.dataset.period = s.period ?? "";
       for (const side of ["home", "away"] as const) {
         const d = digit[side];

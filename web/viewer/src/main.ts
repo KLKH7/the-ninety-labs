@@ -481,9 +481,14 @@ async function start() {
 
   const broadcast = broadcastSchedule(b.cues);
   // The big screen's lower third is HTML over the picture (src/lowerthird.ts); the canvas keeps the rest.
-  const feed = (b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name);
+  // Only the ID feed's confident names are set in bold, and a name gives its club only through a track
+  // whose side the fact-checker vouches for (the bundle's sides_known): a track id's letter alone is
+  // the tracker's vote, never a club (src/teams.ts, sideUnsure).
+  const feed = (b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name && p.confident === true);
   const feedNames = [...new Set(feed.map((p) => p.name!))];
-  const nameSides = Object.fromEntries(feed.map((p) => [p.name!, p.id.startsWith("h") ? "home" : "away"] as const));
+  const vouched = new Set(m.sides_known ?? []);
+  const nameSides = Object.fromEntries(feed.filter((p) => vouched.has(p.id))
+    .map((p) => [p.name!, p.id.startsWith("h") ? "home" : "away"] as const));
   const codes = codesOf(teams, m.teams);
   const lowerThird = big
     ? setupLowerThird($("lower-third"), { teams, names: feedNames, goals: b.match?.goals ?? [], scorebug: b.scorebug,
@@ -492,7 +497,10 @@ async function start() {
   // The second half's kick-off, when vision detected one (a chapter is named from it): half-time's end.
   const kick = (b.match?.chapters ?? []).find((c) => c.label.startsWith("Kick-off") && (c.event_t ?? c.t) >= 45 * 60);
   const secondHalf = kick ? kick.event_t ?? kick.t : null;
-  const scorebug = big ? setupScorebug($("scorebug"), $("clock-tab"), teams, b.scorebug, secondHalf, m.teams) : null;
+  const scorebug = big
+    ? setupScorebug($("scorebug"), $("clock-tab"), teams, b.scorebug, secondHalf, m.teams, (b.match?.goals ?? []).map((g) => g.t),
+      $("bug-said"))
+    : null;
   const statsGfx = big && b.match ? setupStats($("stats-card"), $("period-panel"), b.match, teams, codes) : null;
   const footageStart = matchTime(0);
   (window as unknown as { ninetyScorebug: unknown }).ninetyScorebug = { bugAt, BAKED, rowsAt, statsGraphicAt }; // tests // read by tests/test_match_mode.py

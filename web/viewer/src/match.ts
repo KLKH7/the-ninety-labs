@@ -31,7 +31,7 @@ export interface MatchData {
   goals: { t: number; team: "home" | "away" | null; event: string }[];
   stats: ({ t: number; event: string | null } & Record<"home" | "away", TeamStats>)[];
   /** The line-up by track; a name with source id_feed is the player-ID feed's (docs/FEED_SPEC.md). */
-  lineup?: { id: string; name?: string | null; source?: string }[];
+  lineup?: { id: string; name?: string | null; source?: string; confident?: boolean }[];
 }
 
 /** How long the "time skip" label stays up after a cut (design: long enough to read, gone before

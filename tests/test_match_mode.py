@@ -821,7 +821,7 @@ def test_the_lower_third_lays_out_the_checked_words_never_new_ones(browser, site
     page.context.close()
 
 
-def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10):  # noqa: F811
+def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10, sure=True):  # noqa: F811
     """The big screen with one line break on air at match time 60.2 s (or `cue`), its passer named by
     the ID feed, between the demo's two clubs (the crests are theirs, src/crests.ts); `scorebug`: the
     bundle's scorebug readings, through a measured reader's gate."""
@@ -839,7 +839,8 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
 
     def match(route):
         body = route.fetch().json()
-        route.fulfill(json={**body, "lineup": [{"id": "h-t1", "name": "Kai Laiddon", "source": "id_feed"}]})
+        feed = [{"id": "h-t1", "name": "Kai Laiddon", "source": "id_feed", "confident": sure}]
+        route.fulfill(json={**body, "lineup": feed})
 
     def manifest(route):
         gate = (
@@ -847,9 +848,10 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
             if scorebug
             else None
         )
-        route.fulfill(
-            json={**route.fetch().json(), "teams": {"home": "LON", "away": "LIS"}, "scorebug": gate}
-        )
+        body = route.fetch().json()
+        vouched = [*(body.get("sides_known") or []), *(["h-t1"] if sure else [])]  # his side, vouched for
+        teams = {"home": "LON", "away": "LIS"}
+        route.fulfill(json={**body, "teams": teams, "scorebug": gate, "sides_known": vouched})
 
     ctx.route("**/match/manifest.json", manifest)
     if scorebug:
@@ -903,6 +905,17 @@ def test_the_insight_is_a_flat_stat_card_under_the_scorebug(browser, site, dock)
     assert card["height"] <= 0.12 * page.locator("#stage").bounding_box()["height"]  # a strip, not a panel
     assert page.is_hidden("#stats-card")  # one graphic under the bug at a time
     assert "insight-lb:v1" in page.get_attribute("#overlay", "data-on-air")  # still said to a screen reader
+    assert not errors
+    page.context.close()
+
+
+def test_an_unsure_feed_name_is_not_set_in_bold_nor_gives_a_club(browser, site):  # noqa: F811
+    """The ID feed's name is bold only when the feed is confident of it, and a name gives its club
+    only through a track whose side the fact-checker vouches for (sides_known), never by the track
+    id's letter alone; otherwise the sentence's first club speaks for it."""
+    page, errors = lower_third_page(browser, site, "closed", sure=False)
+    assert page.locator("#lower-third .card-line b").count() == 0
+    assert page.get_attribute("#lower-third", "data-side") == "away"  # Lisbon, the club the sentence names
     assert not errors
     page.context.close()
 
@@ -1175,6 +1188,9 @@ def test_a_goal_sweeps_the_bug_in_its_club_s_colour_then_one_scorer_card_then_it
     page, errors = lower_third_page(browser, site, "closed", cue=goal, scorebug=reads)  # 60.4 s: 1.3 s in
     assert page.get_attribute("#scorebug", "data-goal") == "home"
     assert page.inner_text("#scorebug .sb-goal") == "GOAL"
+    # Said once to a screen reader: the bug itself is drawn for the eye.
+    assert page.text_content("#bug-said") == "Goal, London. London 1, Lisbon 0"
+    assert page.get_attribute("#bug-said", "aria-live") == "polite"
     assert page.inner_text("#lower-third .card-goal .card-kind") == "GOAL"
     assert page.inner_text("#lower-third .card-first") == "London"
     assert page.inner_text("#lower-third .card-last") == "ATHLETIC"
@@ -1205,7 +1221,10 @@ READS = [
 @pytest.mark.parametrize(
     ("reads", "t", "half2", "want"),
     [
-        # Before the first read, 0-0 only because the first read is 0-0.
+        # A reading lower than one already read is a misread, skipped: the score never goes down.
+    (READS + [{"type": "score_read", "t": 2300.0, "score": {"home": 0, "away": 0}}], 2400.0, None,
+     {"score": {"home": 1, "away": 1}}),
+    # Before the first read, 0-0 only because the first read is 0-0.
         (READS, -1.0, None, {"score": {"home": 0, "away": 0}, "goal": None, "period": None}),
         (
             READS[1:],
@@ -1237,6 +1256,21 @@ def test_the_scorebug_shows_only_what_the_scorebug_read(browser, site, reads, t,
     if got.get("goal"):
         got["goal"]["p"] = round(got["goal"]["p"], 3)
     assert {k: got[k] for k in want} == want
+    assert not errors
+    page.context.close()
+
+
+def test_a_detected_goal_whose_score_change_is_unread_leaves_no_stale_score(browser, site):  # noqa: F811
+    """A goal vision detected after the last reading the gate passed (its change unread, or under the
+    gate) makes the old score stale: no digits until a reading says the new one."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    def at(reads, t):
+        args = f"{json.dumps(reads)}, {t}, null, false, 2, [2244.2]"  # a goal detected at 2244.2 s
+        return page.evaluate(f"window.ninetyScorebug.bugAt({args})")
+
+    assert at(READS[:2], 2000)["score"] == {"home": 0, "away": 1}
+    assert at(READS[:2], 2250)["score"] is None  # the 38th-minute goal, its change not read
+    assert at(READS, 2250)["score"] == {"home": 1, "away": 1}  # read: the new score
     assert not errors
     page.context.close()
 

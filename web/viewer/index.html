@@ -45,9 +45,11 @@
             </div>
           </div>
           <p class="captions" id="captions" hidden></p>
-          <!-- The big screen's graphics (src/scorebug.ts, lowerthird.ts): the scorebug over the broadcast's
-               own, its clock tab, and one pill under it (an insight, or a goal's scorer). The half-time and
-               full-time panel is #period-panel (src/stats.ts). #on-air and #score say them to a screen reader. -->
+          <!-- The big screen's graphics (src/scorebug.ts, lowerthird.ts, stats.ts): the scorebug over the
+               broadcast's own, its clock tab, and one card under it (an insight, a goal's scorer or the match
+               stats); the half-time and full-time panel is #period-panel. They are drawn for the eye: #bug-said
+               says the score (and each goal) to a screen reader, and #on-air the insights. -->
+          <p class="sr-only" id="bug-said" role="status" aria-live="polite"></p>
           <div class="bugstack" id="bugstack" aria-hidden="true">
             <div class="sb" id="scorebug" hidden></div>
             <div class="sb-tab" id="clock-tab" hidden></div>

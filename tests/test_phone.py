@@ -666,6 +666,22 @@ def test_at_a_baked_speed_the_phone_stays_in_step_through_play_and_seeks(browser
     assert not errors
 
 
+def test_at_a_baked_speed_the_phone_shows_the_image_of_the_match_time(browser, scaled_site):
+    """The phone's own picture of a moment (How we know) is the image of that match time: at 1.25
+    match s per video s, image k still shows match frame t_start * fps + k, at (k + 0.5) / (fps *
+    1.25) of video, never floor(v * fps) (#412 review)."""
+    from tests.e2e_clip import FPS, T_START
+
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+    phone.wait_for_function("window.ninetyPhone.laptop.cuts !== null", timeout=10_000)
+    for k in (0, 7, 30, 61):
+        t = T_START + (k + 0.5) / FPS  # the middle of match frame T_START * FPS + k
+        got = phone.evaluate(f"window.ninetyPhone.imageAt({t})")
+        assert got["index"] == k, (k, got)
+        assert abs(got["videoT"] - (k + 0.5) / (FPS * 1.25)) < 1e-6
+    assert not errors
+
+
 def test_the_phone_stays_in_step_when_the_big_screen_stops_drawing_frames(browser, api_site):
     """Demo audit, Oct 25: the phone sat at "Screen lost" while the big screen played on. The big
     screen's clock went out only from its frame loop, which a hidden tab or a busy machine stalls.
