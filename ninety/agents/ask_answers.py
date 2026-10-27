@@ -19,6 +19,13 @@ from ninety.agents.contracts import Answer, Question
 from ninety.agents.factcheck import Claim
 
 SEEN = "in the footage we've seen"
+SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep one."
+# Fixed text, stating no fact: possession is unknown before a minute of either side on the ball was seen.
+POSSESSION_UNKNOWN = (
+    "Possession can't be split between the clubs for those minutes: it is measured "
+    "from kick-off and from each half's start, once a minute of either side on the ball "
+    "has been seen."
+)
 # What vision's event detection misses, said after a count it gives (fixed words, no number): on the
 # demo match it spots fewer shots and restarts than were played, and its pass count is not exact.
 MISSES = {
@@ -97,13 +104,17 @@ class Ctx:
             key=lambda f: float(f["t"]),
         )
 
-    def footage_s(self, w: Window) -> float:
-        """Seconds of footage seen in the window's minutes (the possession rows count every frame)."""
-        return sum(
-            float(r.get("frames") or 0)
-            for r in self.mi.facts.get("possession", ())
-            if r.get("kind") == "possession_minute" and w.lo <= r["minute"] <= w.hi
-        )
+    def footage_s(self, w: Window) -> float | None:
+        """Seconds of footage seen in the window's minutes (the territory rows sample every second of
+        it, once per club); None when the insights carry no such rows to tell."""
+        rows = [
+            r
+            for r in self.mi.facts.get("territory", ())
+            if r.get("kind") == "territory_minute" and r.get("team") == "home"
+        ]
+        if not rows:
+            return None
+        return sum(float(r.get("seconds") or 0) for r in rows if w.lo <= r["minute"] <= w.hi)
 
     def fact(
         self,
@@ -141,6 +152,8 @@ class Ctx:
     def ok(self, text: str, cited: list[dict]) -> bool:
         from ninety.agents import insight_check
 
+        for f in cited:  # a tool's summary (players, territory) is known by the tool that made it
+            self.known.setdefault(f["id"], {**f, "clubs": f.get("clubs") or self.clubs})
         claim = Claim(text, [f["id"] for f in cited])
         return insight_check.verify(claim, self.known, self.clubs, self.mi.people, self.mi.sheet_names()).ok
 
@@ -151,6 +164,7 @@ class Reply:
     def __init__(self):
         self.lines: list[tuple[str, list[dict]]] = []
         self.notes: list[str] = []  # said after the answer: a stretch that isn't played yet, a gap
+        self.uncited: list[dict] = []  # facts a sentence of fixed words is about (evidence only)
         self.head: str | None = None
         self.status = "verified"
 
@@ -210,10 +224,19 @@ def _goals(ctx: Ctx, team: str | None = None) -> list[dict]:
     ]
 
 
+def _no_scorebug(ctx: Ctx) -> Reply:
+    """No scorebug reading yet: never a scoreline from vision (option B, Kian, Oct 26), which finds
+    some goals and misses others; the pointer, then each goal vision spotted."""
+    r = scorers(ctx)
+    r.lines.insert(0, (SCORE_POINTER, []))
+    r.head = "Goals spotted by vision" if _goals(ctx) else "See the scorebug"
+    return r
+
+
 def score(ctx: Ctx) -> Reply:
     r, bug = Reply(), _scorebug(ctx)
     if bug is None:
-        return scorers(ctx)
+        return _no_scorebug(ctx)
     r.say(_score_line(ctx, bug), bug)
     r.head = f"{_short(ctx, 'home')} {bug['home']}, {_short(ctx, 'away')} {bug['away']}"
     return r
@@ -222,7 +245,7 @@ def score(ctx: Ctx) -> Reply:
 def winning(ctx: Ctx) -> Reply:
     r, bug = Reply(), _scorebug(ctx)
     if bug is None:
-        return scorers(ctx)
+        return _no_scorebug(ctx)
     h, a = bug["home"], bug["away"]
     lead = None if h == a else ("home" if h > a else "away")
     asked = ctx.read.club
@@ -244,23 +267,46 @@ def _goal_sentence(g: dict) -> str:
 
 
 def scorers(ctx: Ctx) -> Reply:
+    """The scorebug's reading first (Kian, Oct 26), then each goal vision spotted and can vouch for
+    (its detection over the fact-check's floor), by minute, by name when the Player ID feed gives one."""
+    from ninety.agents.factcheck import MIN_CONFIDENCE
+
     r = Reply()
     asked = ctx.read.club
-    goals = _goals(ctx, ctx.team_of[asked] if asked else None)
     bug = _scorebug(ctx)
-    if not goals:
-        r.say(f"{asked} haven't scored yet." if asked else "No goals yet.", *([bug] if bug else []))
-        if bug is not None:
-            r.say(_score_line(ctx, bug), bug)
-        r.head = "No goal yet"
+    seen = [
+        g
+        for g in ctx.events("goal", Window(1, 90, "so far", False))
+        if (g.get("event_confidence") is None or g["event_confidence"] >= MIN_CONFIDENCE)
+    ]
+    goals = [
+        g
+        for g in seen
+        if g.get("side_known", True) and g.get("team") and (asked is None or g["team"] == ctx.team_of[asked])
+    ]
+    unplaced = [g for g in seen if not (g.get("side_known", True) and g.get("team"))] if asked is None else []
+    if bug is not None:
+        r.say(_score_line(ctx, bug), bug)
+        r.head = f"{_short(ctx, 'home')} {bug['home']}, {_short(ctx, 'away')} {bug['away']}"
+    if not goals and not unplaced:
+        r.say(
+            f"{asked} haven't scored yet."
+            if asked and bug is not None and bug[ctx.team_of[asked]] == 0
+            else "Vision has spotted no goal it can vouch for so far."
+        )
+        r.head = r.head or "No goal yet"
         return r
     for g in goals:
         r.say(_goal_sentence(g), g)
+    for g in unplaced:
+        # Fixed words around its minute: a goal of no known side names no club (code_texts says none).
+        r.say(f"It spotted a goal in minute {g['minute']} too, without telling whose it was.")
+        r.uncited.append(g)
     if any(g.get("scorer_source") == "id_feed" for g in goals):
         r.say(FEED_NOTE)
-    if bug is not None and bug["home"] + bug["away"] > len(_goals(ctx)) and asked is None:
+    if bug is not None and asked is None and bug["home"] + bug["away"] > len(goals) + len(unplaced):
         r.say("The scorebug shows more goals than vision spotted.", bug)
-    r.head = ", ".join(f"{_short(ctx, g['team'])} {g['minute']}′" for g in goals)[:48]
+    r.head = r.head or ", ".join(f"{_short(ctx, g['team'])} {g['minute']}′" for g in goals)[:48] or None
     return r
 
 
@@ -275,7 +321,7 @@ def _order(ctx: Ctx, lead: str | None) -> tuple[str, str]:
 
 
 def _no_footage(ctx: Ctx, w: Window) -> str | None:
-    if ctx.footage_s(w) > 0:
+    if ctx.footage_s(w) != 0:
         return None
     return f"We haven't seen any footage {w.said}."
 
@@ -292,19 +338,33 @@ def possession(ctx: Ctx) -> Reply:
         r.notes.append(w.empty)
         w = _so_far(ctx)
     elif w.lo not in (1, HALF_MIN + 1):
-        # Measured only from kick-off and from each half's start (ball_share.MEASURED_FROM).
-        note = (
-            f"Possession is measured from kick-off and from each half's start, not {w.said}; "
-            "here it is so far."
-        )
-        w = _so_far(ctx)
+        # Measured only from kick-off and from each half's start (ball_share.MEASURED_FROM, lesson 290):
+        # over the stretch asked, the closest measured fact is where the ball was in it.
+        terr = on_top(ctx)
+        if terr.status == "verified" and terr.lines:
+            terr.notes.append(
+                f"Possession itself is measured from kick-off and from each half's start, not {w.said}."
+            )
+            terr.head = None
+            return terr
+        note = f"Possession is measured from kick-off and from each half's start, not {w.said}."
+        r.notes.append(note)
+        r.status = "unanswerable"
+        r.say(note)
+        r.notes.clear()
+        return r
     got = {f["team"]: f for f in ctx.mi.possession(w.lo, w.hi)["summary"]}
     if len(got) < 2 or not all(f.get("confident") and f.get("value") is not None for f in got.values()):
-        r.status = "unanswerable"
-        r.say(
-            f"It's too early to split possession {w.said}: too little of either side on the ball has "
-            "been seen yet."
-        )
+        # The fallback: why it isn't known, and the longest run of passing, which needs no side told.
+        r.say(POSSESSION_UNKNOWN)
+        spell = max((f for f in ctx.events("spell", w)), key=lambda f: f.get("value") or 0, default=None)
+        if spell is not None:
+            whose = f"{possessive(spell['club'])} longest" if spell.get("club") else "The longest"
+            r.say(
+                f"{whose} run of passing was {spell['value']} passes in a row, in minute {spell['minute']}.",
+                spell,
+            )
+        r.head = "Not known yet"
         return r
     from ninety.intel.ball_share import ERROR_POINTS
 
@@ -689,29 +749,6 @@ def out_of_play(ctx: Ctx) -> Reply:
         ),
         None,
     )
-    if asked:
-        n = got[asked]
-        one, many = RESTART_UNITS[asked]
-        f = ctx.fact(
-            f"{asked}:all",
-            f"ask_{asked}",
-            sum(n.values()),
-            many,
-            also=[(n["home"], many), (n["away"], many)],
-            sources=ctx.sources,
-        )
-        total = sum(n.values())
-        if ctx.read.club:
-            t = ctx.team_of[ctx.read.club]
-            r.say(
-                f"{ctx.read.club} have had {_plural(n[t], one, many)} {w.said} {SEEN}, out of "
-                f"{_plural(total, one, many)} in all.",
-                f,
-            )
-        else:
-            r.say(f"Vision has spotted {_plural(total, one, many, zero=True)} {w.said} {SEEN}.", f)
-        r.head = _plural(total, one, many)
-        return r
     total = sum(sum(v.values()) for v in got.values())
     parts = [_plural(sum(got[k].values()), *RESTART_UNITS[k], zero=True) for k in kinds]
     f = ctx.fact(
@@ -722,11 +759,20 @@ def out_of_play(ctx: Ctx) -> Reply:
         also=[(sum(got[k].values()), RESTART_UNITS[k][1]) for k in kinds],
         sources=ctx.sources,
     )
-    r.say(
-        f"Vision has seen the ball go out of play {_plural(total, 'time')} {w.said} {SEEN}: "
-        f"{parts[0]}, {parts[1]} and {parts[2]}.",
-        f,
-    )
+    # One lead for every paraphrase (the total, by kind); a club's count of the kind asked after it.
+    if total:
+        r.say(
+            f"Vision has seen the ball go out of play {_plural(total, 'time')} {w.said} {SEEN}: "
+            f"{parts[0]}, {parts[1]} and {parts[2]}.",
+            f,
+        )
+    else:
+        r.say(f"The ball hasn't gone out of play {w.said} {SEEN}: {parts[0]}, {parts[1]} and {parts[2]}.", f)
+    if asked and ctx.read.club:
+        n, (one, many) = got[asked], RESTART_UNITS[asked]
+        t = ctx.team_of[ctx.read.club]
+        fc = ctx.fact(f"{asked}:{t}", f"ask_{asked}", n[t], many, t, sources=ctx.sources)
+        r.say(f"{ctx.read.club} have had {_plural(n[t], one, many)} of them.", fc)
     r.head = _plural(total, "time")
     return r
 
@@ -765,19 +811,58 @@ def _team_km(ctx: Ctx) -> Reply:
     return r
 
 
-def _cant(ctx: Ctx, why: str, closest: Reply) -> Reply:
+def _cant(ctx: Ctx, why: str, closest: Reply, answers: bool = False) -> Reply:
+    """What vision can't say, then the closest thing it measured. `answers`: the closest thing answers
+    the question in part (a best player: who scored), so the reply is "verified"; else it is told as
+    "unanswerable" with the closest fact beside it (a player's top speed is not a team's distance)."""
     r = Reply()
-    r.status = "unanswerable"
+    r.status = "verified" if answers and closest.lines else "unanswerable"
     r.say(why)
     r.lines += closest.lines
     return r
 
 
 def best(ctx: Ctx) -> Reply:
+    # The players tool's leader, when its least beats every other player's most and the name gate let
+    # him be said (by name or position, never "a London Athletic player").
+    w = _so_far(ctx)
+    asked = ctx.read.club
+    top = next((f for f in ctx.mi.players(w.lo, w.hi, asked)["facts"] if f.get("rank") == 1 or asked), None)
+    who = (top or {}).get("player_is") or ""
+    if (
+        top is not None
+        and top.get("leads")
+        and top.get("confident")
+        and not who.lower().startswith(("a ", "an "))
+    ):
+        r = Reply()
+        passes = top["also"][0][0]
+        r.say(
+            f"{who} has taken the most opponents out of the game with passes "
+            f"so far: {top['value']} opponents "
+            f"in {_plural(passes, 'pass', 'passes')} {SEEN}.",
+            top,
+        )
+        r.head = who[:48]
+        return r
+    closest = Reply()
+    named = [
+        g
+        for g in _goals(ctx, ctx.team_of[asked] if asked else None)
+        if g.get("scorer_is") and g.get("scorer_source") == "id_feed"
+    ]
+    for g in named[-2:]:  # the scorers the Player ID feed names: the most decisive thing measured of anyone
+        closest.say(_goal_sentence(g), g)
+    if named:
+        closest.lines[0] = ("Here's what it can say: " + closest.lines[0][0], closest.lines[0][1])
+        closest.say(FEED_NOTE)
+    else:
+        closest = _bypassed(ctx)
     return _cant(
         ctx,
         "Vision can't name players on these pictures well enough to pick a best player yet.",
-        _bypassed(ctx),
+        closest,
+        answers=True,
     )
 
 
@@ -863,6 +948,14 @@ def why_goal(ctx: Ctx) -> Reply:
     r = Reply()
     g = _goal_asked(ctx)
     asked = ctx.read.club
+    if not isinstance(g, dict) and re.search(r"\bassist\w*", ctx.read.text, re.I):
+        r.say(
+            f"{asked} haven't scored yet, so there's no assist to name."
+            if asked and g != "none"
+            else "That goal hasn't been scored yet, so there's no assist to name."
+        )
+        r.head = "No goal yet"
+        return r
     if not isinstance(g, dict):
         if g == "none":
             r.say("That goal hasn't been scored yet, so there's no build-up to talk through.")
@@ -876,6 +969,18 @@ def why_goal(ctx: Ctx) -> Reply:
         return r
     team, gt = g["team"], float(g["t"])
     club = ctx.clubs[team]
+    if re.search(
+        r"\bassist\w*|\bset (?:it|the goal) up\b|\bwho (?:made|gave) the pass\b", ctx.read.text, re.I
+    ):
+        # Who assisted: the pass's maker when vision named him, else that it didn't; then the story.
+        if g.get("assister_is"):
+            r.say(f"{g['assister_is']} made the pass for {possessive(club)} goal in minute {g['minute']}.", g)
+        else:
+            r.say(
+                f"Vision didn't name who made the last pass for {possessive(club)} goal in minute "
+                f"{g['minute']}.",
+                g,
+            )
     # The move: the scoring side's passes in the minute before the goal, after the last time the other
     # side had the ball or a pass of its own was lost; only what happened before the goal, in order.
     before = [p for p in ctx.mi.facts.get("pass", ()) if gt - BUILD_UP_S <= float(p["t"]) < gt]
@@ -899,7 +1004,8 @@ def why_goal(ctx: Ctx) -> Reply:
         )
         if len(chain) == 1:
             r.say(
-                f"{club} scored in minute {g['minute']} straight from a single pass, played from their {start} "
+                f"{club} scored in minute {g['minute']} straight from a single pass, "
+                f"played from their {start} "
                 "third.",
                 g,
                 f,
@@ -936,11 +1042,29 @@ def why_goal(ctx: Ctx) -> Reply:
                 b,
             )
     else:
-        r.say(
-            f"{club} scored in minute {g['minute']}; vision saw no completed {club} pass in the minute "
-            "before it, so it didn't follow the move.",
-            g,
-        )
+        # No pass of theirs followed: the strongest line break of theirs in the minute before, if any.
+        breaks = [
+            b
+            for b in ctx.mi.facts.get("line_break", ())
+            if b.get("team") == team
+            and gt - BUILD_UP_S <= float(b.get("t") or -1) < gt
+            and b.get("value", 0) > 0
+            and b.get("confident")
+        ]
+        if breaks:
+            b = max(breaks, key=lambda b: b["value"])
+            r.say(f"{club} scored in minute {g['minute']}.", g)
+            r.say(
+                f"Just before it, a {club} pass took {b['value']} {ctx.clubs[ctx.other(team)]} "
+                f"{'player' if b['value'] == 1 else 'players'} out of the game.",
+                b,
+            )
+        else:
+            r.say(
+                f"{club} scored in minute {g['minute']}; vision saw no completed {club} pass in the minute "
+                "before it, so it didn't follow the move.",
+                g,
+            )
     shot = next(
         (
             s
@@ -950,7 +1074,13 @@ def why_goal(ctx: Ctx) -> Reply:
         None,
     )
     if shot is not None and shot.get("value") is not None:
-        r.say(f"Then a shot came from {shot['value']} m out.", shot)
+        shooter = ctx.clubs.get(shot.get("team")) if shot.get("side_known") else None
+        r.say(
+            f"Then {shooter} shot from {shot['value']} m out."
+            if shooter
+            else f"Then a shot came from {shot['value']} m out.",
+            shot,
+        )
     else:
         r.say("Vision didn't see the shot itself: it spotted the goal, not the strike.")
     r.head = f"Goal: {_short(ctx, team)}, minute {g['minute']}"
@@ -1064,6 +1194,10 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
     fn = BUILDERS.get(read.intent)
     if fn is None:
         return None
+    if read.window.empty and read.intent not in ("score", "scorers", "winning", "why_goal", "unmeasured"):
+        # "How many shots in the second half?" at minute 5: no stretch to count, and no other stat.
+        text = f"{read.window.empty} Ask me about the match so far."
+        return Answer("unanswerable", text, None, None, None, (), None, None, spoken=text), []
     ctx = Ctx(insights, read, question.t)
     r = fn(ctx)
     kept: list[tuple[str, list[dict]]] = []
@@ -1085,7 +1219,7 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
         ]
         r.status, r.head = "unanswerable", None
     text = " ".join([*(t for t, _ in kept), *r.notes])
-    cited = [f for _, c in kept for f in c]
+    cited = [f for _, c in kept for f in c] + r.uncited
     ids = [i for f in cited for i in (f["id"], *f.get("evidence", ()))]
     ts = [float(f["t"]) for f in cited if f.get("t") is not None]
     ts += [60.0 * (f["minute_from"] - 1) for f in cited if f.get("minute_from")]

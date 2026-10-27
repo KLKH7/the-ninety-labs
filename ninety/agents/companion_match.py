@@ -1515,7 +1515,7 @@ def table_answer(question: Question, insights, history=(), suggest: bool = True)
     if any(pattern.search(question.text) for _, pattern in SMALL_TALK):
         return None
     read = read_question(question.text, insights, question.t, history)
-    if read.intent == "small_talk" and read.topic in ask_answers.NOT_MATCH:
+    if read.intent == "small_talk" and read.topic in ("inject", "future"):
         t = 60.0 * _minute_in(question.t, insights)
         asked = [*(h["question"] for h in history), question.text]
         ups = follow_ups([], [], insights, asked, t) if suggest else ()
@@ -1523,6 +1523,16 @@ def table_answer(question: Question, insights, history=(), suggest: bool = True)
                       follow_ups=ups), []
     if history and FOLLOW_ON.search(question.text) and read.intent in ("small_talk", "tactics"):
         return None
+    if history and FOLLOW_ON.search(question.text):
+        # A follow-up ("who assisted it?", "and Lisbon's?") keeps the last question's club and goal.
+        from dataclasses import replace as _with
+
+        prev = read_question(history[-1].get("question", ""), insights, question.t)
+        pronoun = re.search(r"\b(?:they|them|their|theirs|it|that|he|him|his)\b", question.text, re.I)
+        if not read.clubs and pronoun:
+            read = _with(read, clubs=prev.clubs)
+        if read.goal is None and prev.intent == "why_goal":
+            read = _with(read, goal=prev.goal)
     got = ask_answers.build(question, insights, read)
     if got is None:
         return None

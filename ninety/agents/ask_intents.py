@@ -66,7 +66,7 @@ INTENTS = (
     Intent(
         "winning",
         ("score",),
-        r"\b(?:winning|ahead|level|goals?|lead\w*)\b",
+        r"\b(?:winning|ahead|level|goals?|lead\w*|score\w*)\b",
         "so_far",
         "compare",
         "Who's winning?",
@@ -387,7 +387,13 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
         (r"\b\d+\s*[-–]\s*\d+\b", 4),
     ),
     "winning": (
-        (r"\b(?:winning|ahead|in the lead|leading|in front|losing|drawing)\b", 6),
+        # Not "losing the ball", "winning it back", "winning the battle": those are about play.
+        (
+            r"\b(?:winning|losing|leading)\b(?! (?:the (?:ball|battle|duels?|race)|it|possession"
+            r"|out|duels?|headers?|tackles?|back|them)\b)"
+            r"|\b(?:ahead|in the lead|in front|drawing)\b(?! when)",
+            6,
+        ),
         (r"\bis it (?:level|a draw|all square)\b|\bwho(?:'s| is) up\b", 6),
     ),
     "on_target": ((r"\bon target\b|\bkeeper (?:been )?tested\b|\btested the keeper\b", 9),),
@@ -399,7 +405,14 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
             8,
         ),
     ),
-    "passes": ((r"\bpass(?:es)?\b(?! (?:options?|network|broke|cut))", 5), (r"\bpass count\b", 3)),
+    # A count of passes, not a kind of pass ("the most penetrating pass" is a tactics question).
+    "passes": (
+        (
+            r"\bhow many pass\w*|\bpass count\b|\btotal passes\b|\bnumber of passes\b"
+            r"|\bpasses (?:so far|this half|each|made|played|have there)|^\W*passes\W*$",
+            8,
+        ),
+    ),
     "corners": ((r"\bcorners?\b", 8), (r"\bset[- ]pieces?\b", 7)),
     "out_of_play": (
         (
@@ -410,14 +423,16 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     ),
     "possession": (
         (
-            r"\bpossession\b|\b(?:more|most|much) of the ball\b|\bball more\b|\bkeep(?:ing|s)? the ball\b"
+            r"(?<!lose )(?<!lost )(?<!loses )(?<!losing )\bpossession\b(?! back)"
+            r"|\b(?:more|most|much) of the ball\b|\bball more\b|\bkeep(?:ing|s)? the ball\b"
             r"|\bwho(?:'s| has| have)? (?:had )?the ball\b",
             8,
         ),
     ),
     "territory": (
         (
-            r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play)|\bball (?:has )?been\b"
+            r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play)"
+            r"|\bball (?:has )?been\b"
             r"|\bcamped\b|\bpinned\b|\battacking third\b|\bball spending\b|\bin the other half\b",
             8,
         ),
@@ -425,8 +440,10 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     "momentum": ((r"\bmomentum\b|\bfinished stronger\b|\bpushing\b", 7),),
     "on_top": (
         (
-            r"\bon top\b|\bdominat\w*|\bin control\b|\bupper hand\b|\bbetter (?:side|team)\b|\bplaying better\b"
-            r"|\bfront foot\b|\bbossing\b|\bbeen better\b|\bbetter (?:right now|at the moment|recently|lately)"
+            r"\bon top\b|\bdominat\w*|\bin control\b|\bupper hand\b|\bbetter (?:side|team)\b"
+            r"|\bplaying better\b"
+            r"|\bfront foot\b|\bbossing\b|\bbeen better\b"
+            r"|\bbetter (?:right now|at the moment|recently|lately)"
             r"|\bhad the better\b|\bwhich (?:team|side) is better\b",
             6,
         ),
@@ -456,7 +473,8 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     ),
     "key_moments": (
         (
-            r"\bkey moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b|\bwhat(?:'s| has)? happened"
+            r"\bkey moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b"
+            r"|\bwhat(?:'s| has)? happened"
             r"|\brecap\b|\banything (?:big )?happen\w*|\btimeline\b|\bwhat did i miss\b",
             8,
         ),
@@ -525,7 +543,8 @@ FUTURE = re.compile(
 OUTSIDE = re.compile(
     r"\b(?:referee'?s name|name of the referee|who is the referee|weather|rain\w*|sunny|cold|fans|crowd"
     r"|attendance|stadium|tickets?|pay|paid|fee|transfer|salary|wages?|xg|expected goals|in the world"
-    r"|of all time|ever|world cup|champions league|premier league table|league table|odds|bet|bets|betting)\b",
+    r"|of all time|ever|world cup|champions league|premier league table|league table"
+    r"|odds|bet|bets|betting)\b",
     re.I,
 )
 NOT_MATCH = (("inject", INJECTION), ("future", FUTURE), ("outside", OUTSIDE))
@@ -703,7 +722,9 @@ def scores(text: str, tactics: bool = False) -> dict[str, int]:
     # "Who's been better in the last 15 minutes?": on top over a stretch is momentum.
     if out.get("on_top") and RECENT.search(s):
         out["momentum"] += out["on_top"] + 1
-    # "Are London Athletic dominating possession?" asks possession, not who is on top.
+    # "Explain quantum physics", "talk me through it": a goal's story only when a goal is asked about.
+    if out.get("why_goal") and not re.search(r"\b(?:goals?|scor\w*|equali[sz]\w*|winner|assist\w*)", s):
+        out["why_goal"] = 0
     return {k: v for k, v in out.items() if v > 0}
 
 

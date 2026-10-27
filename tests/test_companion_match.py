@@ -202,6 +202,7 @@ def test_the_question_is_data_inside_the_prompt():
         "clubs",
         "minute",
         "tools",
+        "intents",  # the intent table's rows the model may pick instead of tools (lesson 297)
     }
 
 
@@ -520,7 +521,9 @@ def test_why_did_that_goal_happen():
     q = Question("s1", None, "Why did that goal happen?", 24 * 60.0)
     r = asyncio.run(companion.answer_match(q, mi))
     assert r.answer.evidence == ("goal:v90", "lb:v1")
-    assert r.answer.text.startswith("London Athletic scored in minute 23. Just before it, in minute 23, ")
+    assert r.answer.text.startswith(
+        "London Athletic scored in minute 23. Just before it, a London Athletic pass took "
+    )
 
 
 def test_who_has_been_the_best_player():
@@ -697,8 +700,8 @@ def test_who_is_best_is_never_answered_with_a_name_off_the_sheet(text):
     # The stand-in has no confident leader (the bounds overlap), so there is no honest name to give.
     mi = standin()
     r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
-    # No name: it says it can't single one out (then, at most, who scored: lesson 288).
-    assert r.answer.text.startswith("I can't single out")
+    # No name: it says it can't single one out, and gives the closest measured fact (lesson 297).
+    assert r.answer.text.startswith("Vision can't name players"), r.answer.text
     assert not any(e.startswith("sheet:") for e in r.answer.evidence)
 
 
@@ -1251,9 +1254,10 @@ def _on_top_insights(home_final, away_final, home_early=50):
 
 
 @pytest.mark.parametrize("q, t, window", [
-    ("Who's been on top since the half hour?", 2050.0, (31, 35)),
-    ("Who has been on top in the half hour", 2030.0, (31, 34)),  # 33:50, the second repro
-    ("Who has been on top in the last half hour?", 2050.0, (6, 35)),
+    # Whole minutes played only (lesson 297): at 34:10 minute 35's bin runs past now, so it is not read.
+    ("Who's been on top since the half hour?", 2050.0, (31, 34)),
+    ("Who has been on top in the half hour", 2030.0, (31, 33)),  # 33:50, the second repro
+    ("Who has been on top in the last half hour?", 2050.0, (5, 34)),
 ])
 def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
     mi = _on_top_insights(home_final=6, away_final=15)  # Lisbon's least (25%) beats London's most (13%)
@@ -1261,8 +1265,9 @@ def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
     assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
     a = r.answer
     span = f"from minute {window[0]} to minute {window[1]}"
-    assert "Lisbon Esportes's attacking third" in a.text and "London Athletic's attacking third" in a.text
-    assert a.text.count(span) == 2, a.text  # both clubs, over the stretch asked, never minutes 1 to now
+    assert "Lisbon Esportes' attacking third" in a.text or "in Lisbon Esportes'" in a.text, a.text
+    assert "London Athletic's" in a.text and "Esportes's" not in a.text, a.text  # both clubs, said right
+    assert a.text.count(span) == 1, a.text  # over the stretch asked, never minutes 1 to now
     if window[0] == 31:
         assert a.headline == "Lisbon", a.headline  # the comparison's verdict, not one club's number
         assert a.text.index("Lisbon") < a.text.index("London")  # the leader first
@@ -1272,8 +1277,8 @@ def test_on_top_is_too_close_to_call_when_the_ranges_overlap():
     mi = _on_top_insights(home_final=10, away_final=11)
     a = asyncio.run(companion.answer_match(
         Question("s1", None, "Who's been on top since the half hour?", 2050.0), mi)).answer
-    assert a.headline == "Too close to call", a.headline
-    assert a.text.endswith(companion.ON_TOP_LEVEL)
+    assert a.headline == "Even", a.headline
+    assert a.text.startswith("It's been even from minute 31 to minute 34, with neither side on top"), a.text
 
 
 def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():
@@ -1362,8 +1367,9 @@ def test_a_question_code_does_not_route_is_answered_by_the_models_plan():
     and a plan it makes is answered and checked as any other."""
     plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
     ask, _ = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
-    q = Question("s1", None, "how many passes?", Q.t)
+    q = Question("s1", None, "what's going on out there?", Q.t)
     assert companion.route(q.text) == [] and companion.chat_kind(q.text, insights()) == "other"
+    assert companion.read_question(q.text, insights(), q.t).intent == "small_talk"  # no row of the table
     r = asyncio.run(companion.answer_match(q, insights(), ask))
     assert r.source == "model" and r.answer.status == "verified", (r.reasons, r.answer.text)
 
