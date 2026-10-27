@@ -1,7 +1,8 @@
 # Per-player match stats from the Player ID feed: results
 
 These are graded against the bars set in [player-stats-plan.md](player-stats-plan.md), which was
-committed (dfbf3953) before any number was computed. The run is at 6cfdcfc5 on the demo match,
+committed (dfbf3953; 8e7a548b after the rebase onto main) before any number was computed. The run
+is at 6cfdcfc5 (4f1673a2 after the rebase, the same code) on the demo match,
 seed 8324 (`runs/demo-8324-final`), at full time. The truth is the engine's positions and events
 in the condensed footage's clip windows, read only in `ninety/eval/player_stats_eval.py`. The raw
 numbers, per player, are in [player-stats.json](player-stats.json). The verdicts the live path
