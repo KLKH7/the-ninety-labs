@@ -330,6 +330,13 @@ class MCPInsights:
 # ---------------------------------------------------------------------------------------------
 
 
+def shown(path) -> str:
+    """A path as the trace records it: from `runs/` on, else its name. The repo is public, and an
+    absolute path names the machine's user."""
+    parts = Path(path).parts
+    return str(Path(*parts[parts.index("runs"):])) if "runs" in parts else Path(path).name
+
+
 def shape_rows(mi) -> list[dict]:
     return [{k: v for k, v in r.items() if k not in SHAPE_DROP} for r in mi.facts.get("shape", [])]
 
@@ -437,8 +444,8 @@ async def run(args) -> None:
         specs = [s for s in specs if s.key in args.only.split(",")]
     trace = Trace(out / "trace.jsonl", args.max_calls)
     trace.write("run_start", match=match, plan=PLAN, commit=workflow._commit(),
-                at=datetime.now(UTC).isoformat(timespec="seconds"), detected=str(args.detected),
-                insights=str(args.insights), moments=[s.key for s in specs], drills=args.drills)
+                at=datetime.now(UTC).isoformat(timespec="seconds"), detected=shown(args.detected),
+                insights=shown(args.insights), moments=[s.key for s in specs], drills=args.drills)
     shape = shape_rows(mi)
     tmp = tempfile.TemporaryDirectory()
     (Path(tmp.name) / match_server.INSIGHTS_DIR).mkdir()

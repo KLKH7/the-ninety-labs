@@ -201,3 +201,60 @@ def test_a_drill_that_never_hits_its_fault_is_not_exercised(tmp_path):
     failed = call("judge", "p", None, run="drill:judge-down", error="ServiceRequestError: x")
     write_trace(tmp_path, [start, failed, held], SPEC)
     assert al.score(tmp_path)["drills"]["drill:judge-down"]["exercised"] is True
+
+
+def test_paths_in_the_trace_name_no_machine():
+    shown = al.shown("/Users/someone/repo/runs/demo/final-work/insights.json")
+    assert shown == "runs/demo/final-work/insights.json"
+    assert al.shown("/elsewhere/detected.jsonl") == "detected.jsonl"
+
+
+def test_run_live_calls_every_published_agent_through_wrap(monkeypatch):
+    """The `wrap` hook: each role's published agent is handed to it, and the role then calls
+    what it returns. No Azure: the published agents and the sign-in are fakes."""
+    from ninety.agents import foundry, workflow
+
+    class Published:
+        def __init__(self, agent_name, **kwargs):
+            self.name = agent_name
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def run(self, prompt, **kwargs):
+            return SimpleNamespace(text='{"moments": []}', messages=())
+
+    async def signed_in(credential, load):
+        return load()
+
+    monkeypatch.setattr(workflow, "FoundryAgent", Published)
+    monkeypatch.setattr(workflow, "sign_in_then_load", signed_in)
+    monkeypatch.setattr(foundry, "chat_client", lambda credential: None)
+    monkeypatch.setattr(foundry, "workflow_agents",
+                        lambda client: {r: r for r in ("analyst", "tactician", "challenger", "judge")})
+    monkeypatch.setattr(foundry, "pinned", lambda local: (f"ninety-{local}", "1"))
+    wrapped, asked = [], []
+
+    class Seen:
+        def __init__(self, role, agent):
+            self.role, self.agent = role, agent
+
+        async def run(self, prompt, **kwargs):
+            asked.append(self.role)
+            return await self.agent.run(prompt, **kwargs)
+
+    def wrap(role, name, version, agent):
+        wrapped.append((role, name, version))
+        return Seen(role, agent)
+
+    events = [{"id": "p1", "t": 61.0, "type": "pass", "source": "vision", "team": "home", "player": "h-t1",
+               "confidence": 0.9, "team_confidence": 1.0,
+               "x": 50.0, "y": 34.0, "end_x": 60.0, "end_y": 30.0, "outcome": "success", "receiver": "h-t2"}]
+    result, *_ = asyncio.run(workflow.run_live(lambda: events, 2, "unserved-test", True, False,
+                                               trace_to="none", credential=object(), wrap=wrap))
+    roles = ("analyst", "tactician", "challenger", "judge")
+    assert sorted(wrapped) == sorted((r, f"ninety-{r}", "1") for r in roles)
+    assert asked == ["analyst"] and result.moments == []

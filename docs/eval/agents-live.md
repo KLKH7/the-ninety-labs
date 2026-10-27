@@ -7,18 +7,21 @@ is in one JSONL trace. The moments, questions, expected tools, scores and drills
 [agents-live-plan.md](agents-live-plan.md), committed and pushed (740c65c4, 19:57 EDT) before the first live
 call. Run on 2026-10-27 02:35 UTC at d7f22790, on `runs/demo-8324-final/final-work` (built at b8bde434).
 
-**In one line:** the right context reached every agent (8 of 8), the Companion chose the expected
-tool with the expected arguments 8 times in 8, and every claim that aired cites ids its agent was
-given. The fact-checker let 1 graph claim in 8 on air. It held most of the rest because vision
-was unsure of the side or the detection. The system recovered in all four failure drills, and
-nothing unverified aired. 72 live calls cost $0.033.
+**In one line:** the right context reached every agent (8 of 8). The Companion chose the expected
+tool 8 times in 8, and its arguments met the pre-registered rule 8 times in 8, but effectively
+7: the half-time plan asked for minute 0, and code replaced that window with the default (a plan
+flaw the rule missed; fixed in #418). Every claim that aired cites ids its agent was given. The
+fact-checker let 1 graph claim in 8 on air; it held most of the rest because vision was unsure of
+the side or the detection. All four failure drills recovered with nothing unverified on air, but
+the pre-registered graph Judge-down drill never reached the Judge, so it was re-run on another
+minute (lesson 281). 72 live calls cost $0.033.
 
 ## Results
 
 | measure | result |
 |---|---|
 | Companion tool choice (expected tool, at most 3 calls) | **8/8** |
-| Companion arguments (pre-registered rule, as the model wrote them) | **8/8** (but see half-time below) |
+| Companion arguments (pre-registered rule, as the model wrote them) | **8/8** by the rule; **7/8** effective (half-time's minute 0 was replaced by the default window: see gaps) |
 | Context: the moment's target fact in the Companion's answer prompt | **6/6** (quiet and half-time have no target) |
 | Context: the goal's detected event inline to the Analyst | **5/5** graph minutes with an anchor |
 | Analyst picked a moment holding the anchor event | **5/5** |
@@ -103,6 +106,10 @@ verified, aired), and each drill.
 
 ## Honest gaps
 
+- **A demonstration, not a general measure.** Seed 8324 is the edited demo match (the director's
+  pick, [demo-match-hunt.md](demo-match-hunt.md)), and its moments come from that cut. This run
+  shows the system working live on the match the video shows; it does not measure how it does on
+  matches in general.
 - **A2A was not used.** The Personalizer (our A2A service) was off for this run; no agent called
   another over A2A.
 - **No model agent called an MCP tool through Foundry here.** The Analyst got its events inline,
