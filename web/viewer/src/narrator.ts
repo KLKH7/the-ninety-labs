@@ -1,9 +1,10 @@
 // The audio description track (ninety/speech/describe.py), played in time with the footage.
 //
-// Each line is said once, as the clock passes its start. With synthesised audio in the bundle
-// (`ninety-e2e --speech azure`) the line itself is placed in stereo by its `pan`; without it, a
-// short tone placed by `pan` says where the play is, and the browser's own voice says the line.
-// A seek or a pause stops the voice: nothing is said late.
+// Each line is said once, as the clock passes its start, from the bundle's recorded audio
+// (`ninety-e2e --speech azure`), placed in stereo by its `pan`. A line without its file is not
+// spoken: the browser's voice is never used (Kian, Oct 27: "robotic"); the viewer shows and the
+// screen reader reads its text instead (`at`, main.ts). A seek or a pause stops the voice: nothing
+// is said late.
 
 import type { AudioLine } from "./bundle";
 
@@ -11,7 +12,7 @@ const SEEK_S = 0.5; // a clock jump bigger than this is a seek, not playback
 
 export interface NarratorState {
   spoken: string[]; // ids said so far, in order (the viewer tests read this)
-  voice: "recorded" | "browser" | "none";
+  voice: "recorded" | "none";
 }
 
 export class Narrator {
@@ -47,6 +48,12 @@ export class Narrator {
     }
   }
 
+  /** The line on air at match time `t` (its start passed, its end not), or null: what the viewer
+   * shows and a screen reader reads when the bundle's lines are not voiced. */
+  at(t: number): AudioLine | null {
+    return this.lines.find((l) => l.t_in <= t && t < l.t_out) ?? null;
+  }
+
   /** Says the line on air at `t` again, or the last one before it. */
   repeat(t: number) {
     const line = [...this.lines].reverse().find((l) => l.t_in <= t);
@@ -56,7 +63,6 @@ export class Narrator {
   stop() {
     this.current?.stop();
     this.current = null;
-
   }
 
   private audio(): AudioContext | null {

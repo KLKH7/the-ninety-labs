@@ -148,7 +148,7 @@ function renderPipeline(b: Bundle) {
     [
       "Described",
       m.audio
-        ? `${m.audio.lines} lines spoken, ${m.audio.dropped} left out to keep pace, at most ${m.audio.max_lag_s.toFixed(1)} s after the play (${m.audio.mode === "azure" ? "Azure AI Speech" : "timing estimated, browser voice"})`
+        ? `${m.audio.lines} lines ${m.audio.mode === "azure" ? "spoken" : "described"}, ${m.audio.dropped} left out to keep pace, at most ${m.audio.max_lag_s.toFixed(1)} s after the play (${m.audio.mode === "azure" ? "Azure AI Speech" : "timing estimated, not voiced: shown as text"})`
         : "no audio description in this bundle",
       !m.audio,
     ],
@@ -283,13 +283,15 @@ async function start() {
     ? "This bundle has no audio description: run ninety-e2e again."
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
-      : "This bundle's audio description is not voiced: its captions are shown, nothing is spoken.";
+      : "This bundle's audio description is not voiced: each line is shown as text here, for a screen reader to read.";
+  const voiced = narrator.state.voice === "recorded";
   // The voice is off until a fan picks audio description on this page: a remembered choice never
   // starts it speaking on load.
   voiceBox.checked = false;
   const applyVoice = () => {
-    // With the voice on, the live region stays quiet so a screen reader does not say it twice.
-    onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
+    // With the recorded voice on, the live region stays quiet so a screen reader does not say it
+    // twice; with no voice in the bundle, the live region is how the description is heard.
+    onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked && voiced ? "off" : "polite");
   };
   voiceBox.addEventListener("change", () => {
     store.set("voice", voiceBox.checked ? "1" : "0");
@@ -325,8 +327,9 @@ async function start() {
       if (on && focus) btn.focus();
     }
     const audio = p === "audio";
-    $("voice-toggle").hidden = !audio;
-    $("audio-keys").hidden = !audio;
+    // The voice switch and its keys only where there is a voice to switch.
+    $("voice-toggle").hidden = !audio || !voiced;
+    $("audio-keys").hidden = !audio || !voiced;
     audioNote.hidden = !audio;
     if (!audio) narrator.stop();
     applyVoice();
@@ -534,12 +537,16 @@ async function start() {
       tracks?.update(v, t, !footage.paused());
     }
 
+    // Audio description with no voice: the line due now is what #on-air says (shown, and read by a
+    // screen reader through its live region), in place of the graphics' sentence.
+    const described = persona === "audio" && !voiced ? narrator.at(t) : null;
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
     overlay.dataset.t = t.toFixed(2);
-    if (ids !== lastAired) {
-      lastAired = ids;
-      const sentence = aired
+    const shownKey = described ? `ad:${described.id}` : ids;
+    if (shownKey !== lastAired) {
+      lastAired = shownKey;
+      const graphics = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
         .map((c) => {
           // The check's result belongs in How we know, never prefixed to what is shown or said.
@@ -547,8 +554,8 @@ async function start() {
           return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
         })
         .join(". ");
-      onAirText.textContent = sentence;
-      overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");
+      onAirText.textContent = described ? described.spoken : graphics;
+      overlay.setAttribute("aria-label", graphics ? `On-screen graphics: ${graphics}` : "No graphics on screen");
       for (const li of document.querySelectorAll<HTMLElement>("#claims .claim")) {
         const claim = b.claims.find((c) => c.id === li.dataset.claim);
         const live = !!claim && aired.some((c) => c.kind === "insight" && c.evidence.join() === claim.evidence.join());

@@ -183,16 +183,20 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     page, errors = open_viewer(browser, site)
     page.keyboard.press("3")
     assert page.get_by_role("radio", name="Audio description").get_attribute("aria-checked") == "true"
-    assert page.is_visible("#voice-toggle") and page.is_checked("#voice")
     assert "not voiced" in page.locator("#audio-note").inner_text()  # this bundle has no recorded lines
-    # With the voice on, the live region is quiet: a screen reader does not say each line twice.
-    assert page.get_attribute("#on-air", "aria-live") == "off"
+    # No voice in the bundle: no voice switch or its keys, and the live region is how a screen reader
+    # hears the description (aria-live off would leave a blind fan nothing).
+    assert not page.is_visible("#voice-toggle") and not page.is_visible("#audio-keys")
+    assert page.get_attribute("#on-air", "aria-live") == "polite"
     page.get_by_role("button", name="Watch it").click()  # seeks past the first line, to 60.7 s
     page.keyboard.press("3")
     play_to(page, 62.85)
     # mutation: say every line whose start is behind the clock (no SEEK_S guard) -> ad-e1 is said late
     assert narrator(page)["spoken"] == ["ad-insight-m-e2"]
     assert "ad-insight-m-e2" in on_air(page)
+    # The line due is the text of #on-air, shown and read by a screen reader in place of the graphics.
+    line = page.evaluate("window.ninetyNarrator.at(document.querySelector('#overlay').dataset.t * 1)")
+    assert line and page.inner_text("#on-air") == line["spoken"]
     assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
     assert not errors
 

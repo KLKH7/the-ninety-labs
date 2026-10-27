@@ -1,4 +1,3 @@
-
 // The big screen's audio tracks, as a streaming app's audio menu offers them: "Stadium" (the crowd
 // and whistles bed alone) or "Commentary" (the bundle's commentary lines over it, the bed ducked
 // under each line), and optional captions for the commentary. Commentary is on by default when the
