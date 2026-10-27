@@ -1,17 +1,17 @@
 {
  "about": "The Ask's code path on tests/fixtures/ask-grade-insights-8324.json.gz, graded by ninety/eval/ask_grade. tests/test_ask_grade.py fails if any rate here goes down; raise it with `uv run python -m ninety.eval.ask_grade.run baseline` when a change raises it. A change to how the insights are built refreshes the fixture first (gzip the insights `grade --rebuild-insights runs/demo-8324-final` writes with that code) in the same PR.",
  "all": {
-  "core": 0.136,
+  "core": 0.141,
   "answered": 0.49,
   "relevant": 0.636,
-  "correct": 0.11,
+  "correct": 0.114,
   "no_false_unknown": 0.458,
   "no_future": 0.97,
   "span_clipped": 0.779,
   "coverage_honest": 0.164,
   "natural": 0.8,
   "consistent": 0.689,
-  "pass": 0.024
+  "pass": 0.028
  },
  "chips": {
   "core": 0.352,
@@ -54,17 +54,17 @@
    "pass": 0.197
   },
   "winning": {
-   "core": 0.348,
+   "core": 0.455,
    "answered": 0.455,
    "relevant": 0.455,
-   "correct": 0.348,
+   "correct": 0.455,
    "no_false_unknown": 0.455,
    "no_future": 1.0,
    "span_clipped": 1.0,
    "coverage_honest": null,
    "natural": 0.758,
    "consistent": 0.333,
-   "pass": 0.136
+   "pass": 0.212
   },
   "on_top": {
    "core": 0.0,

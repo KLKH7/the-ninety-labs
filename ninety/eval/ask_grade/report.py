@@ -45,7 +45,75 @@ def _clock(t: float) -> str:
     return "FT" if t >= 5400 else f"{int(t // 60)}:{int(t % 60):02d}"
 
 
-def render(runs: dict[str, list[dict]], meta: dict) -> tuple[str, dict]:
+THROTTLED = ("model timeout", "model service error")  # fallbacks the shared deployment's HTTP 429s cause
+
+
+def model_section(rows: list[dict], meta: dict) -> tuple[list[str], dict]:
+    """The model path on its stratified sample against code's answer to the same questions: core
+    pass of each, headline parity, fallbacks and their reasons, latency and cost; over every sampled
+    answer and over those no throttling touched."""
+    import collections
+    import math
+
+    m = [r for r in rows if r.get("model")]
+
+    def stats(rs):
+        lat = sorted(r["latency_s"] for r in rs)
+        fell = [r for r in rs if r.get("source") != "model"]
+        reasons = collections.Counter(
+            "the Judge: unsupported fact" if x.startswith("unsupported fact") else x
+            for r in fell
+            for x in (r.get("reasons") or ["(none)"])
+        )
+        return {
+            "n": len(rs),
+            "model_core": sum(r["core"] for r in rs) / len(rs),
+            "code_core": sum(r["code_core"] for r in rs) / len(rs),
+            "parity": sum(r["parity"] for r in rs) / len(rs),
+            "fallback": len(fell) / len(rs),
+            "reasons": dict(reasons.most_common()),
+            "p50": lat[max(0, math.ceil(0.5 * len(lat)) - 1)],
+            "p95": lat[max(0, math.ceil(0.95 * len(lat)) - 1)],
+            "usd": sum(r.get("usd", 0) for r in rs),
+        }
+
+    clean = [r for r in m if not set(r.get("reasons") or []) & set(THROTTLED)]
+    body = {"all": stats(m), "not_throttled": stats(clean)}
+    lines = [
+        "",
+        "## The model path (Foundry gpt-4.1-mini Companion and Judge), on a 10% sample",
+        "",
+        f"{meta.get('model_note', '')} The sample is stratified by intent: 10% of each intent's "
+        "(question, time) pairs. Each model answer (`companion_match.answer_match` with the published "
+        "Companion and the Judge) is graded beside code's answer to the same question. Parity: the same "
+        "headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the "
+        "tokens the service reported, at ninety/eval/latency_cost.PRICES.",
+        "",
+        "| | all sampled | not throttled |",
+        "|---|---|---|",
+    ]
+    a, c = body["all"], body["not_throttled"]
+    for key, name in (
+        ("n", "answers"),
+        ("model_core", "core pass, model path"),
+        ("code_core", "core pass, code, same questions"),
+        ("parity", "headline parity"),
+        ("fallback", "fallback rate"),
+    ):
+        fmt = (lambda v: str(v)) if key == "n" else _pct
+        lines.append(f"| {name} | {fmt(a[key])} | {fmt(c[key])} |")
+    lines.append(
+        f"| latency p50 / p95 | {a['p50']:.1f} s / {a['p95']:.1f} s | {c['p50']:.1f} s / {c['p95']:.1f} s |"
+    )
+    lines.append(f"| cost | ${a['usd']:.3f} (${a['usd'] / a['n']:.4f} an answer) | |")
+    lines += [
+        "",
+        "Fallback reasons (all sampled): " + "; ".join(f"{k} {v}" for k, v in a["reasons"].items()) + ".",
+    ]
+    return lines, body
+
+
+def render(runs: dict[str, list[dict]], meta: dict, model_rows: list[dict] | None = None) -> tuple[str, dict]:
     intents, _ = load_intents()
     sums = {k: summarise(v) for k, v in runs.items()}
     labels = list(runs)
@@ -109,6 +177,10 @@ def render(runs: dict[str, list[dict]], meta: dict) -> tuple[str, dict]:
     for k in labels:
         if meta.get("sources", {}).get(k):
             lines.append(f"- **{k}**: {meta['sources'][k]}")
+    model_body = None
+    if model_rows:
+        extra, model_body = model_section(model_rows, meta)
+        lines += extra
     for k in labels:
         lines += ["", f"## The {WORST} worst answers ({k}), verbatim", ""]
         for i, r in enumerate(worst(runs[k]), 1):
@@ -126,6 +198,7 @@ def render(runs: dict[str, list[dict]], meta: dict) -> tuple[str, dict]:
         "",
     ]
     body = {
+        "model": model_body,
         "meta": meta,
         "summaries": sums,
         "worst": {
@@ -145,6 +218,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--source", action="append", default=[], metavar="LABEL=TEXT", help="what each column is")
     ap.add_argument("--meta", type=Path, default=None, help="a JSON of extra meta (preregistered, coverage)")
     ap.add_argument("--out", type=Path, required=True, help="the report's path without suffix")
+    ap.add_argument("--model-run", type=Path, default=None, help="a `grade --model` run's rows (jsonl)")
     args = ap.parse_args(argv)
     runs = {}
     for spec in args.run:
@@ -152,7 +226,10 @@ def main(argv: list[str] | None = None) -> None:
         runs[label] = [json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()]
     meta = json.loads(args.meta.read_text()) if args.meta else {}
     meta["sources"] = dict(s.split("=", 1) for s in args.source)
-    md, body = render(runs, meta)
+    model_rows = None
+    if args.model_run:
+        model_rows = [json.loads(x) for x in args.model_run.read_text().splitlines() if x.strip()]
+    md, body = render(runs, meta, model_rows)
     args.out.with_suffix(".md").write_text(md)
     args.out.with_suffix(".json").write_text(json.dumps(body, indent=1, default=str) + "\n")
     print(args.out.with_suffix(".md"))

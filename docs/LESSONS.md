@@ -3482,3 +3482,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_an_unattributed_total_is_not_one_clubs_count`, `test_one_clubs_figure_is_not_a_comparison`
   and `test_one_clubs_pass_is_not_where_the_ball_has_been`. Each fails with its guard removed
   (mutation-tested). The rules were tightened, never loosened, and before any baseline was written.
+  The other way round too: the first model-path run's grader read "London Athletic 1 goal, Lisbon
+  Esportes 1 goal" (the scorebug's own words) as no score, because it knew only "1-1" and per-goal
+  minutes, so a right answer failed (`test_the_scorebugs_wording_is_a_score`). Read the failures as
+  well as the passes.

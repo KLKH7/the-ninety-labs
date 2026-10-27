@@ -10,7 +10,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 |---|---|---|---|
 | score | 68% | 83% | 68% |
 | scorers | 44% | 44% | 44% |
-| winning | 35% | 41% | 35% |
+| winning | 46% | 82% | 46% |
 | on_top | 0% | 0% | 19% |
 | possession | 0% | 0% | 62% |
 | passes | 0% | 0% | 0% |
@@ -30,24 +30,24 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 | key_moments | 22% | 22% | 22% |
 | unmeasured | 0% | 0% | 0% |
 | tactics_chip | 64% | 67% | 64% |
-| **all** | **14%** | **15%** | **18%** |
+| **all** | **14%** | **16%** | **19%** |
 | chips | 35% | 36% | 38% |
 
 ## Every check, all answers
 
 | Check | main | #423 | #424 |
 |---|---|---|---|
-| **core** | 14% | 15% | 18% |
+| **core** | 14% | 16% | 19% |
 | answered | 49% | 49% | 56% |
 | relevant | 64% | 66% | 65% |
-| correct | 11% | 12% | 16% |
+| correct | 11% | 14% | 16% |
 | no_false_unknown | 46% | 45% | 53% |
 | no_future | 97% | 99% | 97% |
 | span_clipped | 78% | 78% | 72% |
 | coverage_honest | 16% | 20% | 14% |
 | natural | 80% | 77% | 83% |
 | consistent | 69% | 73% | 68% |
-| all checks | 2% | 4% | 5% |
+| all checks | 3% | 6% | 6% |
 
 ## Each check per intent (main)
 
@@ -55,7 +55,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 |---|---|---|---|---|---|---|---|---|---|---|
 | score | 68% | 86% | 86% | 68% | 86% | 100% | 100% | – | 48% | 64% |
 | scorers | 44% | 74% | 82% | 44% | 74% | 100% | 100% | – | 67% | 56% |
-| winning | 35% | 46% | 46% | 35% | 46% | 100% | 100% | – | 76% | 33% |
+| winning | 46% | 46% | 46% | 46% | 46% | 100% | 100% | – | 76% | 33% |
 | on_top | 0% | 17% | 33% | 0% | 17% | 97% | 88% | – | 83% | 44% |
 | possession | 0% | 0% | 75% | 0% | 0% | 100% | 100% | – | 100% | 80% |
 | passes | 0% | 0% | 0% | 0% | 0% | 100% | 100% | – | 100% | 89% |
@@ -82,7 +82,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 |---|---|---|---|---|---|---|---|---|---|---|
 | score | 83% | 89% | 91% | 83% | 89% | 100% | 100% | – | 42% | 82% |
 | scorers | 44% | 74% | 82% | 44% | 74% | 100% | 100% | – | 67% | 56% |
-| winning | 41% | 82% | 82% | 41% | 82% | 100% | 100% | – | 100% | 78% |
+| winning | 82% | 82% | 82% | 82% | 82% | 100% | 100% | – | 100% | 78% |
 | on_top | 0% | 50% | 75% | 0% | 50% | 100% | 58% | – | 50% | 50% |
 | possession | 0% | 0% | 67% | 0% | 0% | 100% | 100% | – | 100% | 70% |
 | passes | 0% | 0% | 0% | 0% | 0% | 100% | 100% | – | 100% | 89% |
@@ -109,7 +109,7 @@ Every fan question in `ninety/eval/ask_grade/intents.json` (22 intents, at least
 |---|---|---|---|---|---|---|---|---|---|---|
 | score | 68% | 86% | 86% | 68% | 86% | 100% | 100% | – | 100% | 64% |
 | scorers | 44% | 74% | 82% | 44% | 74% | 100% | 100% | – | 100% | 56% |
-| winning | 35% | 46% | 46% | 35% | 46% | 100% | 100% | – | 100% | 33% |
+| winning | 46% | 46% | 46% | 46% | 46% | 100% | 100% | – | 100% | 33% |
 | on_top | 19% | 67% | 67% | 19% | 67% | 100% | 44% | – | 58% | 39% |
 | possession | 62% | 75% | 75% | 62% | 75% | 100% | 38% | 0% | 100% | 80% |
 | passes | 0% | 0% | 0% | 0% | 0% | 100% | 100% | – | 100% | 89% |
@@ -135,6 +135,22 @@ Answers per column: main 1554, #423 1554, #424 1554.
 - **main**: 382996dc, cached insights (runs/demo-8324-final/final-work/insights.json; rebuilding them with main's code gives the same file and the same grades)
 - **#423**: 9c2cd777 (claude/dreamy-bassi-380a97), the same cached insights (it changes no insight)
 - **#424**: ff0a17eb (claude/fervent-mcclintock-303a76), insights rebuilt with its code from runs/demo-8324-final (--rebuild-insights; its possession is computed into them)
+
+## The model path (Foundry gpt-4.1-mini Companion and Judge), on a 10% sample
+
+Run on main 382996dc (this branch) on Oct 27 ~03:10 PT after Kian approved spend; $1.50 cap; two runs, $0.17 and $0.23 ($0.39 in all). The first lost 64 answers to HTTP 429 throttling of the shared deployment (other sessions were calling it), and its grader scored the scorebug's per-club wording as no score (fixed, lesson 293); the table is the second run, with backoff on 429, whose waits count against the Ask's own 10 s timeout as they would on the phone. The sample is stratified by intent: 10% of each intent's (question, time) pairs. Each model answer (`companion_match.answer_match` with the published Companion and the Judge) is graded beside code's answer to the same question. Parity: the same headline. A fallback is code's answer shown in place of the model's, with its reason. Cost is the tokens the service reported, at ninety/eval/latency_cost.PRICES.
+
+| | all sampled | not throttled |
+|---|---|---|
+| answers | 167 | 128 |
+| core pass, model path | 22% | 23% |
+| core pass, code, same questions | 16% | 14% |
+| headline parity | 52% | 38% |
+| fallback rate | 57% | 45% |
+| latency p50 / p95 | 5.8 s / 10.0 s | 5.0 s / 9.2 s |
+| cost | $0.225 ($0.0013 an answer) | |
+
+Fallback reasons (all sampled): model: unanswerable 47; model timeout 39; not one of the checked sentences of the facts it cites 8; the Judge: unsupported fact 2.
 
 ## The 10 worst answers (main), verbatim
 

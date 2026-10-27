@@ -252,3 +252,9 @@ def test_one_clubs_pass_is_not_where_the_ball_has_been():
         "the most opponents out of the game with passes from minute 76 to minute 90: 4 opponents in 1 pass.",
     )
     assert one["correct"] is False
+
+
+def test_the_scorebugs_wording_is_a_score():
+    said = "London Athletic 1 goal, Lisbon Esportes 1 goal, read from the broadcast's scorebug."
+    assert graded("score", "What's the score?", 2700.0, said)["correct"] is True
+    assert graded("score", "What's the score?", 5400.0, said)["correct"] is False  # 1-3 at full time

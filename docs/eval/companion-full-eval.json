@@ -1,8 +1,42 @@
 {
+ "model": {
+  "all": {
+   "n": 167,
+   "model_core": 0.2215568862275449,
+   "code_core": 0.15568862275449102,
+   "parity": 0.5209580838323353,
+   "fallback": 0.5748502994011976,
+   "reasons": {
+    "model: unanswerable": 47,
+    "model timeout": 39,
+    "not one of the checked sentences of the facts it cites": 8,
+    "the Judge: unsupported fact": 2
+   },
+   "p50": 5.759,
+   "p95": 10.02,
+   "usd": 0.225252
+  },
+  "not_throttled": {
+   "n": 128,
+   "model_core": 0.2265625,
+   "code_core": 0.140625,
+   "parity": 0.375,
+   "fallback": 0.4453125,
+   "reasons": {
+    "model: unanswerable": 47,
+    "not one of the checked sentences of the facts it cites": 8,
+    "the Judge: unsupported fact": 2
+   },
+   "p50": 5.036,
+   "p95": 9.216,
+   "usd": 0.19997
+  }
+ },
  "meta": {
   "preregistered": "3766efbe",
   "coverage": "20.9% (1129 s of 5400 in the 46 clip windows)",
   "truth_table": "ninety/eval/ask_grade/truth-8324.json.gz",
+  "model_note": "Run on main 382996dc (this branch) on Oct 27 ~03:10 PT after Kian approved spend; $1.50 cap; two runs, $0.17 and $0.23 ($0.39 in all). The first lost 64 answers to HTTP 429 throttling of the shared deployment (other sessions were calling it), and its grader scored the scorebug's per-club wording as no score (fixed, lesson 293); the table is the second run, with backoff on 429, whose waits count against the Ask's own 10 s timeout as they would on the phone.",
   "sources": {
    "main": "382996dc, cached insights (runs/demo-8324-final/final-work/insights.json; rebuilding them with main's code gives the same file and the same grades)",
    "#423": "9c2cd777 (claude/dreamy-bassi-380a97), the same cached insights (it changes no insight)",
@@ -12,11 +46,11 @@
  "summaries": {
   "main": {
    "n": 1554,
-   "core": 0.136,
-   "pass": 0.024,
+   "core": 0.141,
+   "pass": 0.028,
    "answered": 0.49,
    "relevant": 0.636,
-   "correct": 0.11,
+   "correct": 0.114,
    "no_false_unknown": 0.458,
    "no_future": 0.97,
    "span_clipped": 0.779,
@@ -68,11 +102,11 @@
     },
     "winning": {
      "n": 66,
-     "core": 0.348,
-     "pass": 0.136,
+     "core": 0.455,
+     "pass": 0.212,
      "answered": 0.455,
      "relevant": 0.455,
-     "correct": 0.348,
+     "correct": 0.455,
      "no_false_unknown": 0.455,
      "no_future": 1.0,
      "span_clipped": 1.0,
@@ -350,11 +384,11 @@
   },
   "#423": {
    "n": 1554,
-   "core": 0.148,
-   "pass": 0.039,
+   "core": 0.165,
+   "pass": 0.056,
    "answered": 0.486,
    "relevant": 0.663,
-   "correct": 0.121,
+   "correct": 0.139,
    "no_false_unknown": 0.452,
    "no_future": 0.987,
    "span_clipped": 0.784,
@@ -406,11 +440,11 @@
     },
     "winning": {
      "n": 66,
-     "core": 0.409,
-     "pass": 0.409,
+     "core": 0.818,
+     "pass": 0.818,
      "answered": 0.818,
      "relevant": 0.818,
-     "correct": 0.409,
+     "correct": 0.818,
      "no_false_unknown": 0.818,
      "no_future": 1.0,
      "span_clipped": 1.0,
@@ -688,11 +722,11 @@
   },
   "#424": {
    "n": 1554,
-   "core": 0.183,
-   "pass": 0.054,
+   "core": 0.187,
+   "pass": 0.059,
    "answered": 0.556,
    "relevant": 0.652,
-   "correct": 0.159,
+   "correct": 0.163,
    "no_false_unknown": 0.53,
    "no_future": 0.974,
    "span_clipped": 0.723,
@@ -744,11 +778,11 @@
     },
     "winning": {
      "n": 66,
-     "core": 0.348,
-     "pass": 0.348,
+     "core": 0.455,
+     "pass": 0.455,
      "answered": 0.455,
      "relevant": 0.455,
-     "correct": 0.348,
+     "correct": 0.455,
      "no_false_unknown": 0.455,
      "no_future": 1.0,
      "span_clipped": 1.0,

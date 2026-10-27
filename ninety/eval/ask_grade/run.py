@@ -137,9 +137,18 @@ def questions(intents: list[dict]) -> list[tuple[dict, dict]]:
     return [(it, q) for it in intents for q in it["questions"]]
 
 
-def sampled(it: dict, q: str, t: float) -> bool:
-    h = hashlib.sha256(f"{it['id']}|{q}|{t:g}".encode()).digest()
-    return h[0] < 256 * MODEL_SHARE
+def model_sample(intents: list[dict], times=TIMES) -> set[tuple[str, str, float]]:
+    """The model's sample, stratified by intent: in each intent, the MODEL_SHARE of its (question,
+    time) pairs (at least one) that sort first by a hash, so the sample is fixed and spread over every
+    intent, its paraphrases and the times."""
+    import math
+
+    out = set()
+    for it in intents:
+        pairs = [(q["q"], t) for q in it["questions"] for t in times]
+        pairs.sort(key=lambda p: hashlib.sha256(f"{it['id']}|{p[0]}|{p[1]:g}".encode()).hexdigest())
+        out |= {(it["id"], q, t) for q, t in pairs[: max(1, math.ceil(MODEL_SHARE * len(pairs)))]}
+    return out
 
 
 def ask_code(insights, q: str, t: float) -> dict:
@@ -186,6 +195,12 @@ def run(
             ans["leak"] = leaks(insights, ans.get("evidence") or [], t)
             tv = table.get(G.wkey(it, t, w))
             g = G.grade(it, q, t, ans, tv, tol, clubs, roster, holds(insights, it, t))
+            if "code_answer" in ans:  # the model's answer: code's to the same question graded beside it
+                ca = ans["code_answer"]
+                ca["leak"] = leaks(insights, ca.get("evidence") or [], t)
+                cg = G.grade(it, q, t, ca, tv, tol, clubs, roster, holds(insights, it, t))
+                ans["code_core"] = G.core_passed(cg["checks"])
+                ans["parity"] = G.headline(ans.get("text") or "") == G.headline(ca.get("text") or "")
             out.append(
                 {
                     "intent": it["id"],
@@ -294,14 +309,46 @@ def summarise(rows: list[dict]) -> dict:
 # ---- the model path (costs money) -----------------------------------------------------------------
 
 
-def model_answerer(insights, log: list[dict]):
-    """answer(it, q, t) through companion_match.answer_match with the Foundry agents, on the ~10%
-    sample; code's answer elsewhere. Each call logs latency and an estimated cost; spending stops at
-    SPEND_CAP_USD and the rest is answered by code."""
+THROTTLE_BACKOFF_S = (2.0, 5.0, 10.0, 20.0)  # design: a shared deployment's throttling clears in seconds
+
+
+class _Metered:
+    """An agent whose replies' token usage (as the service reports it) is added up."""
+
+    def __init__(self, agent, usage: dict):
+        self._agent, self._usage = agent, usage
+
+    async def run(self, *args, **kwargs):
+        for wait in (*THROTTLE_BACKOFF_S, None):  # a throttled call (HTTP 429) waits and is tried again
+            try:
+                reply = await self._agent.run(*args, **kwargs)
+                break
+            except Exception as exc:  # noqa: BLE001  the SDK's rate-limit error has no stable type
+                if wait is None or ("429" not in str(exc) and "rate" not in str(exc).lower()):
+                    raise
+                await asyncio.sleep(wait)
+        u = getattr(reply, "usage_details", None)
+        u = u if isinstance(u, dict) else vars(u) if u is not None else {}
+        self._usage["in"] += int(u.get("input_token_count") or 0)
+        self._usage["out"] += int(u.get("output_token_count") or 0)
+        self._usage["calls"] += 1
+        return reply
+
+    def __getattr__(self, name):
+        return getattr(self._agent, name)
+
+
+def model_answerer(insights, intents: list[dict], log: list[dict]):
+    """answer(it, q, t) through companion_match.answer_match with the Foundry agents (Companion and
+    Judge) on the stratified sample (model_sample), with code's answer to the same question kept
+    beside it; code's answer elsewhere. Each model answer logs its latency, the tokens the service
+    reported and their price (ninety/eval/latency_cost.PRICES); no model call starts once
+    SPEND_CAP_USD is spent."""
     if not os.environ.get(PASSCODE_ENV):
         raise SystemExit(f"--model needs {PASSCODE_ENV} set in the environment (it is never printed)")
-    from ninety.eval.latency_cost import INPUT, OUTPUT, price, tokens
+    from ninety.eval.latency_cost import INPUT, OUTPUT, price
 
+    sample = model_sample(intents)
     spent = {"usd": 0.0}
     loop = asyncio.new_event_loop()
     state: dict = {}
@@ -318,17 +365,14 @@ def model_answerer(insights, log: list[dict]):
         credential = await stack.enter_async_context(credentials.new_credential())
         await credentials.sign_in(credential)
         client = foundry.chat_client(credential)
-        match_ag, judge_ag = cm.companion_match_agent(client), judge_agent(client)
-        usage = {"in": 0, "out": 0}
+        usage = {"in": 0, "out": 0, "calls": 0}
+        match_ag = _Metered(cm.companion_match_agent(client), usage)
+        judge_ag = _Metered(judge_agent(client), usage)
 
         async def ask(prompt):
-            reply = (await match_ag.run(prompt)).text
-            usage["in"] += tokens(prompt)
-            usage["out"] += tokens(reply or "")
-            return reply
+            return (await match_ag.run(prompt)).text
 
         async def judge(claim, evidence):
-            usage["in"] += tokens(json.dumps(evidence, default=str)) + tokens(claim.text)
             return await run_judge(judge_ag, claim, evidence)
 
         state.update(stack=stack, ask=ask, judge=judge, usage=usage)
@@ -336,12 +380,16 @@ def model_answerer(insights, log: list[dict]):
     loop.run_until_complete(setup())
 
     def answer(it, q, t):
-        if not sampled(it, q, t) or spent["usd"] >= SPEND_CAP_USD:
+        if (it["id"], q, t) not in sample:
             return ask_code(insights, q, t)
+        if spent["usd"] >= SPEND_CAP_USD:
+            rec = ask_code(insights, q, t)
+            rec["model_skipped"] = "spend cap"
+            return rec
         from ninety.agents import companion_match as cm
         from ninety.agents.contracts import Question
 
-        state["usage"].update({"in": 0, "out": 0})
+        state["usage"].update({"in": 0, "out": 0, "calls": 0})
         t0 = time.perf_counter()
         try:
             r = loop.run_until_complete(
@@ -361,14 +409,15 @@ def model_answerer(insights, log: list[dict]):
                 "source": r.source,
                 "reasons": list(r.reasons),
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001  kept and graded as no answer
             rec = {
                 "status": "error",
                 "text": "",
                 "t_to": None,
                 "error": repr(exc)[:300],
                 "tools": [],
-                "source": "model",
+                "source": "error",
+                "reasons": [type(exc).__name__],
             }
         u = state["usage"]
         usd = float(price(INPUT) * u["in"] + price(OUTPUT) * u["out"])
@@ -377,10 +426,27 @@ def model_answerer(insights, log: list[dict]):
             latency_s=round(time.perf_counter() - t0, 3),
             tokens_in=u["in"],
             tokens_out=u["out"],
+            model_calls=u["calls"],
             usd=round(usd, 6),
             model=True,
         )
-        log.append({"intent": it["id"], "q": q, "t": t, "latency_s": rec["latency_s"], "usd": rec["usd"]})
+        rec["code_answer"] = ask_code(insights, q, t)
+        log.append(
+            {
+                "intent": it["id"],
+                "q": q,
+                "t": t,
+                "latency_s": rec["latency_s"],
+                "usd": rec["usd"],
+                "source": rec["source"],
+                "reasons": rec.get("reasons", []),
+            }
+        )
+        print(
+            f"model {len(log)} {it['id']} {rec['source']} {rec['latency_s']:.1f}s ${spent['usd']:.4f}",
+            file=sys.stderr,
+            flush=True,
+        )
         return rec
 
     def close():
@@ -390,6 +456,50 @@ def model_answerer(insights, log: list[dict]):
     answer.close = close
     answer.spent = spent
     return answer
+
+
+def model_report(rows: list[dict], log: list[dict], spent: float) -> dict:
+    """Model vs code on the same sampled questions: core pass of each, headline parity, the
+    fallback rate and its reasons, latency and cost."""
+    import math
+
+    m = [r for r in rows if r.get("model")]
+    if not m:
+        return {"answers": 0}
+    lat = sorted(r["latency_s"] for r in m)
+
+    def pc(p):
+        return lat[max(0, math.ceil(p * len(lat)) - 1)]
+
+    fell = [r for r in m if r.get("source") != "model"]
+    reasons = collections.Counter(x for r in fell for x in (r.get("reasons") or ["(none)"]))
+    per = {}
+    for iid in dict.fromkeys(r["intent"] for r in m):
+        rs = [r for r in m if r["intent"] == iid]
+        per[iid] = {
+            "n": len(rs),
+            "model_core": _rate(r["core"] for r in rs),
+            "code_core": _rate(r["code_core"] for r in rs),
+            "parity": _rate(r["parity"] for r in rs),
+        }
+    return {
+        "answers": len(m),
+        "model_core": _rate(r["core"] for r in m),
+        "code_core_same_questions": _rate(r["code_core"] for r in m),
+        "headline_parity": _rate(r["parity"] for r in m),
+        "fallback_rate": round(len(fell) / len(m), 3),
+        "fallback_reasons": dict(reasons.most_common()),
+        "latency_p50_s": pc(0.5),
+        "latency_p95_s": pc(0.95),
+        "latency_max_s": lat[-1],
+        "usd": round(spent, 4),
+        "usd_per_answer": round(spent / len(m), 5),
+        "tokens_in": sum(r.get("tokens_in", 0) for r in m),
+        "tokens_out": sum(r.get("tokens_out", 0) for r in m),
+        "cap_usd": SPEND_CAP_USD,
+        "skipped_at_cap": sum(1 for r in rows if r.get("model_skipped")),
+        "intents": per,
+    }
 
 
 # ---- CLI ---------------------------------------------------------------------------------------
@@ -417,7 +527,7 @@ def cmd_grade(args) -> None:
     table = T.read(args.truth_table)
     tol = G.load_tolerances()
     log: list[dict] = []
-    answer = model_answerer(insights, log) if args.model else None
+    answer = model_answerer(insights, intents, log) if args.model else None
     try:
         rows = run(insights, intents, table, tol, clubs, answer=answer)
     finally:
@@ -428,14 +538,8 @@ def cmd_grade(args) -> None:
     s = summarise(rows)
     s["label"] = args.label
     if args.model:
-        lat = sorted(x["latency_s"] for x in log)
-        s["model"] = {
-            "answers": len(log),
-            "usd": round(answer.spent["usd"], 4),
-            "cap_usd": SPEND_CAP_USD,
-            "latency_p50_s": lat[len(lat) // 2] if lat else None,
-            "latency_max_s": lat[-1] if lat else None,
-        }
+        s["model"] = model_report(rows, log, answer.spent["usd"])
+        print(json.dumps({k: v for k, v in s["model"].items() if k != "intents"}))
     args.out.with_suffix(".summary.json").write_text(json.dumps(s, indent=1) + "\n")
     print(
         json.dumps(

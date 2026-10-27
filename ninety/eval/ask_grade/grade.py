@@ -171,9 +171,16 @@ def goals_said(text: str, clubs: dict) -> list[tuple[str | None, int]]:
 
 
 def scoreline(text: str, clubs: dict) -> dict | None:
+    """The score an answer states: "London Athletic 1-3 Lisbon Esportes", or each club's goals
+    ("London Athletic 1 goal, Lisbon Esportes 3 goals"), else None."""
     m = re.search(r"\b(\d+)\s*[-–]\s*(\d+)\b", text)
     if not m:
-        return None
+        each = {}
+        for g in re.finditer(r"\b(\d+) goals?\b", text):
+            side = club_before(text, g.start(), clubs)
+            if side is not None and side not in each:
+                each[side] = int(g.group(1))
+        return each if set(each) == {"home", "away"} else None
     a, b = int(m.group(1)), int(m.group(2))
     first = club_before(text, m.start(), clubs) or next(
         (s for p, s in club_spans(text, clubs) if p > m.end()), None
