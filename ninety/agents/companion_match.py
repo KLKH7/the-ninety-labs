@@ -915,6 +915,9 @@ def _who(f: dict, insights) -> str | None:
     who = f.get("scorer_is") or f.get("player_is") or f.get("passer_is")
     if not who:
         return None
+    unnamed = re.fullmatch(r"an? (.+) player", who)
+    if unnamed:  # nobody named: the club heads it, never "a London Athletic player" (lesson 297)
+        return _short(insights, unnamed.group(1))
     for club in insights.fixture.clubs.values():
         if who.startswith(f"{club}'s "):
             return f"{_short(insights, club)}'s {who[len(club) + 3:]}"
@@ -1516,6 +1519,29 @@ def _overview(question: Question, calls: list[dict], insights, known: dict, hist
                          suggest=suggest)
 
 
+PIVOT_CLAUSE = re.compile(
+    r"\b(?:full shape isn't in view|haven't made enough passes|no single .{0,30}player stands out"
+    r"|isn't in what vision picked up|aren't counted|isn't counted|not tracked)\b", re.I)
+
+
+def _pivot(question: Question, insights, clause: str, club: str | None, history=()) -> Answer | None:
+    """The clause, then the closest confident fact (where the ball has been, the club's when one is
+    asked about), in one sentence; None when that fact isn't there either."""
+    from dataclasses import replace as _with
+
+    from ninety.agents import ask_answers
+
+    read = read_question(question.text, insights, question.t, history)
+    read = _with(read, intent="territory", clubs=(club,) if club else ())
+    got = ask_answers.build(question, insights, read)
+    if got is None or got[0].status != "verified":
+        return None
+    a = got[0]
+    text = f"{clause}, but {ask_answers._lower(a.text)}"
+    # Not the answer to what was asked (status "unanswerable"): a true fact beside it, plainly said.
+    return replace(a, status="unanswerable", text=text, spoken=text, headline=None)
+
+
 def read_question(text: str, insights, t: float, history=()):
     """The question read against the intent table (ninety/agents/ask_intents.py): one intent and
     its slots. The old tool routing only says whether it is a tactics question; a player or a
@@ -1572,7 +1598,9 @@ def chips(insights, t: float, club: str | None = None) -> list[dict]:
         a, _ = code_match_answer(Question("chips", None, q, float(t)), insights, suggest=False)
         # A checked fact, never only "no goal yet", and never a chip whose answer would be a "can't"
         # (Kian, Oct 27: no chip is offered that the Ask cannot answer outright).
-        if a.status == "verified" and a.evidence and not CHIP_CANT.search(a.text):
+        # On-metric too: never a chip whose answer is a "not counted yet" pivot to another fact.
+        direct = not CHIP_CANT.search(a.text) and not PIVOT_CLAUSE.search(a.text)
+        if a.status == "verified" and a.evidence and direct:
             out.append({**c, "q": q})
     return out
 
@@ -2043,36 +2071,28 @@ def code_match_answer(
         return code_match_answer(question, insights, wider, history, suggest)
     shape_held = calls and calls[0]["name"] == "team_shape" and not any(
         f.get("confident") for f in facts if f.get("kind") == "shape")
+    # Kian, Oct 27: no "can't" while a related measured fact exists. One short clause naming what was
+    # asked, then the closest confident fact: where the ball has been (the intent table's territory row).
+    club = named[0] if len(named) == 1 else None
     if calls and _minute_now(question.t) <= 2:
         why = TOO_EARLY  # nothing yet to rank, count or share: say so, not a canned list
     elif shape_held:
-        whose = _of(named[0]) if len(named) == 1 else "A club's"
-        why = (f"{whose} shape can't be measured {span}: it needs every one of their players in view at "
-               "once, and the cameras didn't have them all.")
+        why = f"{_of(named[0]) if club else 'The'} full shape isn't in view {span}"
     elif thin is not None:
-        whose = thin.get("club") or "either side"
-        why = (f"Too few of {whose}'s passes {span} to say yet: {_plural(_sample(thin), 'pass')}, and a "
-               f"share needs {MIN_SHARE_PASSES}.")
+        why = f"{thin.get('club') or 'Neither side'} haven't made enough passes {span} for that yet"
     elif ranked and asked is not None:
         # The players were ranked but none can be named the best: say so, never the canned list.
         club = asked.get("club")
-        whose = (f"{club}'" if club.endswith("s") else f"{club}'s") if club else "the"
-        why = (f"I can't single out {whose} most dangerous player {span}: tracking missed too many "
-               "players, or too many are level, to rank them surely.")
-        scorers = [(t, g) for g in goals_so_far(insights, lo_hi[1] if lo_hi else 90, club)
-                   if g.get("scorer_is") and (t := _checked(g, known, insights)) is not None
-                   and "scored for" in t]
-        if scorers:  # who decided the match so far is still worth saying, each a checked sentence
-            return _match_answer(" ".join([why, "What I can say: ", *(t for t, _ in scorers[-2:])]).replace(
-                ":  ", ": "), [g for _, g in scorers[-2:]], insights, calls, asked=asked_all, t=question.t,
-                suggest=suggest), calls
-    elif not facts and calls:
-        # The match is tracked (these are its insights): nothing in the stretch answers it yet.
-        why = f"Nothing {span} answers that yet."
+        why = f"No single {club + ' ' if club else ''}player stands out {span}"
     elif calls:
-        why = f"Nothing {span} answers that surely: vision wasn't sure enough of what it saw."
+        why = f"That isn't in what vision picked up {span}"
     else:
         why = f"I can answer about {names} and the team sheets."
+    if why not in (TOO_EARLY,) and not why.startswith("I can answer about"):
+        pivot = _pivot(question, insights, why, club, history)
+        if pivot is not None:
+            return pivot, calls
+        why += "."
     t_from, t_to = 0.0, float(question.t)
     return Answer("unanswerable", why, None, None, None, (), t_from, t_to), calls
 

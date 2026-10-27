@@ -41,8 +41,8 @@ _GOALS = (
     "a scorer's name comes from the Player ID feed."
 )
 _PASSES = (
-    "Passes are detected in the broadcast video by following the ball from one player to another. On "
-    "the frozen test clips the detector found 7 of 13 passes (recall 0.54, 95% interval 0.29 to 0.77)."
+    "Passes are detected in the broadcast video by following the ball from one player to another, "
+    "and said as which club made more of them and its share, never as a count."
 )
 _RESTARTS = (
     "Restarts (corners, throw-ins, goal kicks, free kicks) are read from where the ball left the "
@@ -711,14 +711,24 @@ def _goals_compare(ctx: Ctx) -> Reply:
     return _compare(ctx, _so_far(ctx), n, "goals", "goals", "goal", "scored", [bug], scope="on the scorebug")
 
 
-def _goals_and_ground(ctx: Ctx) -> Reply:
-    """The confident facts nearest a count vision cannot make: the goals, then where the ball has been."""
-    r = _goals_compare(ctx)
-    where = territory(ctx)
-    if where.status == "verified":
-        r.lines += where.lines[:1]
-        r.head = r.head or where.head
+def _clause(r: Reply, clause: str) -> Reply:
+    """What was asked is not counted, said in one short clause, then the confident fact in the same
+    sentence ("Corners aren't counted here yet, but the ball has been in …"): never a silent pivot to
+    another topic (the relevance bug), never a pile of caveats (Kian, Oct 27)."""
+    if r.lines and r.lines[0][1]:
+        text, cited = r.lines[0]
+        r.lines = [(f"{clause}, but {_lower(text)}", cited), *r.lines[1:]]
     return r
+
+
+def _goals_or_ground(ctx: Ctx, clause: str) -> Reply:
+    """The confident fact nearest a count vision cannot make: the goals from the scorebug, or where the
+    ball has been while neither side has scored."""
+    r = _goals_compare(ctx)
+    if not r.lines or r.head == "No goals yet":
+        r = territory(ctx)
+    r.head = None
+    return _clause(r, clause)
 
 
 def completion(ctx: Ctx) -> Reply:
@@ -763,13 +773,13 @@ def shots(ctx: Ctx) -> Reply:
         r.say(f"{ctx.clubs[first]} have had {word} shots than {ctx.clubs[second]} {_scope(w)}.", f)
         r.head = f"{_short(ctx, lead)}: more shots"
         return r
-    return _goals_and_ground(ctx)
+    return _goals_or_ground(ctx, "Shots aren't counted reliably yet")
 
 
 def on_target(ctx: Ctx) -> Reply:
     """Every goal is on target, and saves are not detected well enough to add: the goals from the
-    scorebug, then where the ball has been."""
-    return _goals_and_ground(ctx)
+    scorebug, else where the ball has been."""
+    return _goals_or_ground(ctx, "Shots on target aren't counted reliably yet")
 
 
 RESTART_UNITS = {
@@ -789,7 +799,13 @@ def _restarts(ctx: Ctx, w: Window, kinds: tuple[str, ...]) -> dict[str, dict]:
 
 def corners(ctx: Ctx) -> Reply:
     if not RESTARTS_COUNTABLE:  # never a restart count on air (precision under 0.2): where the ball was
-        return territory(ctx)
+        sets = re.search(r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", ctx.read.text, re.I)
+        thing = (
+            "Set pieces aren't"
+            if sets and not re.search(r"\bcorners?\b", ctx.read.text, re.I)
+            else "Corners aren't"
+        )
+        return _clause(territory(ctx), f"{thing} counted here yet")
     w = _window(ctx)
     if re.search(
         r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", ctx.read.text, re.I
@@ -821,7 +837,14 @@ def corners(ctx: Ctx) -> Reply:
 
 def out_of_play(ctx: Ctx) -> Reply:
     if not RESTARTS_COUNTABLE:  # never a restart count on air (precision under 0.2): where the ball was
-        return territory(ctx)
+        thing = (
+            "Throw-ins aren't"
+            if re.search(r"\bthrow[- ]?ins?\b|\bthrows?\b", ctx.read.text, re.I)
+            else "Goal kicks aren't"
+            if re.search(r"\bgoal[- ]kicks?\b", ctx.read.text, re.I)
+            else "The ball going out of play isn't"
+        )
+        return _clause(territory(ctx), f"{thing} counted here yet")
     r = Reply()
     w = _window(ctx)
     kinds = ("throw_in", "goal_kick", "corner")

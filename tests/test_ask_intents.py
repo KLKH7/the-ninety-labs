@@ -264,7 +264,9 @@ def test_paraphrases_of_a_row_get_the_same_answer(mi, intent):
             read = cm.read_question(q, mi, t)
             if read.clubs or read.window.named or read.goal is not None or read.topic:
                 continue  # a club, a stretch, a goal or a topic named is another question
-            texts.setdefault(cm.code_match_answer(Question("s", None, q, t), mi, suggest=False)[0].text, q)
+            text = cm.code_match_answer(Question("s", None, q, t), mi, suggest=False)[0].text
+            # "Throw-ins aren't counted…, but" names the kind asked; the fact after it is the row's one answer
+            texts.setdefault(text.split(", but ", 1)[-1], q)
         assert len(texts) <= 1, (intent, t, texts)
 
 
@@ -296,7 +298,9 @@ def test_answers_read_naturally(mi, intent):
 def test_a_figure_says_it_is_of_the_footage(mi, intent):
     a, _ = cm.code_match_answer(Question("s", None, PARAPHRASES[intent][0], 3600.0), mi, suggest=False)
     if a.status == "verified" and re.search(r"\d", a.text):
-        assert "in the footage" in a.text, a.text
+        assert "in the footage" in a.text or "on the scorebug" in a.text, (
+            a.text
+        )  # shots: the scorebug's goals
 
 
 def test_a_lead_without_the_row_s_metric_gives_the_fallback(mi, monkeypatch):
@@ -526,7 +530,10 @@ def test_a_zero_count_is_said_plainly_with_its_scope_never_hedged(mi, q):
 def test_how_do_you_know_is_the_last_answer_s_method_with_only_measured_rates(mi):
     """Kian, Oct 27: the detector's measured hit rate is the answer's How-we-know, never its text."""
     a, _ = cm.code_match_answer(Question("s", None, "How many passes?", 3000.0), mi, suggest=False)
-    assert "recall" not in a.text and a.how is not None and "7 of 13 passes (recall 0.54" in a.how
+    # The old band's 0.54 is not a current rate (EVALUATION.md): the method only, no rate (Kian, Oct 27).
+    assert (
+        "recall" not in a.text and a.how is not None and "never as a count" in a.how and "0.54" not in a.how
+    )
     history = [{"question": "How many passes?", "answer": a.text, "calls": []}]
     r = asyncio.run(
         cm.answer_match(Question("s", None, "how accurate is that?", 3000.0), mi, history=history)
