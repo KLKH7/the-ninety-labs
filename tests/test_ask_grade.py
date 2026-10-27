@@ -480,3 +480,68 @@ def test_territory_follows_each_halfs_direction():
 def test_completion_said_as_a_direction(home, away, text, ok):
     tv = {"footage": {"completion": {"home": home, "away": away, "total": None}}}
     assert G.comparison_direction(text, tv, CLUBS, TOL) is ok
+
+
+def _both(home, away, slack=0):
+    c = _counts(home, away, slack)["footage"]
+    return {"footage": c, "match": c}
+
+
+SHOTS = intent("shots")
+
+
+@pytest.mark.parametrize(
+    "text,ok",
+    [
+        # a comparison alone: graded by its direction
+        ("Lisbon Esportes have had more shots in the footage so far.", True),
+        ("London Athletic have had more shots in the footage so far.", False),  # the wrong club
+        # a comparison with figures: direction and every figure
+        ("Lisbon Esportes have had more shots: 5 to London Athletic's 3 in the footage so far.", True),
+        ("Lisbon Esportes have had more shots: 7 to London Athletic's 3 in the footage so far.", False),  # 7
+        ("Lisbon Esportes have had more shots: 5 to London Athletic's 1 in the footage so far.", False),  # 1
+        ("London Athletic have had more shots: 5 to Lisbon Esportes' 3 in the footage so far.", False),
+        # no comparison: the number, as before
+        ("There were 8 shots in the footage so far.", True),
+        ("There were 9 shots in the footage so far.", False),
+        # neither a comparison nor a number
+        ("Shots have been taken in the footage so far.", False),
+    ],
+)
+def test_the_claim_is_graded(text, ok):
+    strict = G.correct(SHOTS, "How many shots?", text, _both(3, 5), TOL, CLUBS, ROSTER)[0]
+    assert G.grade_claim(SHOTS, text, _both(3, 5), TOL, CLUBS, strict) is ok
+
+
+def test_level_claims_carry_their_figures():
+    each = "London Athletic and Lisbon Esportes have had 2 shots each in the footage so far."
+    assert G.grade_claim(SHOTS, each, _both(2, 2), TOL, CLUBS, False) is True
+    assert G.grade_claim(SHOTS, each, _both(3, 3), TOL, CLUBS, False) is False  # level, but not 2 each
+    none = "Neither side has had a shot in the footage so far."
+    assert G.grade_claim(SHOTS, none, _both(0, 0), TOL, CLUBS, False) is True
+    assert G.grade_claim(SHOTS, none, _both(1, 1), TOL, CLUBS, False) is False  # level, but not none
+
+
+def test_completion_claim():
+    comp = intent("completion")
+    tv = {s: {"completion": {"home": 92.0, "away": 80.0, "total": 86.0}} for s in ("footage", "match")}
+    right = "London Athletic have passed more accurately than Lisbon Esportes in the footage so far."
+    assert G.grade_claim(comp, right, tv, TOL, CLUBS, False) is True
+    wrong = "Lisbon Esportes have passed more accurately than London Athletic in the footage so far."
+    assert G.grade_claim(comp, wrong, tv, TOL, CLUBS, False) is False
+    off = "London Athletic have passed more accurately, 92% to Lisbon Esportes' 60%, in the footage so far."
+    assert G.grade_claim(comp, off, tv, TOL, CLUBS, False) is False
+
+
+def test_the_strict_column_stays_beside_the_claim():
+    c = graded(
+        "shots", "How many shots?", 2700.0, "Lisbon Esportes have had more shots in the footage so far."
+    )
+    assert c["correct_strict"] is False  # no number: the old rule fails it
+    assert c["correct"] == c["comparison_direction"]  # the claim: its direction alone
+    assert (
+        graded("possession", "possession?", 2700.0, "London Athletic had 57% in the footage.")[
+            "correct_strict"
+        ]
+        is None
+    )

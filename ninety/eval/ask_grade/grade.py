@@ -6,7 +6,9 @@ check that applies passes. The checks, fixed with intents.json and tolerances.js
 - answered: a verified answer that is not a "can't" (for the unmeasured intent, any plain reply).
 - relevant: the lead sentence carries the intent's metric (catches total shots for "on target?").
 - correct: the stated number, club or player is within tolerance of the truth, over the footage
-  when the answer says it is about the footage, else over the match.
+  when the answer says it is about the footage, else over the match. For counts and completion the
+  claim is graded (grade_claim): a comparison by its direction and any figures it states; the old
+  number-only rule stays beside it as correct_strict.
 - consistent: the same headline as the other paraphrases of the intent at that time (run.summarise).
 - coverage_honest: where the footage shows part of the match, a stated figure says it is about the
   footage ("in the footage we've seen").
@@ -488,6 +490,63 @@ def comparison_direction(text: str, tv: dict, clubs: dict, tol: dict | None = No
     return compared_side(text, clubs) in allowed
 
 
+CLAIM_KINDS = ("count", "pct")  # the detector-bound rows whose claim is graded (grade_claim)
+NEITHER = re.compile(r"\bneither (?:side|team|club) has(?: had)?\b", re.I)
+NOT_A_FIGURE = re.compile(
+    r"\bminutes? \d{1,3}(?: ?(?:to|until|through|-|–) ?\d{1,3})?\b|\b\d{1,2}:[0-5]\d\b"
+    r"|\b\d{1,3}(?:′|')|\b\d{1,3}(?:st|nd|rd|th)\b",
+    re.I,
+)
+
+
+def claimed_figures(it: dict, text: str, clubs: dict) -> dict | None:
+    """The per-club figures a comparison's lead states: {"home": n, "away": m}, one club's only, or
+    None when it states none or they cannot be told apart. "5 to London's 3" after "Lisbon": Lisbon 5,
+    London 3; "2 shots each": both 2; "neither side has had a corner": both 0; a completion's
+    percentages by the club before each."""
+    s = lead(text)
+    if it["kind"] == "pct":
+        got = {side: v for side, v in percents(s, clubs) if side in ("home", "away")}
+        return got or None
+    if NEITHER.search(s):
+        return {"home": 0, "away": 0}
+    nums = [int(x) for x in re.findall(r"\b(\d+)\b(?!\s*%)", NOT_A_FIGURE.sub(" ", s))]
+    named = clubs_in(s, clubs)
+    if not nums:
+        return None
+    if len(nums) == 1 and re.search(r"\beach\b", s, re.I) and len(named) == 2:
+        return {"home": nums[0], "away": nums[0]}
+    if len(nums) == 2 and len(named) == 2:
+        return dict(zip(named, nums, strict=True))
+    return None
+
+
+def grade_claim(it: dict, text: str, tv: dict, tol: dict, clubs: dict, strict: bool | None) -> bool:
+    """Grade the claim (coordinator, Oct 27; committed before any answer is graded with it). For the
+    detector-bound rows (counts, completion): a lead that is a comparison is correct when its
+    direction is right (comparison_direction) and every figure it states for a club is within
+    tolerance of that club's truth (both apply when both are stated); a lead that is no comparison
+    is correct as before (`strict`: the stated number within tolerance); an answer stating neither
+    a comparison nor a number fails (strict fails it)."""
+    if compared_side(text, clubs) is None:
+        return bool(strict)
+    if not comparison_direction(text, tv, clubs, tol):
+        return False
+    figs = claimed_figures(it, text, clubs)
+    if figs is None:
+        return True
+    scope = "footage" if FOOTAGE.search(text) else "match"
+    v = tv[scope]
+    for side, n in figs.items():
+        if it["kind"] == "pct":
+            t = v["completion"].get(side)
+            if t is None or abs(n - t) > tol["completion_points"]:
+                return False
+        elif not v["count_lo"][side] <= n <= v["count_hi"][side]:
+            return False
+    return True
+
+
 def grade(
     it: dict,
     q: str,
@@ -508,10 +567,14 @@ def grade(
     if it.get("relevance"):
         rel = bool(re.search(it["relevance"], lead(text), re.I))
     ok, scope = (None, None)
+    strict = None
     if tv is not None and it["kind"] != "chip":
         ok, scope = correct(it, q, text, tv, tol, clubs, roster)
         if not answered and not unmeasured:
             ok = False
+        if it["kind"] in CLAIM_KINDS:
+            strict = ok  # the old strict-number column, kept beside the claim's grade
+            ok = answered and grade_claim(it, text, tv, tol, clubs, strict)
     figure = bool(re.search(r"\d", text)) and it["kind"] in ("count", "share", "share_pair", "pct", "player")
     cov = tv["coverage"] if tv else 1.0
     honest = bool(FOOTAGE.search(text)) if (figure and answered and cov < 0.999) else None
@@ -537,6 +600,7 @@ def grade(
         "no_false_unknown": false_unknown,
         "natural": not flags,
         "comparison_direction": compares,
+        "correct_strict": strict,
     }
     return {"checks": checks, "scope": scope, "flags": flags, "future_minutes": future}
 
@@ -547,7 +611,15 @@ def headline(text: str) -> str:
 
 
 CORE = ("answered", "relevant", "correct", "no_false_unknown")  # the headline: a right answer to the question
-OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent", "comparison_direction")
+OTHERS = (
+    "no_future",
+    "span_clipped",
+    "coverage_honest",
+    "natural",
+    "consistent",
+    "comparison_direction",
+    "correct_strict",
+)
 CHECKS = CORE + OTHERS
 
 
