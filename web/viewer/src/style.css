@@ -400,3 +400,45 @@ body[data-screen="big"][data-ui="on"] .lt { bottom: calc(9% + 64px); }
 @media (prefers-reduced-motion: no-preference) {
   .lt:not(.still) > * { transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
+
+/* ---- The big screen's scorebug (src/scorebug.ts): an opaque layer over the baked bug's widest box
+   (render.js: 28, 24, 400 by 40 at 720 lines, as % of the picture) with a margin of 6 units for the
+   encode's soft edge and the corners' radius; it scales with the picture exactly, never clamped. */
+.sb { display: none; }
+body[data-screen="big"] .sb { --v: 0.0521cqw; --m: calc(6 * var(--v) + 2px); display: flex; align-items: stretch;
+  position: absolute; z-index: 2; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m));
+  width: calc(31.25% + 2 * var(--m)); height: calc(5.5556% + 2 * var(--m)); overflow: hidden; pointer-events: none;
+  border-radius: calc(10 * var(--v)); background: #0c0d11; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .sb[hidden] { display: none; }
+.sb-plate { flex: 1; display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; column-gap: calc(12 * var(--v)); }
+.sb-team { display: flex; align-items: center; gap: calc(10 * var(--v)); height: 100%; min-width: 0; }
+.sb-away { flex-direction: row-reverse; }
+.sb-bar { align-self: stretch; width: calc(5 * var(--v)); flex: none; }
+.sb-home .sb-bar { background: var(--home); }
+.sb-away .sb-bar { background: var(--away); }
+.sb-crest { display: inline-flex; width: calc(28 * var(--v)); height: calc(34 * var(--v)); flex: none; }
+.sb-crest svg { width: 100%; height: 100%; }
+.sb-crest[hidden] { display: none; }
+.sb-code { font-size: calc(22 * var(--v)); font-weight: 600; letter-spacing: 0.04em; }
+.sb-digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; min-width: 0.62em; text-align: center;
+  font-size: calc(32 * var(--v)); font-weight: 700; }
+.sb-digit > span { display: block; }
+.sb-now { transform: translateY(calc((1 - var(--roll, 1)) * 100%)); }
+.sb-was { position: absolute; inset: 0; transform: translateY(calc(var(--roll, 1) * -100%)); }
+.sb-digit.hot { color: #fff; }
+.sb-home .sb-code, .sb-away .sb-code { color: #fff; }
+.sb-dash { font-size: calc(22 * var(--v)); color: rgba(235, 235, 245, 0.3); }
+.sb-rule { width: 1px; margin: calc(14 * var(--v)) 0; background: rgba(255, 255, 255, 0.12); }
+.sb-clock { flex: none; width: calc(118 * var(--v)); display: grid; place-items: center; font-size: calc(22 * var(--v)); font-weight: 600;
+  color: rgba(235, 235, 245, 0.85); }
+.sb[data-period="HT"] .sb-clock, .sb[data-period="FT"] .sb-clock { color: #fff; font-weight: 700; letter-spacing: 0.06em; }
+/* The goal: the scoring club's colour sweeps in from its side with its crest and GOAL, then out. */
+.sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(14 * var(--v)); }
+.sb[data-goal="home"] .sb-sweep, .sb[data-goal="away"] .sb-sweep { display: flex; }
+.sb[data-goal="home"] .sb-sweep { background: #1b2f5b; clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
+.sb[data-goal="away"] .sb-sweep { background: #e63942; clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
+.sb-sweep .sb-crest { width: calc(32 * var(--v)); height: calc(40 * var(--v)); }
+.sb-goal { font-size: calc(26 * var(--v)); font-weight: 800; letter-spacing: 0.22em; }

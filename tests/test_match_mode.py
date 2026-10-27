@@ -1177,3 +1177,67 @@ def test_a_goal_is_a_full_card_with_the_scorebug_s_new_score_then_collapses_and_
     assert page.locator("#lower-third .lt-card-score").count() == 0  # no score the gate does not pass
     assert not errors and not errors2
     page.context.close()
+
+
+READS = [
+    {"type": "score_read", "t": 0.0, "score": {"home": 0, "away": 0}},
+    {"type": "score_change", "t": 1292.2, "team": "away", "score": {"home": 0, "away": 1}},
+    {"type": "score_read", "t": 1377.9, "score": {"home": 0, "away": 1}},
+    {"type": "score_change", "t": 2244.2, "team": None, "score": {"home": 1, "away": 1}},
+]
+
+
+@pytest.mark.parametrize(("reads", "t", "half2", "want"), [
+    # Before the first read, 0-0 only because the first read is 0-0.
+    (READS, -1.0, None, {"score": {"home": 0, "away": 0}, "goal": None, "period": None}),
+    (READS[1:], 5.0, None, {"score": None, "goal": None}),  # a clip that starts at 0-1: no digits until read
+    (READS, 2000.0, None, {"score": {"home": 0, "away": 1}, "goal": None}),
+    # The side whose count rose, half-way through the moment.
+    (READS, 2245.2, None, {"score": {"home": 1, "away": 1},
+                           "goal": {"side": "home", "p": 0.5, "before": {"home": 0, "away": 1}}}),
+    (READS, 2246.3, None, {"goal": None}),  # past GOAL_S: settled
+    (READS, 2800.0, 2900.0, {"period": "HT"}),  # 45:00 to the second half's detected kick-off
+    (READS, 2950.0, 2900.0, {"period": None}),
+    (READS, 2800.0, None, {"period": None}),  # no kick-off detected: no half-time card invented
+    (READS, 5398.9, None, {"period": "FT"}),  # the engine's 90:00 (Law 7, no added time)
+])
+def test_the_scorebug_shows_only_what_the_scorebug_read(browser, site, reads, t, half2, want):  # noqa: F811
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    got = page.evaluate(f"window.ninetyScorebug.bugAt({json.dumps(reads)}, {t}, {json.dumps(half2)})")
+    if got.get("goal"):
+        got["goal"]["p"] = round(got["goal"]["p"], 3)
+    assert {k: got[k] for k in want} == want
+    assert not errors
+    page.context.close()
+
+
+@pytest.mark.parametrize(("size", "dock"),
+                         [((1440, 900), "closed"), ((1920, 1080), "closed"), ((1440, 900), "open")])
+def test_the_baked_scorebug_never_shows_through(browser, site, size, dock):  # noqa: F811
+    """The bug covers the baked one's widest box (render.js geometry, 2 source px more each side) at
+    every size, docked or not, and is opaque: the box is pixel-identical with the footage shown and
+    hidden, on every frame sampled."""
+    ctx = browser.new_context(viewport={"width": size[0], "height": size[1]})
+    ctx.add_init_script(f"try {{ localStorage.setItem('ninety.dock', '{dock}'); }} catch (e) {{}}")
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    stage = page.locator("#stage").bounding_box()
+    fx, fy = stage["width"] / 1280, stage["height"] / 720
+    box = {"x": stage["x"] + 26 * fx, "y": stage["y"] + 22 * fy, "width": 404 * fx, "height": 44 * fy}
+    bug = page.locator("#scorebug").bounding_box()
+    assert bug["x"] <= box["x"] and bug["y"] <= box["y"]
+    assert bug["x"] + bug["width"] >= box["x"] + box["width"]
+    assert bug["y"] + bug["height"] >= box["y"] + box["height"]
+    footage = "#frames" if page.is_visible("#frames") else "#video"
+    for image in (0, 20, 39, 41, 74):
+        seek(page, image)
+        shown = page.screenshot(clip=box)
+        page.eval_on_selector(footage, "e => (e.style.visibility = 'hidden')")
+        hidden = page.screenshot(clip=box)
+        page.eval_on_selector(footage, "e => (e.style.visibility = '')")
+        assert shown == hidden, f"the footage shows through the scorebug at image {image}"
+    assert not errors
+    ctx.close()
