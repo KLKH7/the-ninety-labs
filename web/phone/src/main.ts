@@ -117,6 +117,7 @@ interface State {
   following: boolean; // the selection came from the laptop's focus
   card: PlayerCard | null;
   wind: boolean;
+  heat: boolean; // the pitch shows one club's heat map (Live › Heat)
   tab: Tab;
   insights: InsightCard[];
 }
@@ -132,6 +133,7 @@ const state: State = {
   following: false,
   card: null,
   wind: false,
+  heat: false,
   tab: "radar",
   insights: [],
 };
@@ -158,6 +160,8 @@ function screenOf(x: number, y: number): [number, number] {
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
   name: playerName,
+  say: (id: string) => sayPlayer(id), // how the sheet and its chips say him (never "a player")
+  trackSpan: (id: string, t: number) => trackSpan(id, t),
   // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
   drawable: (sv: ScoutVisual, t: number | null = null) => {
     const v = fromScout(sv, t);
@@ -600,6 +604,8 @@ async function loadMinimap() {
 /** The radar from the bundle's tracked positions when the big screen's bundle has them, otherwise
  * from the minimap feed; the same drawing either way. */
 function buildRadar() {
+  spans = null;
+  teamHeatAt = -Infinity;
   state.radar = null;
   state.radarFrom = null;
   if (state.minimap || bundleRadar) {
@@ -688,6 +694,71 @@ function distinctName(id: string): string {
 function roleWords(side: "home" | "away", x: number, y: number): string {
   const [flank, depth] = spot(side, x, y).split(" · ");
   return `${flank} ${depth === "defence" ? "defender" : depth === "midfield" ? "midfielder" : "forward"}`;
+}
+
+/** The label a fan picked an unnamed track by, kept while his sheet is open: where he was when tapped. */
+const pickedAs = new Map<string, string>();
+
+/** How the sheet, its chips and their answers say a player (Kian, Oct 27: never "a player"): the
+ * Player ID feed's name; else where he is on the pitch ("the player on the left of the pitch"), never
+ * a club: a track id's letter is the tracker's side vote, and a bundle may carry no side list
+ * (Coordinator, Oct 27). Where he is comes from the radar's tracked frame now, never a later one. */
+function sayPlayer(id: string): string {
+  if (!unnamedTrack(id)) return playerName(id);
+  const kept = pickedAs.get(id);
+  if (kept) return kept;
+  const p = state.radar?.at(viewTime(), false)?.players.find((q) => q.id === id);
+  const at: [number, number] | undefined = p ? [p.x, p.y] : averagePositions().get(id);
+  let label: string;
+  if (!at) label = "the player you picked";
+  else {
+    const across = at[0] < 105 / 3 ? "on the left" : at[0] > (2 * 105) / 3 ? "on the right" : "in the middle";
+    label = `the player ${across} of the pitch`;
+  }
+  pickedAs.set(id, label);
+  return label;
+}
+/** The same at a sentence's start. */
+const SayPlayer = (id: string) => sayPlayer(id).replace(/^the /, "The ");
+
+/** Each track's first and last tracked time, from the bundle's frames, else the minimap feed. A
+ * track is one unbroken stretch of tracking: a player lost behind others comes back as a new track,
+ * so a card's numbers cover this stretch, never his match (lesson 294). */
+let spans: Map<string, number[]> | null = null; // each track's tracked times, in order
+function trackSpan(id: string, tTo: number): [number, number] | null {
+  if (!spans) {
+    spans = new Map();
+    const see = (pid: string, t: number) => {
+      const s = spans!.get(pid);
+      if (!s) spans!.set(pid, [t]);
+      else s.push(t);
+    };
+    if (bundleRadar) for (const f of bundleRadar.data.frames) for (const p of f.players) see(p.id, f.t);
+    else if (state.minimap) for (const f of state.minimap.frames) for (const [pid] of f.players) see(pid, f.t);
+    for (const s of spans.values()) s.sort((a, b) => a - b);
+  }
+  const s = spans.get(id);
+  if (!s || s[0] > tTo) return null;
+  // The last time he was seen at or before tTo: a sighting after a gap never stretches the span.
+  let lo = 0;
+  let hi = s.length - 1;
+  while (lo < hi) {
+    const m = (lo + hi + 1) >> 1;
+    if (s[m] <= tTo) lo = m;
+    else hi = m - 1;
+  }
+  return [s[0], s[lo]];
+}
+
+/** How long play was followed for this track up to t, or null when it has been followed since the
+ * feed's first frame ("1 min 12 s"): what a card or an answer about him covers (lesson 294). A
+ * per-player match total keyed by the ID feed's name, once AGENTS.md allows it, replaces this. */
+function followedFor(id: string, t: number): { from: number; to: number; said: string } | null {
+  const tracked = trackSpan(id, t);
+  if (!tracked || tracked[0] <= (state.minimap?.frames[0]?.t ?? 0) + 1) return null;
+  const span = Math.max(0, tracked[1] - tracked[0]);
+  const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
+  return { from: tracked[0], to: tracked[1], said };
 }
 
 /** Where a player has mostly been, in two words a line-up uses ("Left · defence"). */
@@ -1151,6 +1222,7 @@ function drawMap(t: number) {
 // --- the player card -------------------------------------------------------------------------
 
 function select(id: string | null, fromLaptop = false) {
+  if (id !== state.selected) pickedAs.clear();
   state.selected = id;
   state.following = fromLaptop;
   state.card = null;
@@ -1163,7 +1235,7 @@ function select(id: string | null, fromLaptop = false) {
     // The ID feed's shirt and position beside the name (lesson 269); vision's numbers below as before.
     const row = tacticalSheet[id];
     const shirt = row?.name ? [row.number !== undefined ? `#${row.number}` : "", row.position ?? ""].filter(Boolean).join(" · ") : "";
-    const title = shirt ? `${playerName(id)}, ${shirt}` : playerName(id);
+    const title = shirt ? `${playerName(id)}, ${shirt}` : SayPlayer(id);
     $("player-title").textContent = fromLaptop ? `${title} · followed from the big screen` : title;
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
@@ -1173,14 +1245,14 @@ function select(id: string | null, fromLaptop = false) {
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
-    if (fromLaptop) announce(`The big screen is following ${mid(playerName(id))}.`);
+    if (fromLaptop) announce(`The big screen is following ${mid(sayPlayer(id))}.`);
     else if (state.tab === "radar") {
       // Focus moves to the sheet's title, so a screen reader lands on it.
       playerSheet.addEventListener("ionModalDidPresent", () => $("player-title").focus(), { once: true });
       if (sheetUp) requestAnimationFrame(() => $("player-title").focus());
     }
   }
-  $("ask-who").textContent = id ? playerName(id) : "the match";
+  $("ask-who").textContent = id ? sayPlayer(id) : "the match"; // "About the player on the left…"
   renderChips();
 }
 
@@ -1223,21 +1295,27 @@ function showCard(c: PlayerCard) {
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
-  // The card covers t_from..t_to, but nothing was tracked before the feed's first frame: say the
-  // stretch the positions really cover, not the one asked for.
-  const from = Math.max(c.t_from, state.minimap?.frames[0]?.t ?? c.t_from);
-  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(c.t_to)}`;
+  // The card covers t_from..t_to, but its numbers come only from the stretch this track was
+  // followed: say that stretch, never "so far" since kick-off (a keeper's "43 metres run" at 29:46
+  // was one track's few seconds; lesson 294).
+  const tracked = trackSpan(c.player, c.t_to);
+  const from = Math.max(c.t_from, tracked?.[0] ?? state.minimap?.frames[0]?.t ?? c.t_from);
+  const to = tracked?.[1] ?? c.t_to;
+  const whole = from <= (state.minimap?.frames[0]?.t ?? 0) + 1;
+  $("so-far-title").textContent = whole ? "So far" : `Tracked ${clock(from)}–${clock(to)}`;
+  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(to)}`;
   // Always say how much play the card covers, so a short window is never mistaken for a match.
-  const span = Math.max(0, c.t_to - from);
-  $("heat-span").textContent =
-    `Covering ${span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`} of play` +
-    (span < 60 ? ": the heat map means more as the match goes on." : ".");
+  const span = Math.max(0, to - from);
+  const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
+  $("heat-span").textContent = whole
+    ? `Covering ${said} of play` + (span < 60 ? ": the heat map means more as the match goes on." : ".")
+    : `Covering ${said} of play: the stretch the tracker followed this player without losing him behind others.`;
   $("player").dataset.t = String(c.t_to);
   const heat = $<HTMLCanvasElement>("heat");
   const v = fit(heat);
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${mid(playerName(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
+  heat.setAttribute("aria-label", `Heat map of ${mid(sayPlayer(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
   // His average position: the heat map's own shares, weighted over its cells' centres.
   const total = c.heat.cells.reduce((a, b) => a + b, 0);
   if (total > 0) {
@@ -1438,9 +1516,12 @@ $("fan-edit").addEventListener("click", () => {
 
 // --- questions -------------------------------------------------------------------------------
 
+/** The three questions /api/ask answers in code for any tracked player (speed now, top speed,
+ * distance, ninety/agents/companion.py), said with his name or, unnamed, where he is (sayPlayer). */
 function playerQuestions(id: string): string[] {
-  const n = mid(playerName(id));
-  return [`How fast is ${n} running now?`, `What is ${n}'s top speed?`, `How far has ${n} run?`];
+  const n = mid(sayPlayer(id));
+  const top = unnamedTrack(id) ? `What top speed has ${n} reached?` : `What is ${n}'s top speed?`; // never "the pitch's"
+  return [`How fast is ${n} running now?`, top, `How far has ${n} run?`];
 }
 
 /** The match questions the Companion's tools answer with a picture. */
@@ -1581,7 +1662,9 @@ function named(text: string, names?: Record<string, string>): string {
   // Answers and cards name TACTICAL tracks: the ID feed's rows for them, under what a payload says.
   const feed: Record<string, string> = {};
   for (const [id, e] of Object.entries(tacticalSheet)) if (e.name) feed[id] = e.name;
-  return nameIds(text, teams, { ...feed, ...names });
+  for (const [id, label] of pickedAs) feed[id] ??= label; // the unnamed player the fan picked, as picked
+  const out = nameIds(text, teams, { ...feed, ...names });
+  return out.replace(/^the /, "The ");
 }
 
 /** The player-ID feed (match.json `identity`): where names come from, never vision (lesson 269). */
@@ -1669,6 +1752,11 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   else if (a.status === "held") body.textContent = "Still being checked, so not shown yet.";
   else if (a.status === "rejected") body.textContent = "The fact-checker turned that answer down, so there's nothing to show.";
   else body.textContent = named(a.text, a.names) || "I can't answer that one. Try a player's speed, an overload or a team's shape.";
+  // A player's speed or distance covers only the stretch his track was followed: said, never "so far"
+  // since kick-off (lesson 294).
+  const who = a?.status === "verified" && /^(speed|peak_speed|distance_run)$/.test(a.metric ?? "") ? a.text.match(/\b[ha]-t\d+\b/)?.[0] : null;
+  const followed = who ? followedFor(who, a!.t_to ?? at) : null;
+  if (followed) body.textContent += ` That covers the ${followed.said} we followed him, ${clock(followed.from)} to ${clock(followed.to)}.`;
   if (a && a.status === "verified") {
     // The headline: a natural phrase for a picture's kind ("1 v 2 round the ball"), else the figure.
     const v = a.visual ? fromScout(a.visual, a.t_to) : null;
@@ -3150,9 +3238,71 @@ let flowAt = 0;
 let flowBusy = false;
 
 $("pitch-mode").addEventListener("ionChange", (e) => {
-  const flow = (e as CustomEvent<{ value: string }>).detail.value === "flow";
-  if (flow !== state.wind) $("wind-toggle").click();
+  const mode = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((mode === "flow") !== state.wind) $("wind-toggle").click();
+  setTeamHeat(mode === "heat");
 });
+
+// --- the team heat map on the radar: where a club has played so far, from the tracked positions ---
+
+const teamHeatCanvas = $<HTMLCanvasElement>("team-heat");
+let teamHeatAt = -Infinity; // the match time the drawn heat map was counted to
+const HEAT_COLOUR = "#ffd54f"; // design: neither club's colour, as the map is both clubs'
+const TEAM_HEAT_EVERY_S = 2; // design: a heat map over minutes barely moves in two seconds
+
+function setTeamHeat(on: boolean) {
+  state.heat = on;
+  teamHeatCanvas.hidden = !on;
+  $("team-heat-box").hidden = !on;
+  $("map").classList.toggle("faint", on || state.wind);
+  teamHeatAt = -Infinity;
+}
+
+/** Every tracked player's share of player-frames in each cell of the cards' 12 by 8 grid
+ * (ninety/intel/window.py HEAT_NX, HEAT_NY), over every tracked frame up to t: both clubs together.
+ * No club split: the side list (`sides_known`) names event tracks, another id space than the radar's
+ * (lesson 259), and the Player ID feed reaches no statistic but an event's side (AGENTS.md). */
+function teamHeat(t: number) {
+  const nx = 12;
+  const ny = 8;
+  const cells = new Array<number>(nx * ny).fill(0);
+  let n = 0;
+  const add = (x: number, y: number) => {
+    const cx = Math.min(nx - 1, Math.max(0, Math.floor((x / 105) * nx)));
+    const cy = Math.min(ny - 1, Math.max(0, Math.floor((y / 68) * ny)));
+    cells[cy * nx + cx] += 1;
+    n += 1;
+  };
+  if (bundleRadar) {
+    for (const f of bundleRadar.data.frames) if (f.t <= t) for (const p of f.players) add(p.x, p.y);
+  } else if (state.minimap) {
+    for (const f of state.minimap.frames) if (f.t <= t) for (const [, x, y] of f.players) add(x, y);
+  }
+  return { nx, ny, cells: n ? cells.map((c) => c / n) : cells, samples: n };
+}
+
+/** Where the play has mostly been, in a third of the pitch as the radar draws it. */
+function busiestThird(heat: { nx: number; cells: number[] }): string {
+  const thirds = [0, 0, 0];
+  heat.cells.forEach((share, k) => (thirds[Math.min(2, Math.floor(((k % heat.nx) * 3) / heat.nx))] += share));
+  const most = thirds.indexOf(Math.max(...thirds));
+  return `${["left", "middle", "right"][most]} third (${Math.round(thirds[most] * 100)}% of the time)`;
+}
+
+function drawTeamHeat(t: number) {
+  if (!state.heat || Math.abs(t - teamHeatAt) < TEAM_HEAT_EVERY_S) return;
+  teamHeatAt = t;
+  const heat = teamHeat(t);
+  const v = fit(teamHeatCanvas);
+  v.ctx.clearRect(0, 0, v.w, v.h);
+  v.ctx.filter = `blur(${Math.round(v.w / 60)}px)`; // design: a soft field, not a grid of tiles
+  drawHeat(v, heat, HEAT_COLOUR);
+  v.ctx.filter = "none";
+  teamHeatCanvas.dataset.samples = String(heat.samples);
+  $("team-heat-words").textContent = heat.samples
+    ? `Every tracked player, to ${clock(t)}: most often in the ${busiestThird(heat)} of the pitch as drawn. Brighter means more time there.`
+    : "No tracked players yet.";
+}
 $("wind-toggle").addEventListener("click", async () => {
   state.wind = !state.wind;
   $("wind-toggle").setAttribute("aria-pressed", String(state.wind));
@@ -3224,6 +3374,8 @@ function frame(now: number) {
   if (state.radar && !$("live").hidden) {
     if (state.tab === "radar") {
       const s = drawMap(t);
+      $("map-empty").hidden = s.players.length > 0;
+      drawTeamHeat(t);
       const pos: Positions = { ball: s.ball ? [s.ball.x, s.ball.y] : [52.5, 34], players: s.players.map((p) => [p.id, p.x, p.y]) };
       lastPositions = s.ball ? pos : null;
       describeMap(t, s, pos);
