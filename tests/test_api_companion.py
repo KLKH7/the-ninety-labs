@@ -60,7 +60,23 @@ def pair(client, clip="seed7"):
     return r.json()["code"]
 
 
-def ask(client, code, text="How fast is h7 going?", player="h7", t=10.0, headers=None, **extra):
+def companion_of(client) -> comp.Companion:
+    return next(r.endpoint.__self__ for r in client.app.routes if getattr(r, "path", "") == "/api/ask")
+
+
+def show(client, code, t, playing=False):
+    """The big screen's clock, as its laptop would have relayed it: where the room's playhead is."""
+    room = companion_of(client).rooms[code]
+    room.latest["clock"] = {"type": "clock", "t": t, "playing": playing}
+    room.stored_at["clock"] = companion_of(client).clock()
+
+
+def ask(client, code, text="How fast is h7 going?", player="h7", t=10.0, headers=None, screen=True, **extra):
+    """A question at match time t. With `screen`, the big screen is paused at t if it has sent no
+    clock yet, so the question is answered at t; tests of the playhead clamp pass screen=False."""
+    room = companion_of(client).rooms.get(code)
+    if screen and room is not None and "clock" not in room.latest:
+        show(client, code, t)
     body = {"session": code, "player": player, "text": text, "t": t, **extra}
     return client.post("/api/ask", json=body, headers=headers or {})
 
@@ -877,3 +893,98 @@ def test_a_screen_re_claims_its_code_after_a_restart_so_its_phones_rejoin(setup)
     assert client.post("/api/pair", json={"clip": "seed7", "code": "ABCDE0"}).status_code == 422
     for bad in ("short", "abcdef", "ABCDEFG", "ABCDEI"):  # (the pairing limit allows few more posts)
         assert not comp.PAIR_BODY.is_valid({"clip": "seed7", "code": bad}), bad
+
+
+# --- the question's match time: never past the big screen ----------------------------------------
+
+
+def evidence_window(message: dict) -> str:
+    return message["answer"]["evidence"][0].rsplit("_", 1)[1]
+
+
+def test_a_phone_cannot_ask_past_the_big_screens_playhead(setup):
+    # Audit, Oct 27: a phone could send any t and get facts the big screen has not shown yet.
+    client, _, clock = setup
+    code = pair(client)
+    show(client, code, 4.0)  # paused at 4 s
+    assert evidence_window(ask(client, code, t=10.0, screen=False).json()) == "0.00-6.00"  # 4 s + slack
+    assert evidence_window(ask(client, code, t=3.0, screen=False).json()) == "0.00-3.00"  # earlier: as asked
+    show(client, code, 4.0, playing=True)
+    clock.now += 3  # playing: the playhead has run on to 7 s since the laptop's message
+    assert evidence_window(ask(client, code, t=10.0, screen=False).json()) == "0.00-9.00"
+
+
+def test_before_the_big_screen_sends_a_clock_nothing_has_been_shown(setup):
+    client, _, _ = setup
+    code = pair(client)
+    message = ask(client, code, t=10.0, screen=False).json()
+    assert evidence_window(message) == f"0.00-{comp.PLAYHEAD_SLACK_S:.2f}"
+
+
+def test_a_question_past_the_clip_is_answered_at_its_end(setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask.jsonl"))
+    client, _, _ = setup
+    code = pair(client)
+    show(client, code, 500.0)  # the clip is 10 s long
+    ask(client, code, t=400.0, screen=False)
+    record = json.loads((tmp_path / "ask.jsonl").read_text())
+    assert record["t_asked"] == 400.0 and record["t_used"] == 10.0
+
+
+# --- one trace per question -----------------------------------------------------------------------
+
+
+def test_every_question_leaves_one_record_without_the_viewers_words(setup, tmp_path, monkeypatch):
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask.jsonl"))
+    monkeypatch.delenv("APPLICATIONINSIGHTS_CONNECTION_STRING", raising=False)
+    client, _, _ = setup
+    code = pair(client)
+    text = "How fast is h7 going? my secret words"
+    ask(client, code, text=text)
+    raw = (tmp_path / "ask.jsonl").read_text()
+    assert "secret" not in raw and len(raw.splitlines()) == 1
+    record = json.loads(raw)
+    assert record["question"]["len"] == len(text) and len(record["question"]["sha256"]) == 16
+    assert record["source"] == "code" and record["path"] == "player" and record["steps"] == []
+    assert record["live"] is False and record["usd"] == 0
+
+
+def test_a_live_answer_records_each_step_and_a_rejected_draft_records_why(monkeypatch, tmp_path):
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask.jsonl"))
+    client, _, _ = live_setup(monkeypatch, [GOOD], judge_ok=False)
+    ask(client, pair(client), headers={comp.PASSCODE_HEADER: "letmein"})
+    record = json.loads((tmp_path / "ask.jsonl").read_text())
+    assert record["live"] is True and record["source"] == "code" and record["reasons"] == ["overclaims"]
+    assert [s["step"] for s in record["steps"]] == ["answer", "judge"]
+    assert all(s["outcome"] == "ok" and s["ms"] >= 0 for s in record["steps"])
+
+
+def test_a_model_step_past_its_budget_gives_the_code_answer_naming_the_step(monkeypatch, tmp_path):
+    monkeypatch.setenv("NINETY_ASK_TRACE", str(tmp_path / "ask.jsonl"))
+    monkeypatch.setitem(comp.companion.STEP_S, "judge", 0.05)
+    client, app, live = live_setup(monkeypatch, [GOOD])
+
+    async def slow_judge(claim, evidence):
+        await asyncio.sleep(1)
+
+    async def build():
+        models = await FakeLive([GOOD]).build()
+        return comp.LiveModels(models.ask, slow_judge)
+
+    app.live_factory = build
+    message = ask(client, pair(client), headers={comp.PASSCODE_HEADER: "letmein"}).json()
+    assert message["source"] == "code"
+    record = json.loads((tmp_path / "ask.jsonl").read_text())
+    assert record["reasons"] == ["model timeout (judge)"]
+    assert [(s["step"], s["outcome"]) for s in record["steps"]] == [("answer", "ok"), ("judge", "timeout")]
+
+
+def test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit():
+    # docs/eval/ask-model-path.md: each budget is 1.5 x the step's measured p95, rounded up to 0.5 s.
+    from ninety.eval import ask_model_path as amp
+
+    report = json.loads((amp.OUT / "report.json").read_text())
+    assert {k: v["budget_s"] for k, v in report["steps"].items()} == comp.companion.STEP_S
+    budgets = comp.companion.STEP_S
+    assert budgets["plan"] + budgets["answer"] < comp.companion.TIMEOUT_S  # the match path
+    assert budgets["answer"] + budgets["judge"] < comp.companion.TIMEOUT_S  # the player path

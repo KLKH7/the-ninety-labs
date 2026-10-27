@@ -169,3 +169,15 @@ def test_tone_labels_fit_their_events():
             assert e["distance_m"] >= LONG_RANGE_M, row
         if row["kind"] == "false: contradicted tone, gentle pass":
             assert e["ball_speed_kmh"] >= FAST_PASS_KMH, row
+
+
+def test_the_match_instructions_quote_no_claim_they_are_measured_on():
+    # docs/eval/ask-model-path.md: an example lifted from the labelled set would score the example.
+    import json
+    from pathlib import Path
+
+    from ninety.agents.judge import MATCH_INSTRUCTIONS
+
+    rows = Path(__file__).resolve().parents[1] / "docs/eval/ask-model-path/judge.jsonl"
+    texts = {json.loads(line).get("text") for line in rows.read_text().splitlines()} - {None}
+    assert texts and not [t for t in texts if t in MATCH_INSTRUCTIONS]
