@@ -3356,3 +3356,17 @@ short and actionable. This file is public: no research sources, product names or
   marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
 - **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
   marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 282. A dedupe key built from a field that can be empty merges every item without it
+- **What happened:** the big screen's schedule (`web/viewer/src/match.ts`, `broadcastSchedule`) kept
+  one graphic per moment by the key `kind|evidence`. The INSIGHT bar's overloads are read from
+  positions and carry no event, so every overload had the key `insight|` and only the first of the
+  match ever aired. Separately, the schedule took graphics strictly in time order, so a template "a
+  player scores" shot graphic 1.5 s before a goal took the 30 s slot and the goal's fact-checked
+  insight never aired (seed 8080's first goal). Both surfaced only when the lower third was
+  screenshotted on the real bundle; the schedule's test had one evidence id per cue.
+- **Rule:** a key that identifies an item falls back to the item's own id when its parts are empty;
+  and a schedule that must always show a class of item (every goal) chooses that class first, then
+  fills the gaps, rather than hoping time order puts it first.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is_room`
+  has two evidence-less overloads and a shot just before a goal; reverting either fix turns it red.
