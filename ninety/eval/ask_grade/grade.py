@@ -433,39 +433,59 @@ def correct(
 
 
 COMPARE_LEVEL = re.compile(
-    r"\b(?:level|the same number|as many|equal(?:ly)?|both had|each had|neither had more)\b", re.I
+    r"\b(?:level|the same number|as many|equal(?:ly)?|both had|each had|neither had more"
+    r"|neither (?:side|team|club) has|each(?! (?:club|side|team|of)\b))\b",
+    re.I,
 )
 COMPARE_MORE = re.compile(r"\b(?:more|most|ahead|edge)\b", re.I)
 COMPARE_FEWER = re.compile(r"\b(?:fewer|less|behind)\b", re.I)
 
 
-def comparison_direction(text: str, tv: dict, clubs: dict) -> bool:
-    """A detector-bound count (Kian, Oct 27) leads with a club comparison: its lead sentence names
-    the club that truly has more over the footage shown, or says "level" when the truth is level.
-    Truth: the footage count with the count tolerance's edge bands (tolerances.json count_edge_s);
-    where the two clubs' bands overlap the truth cannot order them, so "level" or the club ahead on
-    the central count passes (both clubs and "level" when the central counts are equal)."""
-    v = tv["footage"]
-    c, lo, hi = v["count"], v["count_lo"], v["count_hi"]
-    if lo["home"] > hi["away"]:
-        allowed = {"home"}
-    elif lo["away"] > hi["home"]:
-        allowed = {"away"}
-    elif c["home"] == c["away"]:
-        allowed = {"level", "home", "away"} if lo != hi else {"level"}
-    else:
-        allowed = {"level", "home" if c["home"] > c["away"] else "away"}
+def compared_side(text: str, clubs: dict) -> str | None:
+    """The side an answer's lead sentence says is ahead: "level" for "level", "2 each", "neither side
+    has had"; the club named first with "more"/"most"/"ahead" ("Lisbon have had more shots"), the
+    other club with "fewer"/"less" ("London have had fewer than Lisbon"); None with no comparison."""
     s = lead(text)
     if COMPARE_LEVEL.search(s) and not COMPARE_MORE.search(s):
-        claimed = "level"
+        return "level"
+    named = clubs_in(s, clubs)
+    if not named or not (COMPARE_MORE.search(s) or COMPARE_FEWER.search(s)):
+        return None
+    if COMPARE_FEWER.search(s) and not COMPARE_MORE.search(s):
+        return "away" if named[0] == "home" else "home"
+    return named[0]
+
+
+def comparison_direction(text: str, tv: dict, clubs: dict, tol: dict | None = None) -> bool:
+    """Detector-bound rows (Kian, Oct 27) lead with a club comparison: the lead sentence names the
+    club that truly has more over the footage shown, or says "level" when the truth is level.
+    - A count (passes, shots, on target, corners, out of play): the footage count with the count
+      tolerance's edge bands (tolerances.json count_edge_s). Where the two clubs' bands overlap the
+      truth cannot order them, so "level" or the club ahead on the central count passes (both clubs
+      and "level" when the central counts are equal).
+    - Completion, said as a direction ("X have passed more accurately than Y"): the footage
+      completion of each club; within completion_points of each other, "level" or either club passes.
+    No comparison in the lead fails."""
+    v = tv["footage"]
+    if "completion" in v:
+        h, a = v["completion"].get("home"), v["completion"].get("away")
+        if h is None or a is None:
+            allowed = {"level", "home", "away"}
+        elif abs(h - a) <= (tol or {}).get("completion_points", 10):
+            allowed = {"level", "home", "away"}
+        else:
+            allowed = {"home" if h > a else "away"}
     else:
-        named = clubs_in(s, clubs)
-        if not named or not (COMPARE_MORE.search(s) or COMPARE_FEWER.search(s)):
-            return False  # no comparison in the lead
-        claimed = named[0]
-        if COMPARE_FEWER.search(s) and not COMPARE_MORE.search(s):
-            claimed = "away" if claimed == "home" else "home"  # "London have had fewer than Lisbon"
-    return claimed in allowed
+        c, lo, hi = v["count"], v["count_lo"], v["count_hi"]
+        if lo["home"] > hi["away"]:
+            allowed = {"home"}
+        elif lo["away"] > hi["home"]:
+            allowed = {"away"}
+        elif c["home"] == c["away"]:
+            allowed = {"level", "home", "away"} if lo != hi else {"level"}
+        else:
+            allowed = {"level", "home" if c["home"] > c["away"] else "away"}
+    return compared_side(text, clubs) in allowed
 
 
 def grade(
@@ -503,8 +523,8 @@ def grade(
     false_unknown = None if unmeasured or holds is None else not (holds and not answered)
     flags = [k for k, rx in NATURAL.items() if rx.search(text)]
     compares = (
-        comparison_direction(text, tv, clubs)
-        if it["kind"] == "count" and tv is not None and answered
+        comparison_direction(text, tv, clubs, tol)
+        if it["kind"] in ("count", "pct") and tv is not None and answered
         else None
     )
     checks = {
