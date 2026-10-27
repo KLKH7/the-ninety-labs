@@ -772,7 +772,12 @@ def out_of_play(ctx: Ctx) -> Reply:
         n, (one, many) = got[asked], RESTART_UNITS[asked]
         t = ctx.team_of[ctx.read.club]
         fc = ctx.fact(f"{asked}:{t}", f"ask_{asked}", n[t], many, t, sources=ctx.sources)
-        r.say(f"{ctx.read.club} have had {_plural(n[t], one, many)} of them.", fc)
+        r.say(
+            f"{ctx.read.club} have had {_plural(n[t], one, many)} of them."
+            if n[t]
+            else f"None of them were {possessive(ctx.read.club)}.",
+            fc,
+        )
     r.head = _plural(total, "time")
     return r
 
@@ -1163,7 +1168,11 @@ def _offside_reads(ctx: Ctx) -> Reply:
     if rows:
         r.say(
             f"Here's what it read {span} {SEEN}: {_plural(len(rows), 'pass', 'passes')} where it could call "
-            f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it.",
+            + (
+                f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it."
+                if off
+                else "the line, and none to a player beyond it."
+            ),
             f,
         )
     return r
