@@ -45,10 +45,16 @@
             </div>
           </div>
           <p class="captions" id="captions" hidden></p>
-          <!-- The big screen's lower third (src/lowerthird.ts); the live region #on-air says it. -->
-          <div class="lt" id="lower-third" aria-hidden="true" hidden></div>
-          <!-- The big screen's scorebug (src/scorebug.ts), over the broadcast's own; #score says the clubs. -->
-          <div class="sb" id="scorebug" aria-hidden="true" hidden></div>
+          <!-- The big screen's graphics, top left as a league's (src/scorebug.ts, lowerthird.ts, stats.ts):
+               the scorebug over the broadcast's own, its clock tab, the insight tab and the mini stats card
+               under it. #on-air and #score say them to a screen reader. -->
+          <div class="bugstack" id="bugstack" aria-hidden="true">
+            <div class="sb" id="scorebug" hidden></div>
+            <div class="sb-tab" id="clock-tab" hidden></div>
+            <div class="lt" id="lower-third" hidden></div>
+            <div class="sc" id="stats-card" hidden></div>
+          </div>
+          <div class="sp" id="period-panel" aria-hidden="true" hidden></div>
           <!-- First run only: one pill under the scorebug, pointing at the companion; gone after first use. -->
           <button type="button" class="ask-hint" id="ask-hint" hidden>Ask anything about this match <span aria-hidden="true">→</span></button>
           <!-- The big screen's player controls (src/hud.ts): over the picture, fading while it plays. -->

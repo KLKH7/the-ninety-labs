@@ -72,10 +72,16 @@ function el(tag: string, cls: string, text = ""): HTMLElement {
 }
 
 /** The bug, built once; `tick` sets what it shows each frame. */
-export function setupScorebug(root: HTMLElement, teams: TeamNames, reads: ScoreRead[], secondHalf: number | null,
-  codes?: Partial<Record<Side, string>>) {
+/** The clubs' codes as the bug shows them. */
+export const codesOf = (teams: TeamNames, codes?: Partial<Record<Side, string>>): Record<Side, string> =>
+  ({ home: code(teams, "home", codes), away: code(teams, "away", codes) });
+
+/** `root`: the bug's row, over the baked one; `clockTab`: the clock's tab under it. */
+export function setupScorebug(root: HTMLElement, clockTab: HTMLElement, teams: TeamNames, reads: ScoreRead[],
+  secondHalf: number | null, codes?: Partial<Record<Side, string>>) {
   const digit: Record<Side, { now: HTMLElement; was: HTMLElement; box: HTMLElement }> = {} as never;
-  const plate = el("div", "sb-plate");
+  const score = el("span", "sb-score");
+  const tabs: Record<Side, HTMLElement> = {} as never;
   for (const side of ["home", "away"] as const) {
     const team = el("span", `sb-team sb-${side}`);
     const crest = el("span", "sb-crest");
@@ -86,27 +92,33 @@ export function setupScorebug(root: HTMLElement, teams: TeamNames, reads: ScoreR
     const now = el("span", "sb-now"), was = el("span", "sb-was");
     box.append(was, now);
     digit[side] = { now, was, box };
-    team.append(el("span", "sb-bar"), crest, el("span", "sb-code", code(teams, side, codes)));
-    if (side === "home") plate.append(team, box, el("span", "sb-dash", "–"));
-    else plate.append(box, team);
+    team.append(crest, el("span", "sb-code", code(teams, side, codes)));
+    tabs[side] = team;
+    if (side === "home") score.append(box, el("span", "sb-dash", "–"));
+    else score.append(box);
   }
   const clockEl = el("span", "sb-clock");
+  clockTab.replaceChildren(clockEl);
+  clockTab.hidden = false;
   const sweep = el("div", "sb-sweep");
   const sweepCrest = el("span", "sb-crest");
   sweep.append(sweepCrest, el("span", "sb-goal", "GOAL"));
-  root.replaceChildren(plate, el("span", "sb-rule"), clockEl, sweep);
+  root.replaceChildren(tabs.home, score, tabs.away, sweep);
   root.hidden = false;
   let key = "";
+  let shownScore: BugState["score"] = null;
   return {
-    tick(t: number, ended: boolean, reduceMotion: boolean) {
+    /** What the bug shows at match time t; returns the score it shows, for the stats panel. */
+    tick(t: number, ended: boolean, reduceMotion: boolean): BugState["score"] {
       const s = bugAt(reads, t, secondHalf, ended);
+      shownScore = s.score;
       const time = s.period ?? clock(t);
       const g = reduceMotion ? null : s.goal;
       const k = `${s.score?.home}-${s.score?.away}|${time}|${g?.side}|${g ? g.p.toFixed(3) : ""}`;
-      if (k === key) return;
+      if (k === key) return shownScore;
       key = k;
       clockEl.textContent = time;
-      root.dataset.period = s.period ?? "";
+      clockTab.dataset.period = s.period ?? "";
       for (const side of ["home", "away"] as const) {
         const d = digit[side];
         d.now.textContent = s.score ? String(s.score[side]) : "";
@@ -131,6 +143,7 @@ export function setupScorebug(root: HTMLElement, teams: TeamNames, reads: ScoreR
       } else {
         root.dataset.goal = "";
       }
+      return shownScore;
     },
   };
 }
