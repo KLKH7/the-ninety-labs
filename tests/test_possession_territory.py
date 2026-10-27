@@ -118,7 +118,7 @@ def test_territory_is_the_ball_by_third_along_each_teams_attack():
     assert away["shares"]["final"] == round(100 * 2 / 9)  # away attacks toward x = 0
     assert home["seconds"] == 9 and home["confident"]
     assert cm.code_texts({**home, "club": "London Athletic"}) == [
-        f"The ball was in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}"
+        f"London Athletic have had the ball in their attacking third 67–78% {SHOWN}"
     ]
 
 
@@ -130,11 +130,11 @@ XS = [80, 90, 100, 75, 72, 95, 10, 20, 35.5, None]
 @pytest.mark.parametrize(
     "text, ok",
     [
-        (f"The ball was in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}", True),
-        (f"The ball was in London Athletic's attacking third for 90% {SHOWN}", False),
-        (f"The ball was rarely in London Athletic's attacking third for at least 67% and at most 78% {SHOWN}",
-         False),
-        (f"The ball was in Lisbon Esportes' attacking third for at least 67% and at most 78% {SHOWN}", False),
+        (f"London Athletic have had the ball in their attacking third 67–78% {SHOWN}", True),
+        (f"London Athletic have had the ball in their attacking third 90% {SHOWN}", False),
+        (f"London Athletic have had the ball in their attacking third 67–90% {SHOWN}", False),  # 90 not cited
+        (f"London Athletic have rarely had the ball in their attacking third 67–78% {SHOWN}", False),
+        (f"Lisbon Esportes have had the ball in their attacking third 67–78% {SHOWN}", False),
     ],
 )
 def test_a_territory_sentence_is_said_in_its_own_words(text, ok):
@@ -148,6 +148,28 @@ def test_a_territory_sentence_is_said_in_its_own_words(text, ok):
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
     v = verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names)
     assert v.ok is ok, v.reasons
+
+
+@pytest.mark.parametrize("words, ok", [("about a quarter", True), ("about half", False), (None, True)])
+def test_a_territory_share_is_said_as_the_fraction_its_bounds_make(words, ok):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+    from ninety.intel.teamsheet import Fixture
+
+    assert terr.share_words(22, 28) == "about a quarter" and terr.share_words(67, 78) is None
+    fx = Fixture(7, "OAK", "FEN")
+    rows = terr.territory_rows([frame(k, x) for k, x in enumerate(XS)])
+    fact = {**terr.territory(rows, 1, 1)["home"], "club": "London Athletic", "clubs": fx.clubs,
+            "value": 22, "lo": 22, "hi": 28, "also": [[28, "%"]]}
+    text = cm.code_texts(fact)[0]
+    assert text == ("London Athletic have had the ball in their attacking third about a quarter of the time "
+                    "(22–28%) in the footage we've seen in minute 1."), text
+    if words != "about a quarter":
+        text = text.replace("about a quarter of the time (22–28%)",
+                            f"{words} of the time (22–28%)" if words else "22–28% of the time")
+    names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
+    v = verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names)
+    assert v.ok is ok, (text, v.reasons)
 
 
 @pytest.mark.parametrize(

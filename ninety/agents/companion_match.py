@@ -1093,11 +1093,12 @@ def code_texts(fact: dict) -> list[str]:
                 f"by time on the ball, give or take {ERROR_POINTS} points."]
     if metric == "final_third_share":
         lo, hi = fact["lo"], fact["hi"]
-        # Its bounds, said without "to N" (read as a minute, "to minute N"): the ball near a line counts
-        # for either side.
-        share = f"{lo}%" if lo == hi else f"at least {lo}% and at most {hi}%"
-        return [f"The ball was in {_of(club)} attacking third for {share} of the time in the footage we've "
-                f"seen {span}."]
+        from ninety.intel.ball_share import share_words
+
+        # Its bounds (the ball near a line counts for either side), and the plain fraction they make.
+        share, words = (f"{lo}%" if lo == hi else f"{lo}–{hi}%"), share_words(lo, hi)
+        how = f"{words} of the time ({share})" if words else f"{share} of the time"
+        return [f"{club} have had the ball in their attacking third {how} in the footage we've seen {span}."]
     if metric == "one_two":
         a, b = fact.get("passer_is"), fact.get("receiver_is")
         if not a or not b or a == b:  # one name twice is no one-two a fan would believe

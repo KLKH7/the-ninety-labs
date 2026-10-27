@@ -1272,7 +1272,8 @@ def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
     assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
     a = r.answer
     span = f"from minute {window[0]} to minute {window[1]}"
-    assert "Lisbon Esportes' attacking third" in a.text and "London Athletic's attacking third" in a.text
+    assert all(f"{c} have had the ball in their attacking third" in a.text
+               for c in ("Lisbon Esportes", "London Athletic")), a.text
     # The verdict and both clubs, over the stretch asked, never minutes 1 to now.
     assert a.text.count(span) == 3, a.text
     assert re.match(rf"(?:London Athletic|Lisbon Esportes) have been on top {span}", a.text), a.text
