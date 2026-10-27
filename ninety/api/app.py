@@ -36,6 +36,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
+from ninety.agents import telemetry
 from ninety.api import companion as companion_api
 from ninety.api.companion import Companion
 from ninety.api.speak import Speaker
@@ -167,6 +168,7 @@ def build(key: str | None = None, companion: Companion | None = None, *, passcod
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
+        telemetry.monitor_from_env()  # deployed: spans to App Insights before the first question
         async with mcp.session_manager.run():
             yield
 

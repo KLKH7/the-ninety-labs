@@ -619,9 +619,8 @@ class Companion:
         record_fields = {"clip": room.clip, "live": bool(live), "t_asked": question.t, "t_used": asked_at,
                          "question": telemetry.text_digest(question.text)}
         question = dataclasses.replace(question, t=asked_at)
-        with telemetry.ask_trace(**record_fields) as record:
+        with telemetry.ask_trace(**record_fields) as record:  # sent when the question is answered
             message = await self._answer(question, room, track, live, record)
-        telemetry.finish_ask(record)
         return JSONResponse(message)
 
     async def _answer(self, question: Question, room: Room, track: tracking.Track, live: bool,

@@ -42,7 +42,7 @@ from ninety.agents.contracts import Personalize, Profile, TraceStep
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
 from ninety.agents.ledger import InMemoryLedger, Record, load_match
 from ninety.agents.slice import Ask, Judge, Outcome, run_workflow
-from ninety.intel.windows import agent_rows
+from ninety.intel.windows import agent_rows, territory_shifts, window_facts
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact
 from ninety.personalizer import cues as personal
@@ -121,13 +121,17 @@ async def run(
     ]
     outcome, agents_error, refused, trace = None, None, [], []
     if ask is not None and judge is not None and minute is not None:
-        # The fact-checker knows what the Analyst can read over MCP: the compact detected events.
-        rows = [compact(e) for e in events if e["type"] in AGENT_TYPES]
-        stats = agent_rows(events)  # the window stats, as the MCP server serves them
+        # The fact-checker knows what the Analyst can read over MCP: the compact detected events, and
+        # the window stats, as the MCP server serves them, both up to the end of the minute asked about:
+        # nothing that happened later (lesson 292).
+        now = 60.0 * minute
+        rows = [compact(e) for e in events if e["type"] in AGENT_TYPES and e["t"] < now]
+        stats = agent_rows(events, now=now)
         times = {e["id"]: e["t"] for e in events}
-        fact_records = {r.id: r for r in await ledger.query(kind="fact")}
-        stat_events = {s["id"]: list(fact_records[s["id"]].evidence) for s in stats}
-        times |= {s["id"]: fact_records[s["id"]].t for s in stats}
+        window = window_facts(events, now=now) + territory_shifts(events, now=now)
+        counted = {f.id: f.source_ids for f in window}
+        stat_events = {s["id"]: list(counted[s["id"]]) for s in stats}
+        times |= {s["id"]: max(times[i] for i in stat_events[s["id"]]) for s in stats}
         try:
             outcome = await asyncio.wait_for(
                 run_workflow(

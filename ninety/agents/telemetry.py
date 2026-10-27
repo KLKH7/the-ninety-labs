@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,8 +101,10 @@ def record_fact_check(attempt: int, verdict: str, evidence: list[str], reasons: 
 # --- the phone's Ask ---------------------------------------------------------------------------
 # One record per question (ninety/api/companion.py): who answered (code or model), why a model draft
 # was dropped, the tools, each model step's latency, tokens and cost. The viewer's words never reach
-# it: only their length and a hash. With Azure Monitor configured (APPLICATIONINSIGHTS_CONNECTION_STRING)
-# it is a `ninety.ask` span there; otherwise one JSON line appended to NINETY_ASK_TRACE (default
+# it: only their length and a hash. With Azure Monitor configured (APPLICATIONINSIGHTS_CONNECTION_STRING,
+# set on the deployed API by infra/main.bicep) it is a `ninety.ask` span there, open while the question
+# is answered, so Agent Framework's spans for each Foundry call are its children: one trace per question
+# in Foundry's tracing view. Otherwise one JSON line appended to NINETY_ASK_TRACE (default
 # runs/ask-trace.jsonl) and written to this module's log, which the container's console log keeps.
 
 # gpt-4.1-mini, USD per token: the Azure Retail Prices read on 2026-10-19 (docs/eval/latency-cost.md).
@@ -112,6 +114,23 @@ _ASK: ContextVar[dict | None] = ContextVar("ninety_ask", default=None)
 _monitor = {"configured": False}
 
 
+def monitor_from_env() -> bool:
+    """Send this process's spans to Application Insights when APPLICATIONINSIGHTS_CONNECTION_STRING is
+    set, with Agent Framework's own spans (agents, model calls, tools) on; prompt and reply text off,
+    since viewers type the questions. Once per process; the API calls it at start-up, so even the
+    first question's model calls are exported. Returns whether spans go to Azure Monitor."""
+    if not os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        return False
+    if not _monitor["configured"]:
+        from agent_framework.observability import enable_instrumentation
+        from azure.monitor.opentelemetry import configure_azure_monitor
+
+        configure_azure_monitor()
+        enable_instrumentation(enable_sensitive_data=False)
+        _monitor["configured"] = True
+    return True
+
+
 def text_digest(text: str) -> dict:
     """What a record may keep of viewer text: its length and a hash, never the words."""
     return {"len": len(text), "sha256": hashlib.sha256(text.encode()).hexdigest()[:16]}
@@ -119,15 +138,21 @@ def text_digest(text: str) -> dict:
 
 @contextmanager
 def ask_trace(**fields):
-    """The record of one question, open while it is answered, so each model step can add itself."""
+    """The record of one question, open while it is answered, so each model step can add itself; sent
+    (finish_ask) when the question is answered. With Azure Monitor it is the `ninety.ask` span, current
+    while the question is answered, so the model calls' spans nest under it."""
     record = {"steps": [], **fields}
-    token = _ASK.set(record)
-    t0 = time.perf_counter()
-    try:
-        yield record
-    finally:
-        _ASK.reset(token)
-        record["ms"] = round((time.perf_counter() - t0) * 1000, 1)
+    monitored = monitor_from_env()
+    span_cm = tracer().start_as_current_span("ninety.ask") if monitored else nullcontext()
+    with span_cm as span:
+        token = _ASK.set(record)
+        t0 = time.perf_counter()
+        try:
+            yield record
+        finally:
+            _ASK.reset(token)
+            record["ms"] = round((time.perf_counter() - t0) * 1000, 1)
+            finish_ask(record, span)
 
 
 @contextmanager
@@ -161,8 +186,9 @@ def note_usage(reply) -> None:
             entry[ours] = (entry[ours] or 0) + int(usage[theirs])
 
 
-def finish_ask(record: dict) -> dict:
-    """Totals for the record, then send it: a span with Azure Monitor, else a JSON line."""
+def finish_ask(record: dict, span: trace.Span | None = None) -> dict:
+    """Totals for the record, then send it: onto the open `ninety.ask` span with Azure Monitor, else a
+    JSON line."""
     tokens_in = sum(s["tokens_in"] or 0 for s in record["steps"])
     tokens_out = sum(s["tokens_out"] or 0 for s in record["steps"])
     record.update(
@@ -171,22 +197,12 @@ def finish_ask(record: dict) -> dict:
         tokens_out=tokens_out,
         usd=round(tokens_in * PRICE_IN + tokens_out * PRICE_OUT, 6),
     )
-    if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-        _to_monitor(record)
+    if span is not None:
+        span.set_attributes({f"ninety.ask.{k}": v if isinstance(v, (str, int, float, bool)) else json.dumps(v)
+                             for k, v in record.items() if v is not None})
     else:
         _to_file(record)
     return record
-
-
-def _to_monitor(record: dict) -> None:
-    if not _monitor["configured"]:
-        from azure.monitor.opentelemetry import configure_azure_monitor
-
-        configure_azure_monitor()
-        _monitor["configured"] = True
-    with tracer().start_as_current_span("ninety.ask") as span:
-        span.set_attributes({f"ninety.ask.{k}": v if isinstance(v, (str, int, float, bool)) else json.dumps(v)
-                             for k, v in record.items() if v is not None})
 
 
 def _to_file(record: dict) -> None:

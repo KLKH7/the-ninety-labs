@@ -46,6 +46,7 @@ from jsonschema import validate
 from ninety.agents.contracts import Description
 from ninety.agents.cues import SCHEMA, UNNAMED, _pass_text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate, side_known
+from ninety.intel.teamsheet import possessive
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
 from ninety.speech import spells as spell_lines
@@ -95,8 +96,8 @@ SAY_CAUSE = False
 SHAPE_CHANGE_M = 3
 # What is said about each shape change, by its sign: plain words a listener needs no diagram for.
 SHAPE_SAID = {
-    ("line_height", 1): "{team}'s back line has pushed up {n} m.",
-    ("line_height", -1): "{team}'s back line has dropped back {n} m.",
+    ("line_height", 1): "{teams} back line has pushed up {n} m.",
+    ("line_height", -1): "{teams} back line has dropped back {n} m.",
     ("width", -1): "{team} have narrowed by {n} m.",
     ("width", 1): "{team} have widened by {n} m.",
 }
@@ -318,7 +319,7 @@ def _names(text: str, side_known: bool = True, compact: bool = False,
         said_sides.add(side)
         if m[2]:
             club = (clubs or {}).get(side, side.capitalize())
-            phrase = f"number {m[2]}" if compact or not first else f"{club}'s number {m[2]}"
+            phrase = f"number {m[2]}" if compact or not first else f"{possessive(club)} number {m[2]}"
         elif side_known and not compact:
             if clubs and side in clubs:
                 phrase = f"a {clubs[side]} player" if first else "a team-mate"
@@ -398,7 +399,7 @@ def shape_lines(shape: list[dict]) -> list[tuple[float, str, str]]:
             # The side, only when it was told surely; else "one side" (a shape fact's side comes from
             # the same side decision a detection's does, and is gated the same way).
             who = r["team"] if side_known(r) else "one side"
-            text = SHAPE_SAID[_said(r)].format(team=who, n=abs(r["change"]))
+            text = SHAPE_SAID[_said(r)].format(team=who, teams=possessive(who), n=abs(r["change"]))
             out.append((60.0 * minute, text, r["id"]))
     return out
 
