@@ -327,7 +327,8 @@ FOLLOW_ON = re.compile(
     r"|\b(?:they|them|their|theirs|he|him|his)\b"
     # "it" / "that" only in a question that starts like a follow-up ("why is that?", "who assisted it?"):
     # "will it rain tomorrow?" is no follow-up (#422's probe).
-    r"|^\s*(?:why|really|which|who|how)\b(?:.*\b(?:it|that|this|those|these)\b|\W*$)", re.I)
+    r"|^\s*(?:why|really|which|who|how)\b(?:.*\b(?:it|that|this|those|these|one|biggest|best|most|worst"
+    r"|first|last)\b|\W*$)", re.I)
 
 
 # Typed on a phone, mid-match (lesson 288): text-speak spelled out, and a misspelt word taken as the
@@ -417,7 +418,8 @@ def chat_answer(question: Question, insights, history=(), suggest: bool = True,
     greeting, thanks or a question about the companion: a message code routes to no tool ("other")
     may still be one the model's planner can place ("how many passes?"), and is its to try first."""
     kind = chat_kind(question.text, insights, history)
-    if kind is None or (small_talk_only and kind == "other"):
+    # Out of scope ("will it rain?") is the planner's to try too; an injection or a prediction never is.
+    if kind is None or (small_talk_only and kind in ("other", "outside")):
         return None
     t = 60.0 * _minute_in(question.t, insights)
     asked = [*(h["question"] for h in history), question.text]
