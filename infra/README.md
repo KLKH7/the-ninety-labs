@@ -120,6 +120,13 @@ az deployment group what-if -g ninety-labs -f infra/main.bicep -p environmentNam
 
 CI compiles the Bicep on every pull request and fails on any warning.
 
+A deploy (`azd deploy`, deploy.yml) ships an image only; a role, an env var or a secret added to
+this file reaches Azure only with `azd provision`. Before a demo, compare the deployed app with the
+file: the API identity's roles (`az role assignment list --assignee <id-api principal id> --all`)
+and the container's env names (`az containerapp show -g ninety-labs -n ca-api-<token> --query
+"properties.template.containers[0].env[].name"`). Pass every parameter the deployed app runs with
+(a warm replica is `API_MIN_REPLICAS=1` in the azd environment), or the provision changes it back.
+
 ## The deployed demo (M2)
 
 One container app serves everything a judge opens, from one image ([Dockerfile](../Dockerfile)):

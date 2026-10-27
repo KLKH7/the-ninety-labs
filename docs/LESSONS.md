@@ -3481,3 +3481,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
+
+### NNN. A template that was never provisioned is not the deployed infrastructure
+- **What happened:** on Oct 27, the day of the deadline, an audit found that the deployed API could
+  not reach Foundry. Its identity had only AcrPull and Key Vault Secrets User, and its container had
+  two env vars. `infra/main.bicep` had held `AZURE_CLIENT_ID` and the Speech role since #279, but
+  infra was last provisioned on Oct 23, and every deploy since then (`azd deploy`, deploy.yml) shipped
+  an image only. No template gave the API a Foundry role at all: only CI had one. So every
+  passcode-gated Live question fell back to code, as designed (`_live_models` turns any failure into
+  a code answer, lesson 96), and the viewer saw a correct answer either way. No test told code
+  and model apart on the deployed URL, and no deployed request reached Foundry's tracing.
+- **Rule:** a change to a role, env var or secret is not done until it is provisioned and checked
+  on the deployed resource, not just in the file. For every path with a silent fallback, a smoke
+  test on the deployed URL asserts which path answered. A provision passes every parameter the
+  deployed app runs with (`API_MIN_REPLICAS`), so it changes nothing else.
+- **Check:** `tests/test_live_ask_smoke.py` (fails when a Live answer's `source` is not `model`),
+  run by live-smoke.yml once the repo secret `NINETY_DEMO_PASSCODE` is set; infra/README.md lists
+  the two `az` commands that compare the deployed app with the file. `az deployment group what-if`
+  shows the drift as Create or Modify rows before a provision.

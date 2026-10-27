@@ -25,3 +25,9 @@ jobs:
         env:
           NINETY_LIVE_URL: ${{ vars.NINETY_LIVE_URL }}
           NINETY_REQUIRE_LIVE: "1"
+      # Live mode reaches Foundry (source "model"), one question, about $0.0015. Skipped until the
+      # repo secret NINETY_DEMO_PASSCODE is set; a red run means Live quietly answers from code.
+      - run: uv run pytest -q tests/test_live_ask_smoke.py
+        env:
+          NINETY_LIVE_URL: ${{ vars.NINETY_LIVE_URL }}
+          NINETY_DEMO_PASSCODE: ${{ secrets.NINETY_DEMO_PASSCODE }}
