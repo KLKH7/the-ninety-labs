@@ -2296,7 +2296,7 @@ function renderKeyMoments(plays: DetectedEvent[]) {
   // The match's goals (reconciled with the scorebug), then any detected goal none of them tells.
   const now = viewTime();
   const goals: Moment[] = [
-    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? `${teams[side]} goal` : "Goal", goal: true }; }),
+    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? teams[side] : "", goal: true }; }),
     ...plays
       .filter((e) => e.type === "shot" && e.outcome === "goal" && !toldByGoal(e, now))
       .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })), // a club's colour only on a side told surely
@@ -2314,6 +2314,12 @@ function renderKeyMoments(plays: DetectedEvent[]) {
       const text = document.createElement("span");
       text.className = "text";
       text.textContent = m.text;
+      if (m.goal) {
+        const tag = document.createElement("span");
+        tag.className = "goal-tag";
+        tag.textContent = "GOAL";
+        text.prepend(tag);
+      }
       li.append(min, text);
       return li;
     }),

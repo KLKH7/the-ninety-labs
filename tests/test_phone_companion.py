@@ -1661,7 +1661,8 @@ def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_ever
     assert page.evaluate("[document.body.dataset.mode, document.body.dataset.us]") == ["casual", "away"]
     assert top(page, ".pitch-card") < top(page, "#key-moments")  # the pitch leads, then the moments
     assert page.is_hidden("#live-summary") and page.is_hidden("#momentum")  # fewer numbers
-    assert "Lisbon goal" in page.inner_text("#key-rows")  # the club, in the third person (Kian, Oct 26)
+    goal = page.inner_text("#key-rows .moment-row.goal")
+    assert "GOAL" in goal and "Lisbon" in goal  # the club, in the third person (Kian, Oct 26)
     sides = page.locator(".band .fixture > .side")
     assert sides.nth(1).bounding_box()["x"] < sides.nth(0).bounding_box()["x"]  # your club on the left
     assert not errors
@@ -1671,7 +1672,8 @@ def test_casual_live_leads_with_moments_and_analyst_live_with_the_pitch_and_ever
     page.wait_for_selector("#live-summary:not([hidden])")
     assert top(page, ".pitch-card") < min(top(page, "#live-summary"), top(page, "#key-moments"))
     assert page.locator("#summary-rows .stat-row").count() == page.locator("#stat-rows .stat-row").count() > 4
-    assert "Lisbon goal" in page.inner_text("#key-rows") and "You" not in page.inner_text("#key-rows")
+    assert "Lisbon" in page.inner_text("#key-rows .moment-row.goal")
+    assert "You" not in page.inner_text("#key-rows")
     sides = page.locator(".band .fixture > .side")
     assert sides.nth(0).bounding_box()["x"] < sides.nth(1).bounding_box()["x"]
     assert not errors
@@ -1842,5 +1844,20 @@ def test_a_jump_sets_the_score_and_a_goal_never_counts_through_values_it_never_h
     page.wait_for_timeout(1500)
     seen = page.evaluate("shown")
     assert seen and all(v in ("4", "5") for v in seen) and seen[-1] == "5", seen
+    assert not errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("mode", ["casual", "analyst"])
+def test_every_key_moment_row_has_one_type_and_a_goal_is_told_by_its_label(browser, site, mode):  # noqa: F811
+    """Kian, Oct 27: goal rows were larger than the others. Every row is 17 pt regular; a goal carries a
+    small GOAL label and its club's dot, never a bigger size."""
+    goals = [{"t": 61.3, "team": "home", "event": "e2"}]
+    ctx, page, errors = persona_phone(browser, site, {"club": "LON", "mode": mode, "focus": "moments"}, goals)
+    page.wait_for_selector("#key-rows .moment-row.goal")
+    styles = page.evaluate("""[...document.querySelectorAll('#key-rows .moment-row .text')].map((t) => {
+      const s = getComputedStyle(t); return [s.fontSize, s.fontWeight]; })""")
+    assert styles and all(s == ["17px", "400"] for s in styles), styles
+    assert page.inner_text("#key-rows .moment-row.goal .goal-tag") == "GOAL"
     assert not errors
     ctx.close()
