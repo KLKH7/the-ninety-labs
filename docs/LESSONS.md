@@ -3510,6 +3510,59 @@ short and actionable. This file is public: no research sources, product names or
   from a half's start); a window it was not measured on is "not known", or a measured one is used.
 - **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
 
+### 293. A grader's rule that accepts any match lets a wrong answer through
+- **What happened:** building the Ask grader (`ninety/eval/ask_grade`), the first look at main's
+  answers found three of its own rules passing wrong answers. "Why did London Athletic score?" →
+  "London Athletic scored in minute 12. Just before it, in minute 32, …" passed, because *any* minute
+  near the goal counted, so the build-up from twenty minutes later passed too. "How many shots have
+  London had?" → "There were 8 shots" passed, because the total vision saw happened to equal London's
+  true 8. "Who's been in the attacking third more?" → one Lisbon player's line-breaking pass passed
+  as a territory comparison, because the truth's leader was Lisbon too. Each rule accepted the
+  first thing that matched and never asked whether the rest of the answer was also right, or about
+  the thing asked.
+- **Rule:** a grading rule checks every element the answer states (every minute, every name), and
+  the scope it states: a count that names no club is a total, and a comparison names both sides.
+  Before trusting a grader's numbers, read a sample of its *passes*, not only its failures, and give
+  each rule a test that fails on the wrong answer it must catch.
+- **Check:** `tests/test_ask_grade.py::test_a_why_that_cites_a_later_minute_is_not_the_build_up`,
+  `test_an_unattributed_total_is_not_one_clubs_count`, `test_one_clubs_figure_is_not_a_comparison`
+  and `test_one_clubs_pass_is_not_where_the_ball_has_been`. Each fails with its guard removed
+  (mutation-tested). The rules were tightened, never loosened, and before any baseline was written.
+  The other way round too: the first model-path run's grader read "London Athletic 1 goal, Lisbon
+  Esportes 1 goal" (the scorebug's own words) as no score, because it knew only "1-1" and per-goal
+  minutes, so a right answer failed (`test_the_scorebugs_wording_is_a_score`). Read the failures as
+  well as the passes. And the truth itself: `truth.py` swapped the teams' ends at half time from
+  memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
+  L3), so every second-half territory truth had the clubs reversed until another session compared it
+  with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
+  the engine's code, not in how football usually goes.
+
+
+### 294. A track's numbers are one stretch of tracking, not the player's match
+- **What happened:** on the 8324 preview at 29:46, a goalkeeper's player card said "So far: 43 metres
+  run" under "Heat map, 0:00 to 29:46, covering 29 min 46 s of play". The track had been followed
+  for 38 s: vision loses a player behind others and picks him up again as a new track, so each card
+  covers one track's stretch. The label came from the minimap's first frame, not from the track's.
+  On the same phone, 29% of tracked player-frames have no Player ID feed row. Tapping one titled the
+  sheet "A player" and the chips asked "How fast is a player running now?" (Kian, Oct 26).
+- **Rule:** a card states the span its own track covers: "Tracked 29:08–29:46", covering 38 s,
+  from the track's first frame to the last sighting at or before now, never later. A player the
+  feed does not name is said by where he is ("the player on the left of the pitch"). He gets no
+  club: a track id's letter is the tracker's vote, and a bundle may carry no side list, in which
+  case the old `sideUnsure()` named every club. The first version of this PR fell into exactly that
+  (merge review, Oct 27). Never "a player", and never the tracker's number. The heat map is every
+  tracked player together. A club split by the feed's sides would let the feed reach a statistic
+  other than an event's side, which AGENTS.md forbids; the review caught it. A split by
+  `sides_known` would read event track ids against the radar's (lesson 259). Joining tracks into a player's match by feed name is a different
+  change. AGENTS.md forbids stitching on whether a track is named, so that rule must change first.
+- **Check:** `tests/test_phone_companion.py::test_a_cards_numbers_say_the_stretch_its_track_was_followed_not_the_match`,
+  `test_a_player_the_feed_does_not_name_is_said_by_where_he_is_never_a_player` and
+  `test_tapping_a_player_the_id_feed_names_says_his_name_in_the_card_and_every_chip` and
+  `test_the_pitch_shows_positions_movement_and_one_heat_map_of_every_tracked_player`, run on the 8324 shape (no
+  `sides_known`, the feed's side differing from the track's letter). Each fails when its guard is
+  removed (mutation-tested).
+
+
 ### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
 - **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
   one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
