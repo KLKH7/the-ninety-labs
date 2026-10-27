@@ -1383,3 +1383,24 @@ def test_at_the_footage_s_end_the_full_time_panel_shows_the_match_s_stats_and_th
     assert page.is_visible("#scorebug")  # the bug stays on over the panel
     assert not errors
     page.context.close()
+
+
+def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site):  # noqa: F811
+    """manifest footage.timescale = 1.25 (match s per video s): each image moves the match on 1.25
+    match frames, so the clock, the cues and the phone (one timeline, src/radar.ts) run faster."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def manifest(route):
+        body = route.fetch().json()
+        route.fulfill(json={**body, "footage": {**body["footage"], "timescale": 1.25}})
+
+    ctx.route("**/match/manifest.json", manifest)
+    page = ctx.new_page()
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    for image, (index, frame) in ((10, (0, 1500)), (30, (0, 1500)), (50, (40, 1550))):
+        seek(page, image)
+        want = (frame + (image + 0.5 - index) * 1.25) / FPS
+        got = float(page.get_attribute("#overlay", "data-t"))
+        assert abs(got - want) < 0.011, (image, got, want)
+    ctx.close()

@@ -43,8 +43,10 @@ export function lineAt(lines: CommentaryLine[], t: number, v: number): Commentar
   }
   return null;
 }
-/** Seconds into line `l` at video time `v`, match time `t`. */
-const into = (l: CommentaryLine, t: number, v: number) => (typeof l.v === "number" ? v - l.v : t - l.t);
+/** Seconds of its audio into line `l` at video time `v`, match time `t`: a line timed on the match
+ * clock is heard at real time while the footage may run faster (`timescale`, match s per video s). */
+const into = (l: CommentaryLine, t: number, v: number, timescale = 1) =>
+  typeof l.v === "number" ? v - l.v : (t - l.t) / timescale;
 
 export function readCommentary(body: unknown): Commentary | null {
   const c = body as Partial<Commentary> | null;
@@ -67,6 +69,9 @@ export class AudioTracks {
   private bed: HTMLAudioElement | null;
   private murmur: Murmur | null = null;
   private own = false; // the footage has its own sound track: it is the bed
+
+  /** The footage's baked speed (manifest footage.timescale), set by main.ts. */
+  timescale = 1;
 
   constructor(
     private base: string,
@@ -107,7 +112,7 @@ export class AudioTracks {
       if (on?.audio) this.voice.src = new URL(on.audio, new URL(this.base, location.href)).href;
       this.hush();
       // Not recorded: the browser says it, once, from its start; a seek into its middle only captions it.
-      if (on && !on.audio && playing && !this.muted && into(on, t, v) < LATE_S) {
+      if (on && !on.audio && playing && !this.muted && into(on, t, v, this.timescale) < LATE_S) {
         this.said = on.id;
         speakAloud(on.text, { lang: "en-GB", rate: 1.05 });
       }
@@ -117,7 +122,7 @@ export class AudioTracks {
     if (this.captionEl.textContent !== shown) this.captionEl.textContent = shown;
     this.captionEl.hidden = !shown;
     document.body.dataset.commentary = on ? on.id : "";
-    for (const [el, at] of [[this.bed, v], [on?.audio ? this.voice : null, on ? into(on, t, v) : 0]] as const) {
+    for (const [el, at] of [[this.bed, v], [on?.audio ? this.voice : null, on ? into(on, t, v, this.timescale) : 0]] as const) {
       if (!el) continue;
       el.muted = this.muted;
       if (!playing) {

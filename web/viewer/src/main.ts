@@ -249,7 +249,7 @@ async function start() {
   // STINGER_S (ninety/render/edit.py, edge_stingers), so the player starts just after it, through
   // the source it attached: never a second source set over it (which dropped HLS for the MP4).
   const footage = m.footage.kind === "video" ? videoFootage(b, big ? POSTER_S : 0) : frameFootage(b);
-  const { matchTime, videoTime, segmentOf } = timeline(m);
+  const { matchTime, videoTime, segmentOf, timescale } = timeline(m);
   const teams = teamNames(m.teams);
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
@@ -357,7 +357,7 @@ async function start() {
   // graphics use (lesson 33), so its radar shows the frame on the TV.
   const phone = new PhonePanel(
     m.clip,
-    { time: () => matchTime(footage.time()), playing: () => !footage.paused() },
+    { time: () => matchTime(footage.time()), playing: () => !footage.paused(), rate: timescale },
     new URL(b.base, location.href).pathname,
     big,
   );
@@ -377,6 +377,7 @@ async function start() {
     tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null,
       m.footage.audio === "muxed");
     tracks.described = !!b.audio;
+    tracks.timescale = timescale;
     (window as unknown as { ninetyTracks: AudioTracks }).ninetyTracks = tracks; // read by tests/test_match_mode.py
     // The companion on the computer (src/dock.ts): the phone app, paired to this screen.
     const dock = setupDock(store);

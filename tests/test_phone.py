@@ -626,6 +626,46 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
     assert not errors
 
 
+@pytest.fixture(scope="module")
+def scaled_site(viewer_www, tmp_path_factory):
+    """The same bundle encoded faster than real time: 1.25 match seconds per video second (the
+    demo's baked speed, manifest footage.timescale)."""
+    www = tmp_path_factory.mktemp("scaled") / "www"
+    shutil.copytree(viewer_www, www)
+    manifest = www / "bundle" / "manifest.json"
+    body = json.loads(manifest.read_text())
+    body["footage"]["timescale"] = 1.25
+    manifest.write_text(json.dumps(body))
+    server, thread, mp, url = serve_api(www, allow_truth=True, source="truth")
+    yield url
+    server.should_exit = True
+    thread.join(timeout=10)
+    mp.undo()
+
+
+def test_at_a_baked_speed_the_phone_stays_in_step_through_play_and_seeks(browser, scaled_site):
+    """Footage at 1.25 match s per video s: the big screen's clock runs 1.25 times as fast, and the
+    phone, running the clock on between messages through the same timeline, stays within
+    TOLERANCE_S of it while it plays and after every seek."""
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+
+    def lap() -> float:
+        fresh(viewer)
+        return float(viewer.get_attribute("#overlay", "data-t"))
+
+    phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
+    viewer.click("#play")
+    phone.wait_for_function("window.ninetyPhone.laptop.isPlaying()")
+    viewer.wait_for_timeout(500)
+    assert_in_step(lap, phone)
+    for v in (0.4, 1.6, 0.2):  # video seconds: seeks back and forth while it plays
+        viewer.evaluate(f"""(() => {{ const s = document.querySelector('#scrub'); s.step = 'any';
+            s.value = {v}; s.dispatchEvent(new Event('input')); }})()""")
+        viewer.wait_for_timeout(300)
+        assert_in_step(lap, phone)
+    assert not errors
+
+
 def test_the_phone_stays_in_step_when_the_big_screen_stops_drawing_frames(browser, api_site):
     """Demo audit, Oct 25: the phone sat at "Screen lost" while the big screen played on. The big
     screen's clock went out only from its frame loop, which a hidden tab or a busy machine stalls.

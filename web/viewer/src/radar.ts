@@ -125,21 +125,31 @@ function place(s: Sighting[], f: number, lo: number, hi: number, smooth: boolean
 
 /** Video time against match time across the broadcast's cuts (ninety/match/timeline.py): a bundle
  * without segments is one run of frames from its start. */
-export function timeline(m: Pick<Manifest, "segments" | "t_start" | "fps"> & { footage: { frames: number } }) {
+/** The footage's speed: match seconds per video second (manifest footage.timescale; absent, or not
+ * a positive number, is real time). */
+export const timescaleOf = (m: { footage: { timescale?: number } }): number => {
+  const ts = m.footage.timescale;
+  return typeof ts === "number" && Number.isFinite(ts) && ts > 0 ? ts : 1;
+};
+
+export function timeline(m: Pick<Manifest, "segments" | "t_start" | "fps"> & { footage: { frames: number; timescale?: number } }) {
   const segs: Segment[] = m.segments?.length
     ? m.segments
     : [{ index: 0, frame: Math.round(m.t_start * m.fps), frames: m.footage.frames }];
+  // A segment is `frames` video images from image `index`; each image moves the match on `ts` match
+  // frames (the encode's baked speed), so it spans frames * ts match frames from `frame`.
+  const ts = timescaleOf(m);
   const matchTime = (v: number) => {
     const i = Math.max(0, Math.floor(v * m.fps));
     let seg = segs[0];
     for (const s of segs) if (s.index <= i) seg = s;
-    return (seg.frame + (v * m.fps - seg.index)) / m.fps;
+    return (seg.frame + (v * m.fps - seg.index) * ts) / m.fps;
   };
   const videoTime = (t: number) => {
     const f = t * m.fps;
     for (const s of segs) {
       if (f < s.frame) return s.index / m.fps; // inside a cut: shown where the cut is
-      if (f < s.frame + s.frames) return (s.index + f - s.frame) / m.fps;
+      if (f < s.frame + s.frames * ts) return (s.index + (f - s.frame) / ts) / m.fps;
     }
     const last = segs[segs.length - 1];
     return (last.index + last.frames) / m.fps;
@@ -148,9 +158,9 @@ export function timeline(m: Pick<Manifest, "segments" | "t_start" | "fps"> & { f
   const segmentOf = (k: number): [number, number] => {
     let seg = segs[0];
     for (const s of segs) if (s.frame <= k) seg = s;
-    return [seg.frame, seg.frame + seg.frames];
+    return [seg.frame, seg.frame + seg.frames * ts];
   };
-  return { matchTime, videoTime, segmentOf };
+  return { matchTime, videoTime, segmentOf, timescale: ts };
 }
 
 export class RadarModel {

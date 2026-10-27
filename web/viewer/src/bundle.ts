@@ -63,6 +63,9 @@ export interface Manifest {
   footage: {
     kind: "video" | "frames"; src: string; pattern?: string; frames: number;
     mp4?: string; hls?: string; poster?: string; audio?: "muxed" | null;
+    /** Match seconds per video second, when the encode plays the match faster than real time (the
+     * demo's 1.25×, baked in by the renderer); absent is 1. Segments count video images. */
+    timescale?: number;
   };
   detector: string | null;
   detections: { source: string; frames: number };
