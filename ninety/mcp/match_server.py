@@ -51,7 +51,7 @@ TOOLS = ("list_events", "match_info")  # the published Analyst may call only the
 INSIGHT_TOOLS = (
     "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
     "referee", "lineup", "possession", "territory", "shots", "passing", "physical",
-    "halves", "key_moments", "score", "set_pieces",
+    "halves", "key_moments", "score", "set_pieces", "player_stats", "player_rank",
 )
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape, re_perceive and the insight tools are served but not in
@@ -316,6 +316,25 @@ def shots(match: str, minute_from: int, minute_to: int, club: str | None = None)
     return _insight(match, "shots", minute_from, minute_to, club)
 
 
+def player_stats(match: str, minute: float, player: str | None = None, club: str | None = None) -> dict:
+    """Each player's stats up to a match minute (fractional: 33:50 is 33.83), named by the Player ID
+    feed (say "Player ID feed"): tracked seconds and coverage, distance while tracked (m) and top
+    speed (km/h, a 3 s mean), and detected passes, shots, goals and involvements. `player` is a name,
+    a shirt number or a unique part of a name; `club` a club's name; neither gives all 22. Running
+    is while the video tracked him in the footage shown, never a match total. A figure not measured
+    well enough is null with its reason under `withheld`: do not state it."""
+    return _insight(match, "player_stats", minute, player, club)
+
+
+def player_rank(match: str, club: str | None, metric: str, minute: float) -> dict:
+    """Players ranked by one metric up to a match minute, most first: best (a stated formula of
+    involvements, completed passes, shots and goals, never a model's view), involvement, passes,
+    passes_completed, shots, goals, fastest or distance. Fastest and distance rank only players
+    tracked at least half the footage shown. A ranking not measured well enough has `withheld` set
+    and no facts: say it is not available."""
+    return _insight(match, "player_rank", club, metric, minute)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -402,6 +421,7 @@ def make_server() -> FastMCP:
     insight = (
         line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
         possession, territory, shots, passing, physical, halves, key_moments, score, set_pieces,
+        player_stats, player_rank,
     )
     for tool in (list_events, match_info, team_shape, re_perceive, *insight):
         server.add_tool(tool)

@@ -513,7 +513,9 @@ def _build(feed_path, feed: bool):
                                feed=identity.load(feed_path) if feed else None)
 
 
-NAMES = {"identity", "identity_tracks", "identity_broadcast", "lineup", "lineup_tactical"}
+# player_stats: the per-player stats the feed's names key (AGENTS.md, Kian's decision of Oct 26), a
+# key of its own, so every other fact, person and stat is still the same with the feed and without.
+NAMES = {"identity", "identity_tracks", "identity_broadcast", "lineup", "lineup_tactical", "player_stats"}
 
 
 def test_every_fact_person_and_stat_is_the_same_with_the_feed_and_without(feed_path):
@@ -578,6 +580,8 @@ ALLOWED = {
     "ninety/eval/identity_eval.py",  # grades the names it gives
     "ninety/eval/scorer_feed.py",  # grades the shooters step 9 would name
     "ninety/e2e.py",  # copies the line-up rows and the disclosure into match.json
+    "ninety/intel/player_stats.py",  # per-player stats keyed by its names (Kian's decision, Oct 26)
+    "ninety/eval/player_stats_eval.py",  # grades those stats against the truth
 }
 TOKENS = re.compile(r"\b(identity_feed|identity_tracks|identity_broadcast|identity_source|lineup_tactical"
                     r"|identity_mod|load_for)\b"
