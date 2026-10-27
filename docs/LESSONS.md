@@ -3463,3 +3463,22 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_question_code_does_not_route_is_answered_by_the_models_plan`,
   `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
   on main 14a33133, and each fails when its guard is removed.
+
+### 293. A grader's rule that accepts any match lets a wrong answer through
+- **What happened:** building the Ask grader (`ninety/eval/ask_grade`), the first look at main's
+  answers found three of its own rules passing wrong answers. "Why did London Athletic score?" →
+  "London Athletic scored in minute 12. Just before it, in minute 32, …" passed, because *any* minute
+  near the goal counted, so the build-up from twenty minutes later passed too. "How many shots have
+  London had?" → "There were 8 shots" passed, because the total vision saw happened to equal London's
+  true 8. "Who's been in the attacking third more?" → one Lisbon player's line-breaking pass passed
+  as a territory comparison, because the truth's leader was Lisbon too. Each rule accepted the
+  first thing that matched and never asked whether the rest of the answer was also right, or about
+  the thing asked.
+- **Rule:** a grading rule checks every element the answer states (every minute, every name), and
+  the scope it states: a count that names no club is a total, and a comparison names both sides.
+  Before trusting a grader's numbers, read a sample of its *passes*, not only its failures, and give
+  each rule a test that fails on the wrong answer it must catch.
+- **Check:** `tests/test_ask_grade.py::test_a_why_that_cites_a_later_minute_is_not_the_build_up`,
+  `test_an_unattributed_total_is_not_one_clubs_count`, `test_one_clubs_figure_is_not_a_comparison`
+  and `test_one_clubs_pass_is_not_where_the_ball_has_been`. Each fails with its guard removed
+  (mutation-tested). The rules were tightened, never loosened, and before any baseline was written.

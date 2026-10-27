@@ -1,0 +1,1403 @@
+{
+ "meta": {
+  "preregistered": "3766efbe",
+  "coverage": "20.9% (1129 s of 5400 in the 46 clip windows)",
+  "truth_table": "ninety/eval/ask_grade/truth-8324.json.gz",
+  "sources": {
+   "main": "382996dc, cached insights (runs/demo-8324-final/final-work/insights.json; rebuilding them with main's code gives the same file and the same grades)",
+   "#423": "9c2cd777 (claude/dreamy-bassi-380a97), the same cached insights (it changes no insight)",
+   "#424": "ff0a17eb (claude/fervent-mcclintock-303a76), insights rebuilt with its code from runs/demo-8324-final (--rebuild-insights; its possession is computed into them)"
+  }
+ },
+ "summaries": {
+  "main": {
+   "n": 1554,
+   "pass": 0.024,
+   "chips": {
+    "n": 162,
+    "pass": 0.012,
+    "answered": 0.636
+   },
+   "intents": {
+    "score": {
+     "n": 66,
+     "pass": 0.212,
+     "answered": 0.864,
+     "relevant": 0.864,
+     "correct": 0.682,
+     "consistent": 0.636,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.864,
+     "natural": 0.485
+    },
+    "scorers": {
+     "n": 66,
+     "pass": 0.197,
+     "answered": 0.742,
+     "relevant": 0.818,
+     "correct": 0.439,
+     "consistent": 0.556,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.742,
+     "natural": 0.667
+    },
+    "winning": {
+     "n": 66,
+     "pass": 0.136,
+     "answered": 0.455,
+     "relevant": 0.455,
+     "correct": 0.348,
+     "consistent": 0.333,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.455,
+     "natural": 0.758
+    },
+    "on_top": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.167,
+     "relevant": 0.333,
+     "correct": 0.0,
+     "consistent": 0.444,
+     "coverage_honest": null,
+     "no_future": 0.875,
+     "no_false_unknown": 0.167,
+     "natural": 0.833
+    },
+    "possession": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.75,
+     "correct": 0.0,
+     "consistent": 0.8,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "passes": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.889,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "completion": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.288,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.667,
+     "coverage_honest": 0.0,
+     "no_future": 0.788,
+     "no_false_unknown": 0.288,
+     "natural": 0.97
+    },
+    "shots": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.859,
+     "relevant": 0.859,
+     "correct": 0.0,
+     "consistent": 0.846,
+     "coverage_honest": 0.0,
+     "no_future": 0.295,
+     "no_false_unknown": 0.859,
+     "natural": 0.962
+    },
+    "on_target": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.652,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.537,
+     "coverage_honest": 0.0,
+     "no_future": 0.409,
+     "no_false_unknown": 0.652,
+     "natural": 0.985
+    },
+    "territory": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.875,
+     "relevant": 0.792,
+     "correct": 0.667,
+     "consistent": 0.792,
+     "coverage_honest": 0.905,
+     "no_future": 0.278,
+     "no_false_unknown": 0.875,
+     "natural": 0.125
+    },
+    "corners": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.923,
+     "relevant": 0.923,
+     "correct": 0.0,
+     "consistent": 0.923,
+     "coverage_honest": 0.0,
+     "no_future": 0.231,
+     "no_false_unknown": 0.923,
+     "natural": 1.0
+    },
+    "out_of_play": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.455,
+     "relevant": 0.455,
+     "correct": 0.0,
+     "consistent": 0.6,
+     "coverage_honest": 0.0,
+     "no_future": 0.621,
+     "no_false_unknown": 0.455,
+     "natural": 1.0
+    },
+    "momentum": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.273,
+     "relevant": 0.818,
+     "correct": 0.0,
+     "consistent": 0.509,
+     "coverage_honest": null,
+     "no_future": 0.818,
+     "no_false_unknown": 0.273,
+     "natural": 0.727
+    },
+    "best_home": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.153,
+     "relevant": 0.611,
+     "correct": 0.0,
+     "consistent": 0.803,
+     "coverage_honest": 0.0,
+     "no_future": 0.861,
+     "no_false_unknown": 0.153,
+     "natural": 0.847
+    },
+    "best_away": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.264,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.742,
+     "coverage_honest": 0.0,
+     "no_future": 0.861,
+     "no_false_unknown": 0.264,
+     "natural": 0.736
+    },
+    "best_overall": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.333,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.708,
+     "coverage_honest": 0.0,
+     "no_future": 0.778,
+     "no_false_unknown": 0.333,
+     "natural": 0.667
+    },
+    "fastest": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.75,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "distance": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.917,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "why_goal": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.833,
+     "relevant": 0.208,
+     "correct": 0.0,
+     "consistent": 0.924,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.833,
+     "natural": 0.931
+    },
+    "key_moments": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.923,
+     "relevant": 0.923,
+     "correct": 0.218,
+     "consistent": 0.859,
+     "coverage_honest": null,
+     "no_future": 0.846,
+     "no_false_unknown": 0.923,
+     "natural": 0.372
+    },
+    "unmeasured": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 1.0,
+     "relevant": 0.848,
+     "correct": 0.0,
+     "consistent": 0.3,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": null,
+     "natural": 0.848
+    },
+    "tactics_chip": {
+     "n": 78,
+     "pass": 0.026,
+     "answered": 0.641,
+     "relevant": null,
+     "correct": null,
+     "consistent": 0.41,
+     "coverage_honest": null,
+     "no_future": 0.628,
+     "no_false_unknown": null,
+     "natural": 0.718
+    }
+   }
+  },
+  "#423": {
+   "n": 1554,
+   "pass": 0.039,
+   "chips": {
+    "n": 162,
+    "pass": 0.012,
+    "answered": 0.611
+   },
+   "intents": {
+    "score": {
+     "n": 66,
+     "pass": 0.273,
+     "answered": 0.894,
+     "relevant": 0.909,
+     "correct": 0.833,
+     "consistent": 0.818,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.894,
+     "natural": 0.424
+    },
+    "scorers": {
+     "n": 66,
+     "pass": 0.197,
+     "answered": 0.742,
+     "relevant": 0.818,
+     "correct": 0.439,
+     "consistent": 0.556,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.742,
+     "natural": 0.667
+    },
+    "winning": {
+     "n": 66,
+     "pass": 0.409,
+     "answered": 0.818,
+     "relevant": 0.818,
+     "correct": 0.409,
+     "consistent": 0.778,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.818,
+     "natural": 1.0
+    },
+    "on_top": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.5,
+     "relevant": 0.75,
+     "correct": 0.0,
+     "consistent": 0.5,
+     "coverage_honest": null,
+     "no_future": 0.583,
+     "no_false_unknown": 0.5,
+     "natural": 0.5
+    },
+    "possession": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.667,
+     "correct": 0.0,
+     "consistent": 0.7,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "passes": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.889,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "completion": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.273,
+     "relevant": 0.136,
+     "correct": 0.0,
+     "consistent": 0.667,
+     "coverage_honest": 0.0,
+     "no_future": 0.773,
+     "no_false_unknown": 0.273,
+     "natural": 1.0
+    },
+    "shots": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.846,
+     "relevant": 0.846,
+     "correct": 0.0,
+     "consistent": 0.833,
+     "coverage_honest": 0.0,
+     "no_future": 0.295,
+     "no_false_unknown": 0.846,
+     "natural": 0.962
+    },
+    "on_target": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.652,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.537,
+     "coverage_honest": 0.0,
+     "no_future": 0.394,
+     "no_false_unknown": 0.652,
+     "natural": 0.985
+    },
+    "territory": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.833,
+     "relevant": 0.833,
+     "correct": 0.694,
+     "consistent": 0.833,
+     "coverage_honest": 1.0,
+     "no_future": 0.306,
+     "no_false_unknown": 0.833,
+     "natural": 0.111
+    },
+    "corners": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 1.0,
+     "relevant": 1.0,
+     "correct": 0.0,
+     "consistent": 1.0,
+     "coverage_honest": 0.0,
+     "no_future": 0.167,
+     "no_false_unknown": 1.0,
+     "natural": 1.0
+    },
+    "out_of_play": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.455,
+     "relevant": 0.455,
+     "correct": 0.0,
+     "consistent": 0.6,
+     "coverage_honest": 0.0,
+     "no_future": 0.621,
+     "no_false_unknown": 0.455,
+     "natural": 1.0
+    },
+    "momentum": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.182,
+     "relevant": 0.455,
+     "correct": 0.0,
+     "consistent": 0.473,
+     "coverage_honest": null,
+     "no_future": 0.864,
+     "no_false_unknown": 0.182,
+     "natural": 0.758
+    },
+    "best_home": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.818,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "best_away": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.818,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 0.444
+    },
+    "best_overall": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.917,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 0.389
+    },
+    "fastest": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.75,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "distance": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.917,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "why_goal": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.833,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.985,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.833,
+     "natural": 1.0
+    },
+    "key_moments": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.923,
+     "relevant": 0.923,
+     "correct": 0.218,
+     "consistent": 0.859,
+     "coverage_honest": null,
+     "no_future": 0.846,
+     "no_false_unknown": 0.923,
+     "natural": 0.372
+    },
+    "unmeasured": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 1.0,
+     "relevant": 0.773,
+     "correct": 0.0,
+     "consistent": 0.317,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": null,
+     "natural": 0.773
+    },
+    "tactics_chip": {
+     "n": 78,
+     "pass": 0.026,
+     "answered": 0.667,
+     "relevant": null,
+     "correct": null,
+     "consistent": 0.308,
+     "coverage_honest": null,
+     "no_future": 0.551,
+     "no_false_unknown": null,
+     "natural": 0.628
+    }
+   }
+  },
+  "#424": {
+   "n": 1554,
+   "pass": 0.054,
+   "chips": {
+    "n": 162,
+    "pass": 0.012,
+    "answered": 0.673
+   },
+   "intents": {
+    "score": {
+     "n": 66,
+     "pass": 0.636,
+     "answered": 0.864,
+     "relevant": 0.864,
+     "correct": 0.682,
+     "consistent": 0.636,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.864,
+     "natural": 1.0
+    },
+    "scorers": {
+     "n": 66,
+     "pass": 0.258,
+     "answered": 0.742,
+     "relevant": 0.818,
+     "correct": 0.439,
+     "consistent": 0.556,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.742,
+     "natural": 1.0
+    },
+    "winning": {
+     "n": 66,
+     "pass": 0.348,
+     "answered": 0.455,
+     "relevant": 0.455,
+     "correct": 0.348,
+     "consistent": 0.333,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.455,
+     "natural": 1.0
+    },
+    "on_top": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.667,
+     "relevant": 0.667,
+     "correct": 0.194,
+     "consistent": 0.389,
+     "coverage_honest": null,
+     "no_future": 0.444,
+     "no_false_unknown": 0.667,
+     "natural": 0.583
+    },
+    "possession": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.75,
+     "relevant": 0.75,
+     "correct": 0.625,
+     "consistent": 0.8,
+     "coverage_honest": 0.0,
+     "no_future": 0.375,
+     "no_false_unknown": 0.75,
+     "natural": 1.0
+    },
+    "passes": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.889,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "completion": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.288,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.667,
+     "coverage_honest": 0.0,
+     "no_future": 0.788,
+     "no_false_unknown": 0.288,
+     "natural": 0.97
+    },
+    "shots": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.859,
+     "relevant": 0.859,
+     "correct": 0.0,
+     "consistent": 0.846,
+     "coverage_honest": 0.0,
+     "no_future": 0.295,
+     "no_false_unknown": 0.859,
+     "natural": 0.987
+    },
+    "on_target": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.652,
+     "relevant": 0.0,
+     "correct": 0.0,
+     "consistent": 0.537,
+     "coverage_honest": 0.0,
+     "no_future": 0.409,
+     "no_false_unknown": 0.652,
+     "natural": 0.985
+    },
+    "territory": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.875,
+     "relevant": 0.792,
+     "correct": 0.667,
+     "consistent": 0.792,
+     "coverage_honest": 0.905,
+     "no_future": 0.278,
+     "no_false_unknown": 0.875,
+     "natural": 0.125
+    },
+    "corners": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.923,
+     "relevant": 0.923,
+     "correct": 0.0,
+     "consistent": 0.923,
+     "coverage_honest": 0.0,
+     "no_future": 0.231,
+     "no_false_unknown": 0.923,
+     "natural": 1.0
+    },
+    "out_of_play": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.455,
+     "relevant": 0.455,
+     "correct": 0.0,
+     "consistent": 0.6,
+     "coverage_honest": 0.0,
+     "no_future": 0.621,
+     "no_false_unknown": 0.455,
+     "natural": 1.0
+    },
+    "momentum": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 0.455,
+     "relevant": 0.818,
+     "correct": 0.197,
+     "consistent": 0.418,
+     "coverage_honest": null,
+     "no_future": 0.636,
+     "no_false_unknown": 0.455,
+     "natural": 0.545
+    },
+    "best_home": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.153,
+     "relevant": 0.611,
+     "correct": 0.0,
+     "consistent": 0.803,
+     "coverage_honest": 0.0,
+     "no_future": 0.861,
+     "no_false_unknown": 0.153,
+     "natural": 0.847
+    },
+    "best_away": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.264,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.742,
+     "coverage_honest": 0.0,
+     "no_future": 0.861,
+     "no_false_unknown": 0.264,
+     "natural": 0.736
+    },
+    "best_overall": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.333,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.708,
+     "coverage_honest": 0.0,
+     "no_future": 0.778,
+     "no_false_unknown": 0.333,
+     "natural": 0.667
+    },
+    "fastest": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.833,
+     "correct": 0.0,
+     "consistent": 0.75,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "distance": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.0,
+     "relevant": 0.917,
+     "correct": 0.0,
+     "consistent": 0.917,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.0,
+     "natural": 1.0
+    },
+    "why_goal": {
+     "n": 72,
+     "pass": 0.0,
+     "answered": 0.833,
+     "relevant": 0.208,
+     "correct": 0.0,
+     "consistent": 0.924,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": 0.833,
+     "natural": 0.931
+    },
+    "key_moments": {
+     "n": 78,
+     "pass": 0.0,
+     "answered": 0.923,
+     "relevant": 0.923,
+     "correct": 0.218,
+     "consistent": 0.859,
+     "coverage_honest": null,
+     "no_future": 0.846,
+     "no_false_unknown": 0.923,
+     "natural": 0.385
+    },
+    "unmeasured": {
+     "n": 66,
+     "pass": 0.0,
+     "answered": 1.0,
+     "relevant": 0.848,
+     "correct": 0.0,
+     "consistent": 0.3,
+     "coverage_honest": null,
+     "no_future": 1.0,
+     "no_false_unknown": null,
+     "natural": 0.848
+    },
+    "tactics_chip": {
+     "n": 78,
+     "pass": 0.026,
+     "answered": 0.641,
+     "relevant": null,
+     "correct": null,
+     "consistent": 0.41,
+     "coverage_honest": null,
+     "no_future": 0.628,
+     "no_false_unknown": null,
+     "natural": 0.718
+    }
+   }
+  }
+ },
+ "worst": {
+  "main": [
+   {
+    "intent": "territory",
+    "t": 2030.0,
+    "q": "who's been camped in the other half",
+    "text": "a London Athletic player has taken the most opponents out of the game with passes from minute 20 to minute 34: 4 opponents in 1 pass.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "lowercase start",
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "territory",
+    "t": 5100.0,
+    "q": "who's been in the attacking third more",
+    "text": "a Lisbon Esportes player has taken the most opponents out of the game with passes from minute 72 to minute 86: 4 opponents in 1 pass.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "lowercase start",
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 600.0,
+    "q": "who's played well for Lisbon",
+    "text": "Nothing from minute 1 to minute 11 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 2030.0,
+    "q": "who's Lisbon's most involved player",
+    "text": "Nothing from minute 20 to minute 34 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 2700.0,
+    "q": "who's played well for London",
+    "text": "Nothing from minute 32 to minute 46 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 3600.0,
+    "q": "who's London's most involved player",
+    "text": "Nothing from minute 47 to minute 61 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_overall",
+    "t": 600.0,
+    "q": "motm?",
+    "text": "I can't answer that one from this match's tracking. Try one of these:",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 600.0,
+    "q": "who's passing better",
+    "text": "London Athletic made 4 passes with no open teammate further forward from minute 1 to minute 11.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "passing accuracy so far",
+    "text": "London Athletic made 4 passes with no open teammate further forward from minute 1 to minute 34.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "how good is the passing",
+    "text": "I can answer about goal build-up, players, style, referee and the team sheets.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   }
+  ],
+  "#423": [
+   {
+    "intent": "on_target",
+    "t": 600.0,
+    "q": "who's had more shots on target",
+    "text": "In minute 4, a London Athletic player shot from 73 m out, where the posts were 6 degrees apart. London Athletic had 1 shot from minute 1 to minute 11, and took 0 shots from inside the penalty area.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "territory",
+    "t": 2700.0,
+    "q": "who's been in the attacking third more",
+    "text": "I can't single out the most dangerous player from minute 1 to minute 46: tracking missed too many players, or too many are level, to rank them surely. What I can say: a Lisbon Esportes player scored for Lisbon Esportes in minute 35.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 600.0,
+    "q": "who's played well for Lisbon",
+    "text": "Nothing from minute 1 to minute 11 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 2030.0,
+    "q": "who's Lisbon's most involved player",
+    "text": "Nothing from minute 20 to minute 34 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 2700.0,
+    "q": "who's played well for London",
+    "text": "Nothing from minute 32 to minute 46 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 3600.0,
+    "q": "who's London's most involved player",
+    "text": "Nothing from minute 47 to minute 61 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_overall",
+    "t": 600.0,
+    "q": "motm?",
+    "text": "I can't answer that one from this match's tracking. Try one of these:",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 600.0,
+    "q": "who's passing better",
+    "text": "The match tracking can't tell that: it sees where the players and the ball are, not names, money, the crowd or the weather. Try one of these:",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "passing accuracy so far",
+    "text": "There were 8 long passes from minute 1 to minute 34. There were 5 passes intercepted from minute 1 to minute 34.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "how good is the passing",
+    "text": "There were 5 long passes from minute 20 to minute 34. There were 3 passes intercepted from minute 20 to minute 34.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   }
+  ],
+  "#424": [
+   {
+    "intent": "territory",
+    "t": 2030.0,
+    "q": "who's been camped in the other half",
+    "text": "a London Athletic player has taken the most opponents out of the game with passes from minute 20 to minute 34: 4 opponents in 1 pass.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "lowercase start",
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "territory",
+    "t": 5100.0,
+    "q": "who's been in the attacking third more",
+    "text": "a Lisbon Esportes player has taken the most opponents out of the game with passes from minute 72 to minute 86: 4 opponents in 1 pass.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": false,
+     "consistent": false
+    },
+    "flags": [
+     "lowercase start",
+     "a <club> player"
+    ],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 600.0,
+    "q": "who's played well for Lisbon",
+    "text": "Nothing from minute 1 to minute 11 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_away",
+    "t": 2030.0,
+    "q": "who's Lisbon's most involved player",
+    "text": "Nothing from minute 20 to minute 34 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 2700.0,
+    "q": "who's played well for London",
+    "text": "Nothing from minute 32 to minute 46 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_home",
+    "t": 3600.0,
+    "q": "who's London's most involved player",
+    "text": "Nothing from minute 47 to minute 61 answers that yet.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "best_overall",
+    "t": 600.0,
+    "q": "motm?",
+    "text": "I can't answer that one from this match's tracking. Try one of these:",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 600.0,
+    "q": "who's passing better",
+    "text": "London Athletic made 4 passes with no open teammate further forward from minute 1 to minute 11.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "passing accuracy so far",
+    "text": "London Athletic made 4 passes with no open teammate further forward from minute 1 to minute 34.",
+    "checks": {
+     "answered": true,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": false,
+     "no_future": false,
+     "no_false_unknown": true,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   },
+   {
+    "intent": "completion",
+    "t": 2030.0,
+    "q": "how good is the passing",
+    "text": "I can answer about goal build-up, players, style, referee and the team sheets.",
+    "checks": {
+     "answered": false,
+     "relevant": false,
+     "correct": false,
+     "coverage_honest": null,
+     "no_future": true,
+     "no_false_unknown": false,
+     "natural": true,
+     "consistent": false
+    },
+    "flags": [],
+    "chip": null
+   }
+  ]
+ }
+}

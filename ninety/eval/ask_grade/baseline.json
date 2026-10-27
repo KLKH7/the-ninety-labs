@@ -1,0 +1,95 @@
+{
+ "about": "The Ask's code path on tests/fixtures/ask-grade-insights-8324.json.gz, graded by ninety/eval/ask_grade. tests/test_ask_grade.py fails if any rate here goes down; raise it with `uv run python -m ninety.eval.ask_grade.run baseline` when a change raises it.",
+ "pass": 0.024,
+ "chips_answered": 0.636,
+ "intents": {
+  "score": {
+   "pass": 0.212,
+   "correct": 0.682
+  },
+  "scorers": {
+   "pass": 0.197,
+   "correct": 0.439
+  },
+  "winning": {
+   "pass": 0.136,
+   "correct": 0.348
+  },
+  "on_top": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "possession": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "passes": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "completion": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "shots": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "on_target": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "territory": {
+   "pass": 0.0,
+   "correct": 0.667
+  },
+  "corners": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "out_of_play": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "momentum": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "best_home": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "best_away": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "best_overall": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "fastest": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "distance": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "why_goal": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "key_moments": {
+   "pass": 0.0,
+   "correct": 0.218
+  },
+  "unmeasured": {
+   "pass": 0.0,
+   "correct": 0.0
+  },
+  "tactics_chip": {
+   "pass": 0.026,
+   "correct": null
+  }
+ }
+}
