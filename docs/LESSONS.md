@@ -3412,3 +3412,17 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs` (both clubs, both phrasings),
   `test_no_pass_of_the_beaten_club_answers_it_even_alone` and
   `test_the_model_citing_the_beaten_clubs_pass_is_refused`; all fail on main 5cd7d524.
+
+### 284. A value the instructions never ruled out is not malformed
+- **What happened:** live on seed 8324, asked at half-time "Who had more of the ball in the first
+  half?", the published Companion planned `possession` from minute 0 to 45. `companion_match._calls`
+  accepts only windows starting at minute 1, so it replaced this one with the default (minutes 31 to
+  45) and said nothing. The model then saw no first-half facts and said unanswerable. The
+  instructions never say minutes start at 1, so minute 0 was a fair way to say "from kick-off". Its
+  docstring said a bad call is "never repaired", while the code silently substituted a window.
+- **Rule:** when code rejects a model's argument, check first that the instructions ruled the value
+  out. Read a value with one clear meaning in football (minute 0 is kick-off, in minute 1) as that
+  meaning; fall back only for values with none, and say in the docstring what the fallback is.
+- **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
+  with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
+
