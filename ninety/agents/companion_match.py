@@ -1522,7 +1522,9 @@ def _ordinal(n: int) -> str:
     return {1: "one goal", 2: "two goals", 3: "three goals", 4: "four goals"}.get(n, f"{n} goals")
 
 
-WHY_RESULT = re.compile(r"^\s*(?:so )?why\b.*\b(?:winning|losing|lose|lost|concede\w*|conced\w*|can'?t score"
+WHY_RESULT = re.compile(r"^\s*(?:so )?why\b.*\b(?:winning(?! (?:the|it|possession))|(?:losing|lose|lost)"
+                        r"(?! (?:the ball|it|possession|out|the duel|their))|concede\w*|conced\w*"
+                        r"|can'?t score"
                         r"|cannot score|not scoring"
                         r"|struggl\w*|behind|ahead|in front|on top|better|worse|leading|level)\b", re.I)
 
@@ -1555,6 +1557,18 @@ def why_result(question: Question, insights, minute: int, known: dict) -> list[t
     for g in wanted[-2:]:
         said.extend(goal_story(g, insights, known)[:2])
     return said or None
+
+
+CODE_FIRST_TOOLS = ("score", "goal_build_up", "key_moments")
+
+
+def code_first(question: Question, insights, history=()) -> bool:
+    """A question code answers better than one chosen sentence: the score, a goal's story, a recap,
+    or why a club is winning or losing (lesson 288)."""
+    if WHY_RESULT.search(question.text):
+        return True
+    calls = code_calls(question, insights, history)
+    return bool(calls) and calls[0]["name"] in CODE_FIRST_TOOLS
 
 
 def code_match_answer(
@@ -1868,7 +1882,11 @@ async def answer_match(
         overview = _overview(question, calls, insights, known, history, True)
         if overview is not None:
             return MatchResult(overview, "code", tuple(calls))
-    if ask is None:
+    if ask is None or code_first(question, insights, history):
+        # The score, a goal's story, "why are they winning?" and a recap are answered by code in Live
+        # mode too: told whole (the goal asked for, the shot, the build-up), where the model chooses a
+        # single sentence and on the red-team set chose the scorebug for "explain the last goal"
+        # (lesson 288). No model call is spent.
         a, calls = code_match_answer(question, insights, history=history)
         return MatchResult(a, "code", tuple(calls))
     minute = _minute_in(question.t, insights)
@@ -1880,6 +1898,10 @@ async def answer_match(
         except (json.JSONDecodeError, TypeError, AttributeError, ValueError, RecursionError):
             raise _NotTheFormat("plan") from None
         calls = _calls(plan, insights, minute)
+        stretch = minutes_of(question.text, minute)
+        if stretch is not None:  # the stretch the fan named, whatever minutes the plan chose
+            calls = [c if c["name"] == "goal_build_up"
+                     else {**c, "minute_from": stretch[0], "minute_to": stretch[1]} for c in calls]
         if not calls:
             return calls, None, None, []
         facts = run_tools(insights, calls)

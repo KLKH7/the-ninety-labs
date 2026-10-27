@@ -29,6 +29,9 @@ from ninety.agents.contracts import Question
 ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS = ROOT / "docs" / "eval" / "ask-redteam-questions.json"
 MINUTES = (5, 30, 45, 70, 89)
+CONCURRENT = 3  # questions in flight at once: under the deployment's tokens a minute (8 got 429s)
+RETRIES = 6
+EVAL_TIMEOUT_S = 90.0  # a throttled call waits its turn here; the phone's own timeout is not this
 
 # What each expectation allows (docs/eval/ask-redteam-plan.md).
 EXPECTS = ("chat", "offtopic", "inject", "answer", "refuse", "either")
@@ -159,7 +162,8 @@ async def ask_one(q: dict, minute: int, insights, history: list[dict], ask=None,
                   referee_ask=None) -> dict:
     question = Question("redteam", None, q["text"], t_of(minute))
     started = time.perf_counter()
-    r = await cm.answer_match(question, insights, ask, judge, history=history, referee_ask=referee_ask)
+    r = await cm.answer_match(question, insights, ask, judge, history=history, referee_ask=referee_ask,
+                              **({"timeout": EVAL_TIMEOUT_S} if ask is not None else {}))
     took = time.perf_counter() - started
     a = r.answer
     return {
@@ -175,9 +179,10 @@ async def run(questions: list[dict], insights, minutes=MINUTES, ask=None, judge=
               pick=None) -> list[dict]:
     """Every question at every minute (or `pick(q)` minutes), a follow-up after its first question."""
     by_id = {q["id"]: q for q in questions}
-    out = []
-    for q in questions:
-        for minute in (pick(q) if pick else minutes):
+    gate = asyncio.Semaphore(CONCURRENT if ask is not None else 1)
+
+    async def one(q, minute):
+        async with gate:
             history, prev = [], None
             if q.get("after"):
                 prev = await ask_one(by_id[q["after"]], minute, insights, [], ask, judge, referee_ask)
@@ -185,8 +190,9 @@ async def run(questions: list[dict], insights, minutes=MINUTES, ask=None, judge=
                             "calls": prev["tools"]}]
             rec = await ask_one(q, minute, insights, history, ask, judge, referee_ask)
             rec["fails"] = check(q, minute, rec, insights, prev)
-            out.append(rec)
-    return out
+            return rec
+
+    return list(await asyncio.gather(*(one(q, m) for q in questions for m in (pick(q) if pick else minutes))))
 
 
 def summary(records: list[dict], questions: list[dict]) -> dict:
@@ -230,13 +236,24 @@ async def judged(records: list[dict], insights, client) -> list[dict]:
                           "answer": r["answer"]["text"]})
         async with sem:
             try:
-                reply = (await agent.run(msg)).text
+                reply = (await patient(lambda: agent.run(msg))).text
                 r["judge"] = cm.first_object(reply)
             except Exception as exc:  # noqa: BLE001  a grading failure is logged, never fatal
                 r["judge"] = {"error": type(exc).__name__}
         return r
 
     return list(await asyncio.gather(*(one(r) for r in records)))
+
+
+async def patient(call):
+    """A model call retried with backoff when the deployment is throttling (HTTP 429)."""
+    for k in range(RETRIES):
+        try:
+            return await call()
+        except Exception as exc:  # noqa: BLE001  the SDK's rate-limit error has no stable type
+            if "429" not in str(exc) and "rate" not in str(exc).lower() or k == RETRIES - 1:
+                raise
+            await asyncio.sleep(2.0 * 2**k)
 
 
 def main() -> None:
@@ -251,13 +268,13 @@ def main() -> None:
     args = ap.parse_args()
     insights = load_insights(args.insights)
     questions = load_questions()
+    order = {q["id"]: i for i, q in enumerate(questions)}  # the full set's order: a subset keeps its minutes
     if args.only:
         keep = set(args.only.split(","))
         keep |= {q["after"] for q in questions if q["id"] in keep and q.get("after")}
         questions = [q for q in questions if q["id"] in keep]
     pick = None
     if args.one_minute:
-        order = {q["id"]: i for i, q in enumerate(questions)}
         pick = lambda q: [MINUTES[order[q["id"]] % len(MINUTES)]]  # noqa: E731
 
     async def go():
@@ -286,13 +303,13 @@ def main() -> None:
                 ref_ag = referee_agent(writer_client)
 
                 async def ask(prompt):
-                    return (await match_ag.run(prompt)).text
+                    return (await patient(lambda: match_ag.run(prompt))).text
 
                 async def judge(claim, evidence):
-                    return await run_judge(judge_ag, claim, evidence)
+                    return await patient(lambda: run_judge(judge_ag, claim, evidence))
 
                 async def referee_ask(prompt):
-                    return (await ref_ag.run(prompt)).text
+                    return (await patient(lambda: ref_ag.run(prompt))).text
         try:
             records = await run(questions, insights, ask=ask, judge=judge, referee_ask=referee_ask, pick=pick)
             if args.judge:
