@@ -22,7 +22,9 @@ from dataclasses import dataclass
 
 HALF_MIN = 45  # Law 7: two halves of 45 minutes (GROUNDING L3, I23)
 FULL_MIN = 90
-NOW_MIN = 15  # "now", "lately", "right now": the last 15 minutes (the stats' window, GROUNDING S4), within the half
+NOW_MIN = (
+    15  # "now", "lately", "right now": the last 15 minutes (the stats' window, GROUNDING S4), within the half
+)
 
 
 @dataclass(frozen=True)
@@ -43,45 +45,172 @@ class Intent:
 
 
 INTENTS = (
-    Intent("score", ("score",), r"\b(?:goals?|score\w*|level)\b", "so_far", "compare",
-           "What's the score?", "the scorebug's reading"),
-    Intent("scorers", ("score",), r"\b(?:scor\w*|goals?)\b", "so_far", "list",
-           "Who scored?", "each goal vision spotted, by minute and club"),
-    Intent("winning", ("score",), r"\b(?:winning|ahead|level|goals?|lead\w*)\b", "so_far", "compare",
-           "Who's winning?", "the scorebug's reading"),
-    Intent("on_top", ("on_top", "territory"), r"\b(?:on top|attacking third|of the ball|close to call)\b",
-           "now", "compare", "Who's on top?", "both clubs' share of the ball in their attacking third"),
-    Intent("momentum", ("on_top", "territory"), r"\b(?:on top|attacking third|of the ball|close to call)\b",
-           "now", "compare", None, "both clubs' share of the ball in their attacking third"),
-    Intent("possession", ("possession",), r"\b(?:possession|of the ball|on the ball|\d+%)", "so_far",
-           "compare", "Who has had more of the ball?", "the longest run of passing"),
-    Intent("passes", ("passing",), r"\bpass(?:es)?\b", "so_far", "count", "How many passes?",
-           "the passes vision counted"),
-    Intent("completion", ("passing",), r"\b(?:found a teammate|complet\w*|\d+%)", "so_far", "compare",
-           "Who's passing better?", "the passes vision counted"),
-    Intent("shots", ("shots",), r"\bshots?\b", "so_far", "count", "How many shots?",
-           "the shots vision spotted"),
-    Intent("on_target", ("shots", "score"), r"\bon target\b", "so_far", "count", "How many shots on target?",
-           "the goals and saves vision spotted"),
-    Intent("territory", ("territory",), r"\b(?:attacking third|territory)\b", "so_far", "compare",
-           "Where has the ball been?", "both clubs' share of the ball in their attacking third"),
-    Intent("corners", ("set_pieces",), r"\bcorners?\b", "so_far", "count", "How many corners?",
-           "the restarts vision spotted"),
-    Intent("out_of_play", ("set_pieces",), r"\b(?:out of play|throw-ins?|goal kicks?|restarts?)\b", "so_far",
-           "count", "How often has the ball gone out?", "the restarts vision spotted"),
-    Intent("best", ("players",), r"\b(?:best|most involved|passes|opponents|name)\b", "so_far", "rank",
-           "Who has been the best player?", "the players whose passes took most opponents out"),
+    Intent(
+        "score",
+        ("score",),
+        r"\b(?:goals?|score\w*|level)\b",
+        "so_far",
+        "compare",
+        "What's the score?",
+        "the scorebug's reading",
+    ),
+    Intent(
+        "scorers",
+        ("score",),
+        r"\b(?:scor\w*|goals?)\b",
+        "so_far",
+        "list",
+        "Who scored?",
+        "each goal vision spotted, by minute and club",
+    ),
+    Intent(
+        "winning",
+        ("score",),
+        r"\b(?:winning|ahead|level|goals?|lead\w*)\b",
+        "so_far",
+        "compare",
+        "Who's winning?",
+        "the scorebug's reading",
+    ),
+    Intent(
+        "on_top",
+        ("on_top", "territory"),
+        r"\b(?:on top|attacking third|of the ball|close to call)\b",
+        "now",
+        "compare",
+        "Who's on top?",
+        "both clubs' share of the ball in their attacking third",
+    ),
+    Intent(
+        "momentum",
+        ("on_top", "territory"),
+        r"\b(?:on top|attacking third|of the ball|close to call)\b",
+        "now",
+        "compare",
+        None,
+        "both clubs' share of the ball in their attacking third",
+    ),
+    Intent(
+        "possession",
+        ("possession",),
+        r"\b(?:possession|of the ball|on the ball|\d+%)",
+        "so_far",
+        "compare",
+        "Who has had more of the ball?",
+        "the longest run of passing",
+    ),
+    Intent(
+        "passes",
+        ("passing",),
+        r"\bpass(?:es)?\b",
+        "so_far",
+        "count",
+        "How many passes?",
+        "the passes vision counted",
+    ),
+    Intent(
+        "completion",
+        ("passing",),
+        r"\b(?:found a teammate|complet\w*|\d+%)",
+        "so_far",
+        "compare",
+        "Who's passing better?",
+        "the passes vision counted",
+    ),
+    Intent(
+        "shots", ("shots",), r"\bshots?\b", "so_far", "count", "How many shots?", "the shots vision spotted"
+    ),
+    Intent(
+        "on_target",
+        ("shots", "score"),
+        r"\bon target\b",
+        "so_far",
+        "count",
+        "How many shots on target?",
+        "the goals and saves vision spotted",
+    ),
+    Intent(
+        "territory",
+        ("territory",),
+        r"\b(?:attacking third|territory)\b",
+        "so_far",
+        "compare",
+        "Where has the ball been?",
+        "both clubs' share of the ball in their attacking third",
+    ),
+    Intent(
+        "corners",
+        ("set_pieces",),
+        r"\bcorners?\b",
+        "so_far",
+        "count",
+        "How many corners?",
+        "the restarts vision spotted",
+    ),
+    Intent(
+        "out_of_play",
+        ("set_pieces",),
+        r"\b(?:out of play|throw-ins?|goal kicks?|restarts?)\b",
+        "so_far",
+        "count",
+        "How often has the ball gone out?",
+        "the restarts vision spotted",
+    ),
+    Intent(
+        "best",
+        ("players",),
+        r"\b(?:best|most involved|passes|opponents|name)\b",
+        "so_far",
+        "rank",
+        "Who has been the best player?",
+        "the players whose passes took most opponents out",
+    ),
     Intent("player", ("players", "physical"), r".", "so_far", "rank", None, "what vision tracked of him"),
-    Intent("fastest", ("physical",), r"\b(?:fast\w*|speed|km/h|pace)\b", "so_far", "rank",
-           "Who is the fastest on the pitch?", "each club's distance covered"),
-    Intent("distance", ("physical",), r"\b(?:covered|run|ran|distance|km)\b", "so_far", "rank",
-           "Who has run the furthest?", "each club's distance covered"),
-    Intent("why_goal", ("goal_build_up",), r"\b(?:pass\w*|move|build-?up|shot|scored|goal)\b", "so_far",
-           "story", "Why did {club} score?", "the goal's minute and club"),
-    Intent("key_moments", ("key_moments",), r"\b(?:goals?|scor\w*|shots?|minute|moments?)\b", "so_far",
-           "list", "What have I missed?", "the goals so far"),
-    Intent("unmeasured", ("referee",), r"\b(?:doesn't|does not|can't|cannot)\b", "so_far", "unmeasured",
-           None, "the closest thing vision does measure"),
+    Intent(
+        "fastest",
+        ("physical",),
+        r"\b(?:fast\w*|speed|km/h|pace)\b",
+        "so_far",
+        "rank",
+        "Who is the fastest on the pitch?",
+        "each club's distance covered",
+    ),
+    Intent(
+        "distance",
+        ("physical",),
+        r"\b(?:covered|run|ran|distance|km)\b",
+        "so_far",
+        "rank",
+        "Who has run the furthest?",
+        "each club's distance covered",
+    ),
+    Intent(
+        "why_goal",
+        ("goal_build_up",),
+        r"\b(?:pass\w*|move|build-?up|shot|scored|goal)\b",
+        "so_far",
+        "story",
+        "Why did {club} score?",
+        "the goal's minute and club",
+    ),
+    Intent(
+        "key_moments",
+        ("key_moments",),
+        r"\b(?:goals?|scor\w*|shots?|minute|moments?)\b",
+        "so_far",
+        "list",
+        "What have I missed?",
+        "the goals so far",
+    ),
+    Intent(
+        "unmeasured",
+        ("referee",),
+        r"\b(?:doesn't|does not|can't|cannot)\b",
+        "so_far",
+        "unmeasured",
+        None,
+        "the closest thing vision does measure",
+    ),
     Intent("tactics", (), r".", "now", "story", "How are {club} playing?", "the old tool routing"),
     Intent("small_talk", (), r".", "so_far", "unmeasured", None, "suggested questions"),
 )
@@ -92,23 +221,116 @@ BY_ID = {i.id: i for i in INTENTS}
 # Normalisation (#423, lesson 288): text-speak spelled out, a misspelt football word corrected.
 # ---------------------------------------------------------------------------------------------
 
-SHORTHAND = {"r": "are", "u": "you", "ur": "your", "hw": "how", "wat": "what", "wot": "what", "wats": "what's",
-             "pls": "please", "plz": "please", "mins": "minutes", "min": "minutes", "whos": "who's",
-             "whats": "what's", "hows": "how's", "1st": "first", "2nd": "second", "3rd": "third",
-             "4th": "fourth", "v": "vs", "gk": "keeper", "tho": "though", "2day": "today", "cuz": "because",
-             "bc": "because", "possesion": "possession", "posession": "possession", "shtos": "shots",
-             "pases": "passes", "cornres": "corners", "targt": "target", "londons": "London's",
-             "lisbons": "Lisbon's", "motm": "man of the match"}
+SHORTHAND = {
+    "r": "are",
+    "u": "you",
+    "ur": "your",
+    "hw": "how",
+    "wat": "what",
+    "wot": "what",
+    "wats": "what's",
+    "pls": "please",
+    "plz": "please",
+    "mins": "minutes",
+    "min": "minutes",
+    "whos": "who's",
+    "whats": "what's",
+    "hows": "how's",
+    "1st": "first",
+    "2nd": "second",
+    "3rd": "third",
+    "4th": "fourth",
+    "v": "vs",
+    "gk": "keeper",
+    "tho": "though",
+    "2day": "today",
+    "cuz": "because",
+    "bc": "because",
+    "possesion": "possession",
+    "posession": "possession",
+    "shtos": "shots",
+    "pases": "passes",
+    "cornres": "corners",
+    "targt": "target",
+    "londons": "London's",
+    "lisbons": "Lisbon's",
+    "motm": "man of the match",
+}
 # Design: the words the table's patterns need, a close match only (difflib ratio 0.85), never a word
 # under five letters (a short typo has too many neighbours).
 FOOTBALL_WORDS = (
-    "winning", "losing", "playing", "possession", "player", "players", "scored", "score", "scorer",
-    "scoring", "pressing", "shape", "shots", "goals", "passes", "passing", "keeper", "goalkeeper",
-    "offside", "corners", "territory", "counter", "overloads", "assist", "assisted", "minutes", "equaliser",
-    "striker", "winger", "defending", "attacking", "happened", "dangerous", "chances", "compact", "width",
-    "tactics", "formation", "lineup", "referee", "penalty", "highlights", "recap", "missed", "target",
-    "fastest", "quickest", "furthest", "farthest", "distance", "covered", "momentum", "dominating",
-    "completion", "accuracy", "throw-ins", "stoppages", "restarts", "involved", "standout",
+    "winning",
+    "losing",
+    "playing",
+    "possession",
+    "player",
+    "players",
+    "scored",
+    "score",
+    "scorer",
+    "scoring",
+    "pressing",
+    "shape",
+    "shots",
+    "goals",
+    "passes",
+    "passing",
+    "keeper",
+    "goalkeeper",
+    "offside",
+    "corners",
+    "territory",
+    "counter",
+    "overloads",
+    "assist",
+    "assisted",
+    "minutes",
+    "equaliser",
+    "striker",
+    "winger",
+    "defending",
+    "attacking",
+    "happened",
+    "dangerous",
+    "chances",
+    "compact",
+    "width",
+    "tactics",
+    "formation",
+    "lineup",
+    "referee",
+    "penalty",
+    "highlights",
+    "recap",
+    "missed",
+    "target",
+    "fastest",
+    "quickest",
+    "furthest",
+    "farthest",
+    "distance",
+    "covered",
+    "momentum",
+    "dominating",
+    "completion",
+    "accuracy",
+    "throw-ins",
+    "stoppages",
+    "restarts",
+    "involved",
+    "standout",
+    "press",
+    "shot",
+    "best",
+    "goal",
+    "ball",
+    "half",
+    "first",
+    "second",
+    "third",
+    "last",
+    "doing",
+    "possesion",
 )
 FIX_CUTOFF = 0.85
 FIX_LEN = 5
@@ -126,7 +348,7 @@ def normalise(text: str, words: set[str] = frozenset()) -> str:
             continue
         close = difflib.get_close_matches(low, known, n=1, cutoff=FIX_CUTOFF)
         if close:
-            out = out[: m.start()] + close[0] + out[m.end():]
+            out = out[: m.start()] + close[0] + out[m.end() :]
     return out
 
 
@@ -148,8 +370,11 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     "unmeasured": tuple((p, 8) for _, p in UNMEASURED_TOPICS),
     "why_goal": (
         (r"\b(?:why|how) did\b.{0,40}\b(?:score|get (?:their|the|that) goal|goal)", 9),
-        (r"\b(?:talk|walk) me through\b|\bbreak down\b|\bexplain\b|\bbuild-?up\b|\bled to\b"
-         r"|\bhow did .{0,30}goal happen|\bgoal (?:happen|come about)|\bset (?:it|the goal) up\b", 6),
+        (
+            r"\b(?:talk|walk) me through\b|\bbreak down\b|\bexplain\b|\bbuild-?up\b|\bled to\b"
+            r"|\bhow did .{0,30}goal happen|\bgoal (?:happen|come about)|\bset (?:it|the goal) up\b",
+            6,
+        ),
         (r"\bassist\w*", 6),
     ),
     "scorers": (
@@ -168,55 +393,116 @@ PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     "on_target": ((r"\bon target\b|\bkeeper (?:been )?tested\b|\btested the keeper\b", 9),),
     "shots": ((r"\bshots?\b|\battempts?\b|\befforts?\b|\bshoot\w*|\bshot\b", 6),),
     "completion": (
-        (r"\bcomplet\w*|\baccura\w*|\bfinding a team-?mate|\bpassing better\b|\bgood is the passing"
-         r"|% of passes|\bsuccess\w* pass", 8),
+        (
+            r"\bcomplet\w*|\baccura\w*|\bfinding a team-?mate|\bpassing better\b|\bgood is the passing"
+            r"|% of passes|\bsuccess\w* pass",
+            8,
+        ),
     ),
     "passes": ((r"\bpass(?:es)?\b(?! (?:options?|network|broke|cut))", 5), (r"\bpass count\b", 3)),
     "corners": ((r"\bcorners?\b", 8), (r"\bset[- ]pieces?\b", 7)),
     "out_of_play": (
-        (r"\bout of play\b|\b(?:gone|go|went|going) out\b|\bthrow[- ]?ins?\b|\bgoal[- ]kicks?\b"
-         r"|\bstoppages?\b|\brestarts?\b|\bdead ball\b", 8),
+        (
+            r"\bout of play\b|\b(?:gone|go|went|going) out\b|\bthrow[- ]?ins?\b|\bgoal[- ]kicks?\b"
+            r"|\bstoppages?\b|\brestarts?\b|\bdead ball\b",
+            8,
+        ),
     ),
     "possession": (
-        (r"\bpossession\b|\b(?:more|most|much) of the ball\b|\bball more\b|\bkeep(?:ing|s)? the ball\b"
-         r"|\bwho(?:'s| has| have)? (?:had )?the ball\b", 8),
+        (
+            r"\bpossession\b|\b(?:more|most|much) of the ball\b|\bball more\b|\bkeep(?:ing|s)? the ball\b"
+            r"|\bwho(?:'s| has| have)? (?:had )?the ball\b",
+            8,
+        ),
     ),
     "territory": (
-        (r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play)|\bball (?:has )?been\b"
-         r"|\bcamped\b|\bpinned\b|\battacking third\b|\bball spending\b|\bin the other half\b", 8),
+        (
+            r"\bterritor\w*|\bwhere(?:'s| has| is| have)? (?:the ball|most of the play)|\bball (?:has )?been\b"
+            r"|\bcamped\b|\bpinned\b|\battacking third\b|\bball spending\b|\bin the other half\b",
+            8,
+        ),
     ),
     "momentum": ((r"\bmomentum\b|\bfinished stronger\b|\bpushing\b", 7),),
     "on_top": (
-        (r"\bon top\b|\bdominat\w*|\bin control\b|\bupper hand\b|\bbetter (?:side|team)\b|\bplaying better\b"
-         r"|\bfront foot\b|\bbossing\b|\bbeen better\b|\bbetter (?:right now|at the moment|recently|lately)"
-         r"|\bhad the better\b|\bwhich (?:team|side) is better\b", 6),
+        (
+            r"\bon top\b|\bdominat\w*|\bin control\b|\bupper hand\b|\bbetter (?:side|team)\b|\bplaying better\b"
+            r"|\bfront foot\b|\bbossing\b|\bbeen better\b|\bbetter (?:right now|at the moment|recently|lately)"
+            r"|\bhad the better\b|\bwhich (?:team|side) is better\b",
+            6,
+        ),
     ),
-    "fastest": ((r"\bfastest\b|\bquickest\b|\btop speed\b|\bhighest speed\b|\bmost pace\b|\bhow fast\b"
-                 r"|\bsprinted fastest\b|\bquickest\b", 9),),
-    "distance": ((r"\b(?:run|ran|running) the (?:furthest|farthest|most)\b|\bcovered the most\b|\bmost "
-                  r"(?:ground|distance|running|kilomet\w*|km)\b|\bdistance\b|\bhardest working\b|\bfurthest\b"
-                  r"|\bfarthest\b|\bkilomet\w*|\bkm\b|\bhow far\b|\bmost running\b|\bdone the most running\b",
-                  9),),
+    "fastest": (
+        (
+            r"\bfastest\b|\bquickest\b|\btop speed\b|\bhighest speed\b|\bmost pace\b|\bhow fast\b"
+            r"|\bsprinted fastest\b|\bquickest\b",
+            9,
+        ),
+    ),
+    "distance": (
+        (
+            r"\b(?:run|ran|running) the (?:furthest|farthest|most)\b|\bcovered the most\b|\bmost "
+            r"(?:ground|distance|running|kilomet\w*|km)\b|\bdistance\b|\bhardest working\b|\bfurthest\b"
+            r"|\bfarthest\b|\bkilomet\w*|\bkm\b|\bhow far\b|\bmost running\b|\bdone the most running\b",
+            9,
+        ),
+    ),
     "best": (
-        (r"\bbest\b|\bstar (?:man|player|of the show)\b|\bstand-?out\b|\bman of the match\b|\bkey man\b"
-         r"|\bmost (?:involved|dangerous|influential)\b|\bplayed well\b|\bplaying (?:well|best)\b"
-         r"|\bunreal\b|\bbeen brilliant\b", 7),
+        (
+            r"\bbest\b|\bstar (?:man|player|of the show)\b|\bstand-?out\b|\bman of the match\b|\bkey man\b"
+            r"|\bmost (?:involved|dangerous|influential)\b|\bplayed well\b|\bplaying (?:well|best)\b"
+            r"|\bunreal\b|\bbeen brilliant\b",
+            7,
+        ),
     ),
     "key_moments": (
-        (r"\bkey moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b|\bwhat(?:'s| has)? happened"
-         r"|\brecap\b|\banything (?:big )?happen\w*|\btimeline\b|\bwhat did i miss\b", 8),
+        (
+            r"\bkey moments?\b|\bhighlights?\b|\b(?:have|did) i miss\w*|\bcatch me up\b|\bwhat(?:'s| has)? happened"
+            r"|\brecap\b|\banything (?:big )?happen\w*|\btimeline\b|\bwhat did i miss\b",
+            8,
+        ),
     ),
 }
 # The tactics questions the old tool routing answers well (companion_match.TOOL_WORDS): a shape, an
 # overload, a pass that cut through, a style. Each match weighs 5.
-TACTICS_TOOLS = ("style", "counter_press", "overloads", "line_breaks", "pass_options", "team_shape",
-                 "halves", "passing", "lineup")
-TIE_BREAK = ("unmeasured", "why_goal", "scorers", "on_target", "completion", "fastest", "distance",
-             "score", "winning", "corners", "out_of_play", "possession", "territory", "momentum",
-             "on_top", "shots", "passes", "best", "key_moments", "tactics")
+TACTICS_TOOLS = (
+    "style",
+    "counter_press",
+    "overloads",
+    "line_breaks",
+    "pass_options",
+    "team_shape",
+    "halves",
+    "passing",
+    "lineup",
+)
+TIE_BREAK = (
+    "unmeasured",
+    "why_goal",
+    "scorers",
+    "on_target",
+    "completion",
+    "fastest",
+    "distance",
+    "score",
+    "winning",
+    "corners",
+    "out_of_play",
+    "possession",
+    "territory",
+    "momentum",
+    "on_top",
+    "shots",
+    "passes",
+    "best",
+    "key_moments",
+    "tactics",
+)
 # A word that asks to compare over a stretch: on top in "the last ten minutes" is momentum.
-RECENT = re.compile(r"\blast (?:\d+|five|ten|fifteen|twenty|thirty)\b|\blately\b|\brecently\b"
-                    r"|\bsince (?:the|half|minute)\b", re.I)
+RECENT = re.compile(
+    r"\blast (?:\d+|five|ten|fifteen|twenty|thirty)\b|\blately\b|\brecently\b"
+    r"|\bsince (?:the|half|minute)\b",
+    re.I,
+)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -228,14 +514,20 @@ INJECTION = re.compile(
     r"|^\s*(?:system|assistant|developer)\s*:|\b(?:reveal|print|show|repeat|translate|leak)\b.{0,30}"
     r"\b(?:instructions?|system prompt|prompt|rules|ground truth|truth|answer key)\b|\byou are now\b"
     r"|\bpretend\b|\brepeat after me\b|^\s*say\s+['\"]|\btrack ids?\b|\bjailbreak|\bDAN\b"
-    r"|</?\w+>|\{\s*\"", re.I)
-FUTURE = re.compile(r"\b(?:will (?:win|score|happen|be)|who(?:'s| is)? going to (?:win|score)|predict\w*"
-                    r"|next (?:match|game|goal)|what will|gonna (?:win|score)|final score (?:be|going))\b",
-                    re.I)
+    r"|</?\w+>|\{\s*\"",
+    re.I,
+)
+FUTURE = re.compile(
+    r"\b(?:will (?:win|score|happen|be)|who(?:'s| is)? going to (?:win|score)|predict\w*"
+    r"|next (?:match|game|goal)|what will|gonna (?:win|score)|final score (?:be|going))\b",
+    re.I,
+)
 OUTSIDE = re.compile(
     r"\b(?:referee'?s name|name of the referee|who is the referee|weather|rain\w*|sunny|cold|fans|crowd"
     r"|attendance|stadium|tickets?|pay|paid|fee|transfer|salary|wages?|xg|expected goals|in the world"
-    r"|of all time|ever|world cup|champions league|premier league table|league table|odds|bet|bets|betting)\b", re.I)
+    r"|of all time|ever|world cup|champions league|premier league table|league table|odds|bet|bets|betting)\b",
+    re.I,
+)
 NOT_MATCH = (("inject", INJECTION), ("future", FUTURE), ("outside", OUTSIDE))
 
 
@@ -279,19 +571,27 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
 
     def span(lo: int, hi: int, named: bool = True) -> Window:
         lo, hi = max(1, lo), max(1, hi)
-        said = "so far" if lo == 1 and hi == done else f"from minute {lo} to minute {hi}" if lo < hi \
+        said = (
+            "so far"
+            if lo == 1 and hi == done
+            else f"from minute {lo} to minute {hi}"
+            if lo < hi
             else f"in minute {lo}"
+        )
         return Window(lo, hi, said, named)
 
     if re.search(r"\bfirst half\b", s):
         return Window(1, min(HALF_MIN, max(1, done)), "in the first half", True)
-    if re.search(r"\b(?:second half|since the break|after the break|since half[- ]?time|after half[- ]?time)\b", s):
+    if re.search(
+        r"\b(?:second half|since the break|after the break|since half[- ]?time|after half[- ]?time)\b", s
+    ):
         if done <= HALF_MIN:
             return Window(1, max(1, done), "so far", True, "The second half hasn't started yet.")
         return Window(HALF_MIN + 1, done, "in the second half", True)
     if re.search(r"\bthis half\b", s):
-        return Window(half_lo, max(half_lo, done), "this half" if done > HALF_MIN else "in the first half",
-                      True)
+        return Window(
+            half_lo, max(half_lo, done), "this half" if done > HALF_MIN else "in the first half", True
+        )
     m = re.search(rf"\b(?:last|past) {_N}(?: ?min\w*)?\b", s)
     if m:
         return span(done - _n(m.group(1)) + 1, done)
@@ -304,7 +604,9 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
         if done <= 30:
             return Window(1, max(1, done), "so far", True, "The match hasn't reached the half hour yet.")
         return span(31, done)
-    m = re.search(r"\b(?:since|from|after) (?:the )?minute (\d+)\b|\bsince the (\d+)(?:st|nd|rd|th)? minute\b", s)
+    m = re.search(
+        r"\b(?:since|from|after) (?:the )?minute (\d+)\b|\bsince the (\d+)(?:st|nd|rd|th)? minute\b", s
+    )
     if m:
         lo = int(m.group(1) or m.group(2))
         if lo > done:
@@ -321,8 +623,17 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
 # Goals asked for (#423): "the 2nd goal", "Lisbon's third", "the equaliser", "the winner".
 # ---------------------------------------------------------------------------------------------
 
-ORDINALS = {"first": 0, "opening": 0, "second": 1, "third": 2, "fourth": 3, "fifth": 4, "last": -1,
-            "latest": -1, "most recent": -1}
+ORDINALS = {
+    "first": 0,
+    "opening": 0,
+    "second": 1,
+    "third": 2,
+    "fourth": 3,
+    "fifth": 4,
+    "last": -1,
+    "latest": -1,
+    "most recent": -1,
+}
 GOAL_WORD = r"(?:goal|strike|finish|equali[sz]er|winner)"
 
 
@@ -334,8 +645,9 @@ def ordinal_of(text: str) -> str | int | None:
         return "equaliser"
     if re.search(r"\bwinner\b|\bwinning goal\b", s):
         return "winner"
-    m = re.search(rf"\b(first|opening|second|third|fourth|fifth|last|latest|most recent)\b[\w' ]{{0,20}}{GOAL_WORD}",
-                  s)
+    m = re.search(
+        rf"\b(first|opening|second|third|fourth|fifth|last|latest|most recent)\b[\w' ]{{0,20}}{GOAL_WORD}", s
+    )
     return ORDINALS[m.group(1)] if m else None
 
 
@@ -395,9 +707,17 @@ def scores(text: str, tactics: bool = False) -> dict[str, int]:
     return {k: v for k, v in out.items() if v > 0}
 
 
-def classify(text: str, *, clubs: dict[str, str], codes: dict[str, str], t: float,
-             words: set[str] = frozenset(), tactics: bool = False, player: bool = False,
-             small_talk: str | None = None) -> Read:
+def classify(
+    text: str,
+    *,
+    clubs: dict[str, str],
+    codes: dict[str, str],
+    t: float,
+    words: set[str] = frozenset(),
+    tactics: bool = False,
+    player: bool = False,
+    small_talk: str | None = None,
+) -> Read:
     """One intent and its slots. `tactics`: the old routing finds a tactics tool in it; `player`: it
     names a player or a position; `small_talk`: companion_match.chat_kind's reading, if any."""
     names = club_names(clubs, codes)
@@ -416,12 +736,25 @@ def classify(text: str, *, clubs: dict[str, str], codes: dict[str, str], t: floa
     if not sc:
         if small_talk is not None:
             return Read("small_talk", named, window_of(norm, t), goal, small_talk, norm)
-        return Read("tactics" if tactics else "small_talk", named, window_of(norm, t), goal,
-                    None if tactics else "other", norm)
+        return Read(
+            "tactics" if tactics else "small_talk",
+            named,
+            window_of(norm, t),
+            goal,
+            None if tactics else "other",
+            norm,
+        )
     order = {iid: k for k, iid in enumerate((*TIE_BREAK, "player"))}
     intent = max(sc, key=lambda k: (sc[k], -order.get(k, 99)))
-    return Read(intent, named, window_of(norm, t, BY_ID[intent].window), goal, topic, norm,
-                tuple(sorted(sc.items(), key=lambda kv: -kv[1])))
+    return Read(
+        intent,
+        named,
+        window_of(norm, t, BY_ID[intent].window),
+        goal,
+        topic,
+        norm,
+        tuple(sorted(sc.items(), key=lambda kv: -kv[1])),
+    )
 
 
 def chips_table() -> list[dict]:

@@ -124,11 +124,12 @@ def test_route_reads_the_question():
 def test_code_answers_without_a_model():
     r = asyncio.run(companion.answer_match(Q, insights()))
     assert r.source == "code" and r.answer.status == "verified"
-    assert r.answer.text == (
+    # The answer, then one more checked sentence of the same club's (lesson 288).
+    assert r.answer.text.startswith(
         "London Athletic lost the ball 7 times in open play from minute 15 to minute 29 and never won "
         "it back within 5 seconds."
     )
-    assert r.answer.evidence == ("cp:home:m15-29",)
+    assert r.answer.evidence[0] == "cp:home:m15-29"
 
 
 def said(fact_id, mi=None):
@@ -512,6 +513,7 @@ def test_why_did_that_goal_happen():
             "t": 1350.0,
             "event": "v90",
             "event_confidence": 0.9,
+            "side_known": True,
             "confident": True,
         }
     ]
@@ -695,7 +697,9 @@ def test_who_is_best_is_never_answered_with_a_name_off_the_sheet(text):
     # The stand-in has no confident leader (the bounds overlap), so there is no honest name to give.
     mi = standin()
     r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
-    assert r.answer.status == "unanswerable" and not any(e.startswith("sheet:") for e in r.answer.evidence)
+    # No name: it says it can't single one out (then, at most, who scored: lesson 288).
+    assert r.answer.text.startswith("I can't single out")
+    assert not any(e.startswith("sheet:") for e in r.answer.evidence)
 
 
 def test_a_sheet_row_says_only_its_own_name_position_and_club():

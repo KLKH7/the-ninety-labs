@@ -33,7 +33,7 @@ SHOT_BEFORE_GOAL_S = 6.0  # design: a shot this close before a goal of its side 
 MIN_PASSES = 15  # design (as companion_match.MIN_SHARE_PASSES): a completion rate needs this many passes
 UNMEASURED = {
     "offside": "Vision doesn't call offside, so it can't say whether anyone was: it reads the offside "
-               "line at each completed pass it sees.",
+    "line at each completed pass it sees.",
     "fouls": "Vision doesn't detect fouls, so it can't count them.",
     "cards": "Vision doesn't see cards or bookings, so it can't count them.",
     "saves": "Vision can't yet tell a save from other shots reliably, so it doesn't count saves.",
@@ -41,21 +41,25 @@ UNMEASURED = {
     "referee": "Vision doesn't judge the referee's calls.",
 }
 NOT_MATCH = {
-    "inject": ("I only answer questions about this match, from what the cameras tracked, and I can't "
-               "change how I answer. Try one of these:"),
+    "inject": (
+        "I only answer questions about this match, from what the cameras tracked, and I can't "
+        "change how I answer. Try one of these:"
+    ),
     "future": "I can't predict what will happen: I only know what has happened so far. Try one of these:",
-    "outside": ("The match tracking can't tell that: it sees where the players and the ball are, not "
-                "names, money, the crowd or the weather. Try one of these:"),
+    "outside": (
+        "The match tracking can't tell that: it sees where the players and the ball are, not "
+        "names, money, the crowd or the weather. Try one of these:"
+    ),
 }
 
 
 def possessive(club: str) -> str:
-    """"Lisbon Esportes'", "London Athletic's"."""
+    """ "Lisbon Esportes'", "London Athletic's"."""
     return f"{club}'" if club.endswith("s") else f"{club}'s"
 
 
 def _plural(n: int, one: str, many: str | None = None, zero: bool = False) -> str:
-    """"1 shot", "3 shots"; "no shots" for a zero when `zero` (a total, never one club's figure)."""
+    """ "1 shot", "3 shots"; "no shots" for a zero when `zero` (a total, never one club's figure)."""
     if zero and n == 0:
         return f"no {many or one + 's'}"
     return f"{n} {one if n == 1 else (many or one + 's')}"
@@ -84,21 +88,52 @@ class Ctx:
         w = w or self.read.window
         hi_t = self.t if w.hi >= played(self.t) else 60.0 * w.hi
         lo_t = 60.0 * (w.lo - 1)
-        return sorted((f for f in self.mi.facts.get(kind, ()) if f.get("t") is not None
-                       and lo_t <= float(f["t"]) <= hi_t), key=lambda f: float(f["t"]))
+        return sorted(
+            (
+                f
+                for f in self.mi.facts.get(kind, ())
+                if f.get("t") is not None and lo_t <= float(f["t"]) <= hi_t
+            ),
+            key=lambda f: float(f["t"]),
+        )
 
     def footage_s(self, w: Window) -> float:
         """Seconds of footage seen in the window's minutes (the possession rows count every frame)."""
-        return sum(float(r.get("frames") or 0) for r in self.mi.facts.get("possession", ())
-                   if r.get("kind") == "possession_minute" and w.lo <= r["minute"] <= w.hi)
+        return sum(
+            float(r.get("frames") or 0)
+            for r in self.mi.facts.get("possession", ())
+            if r.get("kind") == "possession_minute" and w.lo <= r["minute"] <= w.hi
+        )
 
-    def fact(self, key: str, metric: str, value, unit: str | None, team: str | None = None,
-             also=(), sources=(), w: Window | None = None, **extra) -> dict:
+    def fact(
+        self,
+        key: str,
+        metric: str,
+        value,
+        unit: str | None,
+        team: str | None = None,
+        also=(),
+        sources=(),
+        w: Window | None = None,
+        **extra,
+    ) -> dict:
         w = w or self.read.window
-        f = {"id": f"ask:{key}:m{w.lo}-{w.hi}", "kind": "ask", "metric": metric, "team": team,
-             "club": self.clubs.get(team) if team else None, "clubs": self.clubs, "minute_from": w.lo,
-             "minute_to": w.hi, "value": value, "unit": unit, "also": [list(a) for a in also],
-             "confident": True, "evidence": [s["id"] if isinstance(s, dict) else s for s in sources], **extra}
+        f = {
+            "id": f"ask:{key}:m{w.lo}-{w.hi}",
+            "kind": "ask",
+            "metric": metric,
+            "team": team,
+            "club": self.clubs.get(team) if team else None,
+            "clubs": self.clubs,
+            "minute_from": w.lo,
+            "minute_to": w.hi,
+            "value": value,
+            "unit": unit,
+            "also": [list(a) for a in also],
+            "confident": True,
+            "evidence": [s["id"] if isinstance(s, dict) else s for s in sources],
+            **extra,
+        }
         self.derived[f["id"]] = f
         self.known[f["id"]] = f
         return f
@@ -141,26 +176,38 @@ def _when(w: Window) -> str:
 def _scorebug(ctx: Ctx) -> dict | None:
     """The scorebug's latest reading at or before now, each number bound to its club (as
     match_insights.score gives it, lesson 221)."""
-    rows = [r for r in ctx.mi.facts.get("scorebug", ()) if r.get("confident")
-            and float(r.get("t") or 0) <= ctx.t]
+    rows = [
+        r for r in ctx.mi.facts.get("scorebug", ()) if r.get("confident") and float(r.get("t") or 0) <= ctx.t
+    ]
     if not rows:
         return None
     cl = ctx.clubs
-    bug = {**rows[-1], "value": rows[-1]["home"], "unit": "goals", "clubs": cl, "club": None,
-           "also": [[rows[-1]["away"], "goals", rf"\b{cl['away']}\b[^.\d]*$"]]}
+    bug = {
+        **rows[-1],
+        "value": rows[-1]["home"],
+        "unit": "goals",
+        "clubs": cl,
+        "club": None,
+        "also": [[rows[-1]["away"], "goals", rf"\b{cl['away']}\b[^.\d]*$"]],
+    }
     ctx.known[bug["id"]] = bug
     return bug
 
 
 def _score_line(ctx: Ctx, bug: dict) -> str:
     cl = ctx.clubs
-    return (f"{cl['home']} {_plural(bug['home'], 'goal')}, {cl['away']} {_plural(bug['away'], 'goal')}, "
-            "read from the broadcast's scorebug.")
+    return (
+        f"{cl['home']} {_plural(bug['home'], 'goal')}, {cl['away']} {_plural(bug['away'], 'goal')}, "
+        "read from the broadcast's scorebug."
+    )
 
 
 def _goals(ctx: Ctx, team: str | None = None) -> list[dict]:
-    return [g for g in ctx.events("goal", Window(1, 90, "so far", False))
-            if g.get("side_known", True) and g.get("team") and (team is None or g["team"] == team)]
+    return [
+        g
+        for g in ctx.events("goal", Window(1, 90, "so far", False))
+        if g.get("side_known", True) and g.get("team") and (team is None or g["team"] == team)
+    ]
 
 
 def score(ctx: Ctx) -> Reply:
@@ -246,14 +293,18 @@ def possession(ctx: Ctx) -> Reply:
         w = _so_far(ctx)
     elif w.lo not in (1, HALF_MIN + 1):
         # Measured only from kick-off and from each half's start (ball_share.MEASURED_FROM).
-        note = (f"Possession is measured from kick-off and from each half's start, not {w.said}; "
-                "here it is so far.")
+        note = (
+            f"Possession is measured from kick-off and from each half's start, not {w.said}; "
+            "here it is so far."
+        )
         w = _so_far(ctx)
     got = {f["team"]: f for f in ctx.mi.possession(w.lo, w.hi)["summary"]}
     if len(got) < 2 or not all(f.get("confident") and f.get("value") is not None for f in got.values()):
         r.status = "unanswerable"
-        r.say(f"It's too early to split possession {w.said}: too little of either side on the ball has "
-              "been seen yet.")
+        r.say(
+            f"It's too early to split possession {w.said}: too little of either side on the ball has "
+            "been seen yet."
+        )
         return r
     from ninety.intel.ball_share import ERROR_POINTS
 
@@ -261,20 +312,36 @@ def possession(ctx: Ctx) -> Reply:
     lead = None if h == a else ("home" if h > a else "away")
     first, second = _order(ctx, lead)
     v1, v2 = got[first]["value"], got[second]["value"]
-    f = ctx.fact(f"possession:{first}", "ask_possession_compare", v1, "%", first,
-                 also=[(v2, "%"), (ERROR_POINTS, "points")], sources=list(got.values()), w=w)
+    f = ctx.fact(
+        f"possession:{first}",
+        "ask_possession_compare",
+        v1,
+        "%",
+        first,
+        also=[(v2, "%"), (ERROR_POINTS, "points")],
+        sources=list(got.values()),
+        w=w,
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     if note:
         r.notes.append(note)
     if lead is None:
-        r.say(f"It's even: {c1} and {c2} have had {v1}% of the ball each {w.said}, by time on the ball "
-              f"{SEEN}.", f)
+        r.say(
+            f"It's even: {c1} and {c2} have had {v1}% of the ball each {w.said}, by time on the ball {SEEN}.",
+            f,
+        )
     elif lead == first:
-        r.say(f"{c1} have had more of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-              f"ball {SEEN}.", f)
+        r.say(
+            f"{c1} have had more of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
+            f"ball {SEEN}.",
+            f,
+        )
     else:
-        r.say(f"{c1} have had less of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-              f"ball {SEEN}.", f)
+        r.say(
+            f"{c1} have had less of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
+            f"ball {SEEN}.",
+            f,
+        )
     r.say(f"That's give or take {ERROR_POINTS} points.", f)
     r.head = f"{_short(ctx, lead or first)} {got[lead or first]['value']}%"
     return r
@@ -304,11 +371,21 @@ def on_top(ctx: Ctx) -> Reply:
     lead = top.get("team")
     first, second = _order(ctx, lead)
     t1, t2 = terr[first], terr[second]
-    f = ctx.fact(f"on_top:{lead or 'none'}", "ask_on_top_compare", t1["lo"], "%", lead,
-                 also=[(t1["hi"], "%"), (t2["lo"], "%"), (t2["hi"], "%")], sources=[top, t1, t2], w=w)
+    f = ctx.fact(
+        f"on_top:{lead or 'none'}",
+        "ask_on_top_compare",
+        t1["lo"],
+        "%",
+        lead,
+        also=[(t1["hi"], "%"), (t2["lo"], "%"), (t2["hi"], "%")],
+        sources=[top, t1, t2],
+        w=w,
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    where = (f"the ball was in {possessive(c1)} attacking third {_share(t1)} of the time {SEEN}, against "
-             f"{_share(t2)} in {possessive(c2)}")
+    where = (
+        f"the ball was in {possessive(c1)} attacking third {_share(t1)} of the time {SEEN}, against "
+        f"{_share(t2)} in {possessive(c2)}"
+    )
     if lead is None:
         r.say(f"It's been even {w.said}, with neither side on top: {where}.", f)
         r.head = "Even"
@@ -331,8 +408,11 @@ def territory(ctx: Ctx) -> Reply:
     lead = f["team"]
     verdict = text.split(":", 1)[1].strip()
     verdict = verdict[0].upper() + verdict[1:]
-    tail = (f" so {ctx.clubs[lead]} have had the better of the territory." if lead
-            else " so neither side has had clearly more of the territory.")
+    tail = (
+        f" so {ctx.clubs[lead]} have had the better of the territory."
+        if lead
+        else " so neither side has had clearly more of the territory."
+    )
     r.lines[-1] = (verdict[:-1] + "," + tail, cited)
     return r
 
@@ -369,20 +449,40 @@ def passes(ctx: Ctx) -> Reply:
     rows = ctx.events("pass", w)
     n = _by_team(rows)
     first, second = _order(ctx, None if n["home"] == n["away"] else max(("home", "away"), key=n.get))
-    f1 = ctx.fact(f"passes:{first}", "ask_passes", n[first], "passes", first,
-                  sources=[p for p in rows if p.get("team") == first])
-    f2 = ctx.fact(f"passes:{second}", "ask_passes", n[second], "passes", second,
-                  sources=[p for p in rows if p.get("team") == second])
+    f1 = ctx.fact(
+        f"passes:{first}",
+        "ask_passes",
+        n[first],
+        "passes",
+        first,
+        sources=[p for p in rows if p.get("team") == first],
+    )
+    f2 = ctx.fact(
+        f"passes:{second}",
+        "ask_passes",
+        n[second],
+        "passes",
+        second,
+        sources=[p for p in rows if p.get("team") == second],
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     if ctx.read.club:
-        r.say(f"{c1} have made {_plural(n[first], 'pass', 'passes')} {w.said} {SEEN}, against "
-              f"{possessive(c2)} {_plural(n[second], 'pass', 'passes')}.", f1, f2)
+        r.say(
+            f"{c1} have made {_plural(n[first], 'pass', 'passes')} {w.said} {SEEN}, against "
+            f"{possessive(c2)} {_plural(n[second], 'pass', 'passes')}.",
+            f1,
+            f2,
+        )
     else:
         total = n[first] + n[second]
         ft = ctx.fact("passes:all", "ask_passes_all", total, "passes", None, sources=[])
-        r.say(f"Vision has counted {_plural(total, 'pass', 'passes')} {w.said} {SEEN}: "
-              f"{c1} {_plural(n[first], 'pass', 'passes')}, {c2} {_plural(n[second], 'pass', 'passes')}.",
-              ft, f1, f2)
+        r.say(
+            f"Vision has counted {_plural(total, 'pass', 'passes')} {w.said} {SEEN}: "
+            f"{c1} {_plural(n[first], 'pass', 'passes')}, {c2} {_plural(n[second], 'pass', 'passes')}.",
+            ft,
+            f1,
+            f2,
+        )
     r.notes.append(MISSES["passes"])
     r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
     return r
@@ -398,17 +498,26 @@ def completion(ctx: Ctx) -> Reply:
     won = _by_team(rows, lambda f: f.get("outcome") == "success")
     if min(tot["home"], tot["away"]) < MIN_PASSES:
         r.status = "unanswerable"
-        r.say(f"It's too early to rate the passing {w.said}: vision has counted too few passes "
-              f"{SEEN} yet.")
+        r.say(f"It's too early to rate the passing {w.said}: vision has counted too few passes {SEEN} yet.")
         return r
     pct = {t: round(100 * won[t] / tot[t]) for t in ("home", "away")}
     lead = None if pct["home"] == pct["away"] else max(("home", "away"), key=pct.get)
     first, second = _order(ctx, lead)
-    f = ctx.fact(f"completion:{first}", "ask_completion_compare", pct[first], "%", first,
-                 also=[(pct[second], "%")], sources=rows)
+    f = ctx.fact(
+        f"completion:{first}",
+        "ask_completion_compare",
+        pct[first],
+        "%",
+        first,
+        also=[(pct[second], "%")],
+        sources=rows,
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    r.say(f"{c1} have found a teammate with {pct[first]}% of their passes {w.said} {SEEN}, against "
-          f"{possessive(c2)} {pct[second]}%.", f)
+    r.say(
+        f"{c1} have found a teammate with {pct[first]}% of their passes {w.said} {SEEN}, against "
+        f"{possessive(c2)} {pct[second]}%.",
+        f,
+    )
     if lead:
         r.say(f"So {ctx.clubs[lead]} have been passing better.", f)
     r.head = f"{_short(ctx, first)} {pct[first]}%"
@@ -425,20 +534,32 @@ def shots(ctx: Ctx) -> Reply:
     lead = None if n["home"] == n["away"] else max(("home", "away"), key=n.get)
     first, second = _order(ctx, lead)
     total = len(rows)
-    ft = ctx.fact("shots:all", "ask_shots_total", total, "shots", None, also=[(n[None], "shots")], sources=rows)
+    ft = ctx.fact(
+        "shots:all", "ask_shots_total", total, "shots", None, also=[(n[None], "shots")], sources=rows
+    )
     f1 = ctx.fact(f"shots:{first}", "ask_shots_club", n[first], "shots", first, sources=[])
     f2 = ctx.fact(f"shots:{second}", "ask_shots_club", n[second], "shots", second, sources=[])
     r.notes.append(MISSES["shots"])
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     unplaced = f", and {_plural(n[None], 'shot')} it didn't place on a side" if n[None] else ""
     if ctx.read.club:
-        r.say(f"{c1} have had {_plural(n[first], 'shot')} {w.said} {SEEN}, against {possessive(c2)} "
-              f"{_plural(n[second], 'shot')}{unplaced}.", f1, f2, ft)
+        r.say(
+            f"{c1} have had {_plural(n[first], 'shot')} {w.said} {SEEN}, against {possessive(c2)} "
+            f"{_plural(n[second], 'shot')}{unplaced}.",
+            f1,
+            f2,
+            ft,
+        )
     elif total == 0:
         r.say(f"There have been no shots {w.said} {SEEN}.", ft)
     else:
-        r.say(f"Vision has spotted {_plural(total, 'shot')} {w.said} {SEEN}: {c1} {_plural(n[first], 'shot')}, "
-              f"{c2} {_plural(n[second], 'shot')}{unplaced}.", ft, f1, f2)
+        r.say(
+            f"Vision has spotted {_plural(total, 'shot')} {w.said} {SEEN}: {c1} {_plural(n[first], 'shot')}, "
+            f"{c2} {_plural(n[second], 'shot')}{unplaced}.",
+            ft,
+            f1,
+            f2,
+        )
     r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
     return r
 
@@ -459,13 +580,22 @@ def on_target(ctx: Ctx) -> Reply:
     lead = None if on["home"] == on["away"] else max(("home", "away"), key=on.get)
     first, second = _order(ctx, lead)
     unit = "shots on target"
-    f = ctx.fact(f"on_target:{first}", "ask_on_target", on[first], unit, first,
-                 also=[(on[second], unit), (on[None], unit), (wide, "shots"), (unknown, "shots")],
-                 sources=[*goals, *saves])
+    f = ctx.fact(
+        f"on_target:{first}",
+        "ask_on_target",
+        on[first],
+        unit,
+        first,
+        also=[(on[second], unit), (on[None], unit), (wide, "shots"), (unknown, "shots")],
+        sources=[*goals, *saves],
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     one = lambda k: _plural(k, "shot on target", "shots on target")  # noqa: E731
-    r.say(f"{c1} have had {one(on[first])} {w.said} {SEEN}, against {possessive(c2)} {one(on[second])}, "
-          "counting goals and saves.", f)
+    r.say(
+        f"{c1} have had {one(on[first])} {w.said} {SEEN}, against {possessive(c2)} {one(on[second])}, "
+        "counting goals and saves.",
+        f,
+    )
     rest = []
     if wide:
         rest.append(f"saw {_plural(wide, 'shot')} miss or get blocked")
@@ -477,9 +607,13 @@ def on_target(ctx: Ctx) -> Reply:
     return r
 
 
-RESTART_UNITS = {"corner": ("corner", "corners"), "throw_in": ("throw-in", "throw-ins"),
-                 "goal_kick": ("goal kick", "goal kicks"), "free_kick": ("free kick", "free kicks"),
-                 "penalty_kick": ("penalty", "penalties")}
+RESTART_UNITS = {
+    "corner": ("corner", "corners"),
+    "throw_in": ("throw-in", "throw-ins"),
+    "goal_kick": ("goal kick", "goal kicks"),
+    "free_kick": ("free kick", "free kicks"),
+    "penalty_kick": ("penalty", "penalties"),
+}
 
 
 def _restarts(ctx: Ctx, w: Window, kinds: tuple[str, ...]) -> dict[str, dict]:
@@ -494,12 +628,20 @@ def corners(ctx: Ctx) -> Reply:
     w = _gap_or(ctx, r)
     if w is None:
         return r
-    if re.search(r"\bset[- ]pieces?\b", ctx.read.text, re.I) and not re.search(r"\bcorners?\b", ctx.read.text, re.I):
+    if re.search(r"\bset[- ]pieces?\b", ctx.read.text, re.I) and not re.search(
+        r"\bcorners?\b", ctx.read.text, re.I
+    ):
         got = _restarts(ctx, w, tuple(RESTART_UNITS))
         total = sum(sum(v.values()) for v in got.values())
         parts = [_plural(sum(v.values()), *RESTART_UNITS[k]) for k, v in got.items() if sum(v.values())]
-        f = ctx.fact("set_pieces:all", "ask_set_pieces_all", total, "set pieces",
-                     also=[(sum(v.values()), RESTART_UNITS[k][1]) for k, v in got.items()], sources=ctx.sources)
+        f = ctx.fact(
+            "set_pieces:all",
+            "ask_set_pieces_all",
+            total,
+            "set pieces",
+            also=[(sum(v.values()), RESTART_UNITS[k][1]) for k, v in got.items()],
+            sources=ctx.sources,
+        )
         lead = f"Vision has spotted {_plural(total, 'set piece')} {w.said} {SEEN}"
         r.say(lead + (": " + ", ".join(parts) + "." if parts else "."), f)
         r.head = _plural(total, "set piece")
@@ -507,16 +649,26 @@ def corners(ctx: Ctx) -> Reply:
     n = _restarts(ctx, w, ("corner",))["corner"]
     lead = None if n["home"] == n["away"] else max(("home", "away"), key=n.get)
     first, second = _order(ctx, lead)
-    f = ctx.fact(f"corners:{first}", "ask_corners", n[first], "corners", first,
-                 also=[(n[second], "corners"), (n[None], "corners"), (sum(n.values()), "corners")], sources=ctx.sources)
+    f = ctx.fact(
+        f"corners:{first}",
+        "ask_corners",
+        n[first],
+        "corners",
+        first,
+        also=[(n[second], "corners"), (n[None], "corners"), (sum(n.values()), "corners")],
+        sources=ctx.sources,
+    )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
     total = sum(n.values())
     if total == 0:
         r.say(f"There have been no corners {w.said} {SEEN}.", f)
         r.head = "No corners"
         return r
-    r.say(f"{c1} have had {_plural(n[first], 'corner')} {w.said} {SEEN}, and {c2} "
-          f"{_plural(n[second], 'corner')}.", f)
+    r.say(
+        f"{c1} have had {_plural(n[first], 'corner')} {w.said} {SEEN}, and {c2} "
+        f"{_plural(n[second], 'corner')}.",
+        f,
+    )
     r.head = f"{_short(ctx, first)} {n[first]}, {_short(ctx, second)} {n[second]}"
     return r
 
@@ -529,28 +681,52 @@ def out_of_play(ctx: Ctx) -> Reply:
         return r
     kinds = ("throw_in", "goal_kick", "corner")
     got = _restarts(ctx, w, kinds)
-    asked = next((k for k, p in (("throw_in", r"throw[- ]?ins?"), ("goal_kick", r"goal[- ]kicks?"))
-                  if re.search(rf"\b{p}\b", ctx.read.text, re.I)), None)
+    asked = next(
+        (
+            k
+            for k, p in (("throw_in", r"throw[- ]?ins?"), ("goal_kick", r"goal[- ]kicks?"))
+            if re.search(rf"\b{p}\b", ctx.read.text, re.I)
+        ),
+        None,
+    )
     if asked:
         n = got[asked]
         one, many = RESTART_UNITS[asked]
-        f = ctx.fact(f"{asked}:all", f"ask_{asked}", sum(n.values()), many,
-                     also=[(n["home"], many), (n["away"], many)], sources=ctx.sources)
+        f = ctx.fact(
+            f"{asked}:all",
+            f"ask_{asked}",
+            sum(n.values()),
+            many,
+            also=[(n["home"], many), (n["away"], many)],
+            sources=ctx.sources,
+        )
         total = sum(n.values())
         if ctx.read.club:
             t = ctx.team_of[ctx.read.club]
-            r.say(f"{ctx.read.club} have had {_plural(n[t], one, many)} {w.said} {SEEN}, out of "
-                  f"{_plural(total, one, many)} in all.", f)
+            r.say(
+                f"{ctx.read.club} have had {_plural(n[t], one, many)} {w.said} {SEEN}, out of "
+                f"{_plural(total, one, many)} in all.",
+                f,
+            )
         else:
             r.say(f"Vision has spotted {_plural(total, one, many, zero=True)} {w.said} {SEEN}.", f)
         r.head = _plural(total, one, many)
         return r
     total = sum(sum(v.values()) for v in got.values())
     parts = [_plural(sum(got[k].values()), *RESTART_UNITS[k], zero=True) for k in kinds]
-    f = ctx.fact("out_of_play:all", "ask_out_of_play", total, "times",
-                 also=[(sum(got[k].values()), RESTART_UNITS[k][1]) for k in kinds], sources=ctx.sources)
-    r.say(f"Vision has seen the ball go out of play {_plural(total, 'time')} {w.said} {SEEN}: "
-          f"{parts[0]}, {parts[1]} and {parts[2]}.", f)
+    f = ctx.fact(
+        "out_of_play:all",
+        "ask_out_of_play",
+        total,
+        "times",
+        also=[(sum(got[k].values()), RESTART_UNITS[k][1]) for k in kinds],
+        sources=ctx.sources,
+    )
+    r.say(
+        f"Vision has seen the ball go out of play {_plural(total, 'time')} {w.said} {SEEN}: "
+        f"{parts[0]}, {parts[1]} and {parts[2]}.",
+        f,
+    )
     r.head = _plural(total, "time")
     return r
 
@@ -563,16 +739,29 @@ def _team_km(ctx: Ctx) -> Reply:
     r = Reply()
     dist = (ctx.mi.team_stats or {}).get("distance") or {}
     done = played(ctx.t)
-    km = {t: round(sum(b["km"] for b in (dist.get(t) or {}).get("bins", ()) if b["minute_to"] <= done), 1)
-          for t in ("home", "away")}
+    km = {
+        t: round(sum(b["km"] for b in (dist.get(t) or {}).get("bins", ()) if b["minute_to"] <= done), 1)
+        for t in ("home", "away")
+    }
     if not dist or not any(km.values()):
         return r
     pct = ctx.mi.team_stats.get("within_pct")
-    f = ctx.fact("team_km", "ask_team_km", km["home"], "km", "home", also=[(km["away"], "km"), (pct, "%")],
-                 sources=[], w=_so_far(ctx))
+    f = ctx.fact(
+        "team_km",
+        "ask_team_km",
+        km["home"],
+        "km",
+        "home",
+        also=[(km["away"], "km"), (pct, "%")],
+        sources=[],
+        w=_so_far(ctx),
+    )
     c = ctx.clubs
-    r.say(f"What the tracking does measure is each side's running: {c['home']} have covered {km['home']} km "
-          f"and {c['away']} {km['away']} km so far {SEEN}, give or take {pct}%.", f)
+    r.say(
+        f"What the tracking does measure is each side's running: {c['home']} have covered {km['home']} km "
+        f"and {c['away']} {km['away']} km so far {SEEN}, give or take {pct}%.",
+        f,
+    )
     return r
 
 
@@ -585,37 +774,56 @@ def _cant(ctx: Ctx, why: str, closest: Reply) -> Reply:
 
 
 def best(ctx: Ctx) -> Reply:
-    return _cant(ctx, "Vision can't name players on these pictures well enough to pick a best player yet.",
-                 _bypassed(ctx))
+    return _cant(
+        ctx,
+        "Vision can't name players on these pictures well enough to pick a best player yet.",
+        _bypassed(ctx),
+    )
 
 
 def _bypassed(ctx: Ctx) -> Reply:
     """Closest to a best player: each club's opponents taken out by passes."""
     r = Reply()
     w = _so_far(ctx)
-    tot = {f["team"]: f for f in ctx.mi.line_breaks(w.lo, w.hi)["summary"]
-           if f.get("metric") == "opponents_bypassed_total"}
+    tot = {
+        f["team"]: f
+        for f in ctx.mi.line_breaks(w.lo, w.hi)["summary"]
+        if f.get("metric") == "opponents_bypassed_total"
+    }
     if len(tot) < 2:
         return r
     asked = ctx.read.club
     first = ctx.team_of[asked] if asked else max(tot, key=lambda t: tot[t]["value"])
     second = ctx.other(first)
-    f = ctx.fact(f"bypassed:{first}", "ask_bypassed_compare", tot[first]["value"], "opponents", first,
-                 also=[(tot[second]["value"], "opponents")], sources=list(tot.values()), w=w)
-    r.say(f"Here's what it does measure: {possessive(ctx.clubs[first])} passes have taken "
-          f"{tot[first]['value']} opponents out of the game so far {SEEN}, against "
-          f"{tot[second]['value']} opponents for {ctx.clubs[second]}.", f)
+    f = ctx.fact(
+        f"bypassed:{first}",
+        "ask_bypassed_compare",
+        tot[first]["value"],
+        "opponents",
+        first,
+        also=[(tot[second]["value"], "opponents")],
+        sources=list(tot.values()),
+        w=w,
+    )
+    r.say(
+        f"Here's what it does measure: {possessive(ctx.clubs[first])} passes have taken "
+        f"{tot[first]['value']} opponents out of the game so far {SEEN}, against "
+        f"{tot[second]['value']} opponents for {ctx.clubs[second]}.",
+        f,
+    )
     return r
 
 
 def fastest(ctx: Ctx) -> Reply:
-    return _cant(ctx, "Vision can't measure each player's top speed well enough to rank them yet.",
-                 _team_km(ctx))
+    return _cant(
+        ctx, "Vision can't measure each player's top speed well enough to rank them yet.", _team_km(ctx)
+    )
 
 
 def distance(ctx: Ctx) -> Reply:
-    return _cant(ctx, "Vision can't yet say how far each player has run well enough to rank them.",
-                 _team_km(ctx))
+    return _cant(
+        ctx, "Vision can't yet say how far each player has run well enough to rank them.", _team_km(ctx)
+    )
 
 
 # -- a goal's story, the key moments ---------------------------------------------------------------
@@ -659,8 +867,11 @@ def why_goal(ctx: Ctx) -> Reply:
         if g == "none":
             r.say("That goal hasn't been scored yet, so there's no build-up to talk through.")
         else:
-            r.say(f"{asked} haven't scored yet, so there's no build-up to a goal to talk through." if asked
-                  else "No goals yet, so there's no build-up to a goal to talk through.")
+            r.say(
+                f"{asked} haven't scored yet, so there's no build-up to a goal to talk through."
+                if asked
+                else "No goals yet, so there's no build-up to a goal to talk through."
+            )
         r.head = "No goal yet"
         return r
     team, gt = g["team"], float(g["t"])
@@ -677,31 +888,67 @@ def why_goal(ctx: Ctx) -> Reply:
             chain.append(p)
     if chain:
         start = _third(float(chain[0]["x"]), team)
-        f = ctx.fact(f"build_up:{g['id']}", "ask_build_up_passes", len(chain), "passes", team, sources=chain,
-                     w=Window(g["minute"], g["minute"], f"in minute {g['minute']}", True))
+        f = ctx.fact(
+            f"build_up:{g['id']}",
+            "ask_build_up_passes",
+            len(chain),
+            "passes",
+            team,
+            sources=chain,
+            w=Window(g["minute"], g["minute"], f"in minute {g['minute']}", True),
+        )
         if len(chain) == 1:
-            r.say(f"{club} scored in minute {g['minute']} straight from a single pass, played from their {start} "
-                  "third.", g, f)
+            r.say(
+                f"{club} scored in minute {g['minute']} straight from a single pass, played from their {start} "
+                "third.",
+                g,
+                f,
+            )
         else:
-            r.say(f"{club} scored in minute {g['minute']} at the end of a move of {len(chain)} passes in a "
-                  f"row that started in their {start} third.", g, f)
-        named = [(ctx.mi.people.get(p.get("player") or "", {}).get("name"),
-                  ctx.mi.people.get(p.get("receiver") or "", {}).get("name"), p) for p in chain]
+            r.say(
+                f"{club} scored in minute {g['minute']} at the end of a move of {len(chain)} passes in a "
+                f"row that started in their {start} third.",
+                g,
+                f,
+            )
+        named = [
+            (
+                ctx.mi.people.get(p.get("player") or "", {}).get("name"),
+                ctx.mi.people.get(p.get("receiver") or "", {}).get("name"),
+                p,
+            )
+            for p in chain
+        ]
         links = [(f"{a} to {b}", p) for a, b, p in named if a and b and a != b]
         if links:
             r.say("It went " + ", then ".join(x for x, _ in links) + ".", *(p for _, p in links))
-        breaks = [b for b in ctx.mi.facts.get("line_break", ()) if b.get("event") in {p["id"] for p in chain}
-                  and b.get("value", 0) > 0 and b.get("confident")]
+        breaks = [
+            b
+            for b in ctx.mi.facts.get("line_break", ())
+            if b.get("event") in {p["id"] for p in chain} and b.get("value", 0) > 0 and b.get("confident")
+        ]
         if breaks:
             b = max(breaks, key=lambda b: b["value"])
             opp = ctx.clubs[ctx.other(team)]
-            r.say(f"The pass that broke the lines took {b['value']} {opp} "
-                  f"{'player' if b['value'] == 1 else 'players'} out of the game.", b)
+            r.say(
+                f"The pass that broke the lines took {b['value']} {opp} "
+                f"{'player' if b['value'] == 1 else 'players'} out of the game.",
+                b,
+            )
     else:
-        r.say(f"{club} scored in minute {g['minute']}; vision saw no completed {club} pass in the minute "
-              "before it, so it didn't follow the move.", g)
-    shot = next((s for s in reversed(ctx.mi.facts.get("shot", ())) if gt - SHOT_BEFORE_GOAL_S <= float(s["t"]) <= gt
-                 and s.get("team") in (team, None)), None)
+        r.say(
+            f"{club} scored in minute {g['minute']}; vision saw no completed {club} pass in the minute "
+            "before it, so it didn't follow the move.",
+            g,
+        )
+    shot = next(
+        (
+            s
+            for s in reversed(ctx.mi.facts.get("shot", ()))
+            if gt - SHOT_BEFORE_GOAL_S <= float(s["t"]) <= gt and s.get("team") in (team, None)
+        ),
+        None,
+    )
     if shot is not None and shot.get("value") is not None:
         r.say(f"Then a shot came from {shot['value']} m out.", shot)
     else:
@@ -723,7 +970,7 @@ def key_moments(ctx: Ctx) -> Reply:
     if sh.status == "verified" and sh.lines:
         text, cited = sh.lines[0]
         r.say(text, *cited)
-    r.head = (f"{len(goals)} goal{'s' if len(goals) != 1 else ''}" if goals else "No goals")
+    r.head = f"{len(goals)} goal{'s' if len(goals) != 1 else ''}" if goals else "No goals"
     return r
 
 
@@ -735,17 +982,26 @@ def _offside_reads(ctx: Ctx) -> Reply:
     rows = ctx.events("offside", _so_far(ctx))
     goal = _goal_asked(ctx) if re.search(r"\bgoal\b", ctx.read.text, re.I) else None
     span = "so far"
-    near = [x for x in rows if isinstance(goal, dict)
-            and float(goal["t"]) - BUILD_UP_S <= float(x["t"]) <= float(goal["t"])
-            and x.get("verdict") in ("offside", "onside")]
+    near = [
+        x
+        for x in rows
+        if isinstance(goal, dict)
+        and float(goal["t"]) - BUILD_UP_S <= float(x["t"]) <= float(goal["t"])
+        and x.get("verdict") in ("offside", "onside")
+    ]
     if near:
         rows, span = near, f"in the minute before {possessive(goal['club'])} goal"
     rows = [x for x in rows if x.get("verdict") in ("offside", "onside")]
     off = sum(1 for x in rows if x["verdict"] == "offside")
-    f = ctx.fact("offside_reads", "ask_offside_reads", len(rows), "passes", also=[(off, "passes")], sources=rows)
+    f = ctx.fact(
+        "offside_reads", "ask_offside_reads", len(rows), "passes", also=[(off, "passes")], sources=rows
+    )
     if rows:
-        r.say(f"Here's what it read {span} {SEEN}: {_plural(len(rows), 'pass', 'passes')} where it could call "
-              f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it.", f)
+        r.say(
+            f"Here's what it read {span} {SEEN}: {_plural(len(rows), 'pass', 'passes')} where it could call "
+            f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it.",
+            f,
+        )
     return r
 
 
@@ -759,8 +1015,10 @@ def unmeasured(ctx: Ctx) -> Reply:
         closest = Reply()
         bug = _scorebug(ctx)
         if bug is not None:
-            closest.say("Here's the score instead: " + _score_line(ctx, bug)[0].lower() + _score_line(ctx, bug)[1:],
-                        bug)
+            closest.say(
+                "Here's the score instead: " + _score_line(ctx, bug)[0].lower() + _score_line(ctx, bug)[1:],
+                bug,
+            )
     else:
         closest = possession(ctx)
         if closest.status == "verified" and closest.lines:
@@ -777,11 +1035,25 @@ def unmeasured(ctx: Ctx) -> Reply:
 
 
 BUILDERS = {
-    "score": score, "scorers": scorers, "winning": winning, "on_top": on_top, "momentum": on_top,
-    "possession": possession, "passes": passes, "completion": completion, "shots": shots,
-    "on_target": on_target, "territory": territory, "corners": corners, "out_of_play": out_of_play,
-    "best": best, "fastest": fastest, "distance": distance, "why_goal": why_goal,
-    "key_moments": key_moments, "unmeasured": unmeasured,
+    "score": score,
+    "scorers": scorers,
+    "winning": winning,
+    "on_top": on_top,
+    "momentum": on_top,
+    "possession": possession,
+    "passes": passes,
+    "completion": completion,
+    "shots": shots,
+    "on_target": on_target,
+    "territory": territory,
+    "corners": corners,
+    "out_of_play": out_of_play,
+    "best": best,
+    "fastest": fastest,
+    "distance": distance,
+    "why_goal": why_goal,
+    "key_moments": key_moments,
+    "unmeasured": unmeasured,
 }
 
 
@@ -804,8 +1076,13 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
     lead_ok = bool(kept) and kept[0] == r.lines[0]
     row = BY_ID[read.intent]
     if r.status == "verified" and not (lead_ok and re.search(row.lead, kept[0][0], re.I)):
-        kept = [(f"I can't answer that from what vision has seen yet; it gives {row.fallback} instead "
-                 "when it has them.", [])]
+        kept = [
+            (
+                f"I can't answer that from what vision has seen yet; it gives {row.fallback} instead "
+                "when it has them.",
+                [],
+            )
+        ]
         r.status, r.head = "unanswerable", None
     text = " ".join([*(t for t, _ in kept), *r.notes])
     cited = [f for _, c in kept for f in c]
@@ -813,8 +1090,14 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
     ts = [float(f["t"]) for f in cited if f.get("t") is not None]
     ts += [60.0 * (f["minute_from"] - 1) for f in cited if f.get("minute_from")]
     ts += [min(60.0 * f["minute_to"], float(question.t)) for f in cited if f.get("minute_to")]
-    lead = next((f for f in cited if f.get("value") is not None and f.get("unit")
-                 and f.get("metric") not in ("score", "scorebug")), None)
+    lead = next(
+        (
+            f
+            for f in cited
+            if f.get("value") is not None and f.get("unit") and f.get("metric") not in ("score", "scorebug")
+        ),
+        None,
+    )
     answer = Answer(
         r.status if text else "unanswerable",
         text or "I can't answer that from what vision has seen yet.",
@@ -827,5 +1110,13 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
         spoken=text or None,
         headline=r.head if r.head and all(n in text for n in re.findall(r"\d+", r.head)) else None,
     )
-    return answer, [{"name": n, "club": read.club, "minute_from": read.window.lo, "minute_to": read.window.hi,
-                     "intent": read.intent} for n in row.tools]
+    return answer, [
+        {
+            "name": n,
+            "club": read.club,
+            "minute_from": read.window.lo,
+            "minute_to": read.window.hi,
+            "intent": read.intent,
+        }
+        for n in row.tools
+    ]
