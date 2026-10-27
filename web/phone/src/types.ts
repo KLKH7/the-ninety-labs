@@ -193,6 +193,19 @@ export interface InsightCard {
   follow_ups?: string[];
 }
 
+/** A suggested question the server's intent table answers in code at the room's time (GET
+ * /api/chips, ninety/agents/companion_match.py `chips`): its row and the words the phone shows. */
+export interface Chip {
+  intent: string;
+  q: string;
+}
+
+export interface ChipsMessage {
+  type: "chips";
+  t: number;
+  chips: Chip[];
+}
+
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
   /** The phone's own mark: the demo passcode was refused, so this is the code answer. */

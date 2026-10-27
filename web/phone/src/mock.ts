@@ -7,10 +7,11 @@
 // of frames per cell of a 12 x 8 grid, and the flow field each team's mean velocity per cell.
 
 import minimapUrl from "../mock/minimap.json?url";
-import type { Closed, Feed, Link } from "./feed";
+import { type Closed, type Feed, type Link, fetchChips } from "./feed";
 import { joinMock } from "./mockrelay";
 import {
   type AnswerMessage,
+  type Chip,
   type Flow,
   type InsightCard,
   type Minimap,
@@ -297,6 +298,12 @@ export class MockFeed implements Feed {
         spoken: said.text, // the sentence as a voice reads it (insight_card v2 requires it)
       };
     });
+  }
+
+  /** The mock has no intent table: it asks the relay's /api/chips as the API's phone does (a test
+   * serves it); with none, the phone falls back to its always-answerable questions. */
+  chips(code: string, t: number, club: string | null): Promise<Chip[]> {
+    return fetchChips(new URL("../", location.href), code, t, club);
   }
 
   async ask(q: Question, _passcode?: string | null): Promise<AnswerMessage> {

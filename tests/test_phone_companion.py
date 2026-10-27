@@ -16,10 +16,12 @@ import shutil
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from ninety import e2e
+from ninety.agents.ask_intents import chips_table
 from tests.e2e_clip import H, W, write_clip
 from tests.test_phone import (  # noqa: F401
     MOCK_CODE,
@@ -36,6 +38,40 @@ from tests.test_phone import (  # noqa: F401
 from tests.test_radar import FPS, SEGMENTS, observations_clip, tracked_clip
 
 ROOT = Path(__file__).resolve().parent.parent
+# The mock relay's GET /api/chips (as ninety/api/companion.py's): these rows of the intent table, the
+# club filled with the one asked for, else the mock's home club. Every request is kept for the tests.
+RELAY_CHIP_INTENTS = ("score", "scorers", "winning", "on_top", "possession", "territory", "why_goal",
+                      "key_moments", "tactics")
+CHIP_REQUESTS: list[dict[str, list[str]]] = []
+
+
+def relay_chips(query: dict[str, list[str]]) -> dict:
+    club = query.get("club", ["London Athletic"])[0]
+    rows = [c for c in chips_table() if c["intent"] in RELAY_CHIP_INTENTS]
+    return {"type": "chips", "t": float(query.get("t", ["0"])[0]),
+            "chips": [{"intent": c["intent"], "q": c["q"].format(club=club)} for c in rows]}
+
+
+class Relay(SimpleHTTPRequestHandler):
+    """The test site: the phone's files and the bundle, and the relay's /api/chips."""
+
+    def do_GET(self):  # noqa: N802
+        url = urlsplit(self.path)
+        if url.path != "/api/chips":
+            return super().do_GET()
+        query = parse_qs(url.query)
+        CHIP_REQUESTS.append(query)
+        body = json.dumps(relay_chips(query)).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
 CUT_T = 1540 / FPS  # match time just past the last frame before the cut (61.56 s is frame 1539)
 AFTER_T = 1550 / FPS  # the first frame after it (62.0 s)
 
@@ -83,8 +119,7 @@ def site(browser, tmp_path_factory):  # noqa: F811
     manifest = json.loads((www / "bundle" / "manifest.json").read_text())
     assert manifest["teams"] == {"home": "CRW", "away": "DUN"}
     assert manifest["sides_known"] == ["a-t3"]
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(www))
-    handler.log_message = lambda *a: None
+    handler = functools.partial(Relay, directory=str(www))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}/"
@@ -820,6 +855,86 @@ def test_a_question_already_asked_is_not_suggested_again(browser, site):  # noqa
     suggested = [c.inner_text() for c in page.locator("#ask-chips .chip").all()]
     assert first not in suggested and len(suggested) == 3
     assert not errors
+
+
+# --- the chips: the server's questions code answers now, never a "can't" (Kian, Oct 27) -----------
+
+FAN_TS = ROOT / "web" / "phone" / "src" / "fan.ts"
+SAFE_INTENTS = {"score", "winning", "possession"}  # code answers these from the scorebug and possession
+
+
+def safe_chips() -> list[dict]:
+    """fan.ts's SAFE_CHIPS, read from the source the phone ships."""
+    src = FAN_TS.read_text()
+    block = src[src.index("export const SAFE_CHIPS"):src.index("];", src.index("export const SAFE_CHIPS"))]
+    return [{"intent": i, "q": q} for i, q in re.findall(r'intent: "([^"]+)", q: "([^"]+)"', block)]
+
+
+def test_no_fallback_chip_is_unmeasured_and_each_reads_as_its_own_row():
+    from ninety.agents.ask_intents import classify
+
+    chips = safe_chips()
+    table = {c["intent"]: c["q"] for c in chips_table()}
+    assert [c["intent"] for c in chips] == ["score", "winning", "possession"]
+    for c in chips:
+        assert c["intent"] in SAFE_INTENTS and table[c["intent"]] == c["q"]  # the table's own words
+        assert not re.search(r"offside|fastest|furthest|distance|speed|shot", c["q"], re.I)
+        read = classify(c["q"], clubs={"home": "London Athletic", "away": "Lisbon Esportes"},
+                        codes={"home": "LON", "away": "LIS"}, t=600.0)
+        assert read.intent == c["intent"], c  # a fallback the router reads as another row is a dead end
+
+
+def ask_chips(page) -> list[str]:
+    return [c.inner_text() for c in page.locator("#ask-chips .chip").all()]
+
+
+def test_ask_s_chips_come_from_the_endpoint_at_the_playhead_with_the_fans_club(browser, site):  # noqa: F811
+    CHIP_REQUESTS.clear()
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    fan = json.dumps({"club": "LIS", "mode": "casual", "focus": "moments"})
+    page.evaluate(f"localStorage.setItem('ninety.fan', '{fan}')")
+    page.reload()
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-ask")
+    page.wait_for_function("[...document.querySelectorAll('#ask-grid .chip')]"
+                           ".some(c => c.textContent === 'Why did Lisbon Esportes score?')")
+    served = {c["q"] for c in relay_chips({"club": ["Lisbon Esportes"]})["chips"]}
+    shown = [c.inner_text() for c in page.locator("#ask-grid .chip").all()]
+    assert shown and set(shown) <= served  # nothing hard-coded beside the server's
+    last = CHIP_REQUESTS[-1]
+    assert last["session"] == [MOCK_CODE] and last["club"] == ["Lisbon Esportes"]
+    assert 55 <= float(last["t"][0]) <= 75  # the laptop's clock, near where it was set
+    before = len(CHIP_REQUESTS)
+    ask(page, shown[0])
+    for _ in range(50):  # asked again after the answer, at the clock's new time
+        if len(CHIP_REQUESTS) > before:
+            break
+        page.wait_for_timeout(100)
+    assert len(CHIP_REQUESTS) > before
+    page.wait_for_function("document.querySelectorAll('#ask-chips .chip').length === 3")
+    assert set(ask_chips(page)) <= served and shown[0] not in ask_chips(page)
+    assert not errors
+
+
+def test_when_the_endpoint_fails_ask_offers_only_the_safe_questions(browser, site):  # noqa: F811
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    ctx.route("**/api/chips**", lambda route: route.fulfill(status=500, json={"error": "down"}))
+    ctx.add_init_script("localStorage.setItem('ninety.fan', JSON.stringify({skipped: true}))")
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.wait_for_function("window.ninetyLaptop")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock")
+    page.wait_for_selector("body[data-state=live]")
+    page.click("#tab-button-ask")
+    page.wait_for_selector("#ask-start:visible")
+    safe = [c["q"] for c in safe_chips()]
+    assert [c.inner_text() for c in page.locator("#ask-grid .chip").all()] == safe
+    ask(page, safe[0])
+    assert ask_chips(page) == safe[1:]  # still only the safe ones, never what was asked
+    assert not errors
+    ctx.close()
 
 
 # --- thin real data: an empty card is hidden, never a dash, an error or a guess -----------------

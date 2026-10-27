@@ -1,10 +1,11 @@
 // The fan's first-run choices (Kian's onboarding, Oct 25): a favourite club, a mode (the brief's
 // two personas, casual fan or data-hungry analyst) and what they care about most. Kept in this
 // browser only (localStorage, guarded: private windows refuse it), never sent anywhere. The
-// choices shape Ask's suggested questions and the Story feed's starting filter; they never change
-// a number, only which questions come first.
+// choices order Ask's suggested questions (the server's, /api/chips, with their club) and set the
+// Story feed's starting filter; they never change a number or add a question.
 
 import { CLUBS, short, type TeamNames } from "../../viewer/src/teams";
+import type { Chip } from "./types";
 
 export type Club = "LON" | "LIS";
 export type Mode = "casual" | "analyst";
@@ -67,52 +68,62 @@ export function sides(fan: Fan, teams: TeamNames): { us: string; them: string } 
   return { us: teams.home, them: teams.away };
 }
 
-// Every question here reaches one of the Companion's tools (ninety/agents/companion_match.py,
-// `route`); tests/test_phone_onboarding.py checks each one with {us} and {them} filled in.
-const BANK: Record<Focus | "casual" | "analyst", string[]> = {
-  moments: [
-    "What have I missed?",
-    "How many shots have {us} had?",
-    "What were the key moments?",
-    "How many corners have {us} had?",
-  ],
-  tactics: [
-    "Where are {us} overloading?",
-    "Which pass broke {them}'s lines?",
-    "What are {us}'s passing options?",
-    "What shape are {them} in?",
-    "How do {us} win the ball back?",
-    "How compact are {us}?",
-  ],
-  players: [
-    "Who's been {us}'s best player?",
-    "Who has run the furthest?",
-    "Who is the fastest on the pitch?",
-    "Who is linking up for {us}?",
-  ],
-  casual: ["Who has more of the ball?", "Where has the ball been?"],
-  analyst: ["How do the halves compare?", "Who has more of the ball?"],
+/** The questions Ask offers when /api/chips cannot be reached: only the intent table's rows that code
+ * answers from the scorebug or the possession count at any minute (ninety/agents/ask_chips.json, the
+ * same words), never a measure that may not exist yet (offside, fastest, distance, shots).
+ * tests/test_phone_companion.py checks each one reads as its row. */
+export const SAFE_CHIPS: readonly Chip[] = [
+  { intent: "score", q: "What's the score?" },
+  { intent: "winning", q: "Who's winning?" },
+  { intent: "possession", q: "Who has had more of the ball?" },
+];
+
+/** What each of the intent table's rows is about, for the fan's focus. */
+const GROUP: Record<string, Focus | Mode> = {
+  key_moments: "moments",
+  why_goal: "moments",
+  scorers: "moments",
+  shots: "moments",
+  on_target: "moments",
+  corners: "moments",
+  tactics: "tactics",
+  on_top: "tactics",
+  momentum: "tactics",
+  territory: "tactics",
+  completion: "tactics",
+  passes: "tactics",
+  best: "players",
+  fastest: "players",
+  distance: "players",
+  score: "casual",
+  winning: "casual",
+  possession: "analyst",
+  out_of_play: "analyst",
 };
 
 /** The order each mode reads the rest in, after the fan's focus: a casual fan the moments and the
  * players first, an analyst the tactics and the numbers. */
 const ORDER: Record<Mode, (Focus | Mode)[]> = {
-  casual: ["moments", "players", "casual", "tactics"],
-  analyst: ["tactics", "analyst", "players", "moments"],
+  casual: ["moments", "players", "casual", "analyst", "tactics"],
+  analyst: ["tactics", "analyst", "players", "moments", "casual"],
 };
 
-/** The match questions for this fan, best first: their focus, then their mode's order. */
-export function questions(fan: Fan, teams: TeamNames): string[] {
-  const { us, them } = sides(fan, teams);
-  const fill = (q: string) => q.replaceAll("{us}", us).replaceAll("{them}", them);
+/** The server's chips for this fan, best first: their focus, then their mode's order; the server's
+ * own order within a group. Only the order changes, never which questions (each one code answers). */
+export function ordered(chips: readonly Chip[], fan: Fan | null): Chip[] {
+  if (!fan) return [...chips];
   const groups = [fan.focus, ...ORDER[fan.mode].filter((g) => g !== fan.focus)];
-  return [...new Set(groups.flatMap((g) => BANK[g]).map(fill))];
+  const rank = (c: Chip) => {
+    const k = groups.indexOf(GROUP[c.intent] ?? "");
+    return k < 0 ? groups.length : k;
+  };
+  return chips.map((c, i) => [c, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([c]) => c);
 }
 
 export type Kind = "moments" | "tactics" | "players" | "numbers";
 /** A question's kind, for its glyph on the starter cards: by the words it uses. */
 export function kindOf(q: string): Kind {
-  if (/missed|shots|moments|corners|goal/i.test(q)) return "moments";
+  if (/missed|shots|moments|corners|goal|score/i.test(q)) return "moments";
   if (/overload|lines|options|shape|compact|ball back|set up|moving/i.test(q)) return "tactics";
   if (/player|run|fastest|linking|speed|far/i.test(q)) return "players";
   return "numbers";
