@@ -171,8 +171,19 @@ def test_a_quiet_crowd_bed_is_brought_to_broadcast_loudness(tmp_path):
 def test_the_gain_never_clips_the_whistles(tmp_path, monkeypatch):
     # A whistle near full scale in a bed the gain lifts a long way: the true-peak limiter holds it.
     bed = bed_of(tmp_path, "0.8*sin(2*PI*3200*t)*between(t\\,4\\,4.4)+0.02*(random(0)*2-1)")
-    monkeypatch.setattr(footage, "loudness", lambda audio: -40.0)  # +19 dB of gain
+    monkeypatch.setattr(footage, "bed_gain", lambda audio, timescale=1.0: 19.0)  # a long lift
     out = tmp_path / "bundle"
     out.mkdir()
     e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
     assert r128(out / "video.mp4")[1] <= footage.PEAK_DBTP + 0.5  # AAC's own overshoot: half a dB
+
+
+def test_a_bed_with_many_loud_peaks_still_airs_at_broadcast_loudness(tmp_path):
+    # Crowd roars near full scale a third of the time: the limiter takes level off them, so one gain
+    # from the raw loudness lands low; measured through the chain and corrected, it lands on target.
+    bed = bed_of(tmp_path, "(0.02+0.6*lt(mod(t\\,3)\\,1))*(random(0)*2-1)*0.25")
+    out = tmp_path / "bundle"
+    out.mkdir()
+    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
+    integrated, peak = r128(out / "video.mp4")
+    assert integrated == pytest.approx(footage.BED_LUFS, abs=1.0) and peak <= footage.PEAK_DBTP + 0.5

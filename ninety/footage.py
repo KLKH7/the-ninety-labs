@@ -89,22 +89,45 @@ def _length(frames: int, fps: float) -> list[str]:
     return ["-frames:v", str(frames), "-t", f"{frames / fps:.3f}"]
 
 
-def loudness(audio: Path) -> float | None:
-    """The track's integrated loudness in LUFS (EBU R128), or None for silence or no sound."""
-    err = subprocess.run(["ffmpeg", "-nostats", "-i", str(audio), "-vn", "-af", "ebur128=framelog=quiet",
+def loudness(audio: Path, chain: str = "") -> float | None:
+    """The track's integrated loudness in LUFS (EBU R128), after `chain` (ffmpeg audio filters) when
+    given, or None for silence or no sound."""
+    af = f"{chain},ebur128=framelog=quiet" if chain else "ebur128=framelog=quiet"
+    err = subprocess.run(["ffmpeg", "-nostats", "-i", str(audio), "-vn", "-af", af,
                           "-f", "null", "-"], capture_output=True, text=True).stderr
     found = re.findall(r"I:\s+(-?[\d.]+) LUFS", err)
     value = float(found[-1]) if found else None
     return value if value is not None and value > -70 else None  # -70 LUFS: R128's absolute gate
 
 
-def _sound(timescale: float, gain_db: float = 0.0) -> list[str]:
-    """AAC; the bed brought to BED_LUFS (`gain_db`) under a true-peak limit; and the sound sped up
-    with the picture (atempo: the pitch kept)."""
+def _chain(timescale: float, gain_db: float) -> str:
     chain = [f"volume={gain_db:.2f}dB", f"alimiter=limit={10 ** (PEAK_DBTP / 20):.4f}:level=false"]
     if timescale != 1:
         chain.append(f"atempo={timescale:g}")
-    return [*AUDIO, "-af", ",".join(chain)]
+    return ",".join(chain)
+
+
+def bed_gain(audio: Path, timescale: float = 1.0, passes: int = 2) -> float:
+    """The gain that brings the bed to BED_LUFS as it airs: measured once raw, then through the whole
+    chain (gain, limiter, atempo) and corrected, `passes` times. A bed with many loud peaks loses
+    level in the limiter (seen on 8324: -21 aimed, -23.0 out after one pass), so the first guess
+    lands low. 0 for no sound or silence."""
+    measured = loudness(audio)
+    if measured is None:
+        return 0.0
+    gain = BED_LUFS - measured
+    for _ in range(passes):
+        out = loudness(audio, _chain(timescale, gain))
+        if out is None or abs(out - BED_LUFS) < 0.3:
+            break
+        gain += BED_LUFS - out
+    return gain
+
+
+def _sound(timescale: float, gain_db: float = 0.0) -> list[str]:
+    """AAC; the bed brought to BED_LUFS (`gain_db`, bed_gain) under a true-peak limit; and the sound
+    sped up with the picture (atempo: the pitch kept)."""
+    return [*AUDIO, "-af", _chain(timescale, gain_db)]
 
 
 def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, height: int = 720,
@@ -115,8 +138,7 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     (`footage.timescale` in the manifest; ninety/match/timeline.py maps through it)."""
     n = len(images)
     timescale = checked_timescale(timescale)
-    measured = loudness(audio) if audio is not None else None
-    gain = 0.0 if measured is None else BED_LUFS - measured
+    gain = bed_gain(audio, timescale) if audio is not None else 0.0
     match_fps, fps = fps, fps * timescale  # images a video second, from here on
     sound = [] if audio is None else ["-i", str(audio)]
     shutil.copyfile(images[0], out / "poster.jpg")
