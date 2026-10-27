@@ -283,3 +283,18 @@ def test_no_goal_yet_must_be_said():
         "London Athletic 0 goals, Lisbon Esportes 0 goals, read from the broadcast's scorebug.",
     )
     assert bug["correct"] is True
+
+
+def test_a_shares_range_is_not_a_minute():
+    said = ("London Athletic had the ball in their attacking third for 15% to 20% of the time in the footage "
+            "we've seen from minute 1 to minute 11.")
+    assert set(G.minutes_said(said)) == {1, 11}  # not 20
+    assert graded("territory", "Where has the ball been?", 600.0, said)["no_future"] is True
+
+
+def test_the_teams_do_not_change_ends():
+    # seed 8324: Lisbon scored at the x = 0 end in both halves (35', 76', 85'), so in the second half
+    # as in the first the ball in Lisbon's attacking third is near x = 0, and Lisbon lead it from 60'
+    it = intent("on_top")
+    tv = TABLE[G.wkey(it, 3600.0, (2700.0, 3600.0))]["match"]["territory"]
+    assert tv["away"] > tv["home"]

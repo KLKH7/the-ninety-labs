@@ -210,8 +210,9 @@ class Truth:
         f0, f1 = int(t0 * FPS), int(t1 * FPS)
         m = self.mask(f0, f1, scope) & (self.side > 0)
         idx = np.arange(len(self.side))
-        second = idx >= self.half_frame if self.half_frame >= 0 else np.zeros(len(idx), bool)
-        home_right = np.where(second, not self.home_right, self.home_right)
+        # The engine does not change ends at half time (ninety/sim/engine.py, GROUNDING L3): one
+        # direction per side for the whole match (lesson 293).
+        home_right = np.full(len(idx), self.home_right)
         x = self.ball_x
         home_att = np.where(home_right, x >= PITCH_X - THIRD_X, x <= THIRD_X)
         away_att = np.where(home_right, x <= THIRD_X, x >= PITCH_X - THIRD_X)

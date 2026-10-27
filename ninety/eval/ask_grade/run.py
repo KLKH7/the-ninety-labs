@@ -530,6 +530,19 @@ def cmd_grade(args) -> None:
     tol = G.load_tolerances()
     log: list[dict] = []
     answer = model_answerer(insights, intents, log) if args.model else None
+    if args.replay:  # a saved run's answers, re-graded by today's rules: no model call, no spend
+        kept = {}
+        for line in args.replay.read_text().splitlines():
+            if line.strip():
+                r = json.loads(line)
+                kept[(r["intent"], r["q"], r["t"])] = r
+        drop = ("checks", "scope", "flags", "future_minutes", "pass", "core", "code_core", "parity", "leak",
+                "intent", "q", "chip", "t", "window", "clubs_asked")
+
+        def answer(it, q, t):
+            return {k: v for k, v in kept[(it["id"], q, t)].items() if k not in drop}
+
+        answer.close = lambda: None
     try:
         rows = run(insights, intents, table, tol, clubs, answer=answer)
     finally:
@@ -539,8 +552,9 @@ def cmd_grade(args) -> None:
     args.out.write_text("".join(json.dumps(r, default=str) + "\n" for r in rows))
     s = summarise(rows)
     s["label"] = args.label
-    if args.model:
-        s["model"] = model_report(rows, log, answer.spent["usd"])
+    if args.model or (args.replay and any(r.get("model") for r in rows)):
+        spent = answer.spent["usd"] if args.model else sum(r.get("usd", 0) for r in rows if r.get("model"))
+        s["model"] = model_report(rows, log, spent)
         print(json.dumps({k: v for k, v in s["model"].items() if k != "intents"}))
     args.out.with_suffix(".summary.json").write_text(json.dumps(s, indent=1) + "\n")
     print(
@@ -715,6 +729,7 @@ def main(argv: list[str] | None = None) -> None:
         default="",
         help="further arguments for ninety.intel.match_insights, as the package's build passed them",
     )
+    g.add_argument("--replay", type=Path, default=None, help="re-grade a saved run's answers (rows .jsonl)")
     g.add_argument("--truth-table", type=Path, default=TRUTH_TABLE)
     g.add_argument("--label", default="run")
     g.add_argument("--out", type=Path, required=True)

@@ -151,7 +151,8 @@ def minutes_said(text: str) -> list[int]:
     for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and ))+\d{1,3})\b", text, re.I):
         out += [int(x) for x in re.findall(r"\d{1,3}", run)[1:]]  # "minutes 35, 76 and 85": the rest
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:′|')", text)]
-    out += [int(x) for x in re.findall(r"\b(?:to|until|through) (?:minute )?(\d{1,3})\b", text, re.I)]
+    # "to 34" is a minute, "15% to 20%" is not (a share's range)
+    out += [int(x) for x in re.findall(r"\b(?:to|until|through) (?:minute )?(\d{1,3})\b(?!\s*%)", text, re.I)]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:st|nd|rd|th) minute\b", text, re.I)]
     return out
 
