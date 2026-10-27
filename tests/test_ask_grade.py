@@ -357,3 +357,48 @@ def test_another_question_set_keeps_the_intents_rules(tmp_path):
     bad.write_text(json.dumps([{"intent": "weather", "q": "is it raining"}]))
     with pytest.raises(ValueError):
         G.with_questions(INTENTS, bad)
+
+
+def _counts(home, away, slack=0):
+    band = {"home": home, "away": away, "total": home + away}
+    lo = {"home": home - slack, "away": away - slack, "total": home + away - 2 * slack}
+    hi = {"home": home + slack, "away": away + slack, "total": home + away + 2 * slack}
+    return {"footage": {"count": band, "count_lo": lo, "count_hi": hi}}
+
+
+@pytest.mark.parametrize(
+    "truth,text,ok",
+    [
+        (
+            _counts(3, 5),
+            "Lisbon Esportes have had more shots in the footage, 5 to London Athletic's 3.",
+            True,
+        ),
+        (
+            _counts(3, 5),
+            "London Athletic have had more shots in the footage, 3 to Lisbon Esportes' 5.",
+            False,
+        ),
+        (_counts(3, 5), "London Athletic have had fewer shots than Lisbon Esportes in the footage.", True),
+        (_counts(3, 5), "The two sides are level on shots in the footage.", False),
+        (_counts(3, 5), "There were 8 shots in the footage.", False),
+        (_counts(4, 4), "The two sides are level on shots in the footage, 4 each.", True),
+        (_counts(4, 4), "Lisbon Esportes have had more shots in the footage.", False),
+        (
+            _counts(4, 5, slack=1),
+            "London Athletic and Lisbon Esportes are level on shots in the footage.",
+            True,
+        ),
+        (_counts(4, 5, slack=1), "Lisbon Esportes have had more shots, 5 to 4.", True),
+        (_counts(4, 5, slack=1), "London Athletic have had more shots, 4 to 5.", False),
+    ],
+)
+def test_a_count_leads_with_the_right_club(truth, text, ok):
+    assert G.comparison_direction(text, truth, CLUBS) is ok
+
+
+def test_comparison_direction_is_a_count_check_only():
+    shots = graded("shots", "How many shots?", 2700.0, "Lisbon Esportes have had more shots in the footage.")
+    assert shots["comparison_direction"] is not None
+    poss = graded("possession", "possession?", 2700.0, "London Athletic had 57% of the ball in the footage.")
+    assert poss["comparison_direction"] is None

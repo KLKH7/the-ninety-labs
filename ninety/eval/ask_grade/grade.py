@@ -426,6 +426,42 @@ def correct(
     return None, scope
 
 
+COMPARE_LEVEL = re.compile(
+    r"\b(?:level|the same number|as many|equal(?:ly)?|both had|each had|neither had more)\b", re.I
+)
+COMPARE_MORE = re.compile(r"\b(?:more|most|ahead|edge)\b", re.I)
+COMPARE_FEWER = re.compile(r"\b(?:fewer|less|behind)\b", re.I)
+
+
+def comparison_direction(text: str, tv: dict, clubs: dict) -> bool:
+    """A detector-bound count (Kian, Oct 27) leads with a club comparison: its lead sentence names
+    the club that truly has more over the footage shown, or says "level" when the truth is level.
+    Truth: the footage count with the count tolerance's edge bands (tolerances.json count_edge_s);
+    where the two clubs' bands overlap the truth cannot order them, so "level" or the club ahead on
+    the central count passes (both clubs and "level" when the central counts are equal)."""
+    v = tv["footage"]
+    c, lo, hi = v["count"], v["count_lo"], v["count_hi"]
+    if lo["home"] > hi["away"]:
+        allowed = {"home"}
+    elif lo["away"] > hi["home"]:
+        allowed = {"away"}
+    elif c["home"] == c["away"]:
+        allowed = {"level", "home", "away"} if lo != hi else {"level"}
+    else:
+        allowed = {"level", "home" if c["home"] > c["away"] else "away"}
+    s = lead(text)
+    if COMPARE_LEVEL.search(s) and not COMPARE_MORE.search(s):
+        claimed = "level"
+    else:
+        named = clubs_in(s, clubs)
+        if not named or not (COMPARE_MORE.search(s) or COMPARE_FEWER.search(s)):
+            return False  # no comparison in the lead
+        claimed = named[0]
+        if COMPARE_FEWER.search(s) and not COMPARE_MORE.search(s):
+            claimed = "away" if claimed == "home" else "home"  # "London have had fewer than Lisbon"
+    return claimed in allowed
+
+
 def grade(
     it: dict,
     q: str,
@@ -460,6 +496,11 @@ def grade(
     span_clipped = t_to is None or t_to <= t + 1.0
     false_unknown = None if unmeasured or holds is None else not (holds and not answered)
     flags = [k for k, rx in NATURAL.items() if rx.search(text)]
+    compares = (
+        comparison_direction(text, tv, clubs)
+        if it["kind"] == "count" and tv is not None and answered
+        else None
+    )
     checks = {
         "answered": answered,
         "relevant": rel,
@@ -469,6 +510,7 @@ def grade(
         "span_clipped": span_clipped,
         "no_false_unknown": false_unknown,
         "natural": not flags,
+        "comparison_direction": compares,
     }
     return {"checks": checks, "scope": scope, "flags": flags, "future_minutes": future}
 
@@ -479,7 +521,7 @@ def headline(text: str) -> str:
 
 
 CORE = ("answered", "relevant", "correct", "no_false_unknown")  # the headline: a right answer to the question
-OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent")
+OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent", "comparison_direction")
 CHECKS = CORE + OTHERS
 
 
