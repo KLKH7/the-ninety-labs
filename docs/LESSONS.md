@@ -3441,3 +3441,31 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
   with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
 
+### 285. A share stated only when every input is sure is never stated
+- **What happened:** the Stats tab's possession was each club's share of the detected passes, said
+  only when no pass of the window had an unsure side (I17). On the demo match (seed 8324) a few
+  passes in every window had one, so the row read "unsure" from kick-off to full time, and the big
+  screen's half-time and full-time panels, which show only confident rows, never had possession.
+  Each gate was right on its own; together they made a headline number that could not appear.
+- **Rule:** before shipping a gated statistic, count how often its gate opens on the demo match. A
+  gate that needs every one of hundreds of inputs to pass is a gate that never opens: measure the
+  statistic's error instead and state it with its error. Possession is now time on the ball
+  (I17b), stated once a minute of possession was seen, its error against the answer key published
+  (docs/eval/possession-time.json).
+- **Check:** `tests/test_possession_territory.py::test_the_share_is_always_said_after_a_minute_of_possession_and_never_before`
+  (fails with the old all-sure gate).
+
+### 286. A label for "nobody named" in a name's slot says the club twice
+- **What happened:** where vision's scorer was not named, his `say` was the generic "a Lisbon
+  Esportes player", and the Companion put it where a name goes: "a Lisbon Esportes player scored
+  for Lisbon Esportes in minute 35". The feed did name that goal's track (Ben Vomble), but goal
+  facts never read the feed's names, so the line said the club twice and no one.
+- **Rule:** a sentence with a person's slot is said only with a name or a role, never with the
+  fallback label that is only the club; and a name the approved source gives (the player-ID feed,
+  through the goal's own player) reaches the fact that needs it. A new attribution step (the feed
+  player nearest the ball at the strike) is pre-registered and gated like any other: it missed
+  (0.40 against 0.95 on held-out seed 8080, the misses shots vision detected where there were
+  none) and is off.
+- **Check:** `tests/test_companion_match.py::test_a_scorer_who_is_only_his_club_is_not_said_twice`;
+  `tests/test_identity_feed.py::test_the_shooter_step_is_off_while_its_committed_score_missed`.
+

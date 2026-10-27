@@ -1,4 +1,4 @@
-"""Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18."""
+"""Possession share (time on the ball) and territory (where the ball was): GROUNDING I17b, I18."""
 
 import pytest
 
@@ -6,29 +6,102 @@ from ninety.agents import companion_match as cm
 from ninety.intel import ball_share as terr
 
 
-def ev(i, team, t=60.0, side=0.99, conf=0.9):
-    return {"id": f"e{i}", "type": "pass", "team": team, "t": t, "confidence": conf, "team_confidence": side}
+def fr(n, ball, players):
+    """One tracked frame at 25 fps: the ball (x, y) or None, and players (id, team, x, y)."""
+    return {"frame": n, "t": n / 25, "source": "tracked",
+            "ball": None if ball is None else {"x": ball[0], "y": ball[1]},
+            "players": [{"id": i, "team": t, "x": x, "y": y} for i, t, x, y in players]}
 
 
-def test_the_share_is_stated_only_when_no_pass_is_in_doubt():
-    rows = terr.possession_rows([ev(1, "home"), ev(2, "home"), ev(3, "home"), ev(4, "away")])
-    got = terr.possession(rows, 1, 5)
-    assert got["home"]["value"] == 75 and got["away"]["value"] == 25
-    assert got["home"]["confident"] and got["home"]["lo"] == got["home"]["hi"] == 75
-    # One pass whose side the video could not tell: bounds, and nothing stated.
-    passes = [ev(1, "home"), ev(2, "home"), ev(3, "home"), ev(4, "away"), ev(5, "away", side=0.9)]
-    rows = terr.possession_rows(passes)
-    got = terr.possession(rows, 1, 5)
-    assert (got["home"]["lo"], got["home"]["hi"]) == (60, 80) and not got["home"]["confident"]
+def carry(n0, frames, pid, team, x0, speed=2.0):
+    """A player running with the ball at his feet (0.3 m ahead) along x."""
+    out = []
+    for k in range(frames):
+        x = x0 + speed * k / 25
+        out.append(fr(n0 + k, (x + 0.3, 30.0), [(pid, team, x, 30.0)]))
+    return out
+
+
+def secs(rows):
+    return {t: round(sum(r[t] for r in rows), 2) for t in ("home", "away")}
+
+
+def test_a_side_keeps_the_ball_from_its_touch_until_the_other_side_wins_it():
+    # Home carries 2 s, the ball rolls 1 s to nobody (still home's), then away carries 2 s.
+    rows = carry(0, 50, "h-t1", "home", 40.0)
+    rows += [fr(50 + k, (44.3 + 8 * k / 25, 30.0), [("h-t1", "home", 44.0, 30.0)]) for k in range(25)]
+    rows += carry(75, 50, "a-t1", "away", 52.0)
+    got = secs(terr.possession_rows(rows))
+    assert got["home"] == pytest.approx(3.0, abs=0.1) and got["away"] == pytest.approx(2.0, abs=0.1)
+
+
+def test_a_dead_ball_and_a_cut_belong_to_nobody():
+    rows = carry(0, 50, "h-t1", "home", 40.0)
+    rows += [fr(50 + k, (105.5, 30.0), []) for k in range(25)]  # over the goal line
+    rows += [fr(75 + k, (100.0, 30.0), []) for k in range(25)]  # back in, nobody has touched it
+    got = secs(terr.possession_rows(rows))
+    assert got["home"] == pytest.approx(2.0, abs=0.1)
+    cut = carry(0, 50, "h-t1", "home", 40.0) + [fr(500 + k, (60.0, 30.0), []) for k in range(25)]
+    assert secs(terr.possession_rows(cut))["home"] == pytest.approx(2.0, abs=0.1)
+
+
+def test_a_cut_ends_possession_even_within_the_hold():
+    # The footage cuts 0.4 s after home's touch, to a loose ball: nobody's, though HOLD_S has not run out.
+    rows = carry(0, 50, "h-t1", "home", 40.0) + [fr(60 + k, (60.0, 30.0), []) for k in range(25)]
+    assert secs(terr.possession_rows(rows))["home"] == pytest.approx(2.0, abs=0.1)
+
+
+def test_a_dead_ball_counts_for_nobody_until_a_side_touches_it_again():
+    # Out over the touchline for 1 s, within the hold, then loose in play: nobody's throughout.
+    rows = carry(0, 50, "h-t1", "home", 40.0)
+    rows += [fr(50 + k, (60.0, 68.5), []) for k in range(25)]
+    rows += [fr(75 + k, (60.0, 67.0), []) for k in range(25)]
+    assert secs(terr.possession_rows(rows))["home"] == pytest.approx(2.0, abs=0.1)
+    # A ball on the line (within its radius) is in play, Law 9: still home's.
+    rows = carry(0, 50, "h-t1", "home", 40.0) + [fr(50 + k, (60.0, 68.05), []) for k in range(25)]
+    assert secs(terr.possession_rows(rows))["home"] == pytest.approx(3.0, abs=0.1)
+
+
+def test_possession_is_gained_by_two_frames_running_never_by_scattered_touches():
+    lone = []
+    for k in range(100):
+        near = k in (10, 60)  # two single frames at an away player's feet, 2 s apart
+        lone.append(fr(k, (40.3 if near else 50.0, 30.0), [("a-t1", "away", 40.0, 30.0)]))
+    assert secs(terr.possession_rows(lone))["away"] == 0
+    two = [fr(k, (40.3 if k in (10, 11) else 50.0, 30.0), [("a-t1", "away", 40.0, 30.0)]) for k in range(20)]
+    assert secs(terr.possession_rows(two))["away"] > 0
+
+
+def test_a_loose_ball_is_nobody_s_after_the_hold():
+    rows = carry(0, 25, "h-t1", "home", 40.0)
+    rows += [fr(25 + k, (60.0, 30.0), []) for k in range(250)]  # 10 s loose
+    assert secs(terr.possession_rows(rows))["home"] == pytest.approx(1.0 + 4.0, abs=0.1)
+
+
+def test_control_is_within_1_5_m_and_moving_with_the_player():
+    far = [fr(k, (40.0 + 1.6, 30.0), [("h-t1", "home", 40.0, 30.0)]) for k in range(50)]
+    assert secs(terr.possession_rows(far))["home"] == 0
+    near = [fr(k, (40.0 + 1.4, 30.0), [("h-t1", "home", 40.0, 30.0)]) for k in range(50)]
+    assert secs(terr.possession_rows(near))["home"] == pytest.approx(2.0, abs=0.1)
+    # A pass rolling past a standing player at 10 m/s is near him for frames, never his.
+    past = [fr(k, (30.0 + 10 * k / 25, 30.0), [("a-t1", "away", 40.0, 30.0)]) for k in range(50)]
+    assert secs(terr.possession_rows(past))["away"] == 0
+
+
+def test_the_share_is_always_said_after_a_minute_of_possession_and_never_before():
+    rows = terr.possession_rows(carry(0, 25 * 40, "h-t1", "home", 0.0, 0.05)
+                                + carry(1000, 25 * 19, "a-t1", "away", 60.0, 0.05))
+    got = terr.possession(rows, 1, 2)
+    assert got["home"]["value"] is None and not got["home"]["confident"]  # 59 s: "—"
     assert cm.code_texts({**got["home"], "club": "London Athletic"}) == []
-
-
-def test_a_pass_counts_for_its_side_only_past_the_side_gate():
-    rows = terr.possession_rows([ev(1, "home", side=0.97), ev(2, "home", side=0.9)])
-    assert [r["side_known"] for r in rows] == [True, False]
-    truth = {"id": "e3", "type": "pass", "team": "away", "t": 1.0}  # the simulator's, no detection score
-    assert terr.possession_rows([truth])[0]["side_known"]
-    assert terr.possession_rows([{**truth, "type": "shot"}]) == []
+    rows = terr.possession_rows(carry(0, 25 * 40, "h-t1", "home", 0.0, 0.05)
+                                + carry(1000, 25 * 21, "a-t1", "away", 60.0, 0.05))
+    got = terr.possession(rows, 1, 2)
+    assert got["home"]["confident"] and got["home"]["value"] + got["away"]["value"] == 100
+    assert got["home"]["value"] == round(100 * 40 / 61)
+    assert cm.code_texts({**got["home"], "club": "London Athletic", "minute_from": 1, "minute_to": 2}) == [
+        f"London Athletic had {got['home']['value']}% of possession from minute 1 to minute 2, "
+        "counted by time on the ball."]
 
 
 def frame(k, x):
@@ -101,3 +174,15 @@ def test_a_ball_beyond_a_goal_line_is_in_no_third(x):
     got = terr.territory(rows, 1, 1)
     assert got["home"]["seconds"] == got["away"]["seconds"] == 1
     assert got["home"]["shares"]["final"] == got["away"]["shares"]["final"] == 0
+
+
+def test_the_error_said_beside_possession_is_the_committed_measurement():
+    import json
+    import math
+    from pathlib import Path
+
+    body = json.loads((Path(__file__).resolve().parents[1] / "docs/eval/possession-time.json").read_text())
+    worst = max([body["gate"]["max_error"], *(m["so_far_max"] for m in body["matches"])])
+    assert terr.ERROR_POINTS == math.ceil(worst)
+    assert body["gate"]["mae_points_at_most"] == 5.0
+

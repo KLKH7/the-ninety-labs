@@ -65,7 +65,7 @@ class MatchInsights:
     # through the camera join (ninety/intel/naming.broadcast_people); empty for a single camera.
     broadcast: dict = field(default_factory=dict)
     # Names from the player-ID feed (ninety/intel/identity.py), tactical and broadcast tracks: the
-    # bundle's line-up only. No fact, person record or statistic above reads them.
+    # bundle's line-up, and a goal's scorer's name. No statistic or person record reads them.
     identity: dict = field(default_factory=dict)
     identity_broadcast: dict = field(default_factory=dict)
     identity_source: dict = field(default_factory=dict)
@@ -178,6 +178,13 @@ class MatchInsights:
                 mi.identity_broadcast = identity_mod.named_broadcast(
                     association, mi.identity, feed, detected_events, broadcast_frames)
             mi.identity_source = identity_mod.disclosure(feed)
+            # A goal's scorer by name where the feed names the broadcast track vision says scored:
+            # a name, never whether, when or for whom (the goal and its side stay vision's).
+            by_id = {e["id"]: e for e in detected_events}
+            for g in mi.facts.get("goal", ()):
+                w = mi.identity_broadcast.get((by_id.get(g["event"]) or {}).get("player") or "")
+                if g.get("player") and w and w["team"] == g["team"]:
+                    g["scorer_is"], g["scorer_source"] = w["name"], identity_mod.SOURCE
         return mi
 
     # -- what the tools answer -------------------------------------------------------------

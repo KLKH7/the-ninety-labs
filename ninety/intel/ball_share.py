@@ -40,10 +40,15 @@ THIRD_M = PITCH_X / 3
 EDGE_M = POSITION_ERROR_M
 THIRDS = ("own", "middle", "final")
 FPS = 25  # the tracked frames' rate (ninety/intel/scene)
-# Pre-registered (docs/eval/possession-time-plan.md): a share is said once either team has had the
-# ball this long in the window (design: about two minutes of play, at the half of it a team is
+# Pre-registered (docs/eval/possession-time-plan.md): a share is said once the two teams together
+# have had the ball this long in the window (design: about two minutes of play, at the half of it a team is
 # seen with the ball); before it, "—".
 MIN_POSSESSION_S = 60.0
+# Measured, not a target: the largest error of the home share against the answer key, over the six
+# pre-registered windows and every "so far" value the Stats tab shows (docs/eval/possession-time.json:
+# 8.1 and 9.2, rounded up). It missed its 5-point MAE gate (5.75), so the number is said with this
+# beside it (the plan's fallback).
+ERROR_POINTS = 10
 
 
 def _control(frames: Sequence[Mapping]) -> list[tuple[int, float, str | None, bool]]:
@@ -108,7 +113,9 @@ def possession_rows(frames: Sequence[Mapping]) -> list[dict]:
         prev_n = n
         if not live:
             team, run_side, run = None, None, 0
-        if side is not None:
+        if side is None:
+            run_side, run = None, 0  # frames running: a frame with nobody on the ball ends the run
+        else:
             run = run + 1 if side == run_side else 1
             run_side = side
             if run >= MIN_SPELL_FRAMES:
@@ -116,7 +123,7 @@ def possession_rows(frames: Sequence[Mapping]) -> list[dict]:
         if team is not None and last_touch is not None and (n - last_touch) / FPS > HOLD_S:
             team = None
         m = minute_of(t)
-        r = by.setdefault(m, {"id": f"poss:m{m}", "kind": "possession_minute", "minute": m,
+        r = by.setdefault(m, {"id": f"poss:m{m}", "kind": "possession_minute", "team": None, "minute": m,
                               "frames": 0, **{k: 0 for k in TEAMS}})
         r["frames"] += 1
         if team is not None and live:
@@ -127,7 +134,9 @@ def possession_rows(frames: Sequence[Mapping]) -> list[dict]:
 def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict[str, dict]:
     """Each team's share of the seconds either team had the ball in the window; no share before
     MIN_POSSESSION_S of them (too early to say), and then always one."""
-    window = [r for r in rows if minute_from <= r["minute"] <= minute_to]
+    # Only time rows: a file written before I17b holds pass rows, which say nothing of time.
+    window = [r for r in rows
+              if r.get("kind") == "possession_minute" and minute_from <= r["minute"] <= minute_to]
     secs = {k: sum(float(r[k]) for r in window) for k in TEAMS}
     total = sum(secs.values())
     if not window:

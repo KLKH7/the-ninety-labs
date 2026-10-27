@@ -78,9 +78,8 @@ TOOL_HELP = {
     "shots": "the shot map: each shot's spot, metres from goal and the angle the posts make there, "
     "nearest first; each club's shots and those from inside the penalty area. How a shot ended is not "
     "known yet",
-    "possession": "each club's share of the passes, the pass ratio Opta publishes as possession (not time "
-    "on the ball); "
-    "unsure when the video could not tell whose some passes were",
+    "possession": "each club's share of the time either side had the ball (time in possession: dead and "
+    "contested time left out), from the first minute a share can be said",
     "territory": "where the ball was: each club's share of the time with it in its attacking third, as "
     "a range (the ball near a third's line could be on either side)",
     "goal_build_up": "the latest goal up to minute_to (or one club's), and what happened in the minute "
@@ -795,9 +794,9 @@ def _sample(fact: dict) -> int | None:
     if isinstance(fact.get("passes"), int):
         return fact["passes"]
     return next((int(v) for v, unit, *_ in fact.get("also") or () if unit == "passes"), None)
-# Fixed text, stating no fact: possession is unknown when too few passes had their side told surely.
-POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: vision could not tell surely "
-                      "which side made most of the passes.")
+# Fixed text, stating no fact: possession is unknown before a minute of either side on the ball was seen.
+POSSESSION_UNKNOWN = ("Possession can't be split between the clubs yet: too little of the match has "
+                      "been seen with either side on the ball.")
 
 
 def code_texts(fact: dict) -> list[str]:
@@ -958,7 +957,7 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "possession_share":
         if fact.get("value") is None:
             return []
-        return [f"{club} had {fact['value']}% of possession {span}, counted by share of passes."]
+        return [f"{club} had {fact['value']}% of possession {span}, counted by time on the ball."]
     if metric == "final_third_share":
         lo, hi = fact["lo"], fact["hi"]
         share = f"{lo}%" if lo == hi else f"between {lo}% and {hi}%"
@@ -977,12 +976,13 @@ def code_texts(fact: dict) -> list[str]:
     if kind == "goal":
         m = fact["minute"]
         out = []
-        if fact.get("scorer_is") and fact.get("assister_is"):
-            out.append(
-                f"{fact['scorer_is']} scored for {club} in minute {m}, from {fact['assister_is']}'s pass."
-            )
-        if fact.get("scorer_is"):
-            out.append(f"{fact['scorer_is']} scored for {club} in minute {m}.")
+        # A scorer is said only by name or role: "a London Athletic player scored for London Athletic"
+        # says the club twice and no one (Kian, Oct 27).
+        scorer = fact.get("scorer_is") if club and club not in (fact.get("scorer_is") or club) else None
+        if scorer and fact.get("assister_is"):
+            out.append(f"{scorer} scored for {club} in minute {m}, from {fact['assister_is']}'s pass.")
+        if scorer:
+            out.append(f"{scorer} scored for {club} in minute {m}.")
         return [*out, f"{club} scored in minute {m}."]
     if fact.get("kind") == "set_pieces":
         from ninety.intel.set_pieces import WORDS

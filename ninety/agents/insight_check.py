@@ -580,7 +580,7 @@ TEMPLATES = {
     "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
     "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
-    "possession_share": [rf"had {_N}% of possession", r"counted by share of passes"],
+    "possession_share": [rf"had {_N}% of possession", r"counted by time on the ball"],
     "score": [
         r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
     ],

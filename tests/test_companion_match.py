@@ -974,6 +974,18 @@ def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, sa
     assert a.headline in ("Goals spotted by vision", "See the scorebug")
 
 
+@pytest.mark.parametrize("scorer, said", [
+    ("Ben Vomble", "Ben Vomble scored for London Athletic in minute 23."),
+    ("London Athletic's striker", None),  # a role with the club in it: the club would be said twice
+    ("a London Athletic player", None),  # lesson 286: only the club, in a name's slot
+])
+def test_a_scorer_who_is_only_his_club_is_not_said_twice(scorer, said):
+    texts = companion.code_texts({**_goal("v90", 23), "scorer_is": scorer})
+    assert texts[-1] == "London Athletic scored in minute 23."
+    assert all(t.count("London Athletic") == 1 for t in texts), texts
+    assert (said in texts) if said else len(texts) == 1
+
+
 def test_who_is_winning_is_headed_by_the_scorebug_not_a_scorer():
     a = _score_answer([_goal("v90", 23)], "Who's winning?")
     assert a.headline in ("Goals spotted by vision", "See the scorebug") and a.metric is None
@@ -1062,9 +1074,9 @@ def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing()
     mi.facts["spell"] = [{"id": "spell:v9", "kind": "spell", "metric": "spell_passes", "team": None,
                           "minute": 31, "t": 1850.0, "value": 7, "unit": "passes", "confident": True,
                           "club": None, "events": []}]
-    # Every pass's side unsure: the share is unknown (bounds 0 to 100), not 0 or 100.
-    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
-                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+    # Under a minute of possession seen in the window: the share is unknown, not 0 or 100.
+    mi.facts["possession"] = [{"id": f"poss:m{10 + i}", "kind": "possession_minute", "minute": 10 + i,
+                               "frames": 2.0, "home": 1.0, "away": 1.0, "club": None}
                               for i in range(20)]
     a = asyncio.run(companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0),
                                            mi)).answer
@@ -1085,8 +1097,8 @@ def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known()
     mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
     a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
     assert a.headline == "London 1, Lisbon 0", a.headline
-    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
-                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
+    mi.facts["possession"] = [{"id": f"poss:m{10 + i}", "kind": "possession_minute", "minute": 10 + i,
+                               "frames": 2.0, "home": 1.0, "away": 1.0, "club": None}
                               for i in range(20)]
     for q in ("Who has more of the ball?", "Who has had more possession?"):
         a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer

@@ -339,6 +339,11 @@ BALL_M = 1.5
 GOAL_SHOT_S = 5.0  # design: as the phone pairs a goal with its shot (web/phone GOAL_SHOT_S)
 NEAR_FRAMES = 2  # the feed row nearest the strike's frame, no more than this many frames away
 SHOOTS = ("shot", "goal")
+# Scored once against its pre-registered gate (docs/eval/scorer-feed.json, Oct 27): precision 0.40 on
+# held-out seed 8080 (2 of 5; the 3 misses are shots vision detected where the answer key has
+# none), against 0.95. As its plan says, the step stays off: no name rather than a wrong one.
+# tests/test_identity_feed.py holds this to the committed score.
+SHOOTERS_GATE_MET = False
 
 
 def _at(feed: Feed, t: float) -> Mapping[str, tuple[float, float]]:
@@ -418,7 +423,9 @@ def load_for(path: Path, frames: Sequence[Mapping], fixture: Fixture) -> Feed:
 
 
 def shooters_main(argv: list[str] | None = None) -> None:
-    """Step 9 alone, on a file the side step already wrote: `python -m ninety.intel.identity shooters`."""
+    """Step 9 alone, on a file the side step already wrote: `python -m ninety.intel.identity shooters`.
+    Grading only while its gate is not met (ninety/eval/scorer_feed.py): the demo's files never
+    carry its names."""
     ap = argparse.ArgumentParser(description="Give shots and goals the feed player at the ball (step 9).")
     ap.add_argument("--sided", type=Path, required=True, help="the side step's detected.sided.jsonl")
     ap.add_argument("--insights", type=Path, required=True,
@@ -466,16 +473,16 @@ def main(argv: list[str] | None = None) -> None:
     association = json.loads(args.association.read_text())["tracks"]
     events = [json.loads(x) for x in args.detected.read_text().splitlines() if x.strip()]
     named = named_broadcast(association, tactical(frames, feed), feed, events, b_frames)
-    rows = ball_named(sided(events, named), feed, named)
+    rows = sided(events, named)
+    if SHOOTERS_GATE_MET:
+        rows = ball_named(rows, feed, named)
     args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     n = sum(r.get("team_source") == SOURCE for r in rows)
-    m = sum("player_named" in r for r in rows)
-    print(f"{args.out}: {n} of {len(rows)} events given their player's side by the feed, "
-          f"{m} shots and goals their shooter from the ball")
+    print(f"{args.out}: {n} of {len(rows)} events given their player's side by the feed")
 
 
-__all__ = ["BALL_M", "CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "at_ball", "ball_named", "strike_of",
-           "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
+__all__ = ["BALL_M", "SHOOTERS_GATE_MET", "CALIBRATION", "DISCLOSURE", "Feed", "GATE_M", "at_ball",
+           "ball_named", "strike_of", "SOURCE", "SOURCE_LABEL", "assign", "broadcast",
            "broadcast_frames", "combined", "event_ids", "named_broadcast",
            "disclosure", "gate", "lineup", "load", "load_for", "sided", "tactical"]
 
