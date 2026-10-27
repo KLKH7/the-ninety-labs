@@ -125,6 +125,9 @@ class Line:
     # A goal's score after it, (home, away), as the broadcast's scorebug read it (measured: #356): said
     # after the checked line ("London lead 2–1."), never counted from goals.
     score: tuple[int, int] | None = None
+    # The side of each player the line's event names, as the event tells it surely (its team, which
+    # the player-ID feed may have corrected): said in place of his track id's letter (lesson 283).
+    sides: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -200,6 +203,12 @@ def _versions(event: dict) -> list[str]:
     if kind == "goal" or (kind == "shot" and event.get("outcome") == "goal"):
         # A shot vision saw go in is a goal, said as one, when no goal event follows it (scored_by).
         who = "A player" if who == UNNAMED else who
+        if event.get("player") and side_known(event):
+            # The scoring side is the goal event's own (the side match.json's goals carry,
+            # stats.goal_moments), said by name: never left to the scorer's track id, whose letter is
+            # the tracker's side vote and can be the other club's (lesson 283).
+            team = event["team"]
+            return [f"Goal! {who} scores for {team}, {place}.", f"Goal! {who} scores for {team}."]
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":
         outcome = {"on_target": "on target", "off_target": "off target", "blocked": "blocked"}.get(
@@ -285,26 +294,28 @@ as_sentence = _sentence  # the offline stand-in Tactician writes its claim this 
 
 
 def _names(text: str, side_known: bool = True, compact: bool = False,
-           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None) -> str:
+           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
+           sides: dict[str, str] | None = None) -> str:
     """Ids as a commentator says them. A squad id is its side's shirt number ("Home's number 11", then
     "number 8"). A tracked player has no shirt number the tracker read, so a track id is never said as
     a number: he is "a home player", then "a team-mate", only when the line's side was told surely;
     otherwise "a player", then "another player" (a track id's letter is the tracker's side vote, which
     the voice says only when the gate passes it; the graphic's id still shows it: EVALUATION.md, known
     residual).
-    The same player named again is "the same player". `compact` (a short version) drops the side."""
-    sides: set[str] = set()
+    The same player named again is "the same player". `compact` (a short version) drops the side.
+    `sides` gives a track's side as its event told it surely, over the letter (lesson 283)."""
+    said_sides: set[str] = set()
     seen: dict[str, str] = {}
 
     def say(m: re.Match) -> str:
-        whole, side = m[0], ("home" if m[1] == "h" else "away")
+        whole, side = m[0], (sides or {}).get(m[0]) or ("home" if m[1] == "h" else "away")
         if names and names.get(whole):  # the player-ID feed names him (#389): said by his name
             seen[whole] = names[whole]
             return names[whole]
         if whole in seen:
             return "the same player" if m[3] else f"number {m[2]}"
-        first = side not in sides
-        sides.add(side)
+        first = side not in said_sides
+        said_sides.add(side)
         if m[2]:
             club = (clubs or {}).get(side, side.capitalize())
             phrase = f"number {m[2]}" if compact or not first else f"{club}'s number {m[2]}"
@@ -322,7 +333,8 @@ def _names(text: str, side_known: bool = True, compact: bool = False,
 
 
 def spoken(text: str, side_known: bool = True, compact: bool = False,
-           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None) -> str:
+           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
+           sides: dict[str, str] | None = None) -> str:
     """What the voice says for a checked line: a sentence, not a graphic's compact form; ids as a
     commentator names players; units in full. The substitutions are fixed: what is said carries
     exactly the checked line's numbers, and names no side the checked line does not (a track id's
@@ -330,7 +342,9 @@ def spoken(text: str, side_known: bool = True, compact: bool = False,
     bundle's team codes): "London's number 11" rather than "Home's number 11"."""
     club_of = clubs or {}
     out = TEAM_SPOKEN.sub(lambda m: club_of.get(m[1], m[1].capitalize()), _sentence(text))
-    out = _names(out, side_known, compact, clubs, names)
+    out = _names(out, side_known, compact, clubs, names, sides)
+    # "A Lisbon player scores for Lisbon": the club once.
+    out = re.sub(r"\b(an? (.+?) player scores) for \2\b", r"\1", out)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
     out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
     out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
@@ -549,8 +563,9 @@ def candidates(
         kind = "goal" if event["type"] == "shot" and event.get("outcome") == "goal" else event["type"]
         if versions:
             score = score_after(float(event["t"]), scores or []) if kind == "goal" else None
+            told = ((event["player"], event["team"]),) if event.get("player") and side_known(event) else ()
             lines.append(Line(event["id"], event["t"], PRIORITY[kind], pan_for(event["x"]),
-                              [event["id"]], versions, "event", sides_told([event["id"]]), kind, score))
+                              [event["id"]], versions, "event", sides_told([event["id"]]), kind, score, told))
     lines.extend(insights.values())  # an insight whose last event is not in this list: none today
     for t, text, fact in shape_lines(shape):
         versions = checked([text], [fact])
@@ -580,10 +595,11 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
     free_at = float("-inf")
     last_said: dict[str, float] = {}
     for i, line in enumerate(lines):
+        told = dict(line.sides)
         if line.kind in REPEATS:
             # A pass or a spell said in the same words as one within REPEAT_S tells the listener
             # nothing new ("A player finds another player, in the middle", again): not said.
-            words = spoken(line.versions[0], line.side_known, clubs=clubs, names=names)
+            words = spoken(line.versions[0], line.side_known, clubs=clubs, names=names, sides=told)
             if line.t - last_said.get(words, float("-inf")) < REPEAT_S:
                 dropped.append({"id": line.key, "t": line.t,
                                 "reason": f"said in the same words within {REPEAT_S:g} s"})
@@ -595,7 +611,7 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
         upcoming = [n for n in lines[i + 1:] if n.priority < line.priority]
         chosen = None
         for n, text in enumerate(line.versions):
-            words = spoken(text, line.side_known, compact=n > 0, clubs=clubs, names=names)
+            words = spoken(text, line.side_known, compact=n > 0, clubs=clubs, names=names, sides=told)
             if line.score is not None:  # the scorebug's reading after a goal, said after it
                 words = f"{words} {score_said(line.score, clubs)}"
             seconds, how = duration(words, ssml(words, line.priority))
@@ -620,7 +636,8 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
         ))
         free_at = end + GAP_S * k
         if line.kind in REPEATS:
-            last_said[spoken(line.versions[0], line.side_known, clubs=clubs, names=names)] = line.t
+            last_said[spoken(line.versions[0], line.side_known, clubs=clubs, names=names,
+                             sides=told)] = line.t
     return Track(said, dropped)
 
 

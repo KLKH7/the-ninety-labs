@@ -1152,3 +1152,52 @@ def test_live_mode_answers_how_they_are_playing_with_the_overview_and_spends_no_
     q = Question("s1", None, "How is London Athletic's attack looking?", 60 * 60.0)
     r = asyncio.run(companion.answer_match(q, insights(), ask=ask, judge=ask))
     assert r.source == "code" and "biggest moment" in r.answer.text
+
+
+def _both_sides_broke_lines() -> MatchInsights:
+    """A London pass and a later Lisbon one, each taking 3 out: the Lisbon one is newer and would lead."""
+    mi = insights()
+    lb = next(f for f in mi.facts["line_break"] if f["id"] == "lb:v1")
+    lisbon = {**lb, "id": "lb:v2", "team": "away", "club": "Lisbon Esportes", "minute": 26, "t": 1530.0,
+              "value": 3, "lo": 3, "hi": 3, "event": "v2", "passer": "a-t7", "receiver": "a-t9",
+              "passer_is": None}
+    mi.facts["line_break"] = [{**lb, "value": 3, "lo": 3, "hi": 3}, lisbon]
+    return mi
+
+
+@pytest.mark.parametrize(
+    "text, passer",
+    [
+        ("Which pass broke Lisbon's lines?", "London Athletic"),
+        ("Which pass cut through Lisbon Esportes?", "London Athletic"),
+        ("Which pass broke London's lines?", "Lisbon Esportes"),
+        ("Which Lisbon pass broke the lines?", "Lisbon Esportes"),
+    ],
+)
+def test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs(text, passer):
+    """Preview, Oct 26 (lesson 283): "Which pass broke Lisbon's lines?" was answered with a Lisbon
+    pass ("a Lisbon Esportes player played a pass that took 3 London Athletic players out"): the named
+    club was read as the passer's. A club whose lines were broken is the one the pass beat."""
+    q = Question("s1", None, text, 28 * 60.0)
+    a, _ = companion.code_match_answer(q, _both_sides_broke_lines())
+    beaten = "Lisbon Esportes" if passer == "London Athletic" else "London Athletic"
+    assert a.status == "verified" and f"took 3 {beaten} players" in a.text, a.text
+
+
+def test_no_pass_of_the_beaten_club_answers_it_even_alone():
+    """With only Lisbon's pass in the stretch, "Which pass broke Lisbon's lines?" is not answered with it."""
+    mi = _both_sides_broke_lines()
+    mi.facts["line_break"] = [f for f in mi.facts["line_break"] if f["team"] == "away"]
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    a, _ = companion.code_match_answer(q, mi)
+    assert "Lisbon Esportes player" not in a.text, a.text
+
+
+def test_the_model_citing_the_beaten_clubs_pass_is_refused():
+    mi = _both_sides_broke_lines()
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v2", mi), "evidence": ["lb:v2"]}))
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    r = asyncio.run(companion.answer_match(q, mi, ask))
+    assert r.source == "code" and r.reasons[0].startswith("the question asks for a pass that beat Lisbon")
+    assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
