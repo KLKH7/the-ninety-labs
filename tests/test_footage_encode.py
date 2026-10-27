@@ -172,7 +172,7 @@ def test_a_quiet_crowd_bed_is_brought_to_broadcast_loudness(tmp_path):
 def test_the_gain_never_clips_the_whistles(tmp_path, monkeypatch):
     # A whistle near full scale in a bed the gain lifts a long way: the true-peak limiter holds it.
     bed = bed_of(tmp_path, "0.8*sin(2*PI*3200*t)*between(t\\,4\\,4.4)+0.02*(random(0)*2-1)")
-    monkeypatch.setattr(footage, "bed_gain", lambda audio, timescale=1.0: 19.0)  # a long lift
+    monkeypatch.setattr(footage, "bed_gain", lambda audio, timescale=1.0, **kw: 19.0)  # a long lift
     out = tmp_path / "bundle"
     out.mkdir()
     e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
@@ -192,3 +192,26 @@ def test_the_gain_is_corrected_for_what_the_limiter_takes_off_a_peaky_bed(monkey
     monkeypatch.setattr(footage, "loudness", measured)
     gain = footage.bed_gain(Path("bed.wav"), 1.25)
     assert measured(None, footage._chain(1.25, gain)) == pytest.approx(footage.BED_LUFS, abs=0.3)
+
+
+def test_a_screechy_whistle_is_tamed_but_stays_clear_over_the_crowd(tmp_path):
+    # Kian, Oct 27: once the bed was lifted the whistle screeched. A whistle 30+ dB over the crowd in
+    # its band is found and its band cut inside it; it stays at least 10 dB over the crowd.
+    import numpy as np
+
+    bed = bed_of(tmp_path, "0.05*(random(0)*2-1)+0.6*sin(2*PI*3400*t)*between(t\\,4\\,4.6)")
+    tamed = footage.whistles(bed)
+    assert len(tamed) == 1 and tamed[0][0] <= 4.0 and tamed[0][1] >= 4.6
+
+    def band(af: str) -> float:
+        cut = ["ffmpeg", "-loglevel", "error", "-i", str(bed), "-af", af, "-ac", "1", "-ar", "16000",
+               "-f", "s16le", "-"]
+        x = np.frombuffer(subprocess.run(cut, capture_output=True, check=True).stdout, dtype=np.int16) / 32768
+        n = 800
+        f = x[: len(x) // n * n].reshape(-1, n) * np.hanning(n)
+        sp, fr = np.abs(np.fft.rfft(f, axis=1)) ** 2, np.fft.rfftfreq(n, 1 / 16000)
+        db = 10 * np.log10(sp[:, (fr >= 2500) & (fr <= 4500)].sum(axis=1) + 1e-12)
+        return float(db.max() - np.median(db))  # the whistle over the crowd, in its band
+
+    before, after = band("anull"), band(footage._chain(1.0, 0.0, tamed))
+    assert before > 30 and 10 <= after <= before - 10

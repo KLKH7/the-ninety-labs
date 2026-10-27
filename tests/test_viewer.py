@@ -183,18 +183,42 @@ def test_audio_description_speaks_each_line_once_in_time(browser, site):
     page, errors = open_viewer(browser, site)
     page.keyboard.press("3")
     assert page.get_by_role("radio", name="Audio description").get_attribute("aria-checked") == "true"
-    assert page.is_visible("#voice-toggle") and page.is_checked("#voice")
-    assert "where the play is" in page.locator("#audio-note").inner_text()
-    # With the voice on, the live region is quiet: a screen reader does not say each line twice.
-    assert page.get_attribute("#on-air", "aria-live") == "off"
+    assert "not voiced" in page.locator("#audio-note").inner_text()  # this bundle has no recorded lines
+    # No voice in the bundle: no voice switch or its keys, and the live region is how a screen reader
+    # hears the description (aria-live off would leave a blind fan nothing).
+    assert not page.is_visible("#voice-toggle") and not page.is_visible("#audio-keys")
+    assert page.get_attribute("#on-air", "aria-live") == "polite"
     page.get_by_role("button", name="Watch it").click()  # seeks past the first line, to 60.7 s
     page.keyboard.press("3")
     play_to(page, 62.85)
     # mutation: say every line whose start is behind the clock (no SEEK_S guard) -> ad-e1 is said late
     assert narrator(page)["spoken"] == ["ad-insight-m-e2"]
     assert "ad-insight-m-e2" in on_air(page)
+    # The line due is the text of #on-air, shown and read by a screen reader in place of the graphics.
+    line = page.evaluate("window.ninetyNarrator.at(document.querySelector('#overlay').dataset.t * 1)")
+    assert line and page.inner_text("#on-air") == line["spoken"]
     assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
     assert not errors
+
+
+def test_the_viewer_never_speaks_with_the_browser_s_voice(browser, site):
+    """A line with no recorded audio is silent, its caption kept: audio description and commentary are
+    the bundle's voiced files or nothing (Kian, Oct 27: the browser's voice sounds robotic)."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script("""window.__speak = 0;
+        if (window.speechSynthesis) speechSynthesis.speak = () => { window.__speak += 1; };""")
+    page = ctx.new_page()
+    page.goto(site)
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.keyboard.press("3")  # audio description, voice on
+    page.get_by_role("button", name="Watch it").click()
+    page.keyboard.press("3")
+    play_to(page, 62.85)
+    assert narrator(page)["spoken"], "a line came due, or this proves nothing"
+    assert narrator(page)["voice"] == "none"
+    # mutation: speak a line without a file through speakAloud -> ninetySpokenAloud holds it
+    assert page.evaluate("window.ninetySpokenAloud") is None and page.evaluate("window.__speak") == 0
+    ctx.close()
 
 
 def test_audio_description_is_silent_with_the_voice_off(browser, site):

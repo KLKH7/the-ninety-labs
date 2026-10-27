@@ -640,6 +640,31 @@ def test_commentary_with_video_times_plays_by_the_video_clock(browser, site):  #
     ctx.close()
 
 
+def test_a_commentary_line_with_no_audio_is_captioned_and_never_spoken_by_the_browser(browser, site):  # noqa: F811
+    """Kian, Oct 27: the browser's voice sounds robotic. A commentary line without its recorded file is
+    captioned, and nothing is handed to speechSynthesis (speech.ts records what it would say)."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script("""window.__speak = 0;
+        if (window.speechSynthesis) speechSynthesis.speak = () => { window.__speak += 1; };""")
+    ctx.route("**/commentary/commentary.json", lambda r: r.fulfill(json={"format": 1, "lines": [
+        {"id": "cm-v1", "t": 60.1, "t_end": 61.5, "v": 0.1, "v_end": 1.5, "text": "Unvoiced line",
+         "audio": None}]}))
+    page = ctx.new_page()
+    page.goto(site + "?bundle=commentary/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.click("#hud-audio")
+    page.check("input[name=track][value=commentary]")
+    page.check("input[name=subs][value=on]")
+    seek(page, 0)
+    page.click("#play")  # play through the line's start
+    page.wait_for_function("document.querySelector('#captions').textContent === 'Unvoiced line'")
+    page.wait_for_function("document.querySelector('#overlay').dataset.t >= 60.8")
+    page.click("#play")
+    # mutation: speak a line with no audio through speakAloud -> ninetySpokenAloud holds it
+    assert page.evaluate("window.ninetySpokenAloud") is None and page.evaluate("window.__speak") == 0
+    ctx.close()
+
+
 def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_six(browser, site):  # noqa: F811
     """No lower third for a routine pass (that stays in the phone's All plays); a shot, an insight
     or a recap, at most one starting every 30 s, each held 6 s at most; one moment told for two
