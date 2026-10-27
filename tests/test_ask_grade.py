@@ -111,13 +111,25 @@ def test_when_is_not_why():
     assert c["relevant"] is False and c["correct"] is False
 
 
-def test_a_window_past_now_fails():
-    c = graded(
+def test_a_span_to_the_bins_end_is_not_a_leak_but_a_minute_past_now_is():
+    span = graded(
         "shots", "How many shots?", 2030.0, "In the footage, 3 shots from minute 1 to minute 34.", t_to=2040.0
     )
-    assert c["no_future"] is False
-    c = graded("shots", "How many shots?", 2030.0, "In the footage, 3 shots from minute 1 to minute 36.")
-    assert c["no_future"] is False
+    assert span["span_clipped"] is False and span["no_future"] is True
+    told = graded("shots", "How many shots?", 2030.0, "In the footage, 3 shots from minute 1 to minute 36.")
+    assert told["no_future"] is False
+
+
+def test_a_cited_fact_or_aggregate_from_after_now_is_a_leak():
+    insights = R.load_insights(R.FIXTURE)
+    late = next(f for f in insights.facts["shot"] if f.get("t"))
+    t = float(late["t"]) - 5.0
+    minute = int(late["minute"])
+    assert R.leaks(insights, [late["id"]], t) == [late["id"]]
+    assert R.leaks(insights, [late["id"]], float(late["t"])) == []
+    agg = f"shots:all:m1-{minute}"
+    assert R.leaks(insights, [agg], t) == [agg]
+    assert R.leaks(insights, [f"shots:all:m1-{minute - 1}"], t) == []
 
 
 def test_a_footage_figure_must_say_so():
@@ -195,14 +207,20 @@ def test_unmeasured_must_say_so_and_point_to_a_measured_fact():
 
 
 def test_the_asks_rates_only_go_up():
+    # every column on its own (the core pass rate, each check, the all-checks rate), per intent,
+    # overall and for the chips. A change to how insights are built refreshes the fixture (rebuild it
+    # from runs/demo-8324-final with that code: run.py grade --rebuild-insights) and the baseline in
+    # the same PR; a check with no answer it applies to (None) is not a drop, `answered` holds those.
     base = json.loads(R.BASELINE.read_text())
     now = R.ratchet_rates()
-    down = [f"overall pass {base['pass']} -> {now['pass']}"] if now["pass"] < base["pass"] else []
-    for iid, rates in base["intents"].items():
-        for k, v in rates.items():
-            got = now["intents"].get(iid, {}).get(k)
-            if v is not None and (got is None or got < v):
-                down.append(f"{iid} {k} {v} -> {got}")
+    blocks = [("all", base["all"], now["all"]), ("chips", base["chips"], now["chips"])]
+    blocks += [(iid, rates, now["intents"].get(iid, {})) for iid, rates in base["intents"].items()]
+    down = [
+        f"{name} {k} {v} -> {got.get(k)}"
+        for name, rates, got in blocks
+        for k, v in rates.items()
+        if v is not None and got.get(k) is not None and got[k] < v  # None: no answer it applies to
+    ]
     assert not down, (
         "the Ask's graded rates went down on the frozen fixture (docs/eval/companion-full-eval.md):\n"
         + "\n".join(down)

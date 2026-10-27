@@ -12,19 +12,9 @@ import argparse
 import json
 from pathlib import Path
 
-from ninety.eval.ask_grade.grade import load_intents
+from ninety.eval.ask_grade.grade import CHECKS, CORE, OTHERS, load_intents
 from ninety.eval.ask_grade.run import TIMES, summarise
 
-CHECKS = (
-    "answered",
-    "relevant",
-    "correct",
-    "consistent",
-    "coverage_honest",
-    "no_future",
-    "no_false_unknown",
-    "natural",
-)
 WORST = 10
 
 
@@ -33,8 +23,9 @@ def _pct(v) -> str:
 
 
 def worst(rows: list[dict], n: int = WORST) -> list[dict]:
-    """The failing answers that fail most checks, a chip first among equals, one per text and question."""
-    bad = [r for r in rows if not r["pass"]]
+    """The answers that fail the core, most failed checks first, a chip first among equals; one per
+    text and question."""
+    bad = [r for r in rows if not r["core"]]
     bad.sort(
         key=lambda r: (-sum(v is False for v in r["checks"].values()), not r.get("chip"), r["intent"], r["t"])
     )
@@ -58,7 +49,6 @@ def render(runs: dict[str, list[dict]], meta: dict) -> tuple[str, dict]:
     intents, _ = load_intents()
     sums = {k: summarise(v) for k, v in runs.items()}
     labels = list(runs)
-    before = labels[0]
     lines = [
         "# The Ask, graded against the answer key (seed 8324)",
         "",
@@ -71,55 +61,54 @@ def render(runs: dict[str, list[dict]], meta: dict) -> tuple[str, dict]:
         f"{meta.get('preregistered', '?')}). The footage shows "
         f"{meta.get('coverage', '?')} of the match.",
         "",
-        'An answer passes when every check that applies passes: answered (not a "can\'t"), relevant (the '
-        "lead sentence carries the intent's metric), correct (within tolerance of the truth), consistent "
-        "(the same headline as the intent's other paraphrases at that time), coverage-honest (a figure "
-        'from part of the match says so), no window past now, no false "not known", natural (no "footage '
-        'shown", "Esportes\'s", bare ranges, lower-case starts, "a London Athletic player").',
+        "**The headline is the core pass rate**: an answer passes the core when it is answered (a "
+        "verified reply, not a \"can't\"), relevant (its lead sentence carries the intent's metric), correct "
+        '(within tolerance of the truth) and no false "not known" (no "can\'t" while the insights hold '
+        "the facts). Each other check is its own column: no_future (a real leak: a minute past now said, or "
+        "a cited fact, or a cited aggregate's source fact, timed after now), span_clipped (the answer's span "
+        "ends by now; a span to the current minute bin's end with every cited fact before now fails only "
+        'this), coverage_honest (a figure from part of the match says "in the footage"), natural (no '
+        '"footage shown", "Esportes\'s", bare ranges, lower-case starts, "a London Athletic player") '
+        "and consistent (the same headline as the intent's other paraphrases at that time). The CI ratchet "
+        "holds every column separately.",
         "",
-        "## Pass rate per intent",
+        "## Core pass rate per intent",
         "",
         "| Intent | " + " | ".join(labels) + " |",
         "|---|" + "---|" * len(labels),
     ]
     for it in intents:
-        cells = [_pct(sums[k]["intents"].get(it["id"], {}).get("pass")) for k in labels]
+        cells = [_pct(sums[k]["intents"].get(it["id"], {}).get("core")) for k in labels]
         lines.append(f"| {it['id']} | " + " | ".join(cells) + " |")
-    lines.append("| **all** | " + " | ".join(f"**{_pct(sums[k]['pass'])}**" for k in labels) + " |")
-    lines.append(
-        "| chips answered | " + " | ".join(_pct(sums[k]["chips"]["answered"]) for k in labels) + " |"
-    )
-    lines.append("| chips passed | " + " | ".join(_pct(sums[k]["chips"]["pass"]) for k in labels) + " |")
+    lines.append("| **all** | " + " | ".join(f"**{_pct(sums[k]['core'])}**" for k in labels) + " |")
+    lines.append("| chips | " + " | ".join(_pct(sums[k]["chips"].get("core")) for k in labels) + " |")
     lines += [
         "",
-        "## Answered and correct per intent",
+        "## Every check, all answers",
         "",
-        'Answered: a verified reply that is not a "can\'t". Correct: within tolerance of the truth (an '
-        "unanswered question counts as not correct).",
-        "",
-        "| Intent | " + " | ".join(f"{k} answered | {k} correct" for k in labels) + " |",
-        "|---|" + "---|---|" * len(labels),
+        "| Check | " + " | ".join(labels) + " |",
+        "|---|" + "---|" * len(labels),
     ]
-    for it in intents:
-        cells = []
-        for k in labels:
+    for c in ("core", *CORE, *OTHERS, "pass"):
+        name = {"core": "**core**", "pass": "all checks"}.get(c, c)
+        lines.append(f"| {name} | " + " | ".join(_pct(sums[k].get(c)) for k in labels) + " |")
+    for k in labels:
+        lines += [
+            "",
+            f"## Each check per intent ({k})",
+            "",
+            "| Intent | core | " + " | ".join(CHECKS) + " |",
+            "|---|---|" + "---|" * len(CHECKS),
+        ]
+        for it in intents:
             d = sums[k]["intents"].get(it["id"], {})
-            cells += [_pct(d.get("answered")), _pct(d.get("correct"))]
-        lines.append(f"| {it['id']} | " + " | ".join(cells) + " |")
+            lines.append(
+                f"| {it['id']} | {_pct(d.get('core'))} | " + " | ".join(_pct(d.get(c)) for c in CHECKS) + " |"
+            )
     lines += ["", "Answers per column: " + ", ".join(f"{k} {sums[k]['n']}" for k in labels) + ".", ""]
     for k in labels:
         if meta.get("sources", {}).get(k):
             lines.append(f"- **{k}**: {meta['sources'][k]}")
-    lines += [
-        "",
-        f"## Each check, per intent ({before})",
-        "",
-        "| Intent | " + " | ".join(CHECKS) + " |",
-        "|---|" + "---|" * len(CHECKS),
-    ]
-    for it in intents:
-        d = sums[before]["intents"].get(it["id"], {})
-        lines.append(f"| {it['id']} | " + " | ".join(_pct(d.get(c)) for c in CHECKS) + " |")
     for k in labels:
         lines += ["", f"## The {WORST} worst answers ({k}), verbatim", ""]
         for i, r in enumerate(worst(runs[k]), 1):

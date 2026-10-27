@@ -10,7 +10,10 @@ check that applies passes. The checks, fixed with intents.json and tolerances.js
 - consistent: the same headline as the other paraphrases of the intent at that time (run.summarise).
 - coverage_honest: where the footage shows part of the match, a stated figure says it is about the
   footage ("in the footage we've seen").
-- no_future: no minute or window past now.
+- no_future: no leak from after now: no stated minute past now, and no cited fact (or a cited
+  aggregate's source fact) timed after now (run.leaks). A real leak.
+- span_clipped: the answer's own span ends by now. A span that runs to the end of the current
+  minute's bin while every fact it cites is before now is a wording/span defect, not a leak.
 - no_false_unknown: no "can't" when the insights hold the intent's facts at that time.
 - natural: none of the robotic forms below.
 """
@@ -413,7 +416,8 @@ def grade(
     nm = now_minute(t)
     future = [m for m in minutes_said(text) if m > nm]
     t_to = ans.get("t_to")
-    no_future = not future and (t_to is None or t_to <= t + 1.0)
+    no_future = not future and not ans.get("leak")
+    span_clipped = t_to is None or t_to <= t + 1.0
     false_unknown = None if unmeasured or holds is None else not (holds and not answered)
     flags = [k for k, rx in NATURAL.items() if rx.search(text)]
     checks = {
@@ -422,6 +426,7 @@ def grade(
         "correct": ok,
         "coverage_honest": honest,
         "no_future": no_future,
+        "span_clipped": span_clipped,
         "no_false_unknown": false_unknown,
         "natural": not flags,
     }
@@ -433,5 +438,14 @@ def headline(text: str) -> str:
     return re.sub(r"\s+", " ", lead(text).lower()).strip(" .")
 
 
+CORE = ("answered", "relevant", "correct", "no_false_unknown")  # the headline: a right answer to the question
+OTHERS = ("no_future", "span_clipped", "coverage_honest", "natural", "consistent")
+CHECKS = CORE + OTHERS
+
+
 def passed(checks: dict) -> bool:
     return all(v is not False for v in checks.values())
+
+
+def core_passed(checks: dict) -> bool:
+    return all(checks.get(c) is not False for c in CORE)

@@ -9,6 +9,8 @@
         --out runs/ask-grade/main.jsonl
     # rebuild the insights from the package first (#424 computes possession into them):
     uv run python -m ninety.eval.ask_grade.run grade --rebuild-insights runs/demo-8324-final ...
+    # before/after per intent for a PR, both refs graded by this checkout's rules (paste it in the PR):
+    uv run python -m ninety.eval.ask_grade.run --compare origin/main HEAD
     # the model path on a ~10% sample (costs money; NINETY_DEMO_PASSCODE must be set; stops at $1.50):
     uv run python -m ninety.eval.ask_grade.run grade --model ...
 
@@ -153,6 +155,7 @@ def ask_code(insights, q: str, t: float) -> dict:
             "t_to": a.t_to,
             "metric": a.metric,
             "value": a.value,
+            "evidence": list(a.evidence),
             "tools": [c.get("name") for c in calls],
             "source": "code",
         }
@@ -180,6 +183,7 @@ def run(
             q = qd["q"]
             w = G.window_of(it, q, t)
             ans = answer(it, q, t) if answer else ask_code(insights, q, t)
+            ans["leak"] = leaks(insights, ans.get("evidence") or [], t)
             tv = table.get(G.wkey(it, t, w))
             g = G.grade(it, q, t, ans, tv, tol, clubs, roster, holds(insights, it, t))
             out.append(
@@ -197,6 +201,57 @@ def run(
     consistency(out)
     for r in out:
         r["pass"] = G.passed(r["checks"])
+        r["core"] = G.core_passed(r["checks"])
+    return out
+
+
+# A cited aggregate's id names its source facts' kind and its minutes ("shots:all:m1-34", "terr:home:m20-34").
+AGGREGATE_KINDS = {
+    "shots": ("shot",),
+    "terr": ("territory",),
+    "po": ("pass_options",),
+    "cp": ("counter_press",),
+    "ov": ("overload",),
+    "pt": ("pass_type",),
+    "style": ("pass_type", "pass"),
+    "top": ("line_break",),
+    "score": ("goal", "scorebug"),
+    "poss": ("possession",),
+}
+
+
+def leaks(insights, evidence: list[str], t: float) -> list[str]:
+    """The cited ids that use something from after t: a fact timed after t, or an aggregate one of
+    whose source facts (same kind, same side, inside its minutes) is timed after t. Aggregates of a
+    kind with no source facts in the insights (set pieces, the Laws) cannot be checked and are not
+    counted."""
+    import re
+
+    by_id = {f["id"]: f for v in insights.facts.values() for f in v}
+    out = []
+    for e in evidence:
+        f = by_id.get(e)
+        if f is not None:
+            if f.get("t") is not None and float(f["t"]) > t:
+                out.append(e)
+            continue
+        parts = e.split(":")
+        kinds = AGGREGATE_KINDS.get(parts[0])
+        m = re.search(r":m(\d+)(?:-(\d+))?$", e)
+        if not kinds or not m:
+            continue
+        lo, hi = (int(m.group(1)), int(m.group(2))) if m.group(2) else (1, int(m.group(1)))
+        side = next((p for p in parts if p in ("home", "away")), None)
+        for k in kinds:
+            if any(
+                g.get("t") is not None
+                and float(g["t"]) > t
+                and lo <= int(g.get("minute") or 0) <= hi
+                and (side is None or g.get("team") in (None, side))
+                for g in insights.facts.get(k, [])
+            ):
+                out.append(e)
+                break
     return out
 
 
@@ -213,37 +268,27 @@ def consistency(rows: list[dict]) -> None:
             r["checks"]["consistent"] = None if len(g) < 2 else h == modal
 
 
+def _rate(xs) -> float | None:
+    xs = list(xs)
+    return round(sum(xs) / len(xs), 3) if xs else None
+
+
 def summarise(rows: list[dict]) -> dict:
-    """Pass rates per intent and per check, and overall."""
-    checks = (
-        "answered",
-        "relevant",
-        "correct",
-        "consistent",
-        "coverage_honest",
-        "no_future",
-        "no_false_unknown",
-        "natural",
-    )
-    per: dict[str, dict] = {}
-    for iid in dict.fromkeys(r["intent"] for r in rows):
-        rs = [r for r in rows if r["intent"] == iid]
-        d = {"n": len(rs), "pass": round(sum(r["pass"] for r in rs) / len(rs), 3)}
-        for c in checks:
-            app = [r["checks"][c] for r in rs if r["checks"].get(c) is not None]
-            d[c] = round(sum(app) / len(app), 3) if app else None
-        per[iid] = d
-    chips = [r for r in rows if r.get("chip")]
-    return {
-        "n": len(rows),
-        "pass": round(sum(r["pass"] for r in rows) / len(rows), 3),
-        "chips": {
-            "n": len(chips),
-            "pass": round(sum(r["pass"] for r in chips) / len(chips), 3) if chips else None,
-            "answered": round(sum(r["checks"]["answered"] for r in chips) / len(chips), 3) if chips else None,
-        },
-        "intents": per,
+    """Per intent and overall: the core pass rate (the headline: answered, relevant, correct, no
+    false "not known"), the all-checks pass rate, and each check's own rate where it applies."""
+
+    def block(rs):
+        d = {"n": len(rs), "core": _rate(r["core"] for r in rs), "pass": _rate(r["pass"] for r in rs)}
+        for c in G.CHECKS:
+            d[c] = _rate(r["checks"][c] for r in rs if r["checks"].get(c) is not None)
+        return d
+
+    per = {
+        iid: block([r for r in rows if r["intent"] == iid])
+        for iid in dict.fromkeys(r["intent"] for r in rows)
     }
+    chips = [r for r in rows if r.get("chip")]
+    return {**block(rows), "chips": block(chips) if chips else {}, "intents": per}
 
 
 # ---- the model path (costs money) -----------------------------------------------------------------
@@ -311,6 +356,7 @@ def model_answerer(insights, log: list[dict]):
                 "t_to": a.t_to,
                 "metric": a.metric,
                 "value": a.value,
+                "evidence": list(a.evidence),
                 "tools": [c.get("name") for c in r.tools],
                 "source": r.source,
                 "reasons": list(r.reasons),
@@ -391,7 +437,18 @@ def cmd_grade(args) -> None:
             "latency_max_s": lat[-1] if lat else None,
         }
     args.out.with_suffix(".summary.json").write_text(json.dumps(s, indent=1) + "\n")
-    print(json.dumps({"label": args.label, "n": s["n"], "pass": s["pass"], "chips": s["chips"]}))
+    print(
+        json.dumps(
+            {
+                "label": args.label,
+                "n": s["n"],
+                "core": s["core"],
+                "pass": s["pass"],
+                "chips_core": s["chips"].get("core"),
+                "chips_answered": s["chips"].get("answered"),
+            }
+        )
+    )
     for iid, d in s["intents"].items():
         print(
             f"{iid:14} pass {d['pass']:.2f}  "
@@ -403,7 +460,7 @@ def cmd_grade(args) -> None:
 
 FIXTURE = HERE.parents[2] / "tests" / "fixtures" / "ask-grade-insights-8324.json.gz"
 BASELINE = HERE / "baseline.json"
-RATCHETED = ("pass", "correct")  # per intent: these rates may only go up (tests/test_ask_grade.py)
+RATCHETED = ("core", *G.CHECKS, "pass")  # each column, per intent and overall: may only go up
 
 
 def ratchet_rates(insights_path: Path = FIXTURE) -> dict:
@@ -414,8 +471,8 @@ def ratchet_rates(insights_path: Path = FIXTURE) -> dict:
     rows = run(load_insights(insights_path), intents, T.read(TRUTH_TABLE), G.load_tolerances(), clubs)
     s = summarise(rows)
     return {
-        "pass": s["pass"],
-        "chips_answered": s["chips"]["answered"],
+        "all": {c: s[c] for c in RATCHETED},
+        "chips": {c: s["chips"][c] for c in RATCHETED},
         "intents": {k: {c: v[c] for c in RATCHETED} for k, v in s["intents"].items()},
     }
 
@@ -425,14 +482,99 @@ def cmd_baseline(args) -> None:
     body = {
         "about": "The Ask's code path on tests/fixtures/ask-grade-insights-8324.json.gz, graded by "
         "ninety/eval/ask_grade. tests/test_ask_grade.py fails if any rate here goes down; raise it with "
-        "`uv run python -m ninety.eval.ask_grade.run baseline` when a change raises it.",
+        "`uv run python -m ninety.eval.ask_grade.run baseline` when a change raises it. A change to how the "
+        "insights are built refreshes the fixture first (gzip the insights `grade --rebuild-insights "
+        "runs/demo-8324-final` writes with that code) in the same PR.",
         **rates,
     }
     BASELINE.write_text(json.dumps(body, indent=1) + "\n")
-    print(f"{BASELINE}: pass {rates['pass']}")
+    print(f"{BASELINE}: core {rates['all']['core']}, all checks {rates['all']['pass']}")
+
+
+EXPORT = ("ninety", "schemas", "docs/GROUNDING.md", "pyproject.toml")  # what a ref needs to answer
+
+
+def _graded_ref(ref: str, insights: Path | None, package: Path | None, work: Path) -> list[dict]:
+    """Grade one git ref's Ask: export the ref (git archive), put this checkout's grader in it, so
+    both sides of a comparison are graded by the same rules, and run `grade` with the export first
+    on the path."""
+    import shutil
+    import tarfile
+    import tempfile
+
+    root = HERE.parents[2]
+    work.mkdir(parents=True)
+    with tempfile.TemporaryFile() as tar:
+        subprocess.run(["git", "archive", ref, *EXPORT], cwd=root, stdout=tar, check=True)
+        tar.seek(0)
+        with tarfile.open(fileobj=tar) as tf:
+            tf.extractall(work, filter="data")
+    dest = work / "ninety" / "eval" / "ask_grade"
+    shutil.rmtree(dest, ignore_errors=True)
+    shutil.copytree(HERE, dest, ignore=shutil.ignore_patterns("__pycache__"))
+    out = work / "rows.jsonl"
+    src = ["--rebuild-insights", str(package)] if package else ["--insights", str(insights)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "ninety.eval.ask_grade.run",
+        "grade",
+        *src,
+        "--label",
+        ref,
+        "--out",
+        str(out),
+    ]
+    subprocess.run(
+        cmd, cwd=work, env={**os.environ, "PYTHONPATH": str(work)}, check=True, stdout=subprocess.DEVNULL
+    )
+    return [json.loads(x) for x in out.read_text().splitlines() if x.strip()]
+
+
+def delta_table(before: str, after: str, a: dict, b: dict) -> str:
+    """Markdown: the core pass rate per intent before and after, then every check over all answers."""
+
+    def pct(v):
+        return "–" if v is None else f"{100 * v:.0f}%"
+
+    def diff(x, y):
+        return "" if x is None or y is None or round(100 * (y - x)) == 0 else f"{100 * (y - x):+.0f}"
+
+    lines = [f"| Intent (core pass) | {before} | {after} | Δ |", "|---|---|---|---|"]
+    for iid in a["intents"]:
+        x, y = a["intents"][iid].get("core"), b["intents"].get(iid, {}).get("core")
+        lines.append(f"| {iid} | {pct(x)} | {pct(y)} | {diff(x, y)} |")
+    lines.append(
+        f"| **all** | **{pct(a['core'])}** | **{pct(b['core'])}** | **{diff(a['core'], b['core'])}** |"
+    )
+    lines.append(
+        f"| chips | {pct(a['chips'].get('core'))} | {pct(b['chips'].get('core'))} | "
+        f"{diff(a['chips'].get('core'), b['chips'].get('core'))} |"
+    )
+    lines += ["", f"| Check (all answers) | {before} | {after} | Δ |", "|---|---|---|---|"]
+    for c in (*G.CHECKS, "pass"):
+        lines.append(
+            f"| {'all checks' if c == 'pass' else c} | {pct(a.get(c))} | {pct(b.get(c))} | "
+            f"{diff(a.get(c), b.get(c))} |"
+        )
+    return "\n".join(lines)
+
+
+def cmd_compare(args) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="ask-grade-compare-") as tmp:
+        sums = []
+        for i, ref in enumerate(args.refs):
+            rows = _graded_ref(ref, args.insights, args.rebuild_insights, Path(tmp) / str(i))
+            sums.append(summarise(rows))
+    print(delta_table(args.refs[0], args.refs[1], *sums))
 
 
 def main(argv: list[str] | None = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "--compare":  # `run.py --compare REF_A REF_B ...` is `run.py compare ...`
+        argv[0] = "compare"
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("truth", help="write the frozen truth table (reads the answer key)")
@@ -464,8 +606,22 @@ def main(argv: list[str] | None = None) -> None:
     )
     b = sub.add_parser("baseline", help="write baseline.json from the frozen fixture (code path)")
     b.add_argument("--insights", type=Path, default=FIXTURE)
+    c = sub.add_parser(
+        "compare", help="grade two git refs with this checkout's grader; print a per-intent delta table"
+    )
+    c.add_argument("refs", nargs=2, metavar="REF")
+    c.add_argument("--insights", type=Path, default=FIXTURE, help="the insights both refs answer from")
+    c.add_argument(
+        "--rebuild-insights",
+        type=Path,
+        default=None,
+        metavar="PACKAGE",
+        help="rebuild the insights with each ref's own code from a package (heavy: use heavy.sh)",
+    )
     args = ap.parse_args(argv)
-    if args.cmd == "truth":
+    if args.cmd == "compare":
+        cmd_compare(args)
+    elif args.cmd == "truth":
         cmd_truth(args)
     elif args.cmd == "baseline":
         cmd_baseline(args)
