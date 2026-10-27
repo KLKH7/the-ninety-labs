@@ -111,6 +111,31 @@ def build(run: Path, out: Path) -> None:
     )
 
 
+def attack_directions(events: list[dict], half_frame: int) -> tuple[bool | None, bool | None]:
+    """Does home attack toward x = 105, in each half? Read from where each side's shots and goals
+    were (a goal's x is the goal line it crossed), never assumed: the engine keeps ends all match
+    (ninety/sim/engine.py, GROUNDING L3), but the truth is checked, not remembered (lesson 293).
+    In a half, home attacks right when its shots lie further toward x = 105 than the away side's;
+    with one side's shots only, when they lie past halfway on that side; with none, None."""
+    out = []
+    for first in (True, False):
+        xs = {"home": [], "away": []}
+        for e in events:
+            if e["type"] in ("shot", "goal") and e.get("x") is not None and e.get("team") in xs:
+                if (half_frame < 0 or e["frame"] < half_frame) == first:
+                    xs[e["team"]].append(float(e["x"]))
+        mean = {k: sum(v) / len(v) for k, v in xs.items() if v}
+        if "home" in mean and "away" in mean:
+            out.append(mean["home"] > mean["away"])
+        elif "home" in mean:
+            out.append(mean["home"] > PITCH_X / 2)
+        elif "away" in mean:
+            out.append(mean["away"] < PITCH_X / 2)
+        else:
+            out.append(None)
+    return out[0], out[1]
+
+
 @dataclass
 class Truth:
     events: list[dict]  # the full match's
@@ -119,9 +144,10 @@ class Truth:
     ball_x: object
     speed: object
     ids: list[str]
-    home_right: bool
+    home_right: bool  # at kick-off, from where home's keeper stood (the cache)
     half_frame: int
     names: dict[str, dict]  # engine id -> {name, team, number}
+    directions: tuple = (None, None)  # attack_directions: home toward x = 105, each half
 
     # --- windows and scope -------------------------------------------------------------------
     def mask(self, f0: int, f1: int, scope: str):
@@ -210,9 +236,11 @@ class Truth:
         f0, f1 = int(t0 * FPS), int(t1 * FPS)
         m = self.mask(f0, f1, scope) & (self.side > 0)
         idx = np.arange(len(self.side))
-        # The engine does not change ends at half time (ninety/sim/engine.py, GROUNDING L3): one
-        # direction per side for the whole match (lesson 293).
-        home_right = np.full(len(idx), self.home_right)
+        # Each half's direction as the truth's own shots and goals show it (attack_directions), the
+        # kick-off keeper's side where a half has none (lesson 293: never an assumed change of ends).
+        first, second = (self.home_right if d is None else d for d in self.directions)
+        half = self.half_frame if self.half_frame >= 0 else len(idx)
+        home_right = np.where(idx < half, first, second)
         x = self.ball_x
         home_att = np.where(home_right, x >= PITCH_X - THIRD_X, x <= THIRD_X)
         away_att = np.where(home_right, x <= THIRD_X, x >= PITCH_X - THIRD_X)
@@ -298,8 +326,9 @@ def load(run: Path, work: Path, cache: Path, fixture) -> Truth:
     for r in meta["roster"]:
         s = sheets[r["team"]][r["role"]]
         names[r["id"]] = {"name": s.name, "team": r["team"], "number": s.number}
+    events = _jsonl(run / "events.jsonl")
     return Truth(
-        events=_jsonl(run / "events.jsonl"),
+        events=events,
         shown=footage_windows(work),
         side=z["side"],
         ball_x=z["ball_x"],
@@ -307,6 +336,7 @@ def load(run: Path, work: Path, cache: Path, fixture) -> Truth:
         ids=[str(i) for i in z["ids"]],
         home_right=bool(z["home_right"]),
         half_frame=int(z["half"]),
+        directions=attack_directions(events, int(z["half"])),
         names=names,
     )
 
