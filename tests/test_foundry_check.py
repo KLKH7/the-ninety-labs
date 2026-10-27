@@ -175,3 +175,19 @@ def test_the_checker_reads_no_ground_truth():
 @pytest.mark.parametrize("label", fc.LABELS)
 def test_every_label_has_a_dedupe_or_is_none(label):
     assert label == "none" or label in fc.DEDUPE_S
+
+
+def test_the_scorer_matches_one_to_one_nearest_first_and_applies_the_bar():
+    from ninety.eval import foundry_event_score as s
+
+    truths = [{"frame": 100, "stop": None, "lo": 75, "hi": 125},
+              {"frame": 110, "stop": None, "lo": 85, "hi": 135}]
+    dets = [{"frame": 108}, {"frame": 300}]
+    m, miss, fp = s.match(truths, dets)
+    assert [(t["frame"], d["frame"]) for t, d in m] == [(110, 108)]
+    assert [t["frame"] for t in miss] == [100] and fp == [{"frame": 300}]
+    row = {"true": 5, "precision": 0.8, "recall": 0.4}
+    assert s.verdict({t: row for t in s.TYPES}, {t: {"recall": 0.2} for t in s.TYPES})["shot"]["pass"]
+    few = {t: {**row, "true": 4} for t in s.TYPES}
+    assert not s.verdict(few, {t: {"recall": 0} for t in s.TYPES})["shot"]["pass"]
+    assert not s.verdict({t: row for t in s.TYPES}, {t: {"recall": 0.4} for t in s.TYPES})["shot"]["pass"]

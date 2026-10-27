@@ -1,0 +1,614 @@
+{
+ "checker": {
+  "corner": {
+   "true": 1,
+   "detected": 1,
+   "hits": 0,
+   "recall": 0.0,
+   "recall_ci95": [
+    0.0,
+    0.79
+   ],
+   "precision": 0.0,
+   "precision_ci95": [
+    0.0,
+    0.79
+   ],
+   "misses": [
+    {
+     "frame": 8115,
+     "stop": 7209,
+     "t": 324.6
+    }
+   ],
+   "false_positives": [
+    {
+     "frame": 97111,
+     "t": 3884.44,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "away"
+    }
+   ],
+   "hit_frames": []
+  },
+  "goal_kick": {
+   "true": 6,
+   "detected": 13,
+   "hits": 5,
+   "recall": 0.833,
+   "recall_ci95": [
+    0.44,
+    0.97
+   ],
+   "precision": 0.385,
+   "precision_ci95": [
+    0.18,
+    0.64
+   ],
+   "misses": [
+    {
+     "frame": 41172,
+     "stop": 40407,
+     "t": 1646.88
+    }
+   ],
+   "false_positives": [
+    {
+     "frame": 5276,
+     "t": 211.04,
+     "confidence": 0.9,
+     "candidate": "fast toward goal",
+     "team": "home"
+    },
+    {
+     "frame": 11068,
+     "t": 442.72,
+     "confidence": 0.9,
+     "candidate": "set ball",
+     "team": "home"
+    },
+    {
+     "frame": 30942,
+     "t": 1237.68,
+     "confidence": 0.9,
+     "candidate": "fast toward goal",
+     "team": "home"
+    },
+    {
+     "frame": 51084,
+     "t": 2043.36,
+     "confidence": 0.9,
+     "candidate": "fast toward goal",
+     "team": "home"
+    },
+    {
+     "frame": 80360,
+     "t": 3214.4,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "home"
+    },
+    {
+     "frame": 80673,
+     "t": 3226.92,
+     "confidence": 0.9,
+     "candidate": "fast toward goal",
+     "team": "home"
+    },
+    {
+     "frame": 104366,
+     "t": 4174.64,
+     "confidence": 0.9,
+     "candidate": "fast toward goal",
+     "team": "away"
+    },
+    {
+     "frame": 110240,
+     "t": 4409.6,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "home"
+    }
+   ],
+   "hit_frames": [
+    {
+     "truth": 21944,
+     "detected": 21300
+    },
+    {
+     "truth": 41986,
+     "detected": 41333
+    },
+    {
+     "truth": 88867,
+     "detected": 88126
+    },
+    {
+     "truth": 65649,
+     "detected": 64903
+    },
+    {
+     "truth": 66796,
+     "detected": 65960
+    }
+   ]
+  },
+  "throw_in": {
+   "true": 7,
+   "detected": 1,
+   "hits": 1,
+   "recall": 0.143,
+   "recall_ci95": [
+    0.03,
+    0.51
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.21,
+    1.0
+   ],
+   "misses": [
+    {
+     "frame": 17748,
+     "stop": 17382,
+     "t": 709.92
+    },
+    {
+     "frame": 50806,
+     "stop": 50487,
+     "t": 2032.24
+    },
+    {
+     "frame": 56828,
+     "stop": 56419,
+     "t": 2273.12
+    },
+    {
+     "frame": 80375,
+     "stop": 80045,
+     "t": 3215.0
+    },
+    {
+     "frame": 97101,
+     "stop": 96708,
+     "t": 3884.04
+    },
+    {
+     "frame": 131615,
+     "stop": 131193,
+     "t": 5264.6
+    }
+   ],
+   "false_positives": [],
+   "hit_frames": [
+    {
+     "truth": 61434,
+     "detected": 61432
+    }
+   ]
+  },
+  "shot": {
+   "true": 18,
+   "detected": 8,
+   "hits": 5,
+   "recall": 0.278,
+   "recall_ci95": [
+    0.12,
+    0.51
+   ],
+   "precision": 0.625,
+   "precision_ci95": [
+    0.31,
+    0.86
+   ],
+   "misses": [
+    {
+     "frame": 8236,
+     "stop": null,
+     "t": 329.44
+    },
+    {
+     "frame": 21211,
+     "stop": null,
+     "t": 848.44
+    },
+    {
+     "frame": 21272,
+     "stop": null,
+     "t": 850.88
+    },
+    {
+     "frame": 30921,
+     "stop": null,
+     "t": 1236.84
+    },
+    {
+     "frame": 40364,
+     "stop": null,
+     "t": 1614.56
+    },
+    {
+     "frame": 41320,
+     "stop": null,
+     "t": 1652.8
+    },
+    {
+     "frame": 51049,
+     "stop": null,
+     "t": 2041.96
+    },
+    {
+     "frame": 64860,
+     "stop": null,
+     "t": 2594.4
+    },
+    {
+     "frame": 65918,
+     "stop": null,
+     "t": 2636.72
+    },
+    {
+     "frame": 80513,
+     "stop": null,
+     "t": 3220.52
+    },
+    {
+     "frame": 83953,
+     "stop": null,
+     "t": 3358.12
+    },
+    {
+     "frame": 88114,
+     "stop": null,
+     "t": 3524.56
+    },
+    {
+     "frame": 100626,
+     "stop": null,
+     "t": 4025.04
+    }
+   ],
+   "false_positives": [
+    {
+     "frame": 51094,
+     "t": 2043.76,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "away"
+    },
+    {
+     "frame": 80620,
+     "t": 3224.8,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "away"
+    },
+    {
+     "frame": 126599,
+     "t": 5063.96,
+     "confidence": 0.9,
+     "candidate": "at a line",
+     "team": "away"
+    }
+   ],
+   "hit_frames": [
+    {
+     "truth": 113013,
+     "detected": 113010
+    },
+    {
+     "truth": 11031,
+     "detected": 11045
+    },
+    {
+     "truth": 9369,
+     "detected": 9386
+    },
+    {
+     "truth": 17870,
+     "detected": 17890
+    },
+    {
+     "truth": 126703,
+     "detected": 126681
+    }
+   ]
+  }
+ },
+ "baseline": {
+  "corner": {
+   "true": 1,
+   "detected": 0,
+   "hits": 0,
+   "recall": 0.0,
+   "recall_ci95": [
+    0.0,
+    0.79
+   ],
+   "precision": null,
+   "precision_ci95": null,
+   "misses": [
+    {
+     "frame": 8115,
+     "stop": 7209,
+     "t": 324.6
+    }
+   ],
+   "false_positives": [],
+   "hit_frames": []
+  },
+  "goal_kick": {
+   "true": 6,
+   "detected": 0,
+   "hits": 0,
+   "recall": 0.0,
+   "recall_ci95": [
+    0.0,
+    0.39
+   ],
+   "precision": null,
+   "precision_ci95": null,
+   "misses": [
+    {
+     "frame": 21944,
+     "stop": 21307,
+     "t": 877.76
+    },
+    {
+     "frame": 41172,
+     "stop": 40407,
+     "t": 1646.88
+    },
+    {
+     "frame": 41986,
+     "stop": 41359,
+     "t": 1679.44
+    },
+    {
+     "frame": 65649,
+     "stop": 64889,
+     "t": 2625.96
+    },
+    {
+     "frame": 66796,
+     "stop": 65970,
+     "t": 2671.84
+    },
+    {
+     "frame": 88867,
+     "stop": 88138,
+     "t": 3554.68
+    }
+   ],
+   "false_positives": [],
+   "hit_frames": []
+  },
+  "throw_in": {
+   "true": 7,
+   "detected": 1,
+   "hits": 1,
+   "recall": 0.143,
+   "recall_ci95": [
+    0.03,
+    0.51
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.21,
+    1.0
+   ],
+   "misses": [
+    {
+     "frame": 17748,
+     "stop": 17382,
+     "t": 709.92
+    },
+    {
+     "frame": 56828,
+     "stop": 56419,
+     "t": 2273.12
+    },
+    {
+     "frame": 61434,
+     "stop": 60969,
+     "t": 2457.36
+    },
+    {
+     "frame": 80375,
+     "stop": 80045,
+     "t": 3215.0
+    },
+    {
+     "frame": 97101,
+     "stop": 96708,
+     "t": 3884.04
+    },
+    {
+     "frame": 131615,
+     "stop": 131193,
+     "t": 5264.6
+    }
+   ],
+   "false_positives": [],
+   "hit_frames": [
+    {
+     "truth": 50806,
+     "detected": 50796
+    }
+   ]
+  },
+  "shot": {
+   "true": 18,
+   "detected": 8,
+   "hits": 4,
+   "recall": 0.222,
+   "recall_ci95": [
+    0.09,
+    0.45
+   ],
+   "precision": 0.5,
+   "precision_ci95": [
+    0.22,
+    0.78
+   ],
+   "misses": [
+    {
+     "frame": 8236,
+     "stop": null,
+     "t": 329.44
+    },
+    {
+     "frame": 9369,
+     "stop": null,
+     "t": 374.76
+    },
+    {
+     "frame": 11031,
+     "stop": null,
+     "t": 441.24
+    },
+    {
+     "frame": 21211,
+     "stop": null,
+     "t": 848.44
+    },
+    {
+     "frame": 21272,
+     "stop": null,
+     "t": 850.88
+    },
+    {
+     "frame": 30921,
+     "stop": null,
+     "t": 1236.84
+    },
+    {
+     "frame": 40364,
+     "stop": null,
+     "t": 1614.56
+    },
+    {
+     "frame": 41320,
+     "stop": null,
+     "t": 1652.8
+    },
+    {
+     "frame": 64860,
+     "stop": null,
+     "t": 2594.4
+    },
+    {
+     "frame": 65918,
+     "stop": null,
+     "t": 2636.72
+    },
+    {
+     "frame": 80513,
+     "stop": null,
+     "t": 3220.52
+    },
+    {
+     "frame": 83953,
+     "stop": null,
+     "t": 3358.12
+    },
+    {
+     "frame": 88114,
+     "stop": null,
+     "t": 3524.56
+    },
+    {
+     "frame": 100626,
+     "stop": null,
+     "t": 4025.04
+    }
+   ],
+   "false_positives": [
+    {
+     "frame": 5276,
+     "t": 211.04,
+     "confidence": 0.593,
+     "candidate": null,
+     "team": "away"
+    },
+    {
+     "frame": 21151,
+     "t": 846.04,
+     "confidence": 0.518,
+     "candidate": null,
+     "team": "home"
+    },
+    {
+     "frame": 80617,
+     "t": 3224.68,
+     "confidence": 0.274,
+     "candidate": null,
+     "team": "away"
+    },
+    {
+     "frame": 126681,
+     "t": 5067.24,
+     "confidence": 0.779,
+     "candidate": null,
+     "team": "away"
+    }
+   ],
+   "hit_frames": [
+    {
+     "truth": 17870,
+     "detected": 17868
+    },
+    {
+     "truth": 51049,
+     "detected": 51047
+    },
+    {
+     "truth": 113013,
+     "detected": 113010
+    },
+    {
+     "truth": 126703,
+     "detected": 126699
+    }
+   ]
+  }
+ },
+ "spend": {
+  "calls": 73,
+  "tokens_in": 72270,
+  "tokens_out": 1939,
+  "usd": 0.03521,
+  "cap_usd": 0.5,
+  "latency_p50_s": 1.387,
+  "latency_p95_s": 2.475
+ },
+ "bar": {
+  "corner": {
+   "pass": false,
+   "reasons": [
+    "only 1 true shown (needs 5): counts only",
+    "precision 0.0 < 0.8",
+    "recall 0.0 not above the baseline's 0.0"
+   ]
+  },
+  "goal_kick": {
+   "pass": false,
+   "reasons": [
+    "precision 0.385 < 0.8"
+   ]
+  },
+  "throw_in": {
+   "pass": false,
+   "reasons": [
+    "recall 0.143 not above the baseline's 0.143"
+   ]
+  },
+  "shot": {
+   "pass": false,
+   "reasons": [
+    "precision 0.625 < 0.8"
+   ]
+  }
+ }
+}
