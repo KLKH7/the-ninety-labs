@@ -395,6 +395,19 @@ def _counts(home, away, slack=0):
         ),
         (_counts(4, 5, slack=1), "Lisbon Esportes have had more shots, 5 to 4.", True),
         (_counts(4, 5, slack=1), "London Athletic have had more shots, 4 to 5.", False),
+        (
+            _counts(2, 2),
+            "London Athletic and Lisbon Esportes have had 2 shots each in the footage so far.",
+            True,
+        ),
+        (_counts(0, 0), "Neither side has had a corner in the footage so far.", True),
+        (_counts(0, 2), "Neither side has had a corner in the footage so far.", False),
+        (
+            _counts(3, 5),
+            "Lisbon Esportes have had more shots: 5 to London Athletic's 3 in the footage so far.",
+            True,
+        ),
+        (_counts(3, 5), "Each club's shots: London Athletic 3, Lisbon Esportes 5.", False),
     ],
 )
 def test_a_count_leads_with_the_right_club(truth, text, ok):
@@ -431,3 +444,38 @@ def test_territory_follows_each_halfs_direction():
     assert tr.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 100.0, "away": 0.0}
     kept = T.Truth(**{**tr.__dict__, "directions": (True, True)})
     assert kept.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 0.0, "away": 100.0}
+
+
+@pytest.mark.parametrize(
+    "home,away,text,ok",
+    [
+        (
+            95.0,
+            80.0,
+            "London Athletic have passed more accurately than Lisbon Esportes in the footage so far.",
+            True,
+        ),
+        (
+            95.0,
+            80.0,
+            "Lisbon Esportes have passed more accurately than London Athletic in the footage so far.",
+            False,
+        ),
+        (
+            85.0,
+            90.0,
+            "Lisbon Esportes have passed more accurately than London Athletic in the footage so far.",
+            True,
+        ),
+        (
+            85.0,
+            90.0,
+            "London Athletic have passed more accurately than Lisbon Esportes in the footage so far.",
+            True,
+        ),
+        (95.0, 80.0, "Passes are finding a team-mate in the footage so far.", False),
+    ],
+)
+def test_completion_said_as_a_direction(home, away, text, ok):
+    tv = {"footage": {"completion": {"home": home, "away": away, "total": None}}}
+    assert G.comparison_direction(text, tv, CLUBS, TOL) is ok
