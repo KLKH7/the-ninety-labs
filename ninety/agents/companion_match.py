@@ -685,12 +685,18 @@ GENERAL = (
 FOLLOW_UP_COUNT = 3
 
 
+# Rows that answer one question in other words, for suggestions: one of each family is offered.
+FAMILY = {"score": "score", "scorers": "score", "winning": "score", "key_moments": "score",
+          "on_top": "on_top", "momentum": "on_top", "territory": "on_top",
+          "passes": "passes", "completion": "passes", "shots": "shots", "on_target": "shots",
+          "corners": "restarts", "out_of_play": "restarts", "fastest": "running", "distance": "running"}
+
+
 def answerable(text: str, insights, t: float) -> bool:
-    """Can the tools answer this question now: code routes it to a tool and a checked answer comes back."""
-    if not route(text):
-        return False
+    """Can code answer this question now from a checked fact: a verified answer that cites one (never
+    only "no goal yet"), whether the intent table or the tools' routing answers it."""
     a, _ = code_match_answer(Question("follow-up", None, text, max(0.0, t)), insights, suggest=False)
-    return a.status == "verified"
+    return a.status == "verified" and bool(a.evidence)
 
 
 def follow_ups(
@@ -705,15 +711,36 @@ def follow_ups(
         ts += [60.0 * f["minute_to"] for f in cited if f.get("minute_to")]
         t = max(ts, default=60.0 * insights.minutes)
     seen = {q.strip().lower() for q in asked}
-    # Not the same topic again: a suggestion that routes to exactly the tools of the question just
-    # asked would repeat it in other words.
-    just_asked = set(route(list(asked)[-1])) if asked else set()
+    # Not the same topic again: a suggestion that reads as the intent table's row of the question just
+    # asked (or, for a tactics question, routes to exactly its tools) would repeat it in other words.
+    from ninety.agents.ask_intents import chips_table
+
+    last = list(asked)[-1] if asked else None
+    just_row = read_question(last, insights, t).intent if last else None
+    just_asked = set(route(last)) if last else set()
+
+    def same_topic(q: str) -> bool:
+        row = read_question(q, insights, t).intent
+        if row not in ("tactics", "small_talk", "player"):
+            return row == just_row or {row, just_row} <= {"on_top", "momentum"}
+        return bool(just_asked) and set(route(q)) == just_asked
+
     out: list[str] = []
-    pool = [q for c in calls for q in FOLLOW_UPS.get(c["name"], ())] + list(GENERAL)
-    for template in pool:
+    # The intent table's chips first (the phone's own chips, lesson 297), from the row after the one
+    # just asked, so the suggestions move on through the table; then the tools' suggestions. One per
+    # family: "Who scored?" and "Who's winning?" after "What's the score?" say the same thing again.
+    table = chips_table()
+    at = next((k for k, c in enumerate(table) if c["intent"] == just_row), -1) + 1
+    rows = table[at:] + table[:at]
+    pool = [(c["q"], FAMILY.get(c["intent"], c["intent"])) for c in rows]
+    pool += [(q, None) for c in calls for q in FOLLOW_UPS.get(c["name"], ())] + [(q, None) for q in GENERAL]
+    families = {FAMILY.get(just_row, just_row)}
+    for template, family in pool:
         q = template.format(club=club)
-        if q.lower() in seen or q in out or (just_asked and set(route(q)) == just_asked):
+        if q.lower() in seen or q in out or same_topic(q) or (family is not None and family in families):
             continue
+        if family is not None:
+            families.add(family)
         seen.add(q.lower())
         if answerable(q, insights, t):
             out.append(q)

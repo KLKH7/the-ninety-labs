@@ -8,7 +8,8 @@
     { "$ref": "#/$defs/focus" },
     { "$ref": "#/$defs/answer" },
     { "$ref": "#/$defs/player_card" },
-    { "$ref": "#/$defs/flow" }
+    { "$ref": "#/$defs/flow" },
+    { "$ref": "#/$defs/chips" }
   ],
   "$defs": {
     "clock": {
@@ -108,6 +109,29 @@
         "vy": { "type": "array", "items": { "type": ["number", "null"] }, "description": "m/s along y." },
         "count": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Frame-to-frame steps averaged in the cell." },
         "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
+      }
+    },
+    "chips": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "t", "chips"],
+      "description": "The questions the phone offers as chips at match time t: the intent table's (ninety/agents/ask_chips.json), each one code answers from a checked fact by then.",
+      "properties": {
+        "type": { "const": "chips" },
+        "t": { "type": "number", "minimum": 0 },
+        "chips": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["intent", "q"],
+            "properties": {
+              "intent": { "type": "string", "pattern": "^[a-z_]+$" },
+              "q": { "type": "string", "minLength": 1, "maxLength": 120 }
+            }
+          }
+        }
       }
     }
   }

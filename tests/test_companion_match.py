@@ -1425,7 +1425,10 @@ def _a_friendly_reply(r):
     a = r.answer
     assert r.tools == () and a.evidence == () and a.value is None and a.headline is None, a
     assert not STAT.search(a.text), a.text
-    assert 1 <= len(a.follow_ups) <= 3 and all(companion.route(q) for q in a.follow_ups), a.follow_ups
+    # Each suggestion is a question code answers: a row of the intent table or a tool's (lesson 297).
+    assert 1 <= len(a.follow_ups) <= 3 and all(
+        companion.route(q) or companion.read_question(q, insights(), 3000.0).intent != "small_talk"
+        for q in a.follow_ups), a.follow_ups
 
 
 @pytest.mark.parametrize("text", SMALL_TALK_PROBES + OFF_TOPIC_PROBES)

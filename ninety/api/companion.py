@@ -11,6 +11,9 @@
     GET  /api/card/{clip}/{player}?t_to=95.2[&t_from=0]   a player_card message
     GET  /api/flow/{clip}/{team}?t_to=95.2[&t_from=0]     a flow message (the wind map)
     POST /api/ask                      a viewer_question -> an answer message
+    GET  /api/chips?session=CODE[&t=95.2][&club=Lisbon Esportes]   a chips message: the questions the
+                                       phone offers, each one code answers by then (no later than the
+                                       room's playhead, as /api/ask)
 
 Every message to the phone validates against schemas/companion_message.schema.json, and every
 request body against its schema, so an unknown field is a 422. The pairing code is the viewer's
@@ -711,6 +714,35 @@ class Companion:
                     return None
             return self.live_models
 
+    async def chips(self, request: Request) -> JSONResponse:
+        """The chips at the room's time: the intent table's questions code answers from a checked fact
+        by then (companion_match.chips), t never past the big screen's playhead (as /api/ask)."""
+        if not self.limits["read"].allow(client_ip(request)):
+            return _error(429, "too many requests; wait a minute")
+        room = self.room(request.query_params.get("session", ""))
+        if room is None:
+            return _error(404, "unknown or expired session; pair again")
+        unknown = set(request.query_params) - {"session", "t", "club"}
+        if unknown:
+            return _error(422, f"unknown query parameters: {', '.join(sorted(unknown))}")
+        try:
+            q = {"t": float(request.query_params["t"])} if "t" in request.query_params else {}
+        except ValueError:
+            return _error(422, "t must be a number")
+        if q.get("t", 0.0) < 0 or q.get("t", 0.0) != q.get("t", 0.0):
+            return _error(422, "t must be a number of seconds, 0 or more")
+        track = self._served(room.clip)
+        if isinstance(track, JSONResponse):
+            return track
+        insights = _insights(room.clip)
+        t = self._asked_at(room, track, q.get("t", track.duration))
+        club = request.query_params.get("club")
+        if insights is not None and club is not None and club not in insights.fixture.clubs.values():
+            return _error(422, f"{club!r} is not a club of {room.clip}")
+        rows = companion_match.chips(insights, t, club) if insights is not None else []
+        return JSONResponse(_send({"type": "chips", "t": round(t, 2),
+                                   "chips": [{"intent": c["intent"], "q": c["q"]} for c in rows]}))
+
     def routes(self) -> list:
         return [
             Route("/api/pair", self.pair, methods=["POST"]),
@@ -720,6 +752,7 @@ class Companion:
             Route("/api/card/{clip}/{player}", self.card, methods=["GET"]),
             Route("/api/flow/{clip}/{team}", self.flow, methods=["GET"]),
             Route("/api/ask", self.ask, methods=["POST"]),
+            Route("/api/chips", self.chips, methods=["GET"]),
         ]
 
 
