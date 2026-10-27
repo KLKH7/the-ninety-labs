@@ -3377,6 +3377,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
   marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
 
+### 281. A failure drill that never reaches its failure point tests nothing
+- **What happened:** the live agent run on seed 8324 pre-registered a "Judge down" drill on goal 1's
+  minute: every Judge call fails, so every claim must be held. The claim came out held, as expected,
+  but by a code check (a ball speed vision measures only for ground passes) before the Judge was
+  ever called. The trace showed no Judge call, so the drill had tested nothing. It was re-run,
+  labelled, on goal 2's minute, where the same claim path had reached the Judge and aired: there
+  the Judge was tried twice and the claim held (`service`), with the template kept.
+- **Rule:** a drill passes only when the trace shows the injected fault was hit (the failing call
+  made, the timeout reached) and the expected recovery followed. An expected end state reached by
+  another route is not the drill passing. Choose the drill's moment where the path reaches the
+  fault, or check that it did before reporting.
+- **Check:** `docs/eval/agents-live.md`'s drill table lists each drill's failed calls from the trace
+  (`ninety/eval/agents_live.py` `drill_scores`, `failed_calls`); a drill row with no failed call of
+  the injected role is reported as not exercised.
+
 ### 282. A dedupe key built from a field that can be empty merges every item without it
 - **What happened:** the big screen's schedule (`web/viewer/src/match.ts`, `broadcastSchedule`) kept
   one graphic per moment by the key `kind|evidence`. The INSIGHT bar's overloads are read from

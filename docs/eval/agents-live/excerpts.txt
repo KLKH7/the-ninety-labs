@@ -1,0 +1,92 @@
+## goal-2 · graph
+      19.3s  analyst     ninety-moment-analyst:1      1.3s  662→33 tok
+      20.8s  tactician   ninety-tactician:2           1.4s  387→60 tok
+      31.6s  challenger  ninety-challenger:2         10.8s  452→6 tok
+      33.3s  tactician   ninety-tactician:2           1.7s  468→60 tok
+      35.6s  judge       ninety-judge:4               2.2s  1062→156 tok
+      35.6s  producer    templates  498 template graphics on air
+      35.6s  analyst     pick       evidence ['s18-v00011', 's18-v00012']
+      35.6s  tactician   draft      "The away team's quick goal at 34:01 by a-t18090, followed immediately by confirmation of the goal at 34:04, highlights their effective finishing unde
+      35.6s  fact_checker reject     back to the tactician: play under pressure is said, but no cited event is a pressure event
+      35.6s  judge       verify     
+      35.6s  fact_checker verify     tactician's claim
+      35.6s  producer    air        the tactician's claim replaces cue-s18-v00011-analyst
+      35.6s  graph done in 19.4s; aired insights: ['The goal scored by a-t18090 at 34:01 changed the scoreline in minute 35 and was immediately confirmed at 34:04, underscoring its impact on the match.']
+
+## goal-2 · companion
+      36.8s  companion   ninety-companion-match:4     1.2s  1430→26 tok
+      36.8s  mcp         goal_build_up({'minute': 35, 'club': None})  7726 B, 13 facts
+      37.7s  companion   ninety-companion-match:4     0.9s  2346→30 tok
+      41.7s  judge       ninety-judge:4               3.9s  1029→99 tok
+      41.7s  mcp         players({'minute_from': 21, 'minute_to': 35, 'club': None})  1785 B, 5 facts
+      41.7s  mcp         counter_press({'minute_from': 21, 'minute_to': 35, 'club': 'Lisbon Esportes'})  3257 B, 5 facts
+      41.7s  mcp         referee({'minute_from': 21, 'minute_to': 35, 'club': None})  15240 B, 11 facts
+      41.7s  mcp         goal_build_up({'minute': 35, 'club': None})  7726 B, 13 facts
+      41.7s  ON AIR (phone, model, verified): a Lisbon Esportes player scored for Lisbon Esportes in minute 35.
+
+## goal-2 · drill:judge-down
+  injected: every Judge call raises ServiceRequestError (added after the run: the pre-registered one on goal-1 never reached the Judge)
+       4.8s  analyst     ninety-moment-analyst:1      1.5s  662→33 tok
+       6.1s  tactician   ninety-tactician:2           1.3s  387→46 tok
+       7.1s  challenger  ninety-challenger:2          1.0s  438→6 tok
+       7.1s  judge       ninety-judge:4               0.0s  79→0 tok  ERROR ServiceRequestError: drill: the Judge's endpoint cannot be reached
+       7.1s  judge       ninety-judge:4               0.0s  79→0 tok  ERROR ServiceRequestError: drill: the Judge's endpoint cannot be reached
+       7.1s  producer    templates  498 template graphics on air
+       7.1s  analyst     pick       evidence ['s18-v00011', 's18-v00012']
+       7.1s  tactician   draft      'The goal by a-t18090 at 34:01 shows the away team successfully capitalizing on their shot to change the scoreline in minute 35.' evidence=['s18-v0001
+       7.1s  judge       hold       service
+       7.1s  fact_checker hold       tactician's claim: judge service error; claim held back
+       7.1s  producer    template   cue-s18-v00011-analyst stays: held  [held: service]
+       7.1s  graph done in 5.7s; aired insights: none (templates stay)
+
+## goal-2 · drill:vision-dropout
+  injected: no detected events in the 60 s around the goal
+     137.2s  analyst     ninety-moment-analyst:1      1.3s  555→8 tok
+     137.2s  producer    templates  490 template graphics on air
+     137.2s  graph done in 3.2s; aired insights: none (templates stay)
+
+## line-break · drill:slow-tactician
+  injected: the Tactician answers after 65.0 s (budget 60.0 s)
+     140.8s  analyst     ninety-moment-analyst:1      1.6s  1413→63 tok
+     200.8s  tactician   ninety-tactician:2          60.0s  416→0 tok  ERROR cancelled (caller's timeout)
+     200.8s  producer    templates  498 template graphics on air
+     200.8s  analyst     pick       evidence ['s44-v00017', 's44-v00011', 's44-v00012', 's44-v00013', 's44-v00014', 's44-v00015', 's44-v00016']
+     200.8s  tactician   fail       TimeoutError: ; template stays  [template]
+     200.8s  producer    template   cue-s44-v00017-analyst stays: held  [held: timeout]
+     200.8s  graph done in 63.6s; aired insights: none (templates stay)
+
+## overload · drill:slow-companion
+  injected: the Companion answers after 12.0 s (budget 10.0 s)
+     210.8s  companion   ninety-companion-match:4    10.0s  726→0 tok  ERROR cancelled (caller's timeout)
+     210.8s  mcp         overloads({'minute_from': 47, 'minute_to': 61, 'club': None})  9901 B, 12 facts
+     210.8s  mcp         counter_press({'minute_from': 47, 'minute_to': 61, 'club': 'London Athletic'})  6719 B, 12 facts
+     210.8s  mcp         line_breaks({'minute_from': 47, 'minute_to': 61, 'club': None})  5933 B, 10 facts
+     210.8s  mcp         style({'minute_from': 47, 'minute_to': 61, 'club': 'London Athletic'})  1045 B, 0 facts
+     210.8s  mcp         territory({'minute_from': 47, 'minute_to': 61, 'club': 'London Athletic'})  454 B, 0 facts
+     210.8s  mcp         style({'minute_from': 47, 'minute_to': 61, 'club': 'London Athletic'})  1045 B, 0 facts
+     210.8s  mcp         goal_build_up({'minute': 12, 'club': None})  1574 B, 3 facts
+     210.8s  mcp         goal_build_up({'minute': 35, 'club': None})  7726 B, 13 facts
+     210.8s  mcp         goal_build_up({'minute': 76, 'club': None})  1404 B, 3 facts
+     210.8s  mcp         goal_build_up({'minute': 85, 'club': None})  4092 B, 7 facts
+     210.8s  ON AIR (phone, code, verified): London Athletic built 6 overloads from minute 47 to minute 61, most often in their middle third in the centre.  reasons ['model timeout']
+
+## goal-1 · drill:judge-down-companion
+     133.1s  companion   ninety-companion-match:4     2.0s  1493→123 tok
+     133.1s  mcp         goal_build_up({'minute': 13, 'club': 'London Athletic'})  1574 B, 3 facts
+     134.0s  companion   ninety-companion-match:4     0.9s  1092→23 tok
+     134.0s  judge       ninety-judge:4               0.0s  77→0 tok  ERROR ServiceRequestError: drill: the Judge's endpoint cannot be reached
+     134.0s  judge       ninety-judge:4               0.0s  77→0 tok  ERROR ServiceRequestError: drill: the Judge's endpoint cannot be reached
+     134.0s  mcp         goal_build_up({'minute': 13, 'club': 'London Athletic'})  1574 B, 3 facts
+     134.0s  mcp         players({'minute_from': 1, 'minute_to': 13, 'club': None})  1763 B, 5 facts
+     134.0s  mcp         counter_press({'minute_from': 1, 'minute_to': 13, 'club': 'London Athletic'})  6719 B, 12 facts
+     134.0s  mcp         referee({'minute_from': 1, 'minute_to': 13, 'club': None})  9833 B, 7 facts
+     134.0s  mcp         goal_build_up({'minute': 13, 'club': None})  1574 B, 3 facts
+     134.0s  mcp         style({'minute_from': 1, 'minute_to': 13, 'club': 'London Athletic'})  1418 B, 1 facts
+     134.0s  mcp         territory({'minute_from': 1, 'minute_to': 13, 'club': 'London Athletic'})  456 B, 0 facts
+     134.0s  mcp         style({'minute_from': 1, 'minute_to': 13, 'club': 'London Athletic'})  1418 B, 1 facts
+     134.0s  mcp         goal_build_up({'minute': 12, 'club': None})  1574 B, 3 facts
+     134.0s  mcp         goal_build_up({'minute': 35, 'club': None})  7726 B, 13 facts
+     134.0s  mcp         goal_build_up({'minute': 76, 'club': None})  1404 B, 3 facts
+     134.0s  mcp         goal_build_up({'minute': 85, 'club': None})  4092 B, 7 facts
+     134.0s  ON AIR (phone, code, verified): London Athletic scored in minute 12.  reasons ['judge service error; claim held back']
+
