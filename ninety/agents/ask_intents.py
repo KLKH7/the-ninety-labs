@@ -102,7 +102,7 @@ INTENTS = (
     Intent(
         "passes",
         ("passing",),
-        r"\bpass(?:es)?\b",
+        r"\b(?:pass(?:es)?|attacking third)\b",
         "so_far",
         "count",
         "How many passes?",
@@ -118,12 +118,18 @@ INTENTS = (
         "the passes vision counted",
     ),
     Intent(
-        "shots", ("shots",), r"\bshots?\b", "so_far", "count", "How many shots?", "the shots vision spotted"
+        "shots",
+        ("shots",),
+        r"\b(?:shots?|goals?|attacking third)\b",
+        "so_far",
+        "count",
+        "How many shots?",
+        "the shots vision spotted",
     ),
     Intent(
         "on_target",
         ("shots", "score"),
-        r"\bon target\b",
+        r"\b(?:on target|goals?|attacking third)\b",
         "so_far",
         "count",
         "How many shots on target?",
@@ -141,7 +147,7 @@ INTENTS = (
     Intent(
         "corners",
         ("set_pieces",),
-        r"\bcorners?\b",
+        r"\b(?:corners?|set pieces?|attacking third)\b",
         "so_far",
         "count",
         "How many corners?",
@@ -150,7 +156,7 @@ INTENTS = (
     Intent(
         "out_of_play",
         ("set_pieces",),
-        r"\b(?:out of play|throw-ins?|goal kicks?|restarts?)\b",
+        r"\b(?:out of play|throw-ins?|goal kicks?|restarts?|attacking third)\b",
         "so_far",
         "count",
         "How often has the ball gone out?",

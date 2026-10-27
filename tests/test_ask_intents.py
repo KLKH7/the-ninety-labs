@@ -226,7 +226,9 @@ def test_on_top_since_the_half_hour_is_lisbon_with_both_clubs(mi):
 def test_how_many_passes_is_answered_with_passes_never_shots(mi):
     a = ask(mi, "How many passes?", 2050.0).answer
     lead = a.text.split(". ")[0]
-    assert re.search(r"more passes: \d+ to", lead) and "shot" not in lead, a.text  # the comparison leads
+    # The comparison leads, as a share: the detector overcounts, but its direction held (never a count).
+    assert re.search(r"(?:more|fewer) of the passes", lead) and "shot" not in lead, a.text
+    assert not re.search(r"\d+ passes", a.text), a.text
     assert "London Athletic" in lead and "Lisbon Esportes" in lead
 
 
@@ -306,8 +308,10 @@ def test_a_lead_without_the_row_s_metric_gives_the_fallback(mi, monkeypatch):
         r.say(ask_answers._score_line(ctx, bug), bug)  # a true sentence, about the score
         return r
 
-    monkeypatch.setitem(ask_answers.BUILDERS, "shots", off_topic)
-    a, _ = cm.code_match_answer(Question("s", None, "How many shots?", 3600.0), mi, suggest=False)
+    monkeypatch.setitem(ask_answers.BUILDERS, "fastest", off_topic)
+    a, _ = cm.code_match_answer(
+        Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
+    )
     assert a.status == "unanswerable" and "scorebug" not in a.text, a.text
 
 
@@ -316,12 +320,16 @@ def test_a_sentence_failing_the_fact_check_is_never_shown(mi, monkeypatch):
 
     def wrong(ctx):
         r = real(ctx)
-        r.lines[0] = (re.sub(r"\b8 shots\b", "9 shots", r.lines[0][0], count=1), r.lines[0][1])
+        text = r.lines[0][0]
+        planted = re.sub(r"\d+", lambda m: str(int(m.group()) + 1), text, count=1)  # one number off by one
+        assert planted != text
+        r.lines[0] = (planted, r.lines[0][1])
+        wrong.planted = planted
         return r
 
     monkeypatch.setitem(ask_answers.BUILDERS, "shots", wrong)
     a, _ = cm.code_match_answer(Question("s", None, "How many shots?", 5400.0), mi, suggest=False)
-    assert "9 shots" not in a.text, a.text
+    assert wrong.planted not in a.text, a.text
 
 
 def test_every_chip_reads_as_its_own_row(mi):
@@ -510,7 +518,9 @@ def test_this_match_is_the_match_so_far():
 def test_a_zero_count_is_said_plainly_with_its_scope_never_hedged(mi, q):
     a, _ = cm.code_match_answer(Question("s", None, q, 120.0), mi, suggest=False)
     assert not re.search(r"\b(?:[Vv]ision (?:has )?spotted|can't|doesn't catch)", a.text), a.text
-    assert "in the footage" in a.text
+    assert "in the footage" in a.text or a.text == "No goals yet.", (
+        a.text
+    )  # shots: the goals, then the ground
 
 
 def test_how_do_you_know_is_the_last_answer_s_method_with_only_measured_rates(mi):

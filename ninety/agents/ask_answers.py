@@ -46,7 +46,8 @@ _PASSES = (
 )
 _RESTARTS = (
     "Restarts (corners, throw-ins, goal kicks, free kicks) are read from where the ball left the "
-    "pitch and how play restarted in the broadcast video; how many it misses is not measured yet."
+    "pitch and how play restarted in the broadcast video. Their counts are not said: the detector is "
+    "not yet reliable enough for them, so the answer gives where the ball has been instead."
 )
 _WHERE = (
     "Where the ball was comes from the tracked ball: each club's share of the footage with the ball in "
@@ -397,7 +398,17 @@ def _lower(text: str) -> str:
     return text[0].lower() + text[1:] if first in ("It's", "The", "There", "No", "Neither") else text
 
 
-def _compare(ctx: Ctx, w: Window, n: dict, key: str, noun: str, one: str, verb: str, sources=()) -> Reply:
+def _compare(
+    ctx: Ctx,
+    w: Window,
+    n: dict,
+    key: str,
+    noun: str,
+    one: str,
+    verb: str,
+    sources=(),
+    scope: str | None = None,
+) -> Reply:
     """A count said as the comparison it is reliable for (vision misses events at both ends alike):
     who has had more, then both numbers, and the scope once. "Lisbon Esportes have had more shots: 5 to
     London Athletic's 3 in the footage so far." The club asked about is said first."""
@@ -417,13 +428,17 @@ def _compare(ctx: Ctx, w: Window, n: dict, key: str, noun: str, one: str, verb: 
     ]
     f = ctx.fact(f"{key}:{first}", f"ask_{key}_compare", None, None, first, also=also, sources=sources, w=w)
     if h == a == 0:
-        r.say(f"Neither side has {verb} a {one} {_scope(w)}.", f)
+        r.say(f"Neither side has {verb} a {one} {scope or _scope(w)}.", f)
         r.head = f"No {noun}"
     elif h == a:
-        r.say(f"It's level: {c1} and {c2} have {verb} {n1} {one if n1 == 1 else noun} each {_scope(w)}.", f)
+        r.say(
+            f"It's level: {c1} and {c2} have {verb} {n1} {one if n1 == 1 else noun} each "
+            f"{scope or _scope(w)}.",
+            f,
+        )
         r.head = f"Level: {n1} each"
     else:
-        r.say(f"{c1} have {verb} {more} {noun}: {n1} to {possessive(c2)} {n2} {_scope(w)}.", f)
+        r.say(f"{c1} have {verb} {more} {noun}: {n1} to {possessive(c2)} {n2} {scope or _scope(w)}.", f)
         r.head = f"{_short(ctx, lead)}: {n[lead]} {noun}"
     return r
 
@@ -628,10 +643,82 @@ def _window(ctx: Ctx) -> Window:
     return _so_far(ctx) if w.empty or _no_footage(ctx, w) else w
 
 
+# Design, pre-registered before it was run (the Coordinator, Oct 27; measured on 8324's footage,
+# in-sample): the pass detector overcounts (recall 0.84, precision 0.68) but the clubs' direction held in
+# every 15-minute window, so passes are said as a share rounded to 5 points ("about 55%"), never a count.
+PASS_SHARE_STEP = 5
+# Shots (recall 0.22 there): a direction is said only when the gap is large, the larger at least twice
+# the smaller and at least 3 more; otherwise the answer leads with the goals and where the ball was.
+SHOT_RATIO, SHOT_GAP = 2.0, 3
+# Restarts (corners, throw-ins, goal kicks: precision under 0.2 there) are not counted on air. The hook
+# for when they are measured countable (the Foundry event checker's work): set True, and their counts
+# are said as the comparison again.
+RESTARTS_COUNTABLE = False
+
+
 def passes(ctx: Ctx) -> Reply:
+    """Who has made more of the passes, as a share ("about 55% of them"), never a count."""
     w = _window(ctx)
     rows = ctx.events("pass", w)
-    return _compare(ctx, w, _by_team(rows), "passes", "passes", "pass", "made", rows)
+    n = _by_team(rows)
+    total = n["home"] + n["away"]
+    r = Reply()
+    if not total:
+        r.say(f"Neither side has made a pass {_scope(w)}.")
+        return r
+    share = {t: PASS_SHARE_STEP * round(100 * n[t] / total / PASS_SHARE_STEP) for t in ("home", "away")}
+    # The direction is the counts' (it held in every window measured); the share only says how much.
+    lead = None if n["home"] == n["away"] else max(("home", "away"), key=lambda t: n[t])
+    first, second = _order(ctx, lead)
+    f = ctx.fact(f"pass_share:{first}", "ask_pass_share", share[first], "%", first, sources=rows, w=w)
+    if lead is None:
+        r.say(
+            f"It's level: {ctx.clubs[first]} and {ctx.clubs[second]} have each made half of the passes "
+            f"{_scope(w)}.",
+            f,
+        )
+        r.head = "Level"
+    elif share[first] == 50:  # rounded to half: say which side of it, never a share that reads level
+        word, amount = ("more", "a little over half") if first == lead else ("fewer", "a little under half")
+        r.say(
+            f"{ctx.clubs[first]} have made {word} of the passes than {ctx.clubs[second]}: {amount} of them "
+            f"{_scope(w)}.",
+            f,
+        )
+        r.head = f"{_short(ctx, lead)}: more passes"
+    else:
+        word = "more" if first == lead else "fewer"
+        r.say(
+            f"{ctx.clubs[first]} have made {word} of the passes than {ctx.clubs[second]}: "
+            f"about {share[first]}% of them {_scope(w)}.",
+            f,
+        )
+        r.head = f"{_short(ctx, lead)}: about {share[lead]}% of passes"
+    return r
+
+
+def _goals_compare(ctx: Ctx) -> Reply:
+    """The goals each club has scored, from the broadcast's scorebug, as a comparison."""
+    bug = _scorebug(ctx)
+    if bug is None:
+        return Reply()
+    n = {"home": bug["home"], "away": bug["away"]}
+    if not n["home"] and not n["away"]:
+        r = Reply()
+        r.say("No goals yet.", bug)
+        r.head = "No goals yet"
+        return r
+    return _compare(ctx, _so_far(ctx), n, "goals", "goals", "goal", "scored", [bug], scope="on the scorebug")
+
+
+def _goals_and_ground(ctx: Ctx) -> Reply:
+    """The confident facts nearest a count vision cannot make: the goals, then where the ball has been."""
+    r = _goals_compare(ctx)
+    where = territory(ctx)
+    if where.status == "verified":
+        r.lines += where.lines[:1]
+        r.head = r.head or where.head
+    return r
 
 
 def completion(ctx: Ctx) -> Reply:
@@ -661,20 +748,28 @@ def completion(ctx: Ctx) -> Reply:
 
 
 def shots(ctx: Ctx) -> Reply:
+    """Who has had more shots, only when the gap is large enough for the detector (SHOT_RATIO and
+    SHOT_GAP); else the goals and where the ball has been."""
     w = _window(ctx)
     rows = ctx.events("shot", w)
-    return _compare(ctx, w, _by_team(rows), "shots", "shots", "shot", "had", rows)
+    n = _by_team(rows)
+    hi, lo = max(n["home"], n["away"]), min(n["home"], n["away"])
+    if hi >= SHOT_RATIO * lo and hi - lo >= SHOT_GAP:
+        lead = "home" if n["home"] > n["away"] else "away"
+        first, second = _order(ctx, lead)
+        f = ctx.fact(f"shots_direction:{lead}", "ask_shots_direction", None, None, first, sources=rows, w=w)
+        r = Reply()
+        word = "far more" if first == lead else "far fewer"
+        r.say(f"{ctx.clubs[first]} have had {word} shots than {ctx.clubs[second]} {_scope(w)}.", f)
+        r.head = f"{_short(ctx, lead)}: more shots"
+        return r
+    return _goals_and_ground(ctx)
 
 
 def on_target(ctx: Ctx) -> Reply:
-    """Shots on target: goals and saves (a shot whose outcome is on target)."""
-    w = _window(ctx)
-    goals = [g for g in ctx.events("goal", w) if g.get("side_known", True)]
-    saves = [s for s in ctx.events("shot", w) if s.get("outcome") == "on_target"]
-    on = _by_team(goals)
-    for t, k in _by_team(saves).items():
-        on[t] += k
-    return _compare(ctx, w, on, "on_target", "shots on target", "shot on target", "had", [*goals, *saves])
+    """Every goal is on target, and saves are not detected well enough to add: the goals from the
+    scorebug, then where the ball has been."""
+    return _goals_and_ground(ctx)
 
 
 RESTART_UNITS = {
@@ -693,6 +788,8 @@ def _restarts(ctx: Ctx, w: Window, kinds: tuple[str, ...]) -> dict[str, dict]:
 
 
 def corners(ctx: Ctx) -> Reply:
+    if not RESTARTS_COUNTABLE:  # never a restart count on air (precision under 0.2): where the ball was
+        return territory(ctx)
     w = _window(ctx)
     if re.search(
         r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", ctx.read.text, re.I
@@ -723,6 +820,8 @@ def corners(ctx: Ctx) -> Reply:
 
 
 def out_of_play(ctx: Ctx) -> Reply:
+    if not RESTARTS_COUNTABLE:  # never a restart count on air (precision under 0.2): where the ball was
+        return territory(ctx)
     r = Reply()
     w = _window(ctx)
     kinds = ("throw_in", "goal_kick", "corner")
@@ -1189,9 +1288,9 @@ def key_moments(ctx: Ctx) -> Reply:
             r.say(_goal_sentence(g), g)
     else:
         r.say(f"No goals {w.said}.")
-    sh = shots(ctx)
-    if sh.status == "verified" and sh.lines:
-        text, cited = sh.lines[0]
+    where = territory(ctx)  # and where the ball has been, the measure that held
+    if where.status == "verified" and where.lines:
+        text, cited = where.lines[0]
         r.say(text, *cited)
     r.head = f"{len(goals)} goal{'s' if len(goals) != 1 else ''}" if goals else "No goals"
     return r
