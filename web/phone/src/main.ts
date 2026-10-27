@@ -1930,6 +1930,9 @@ function howButton(h: How): HTMLButtonElement {
  * every detection of that frame boxed and its confidence. Resolves to the detections drawn. */
 /** The footage image that shows match time `t`, and where it sits in the video: through the shared
  * timeline, at the footage's image rate (fps × footage.timescale, #413). */
+/** How long the frame may take to arrive (design: a seek in the bundle's video takes well under a second
+ * on a range-serving host; past this the browser is not going to show it). */
+const SEEN_TIMEOUT_MS = 8000;
 function imageAt(t: number): { index: number; videoT: number } | null {
   if (!bundle) return null;
   const m = bundle.manifest;
@@ -1939,8 +1942,10 @@ function imageAt(t: number): { index: number; videoT: number } | null {
   return { index, videoT: (index + 0.5) / rate };
 }
 
-async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"]> {
-  if (!bundle) return [];
+/** The broadcast frame at t with what the detector boxed; null when this browser cannot show the frame
+ * (a video it cannot decode, or one that never seeks), so no black box stands in for the picture. */
+async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"] | null> {
+  if (!bundle) return null;
   const m = bundle.manifest;
   const frame = Math.round(t * m.fps);
   const { index, videoT } = imageAt(t)!;
@@ -1948,6 +1953,7 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
   canvas.height = m.height;
   const ctx = canvas.getContext("2d")!;
   const picture = await new Promise<CanvasImageSource | null>((resolve) => {
+    setTimeout(() => resolve(null), SEEN_TIMEOUT_MS);
     if (m.footage.kind === "frames") {
       const img = new Image();
       img.onload = () => resolve(img);
@@ -1963,7 +1969,8 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
       video.addEventListener("error", () => resolve(null), { once: true });
     }
   });
-  if (picture) ctx.drawImage(picture, 0, 0, m.width, m.height);
+  if (!picture) return null;
+  ctx.drawImage(picture, 0, 0, m.width, m.height);
   const found = (await bundleDetections()).get(frame)?.detections ?? [];
   ctx.lineWidth = Math.max(2, m.width / 400);
   ctx.font = `700 ${Math.round(m.width / 45)}px system-ui, sans-serif`;
@@ -2059,7 +2066,7 @@ async function openHow(h: How) {
     const cameras = step("What the cameras saw", canvas);
     steps.push(cameras);
     void drawSeen(canvas, h.t).then((found) => {
-      if (!found.length) {
+      if (!found?.length) {
         cameras.remove(); // a frame with nothing found is no evidence: the step is not shown
         count.textContent = `${list.children.length} checks · all passed`;
         return;

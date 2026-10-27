@@ -528,6 +528,21 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     assert not errors
 
 
+def test_how_do_we_know_shows_no_black_box_when_this_browser_cannot_show_the_frame(browser, site):  # noqa: F811
+    """video-prep, Oct 27: "What the cameras saw" was a black box in a browser that could not decode the
+    bundle's video (Playwright's own Chromium has no H.264). With no picture, the step is not shown."""
+    laptop, page, errors = phone(browser, site, laptop_t=61.2)
+    page.context.route("**/bundle/frames/**", lambda route: route.fulfill(status=404, body=""))
+    answer = ask(page, "Where are London overloading?")
+    answer.locator(".how").click()
+    page.wait_for_selector("#how-body .stepper")
+    page.wait_for_function("!document.querySelector('#how-body canvas.seen')", timeout=10_000)
+    assert "What the cameras saw" not in page.inner_text("#how-body")
+    assert page.inner_text("#how-body .count-line").startswith("2 checks")
+    page.context.unroute("**/bundle/frames/**")
+    assert not [e for e in errors if "404" not in e]
+
+
 def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reaches_it(browser, site):  # noqa: F811
     laptop, page, errors = phone(browser, site, bundle=False)
     assert page.is_visible("#lt-players")  # Players: a visible way to any player
