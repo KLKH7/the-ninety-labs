@@ -8,7 +8,7 @@
 // reads the mock feed.
 
 import "./ionic";
-import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
+import { COLORS as RADAR_COLORS, RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, timescaleOf, within } from "../../viewer/src/radar";
 import { type MatchData, chapterAt, chapterLabel, statsAt } from "../../viewer/src/match";
 import * as momentum from "./momentum";
 import { tickTo } from "./ticker";
@@ -117,6 +117,7 @@ interface State {
   following: boolean; // the selection came from the laptop's focus
   card: PlayerCard | null;
   wind: boolean;
+  heat: boolean; // the pitch shows one club's heat map (Live › Heat)
   tab: Tab;
   insights: InsightCard[];
 }
@@ -132,6 +133,7 @@ const state: State = {
   following: false,
   card: null,
   wind: false,
+  heat: false,
   tab: "radar",
   insights: [],
 };
@@ -152,10 +154,14 @@ function screenOf(x: number, y: number): [number, number] {
   state,
   laptop,
   positions: () => lastPositions,
+  imageAt: (t: number) => imageAt(t), // read by tests/test_phone.py
+  chapterAt: (t: number) => (state.match ? chapterAt(state.match.chapters, bundleImageRate, laptop.cuts ? laptop.cuts.videoTime(t) : t) : null),
   radar: () => lastState,
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
   name: playerName,
+  say: (id: string) => sayPlayer(id), // how the sheet and its chips say him (never "a player")
+  trackSpan: (id: string, t: number) => trackSpan(id, t),
   // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
   drawable: (sv: ScoutVisual, t: number | null = null) => {
     const v = fromScout(sv, t);
@@ -259,14 +265,21 @@ function onRelay(m: RelayMessage) {
   }
 }
 
+/** How long a phone that lost its screen keeps asking for the same code when the server does not know
+ * it (design: a restarted server, whose big screen claims its code back within about 2 s,
+ * desktop-companion, Oct 26); a code typed or scanned still fails at once. */
+const RECLAIM_S = 30;
+let reclaimUntil = 0; // while reconnecting, an unknown code is the server coming back, not a wrong code
 function onClosed(why: Closed) {
-  if (why === "lost") {
+  const reclaiming = (w: unknown) => w === "unknown-code" && Date.now() < reclaimUntil;
+  if (why === "lost" || reclaiming(why)) {
+    if (Date.now() >= reclaimUntil) reclaimUntil = Date.now() + RECLAIM_S * 1000;
     setStatus("lost", "Reconnecting…");
     const retry = async () => {
       try {
         link = await feed.join(state.code, onRelay, onClosed);
       } catch (again) {
-        if (again === "lost" || again === "not-joined") setTimeout(retry, 2000);
+        if (again === "lost" || again === "not-joined" || reclaiming(again)) setTimeout(retry, 2000);
         else backToPairing(again as Closed);
       }
     };
@@ -379,7 +392,7 @@ interface BundleManifest {
   segments?: { index: number; frame: number; frames: number }[];
   width: number;
   height: number;
-  footage: { kind: "video" | "frames"; src: string; frames: number };
+  footage: { kind: "video" | "frames"; src: string; frames: number; timescale?: number };
   detector?: string | null;
   teams?: unknown;
   sides_known?: unknown;
@@ -391,7 +404,9 @@ interface BundleManifest {
   cards?: unknown;
 }
 
-let bundleFps = 25;
+/** Video images a second: the bundle's fps times its footage's baked speed (footage.timescale, #413).
+ * Chapters and the footage count images, so every image <-> video-time conversion uses this. */
+let bundleImageRate = 25;
 let bundle: { base: URL; manifest: BundleManifest } | null = null;
 let bundleCards: InsightCard[] | null = null;
 interface DetectedEvent {
@@ -459,7 +474,7 @@ async function loadBundle() {
     const cuts = timeline(m);
     laptop.cuts = cuts;
     bundle = { base, manifest: m };
-    bundleFps = m.fps;
+    bundleImageRate = cuts.rate;
     const [radar, match, cards] = await Promise.all([
       m.radar ? get("radar.json") : null,
       m.match ? get("match.json") : null,
@@ -589,6 +604,8 @@ async function loadMinimap() {
 /** The radar from the bundle's tracked positions when the big screen's bundle has them, otherwise
  * from the minimap feed; the same drawing either way. */
 function buildRadar() {
+  spans = null;
+  teamHeatAt = -Infinity;
   state.radar = null;
   state.radarFrom = null;
   if (state.minimap || bundleRadar) {
@@ -677,6 +694,71 @@ function distinctName(id: string): string {
 function roleWords(side: "home" | "away", x: number, y: number): string {
   const [flank, depth] = spot(side, x, y).split(" · ");
   return `${flank} ${depth === "defence" ? "defender" : depth === "midfield" ? "midfielder" : "forward"}`;
+}
+
+/** The label a fan picked an unnamed track by, kept while his sheet is open: where he was when tapped. */
+const pickedAs = new Map<string, string>();
+
+/** How the sheet, its chips and their answers say a player (Kian, Oct 27: never "a player"): the
+ * Player ID feed's name; else where he is on the pitch ("the player on the left of the pitch"), never
+ * a club: a track id's letter is the tracker's side vote, and a bundle may carry no side list
+ * (Coordinator, Oct 27). Where he is comes from the radar's tracked frame now, never a later one. */
+function sayPlayer(id: string): string {
+  if (!unnamedTrack(id)) return playerName(id);
+  const kept = pickedAs.get(id);
+  if (kept) return kept;
+  const p = state.radar?.at(viewTime(), false)?.players.find((q) => q.id === id);
+  const at: [number, number] | undefined = p ? [p.x, p.y] : averagePositions().get(id);
+  let label: string;
+  if (!at) label = "the player you picked";
+  else {
+    const across = at[0] < 105 / 3 ? "on the left" : at[0] > (2 * 105) / 3 ? "on the right" : "in the middle";
+    label = `the player ${across} of the pitch`;
+  }
+  pickedAs.set(id, label);
+  return label;
+}
+/** The same at a sentence's start. */
+const SayPlayer = (id: string) => sayPlayer(id).replace(/^the /, "The ");
+
+/** Each track's first and last tracked time, from the bundle's frames, else the minimap feed. A
+ * track is one unbroken stretch of tracking: a player lost behind others comes back as a new track,
+ * so a card's numbers cover this stretch, never his match (lesson 294). */
+let spans: Map<string, number[]> | null = null; // each track's tracked times, in order
+function trackSpan(id: string, tTo: number): [number, number] | null {
+  if (!spans) {
+    spans = new Map();
+    const see = (pid: string, t: number) => {
+      const s = spans!.get(pid);
+      if (!s) spans!.set(pid, [t]);
+      else s.push(t);
+    };
+    if (bundleRadar) for (const f of bundleRadar.data.frames) for (const p of f.players) see(p.id, f.t);
+    else if (state.minimap) for (const f of state.minimap.frames) for (const [pid] of f.players) see(pid, f.t);
+    for (const s of spans.values()) s.sort((a, b) => a - b);
+  }
+  const s = spans.get(id);
+  if (!s || s[0] > tTo) return null;
+  // The last time he was seen at or before tTo: a sighting after a gap never stretches the span.
+  let lo = 0;
+  let hi = s.length - 1;
+  while (lo < hi) {
+    const m = (lo + hi + 1) >> 1;
+    if (s[m] <= tTo) lo = m;
+    else hi = m - 1;
+  }
+  return [s[0], s[lo]];
+}
+
+/** How long play was followed for this track up to t, or null when it has been followed since the
+ * feed's first frame ("1 min 12 s"): what a card or an answer about him covers (lesson 294). A
+ * per-player match total keyed by the ID feed's name, once AGENTS.md allows it, replaces this. */
+function followedFor(id: string, t: number): { from: number; to: number; said: string } | null {
+  const tracked = trackSpan(id, t);
+  if (!tracked || tracked[0] <= (state.minimap?.frames[0]?.t ?? 0) + 1) return null;
+  const span = Math.max(0, tracked[1] - tracked[0]);
+  const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
+  return { from: tracked[0], to: tracked[1], said };
 }
 
 /** Where a player has mostly been, in two words a line-up uses ("Left · defence"). */
@@ -1140,6 +1222,7 @@ function drawMap(t: number) {
 // --- the player card -------------------------------------------------------------------------
 
 function select(id: string | null, fromLaptop = false) {
+  if (id !== state.selected) pickedAs.clear();
   state.selected = id;
   state.following = fromLaptop;
   state.card = null;
@@ -1152,7 +1235,7 @@ function select(id: string | null, fromLaptop = false) {
     // The ID feed's shirt and position beside the name (lesson 269); vision's numbers below as before.
     const row = tacticalSheet[id];
     const shirt = row?.name ? [row.number !== undefined ? `#${row.number}` : "", row.position ?? ""].filter(Boolean).join(" · ") : "";
-    const title = shirt ? `${playerName(id)}, ${shirt}` : playerName(id);
+    const title = shirt ? `${playerName(id)}, ${shirt}` : SayPlayer(id);
     $("player-title").textContent = fromLaptop ? `${title} · followed from the big screen` : title;
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
@@ -1162,14 +1245,14 @@ function select(id: string | null, fromLaptop = false) {
     renderCompareChips(id);
     cardAsked = -1;
     void refreshCard(true);
-    if (fromLaptop) announce(`The big screen is following ${mid(playerName(id))}.`);
+    if (fromLaptop) announce(`The big screen is following ${mid(sayPlayer(id))}.`);
     else if (state.tab === "radar") {
       // Focus moves to the sheet's title, so a screen reader lands on it.
       playerSheet.addEventListener("ionModalDidPresent", () => $("player-title").focus(), { once: true });
       if (sheetUp) requestAnimationFrame(() => $("player-title").focus());
     }
   }
-  $("ask-who").textContent = id ? playerName(id) : "the match";
+  $("ask-who").textContent = id ? sayPlayer(id) : "the match"; // "About the player on the left…"
   renderChips();
 }
 
@@ -1212,21 +1295,27 @@ function showCard(c: PlayerCard) {
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
-  // The card covers t_from..t_to, but nothing was tracked before the feed's first frame: say the
-  // stretch the positions really cover, not the one asked for.
-  const from = Math.max(c.t_from, state.minimap?.frames[0]?.t ?? c.t_from);
-  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(c.t_to)}`;
+  // The card covers t_from..t_to, but its numbers come only from the stretch this track was
+  // followed: say that stretch, never "so far" since kick-off (a keeper's "43 metres run" at 29:46
+  // was one track's few seconds; lesson 294).
+  const tracked = trackSpan(c.player, c.t_to);
+  const from = Math.max(c.t_from, tracked?.[0] ?? state.minimap?.frames[0]?.t ?? c.t_from);
+  const to = tracked?.[1] ?? c.t_to;
+  const whole = from <= (state.minimap?.frames[0]?.t ?? 0) + 1;
+  $("so-far-title").textContent = whole ? "So far" : `Tracked ${clock(from)}–${clock(to)}`;
+  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(to)}`;
   // Always say how much play the card covers, so a short window is never mistaken for a match.
-  const span = Math.max(0, c.t_to - from);
-  $("heat-span").textContent =
-    `Covering ${span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`} of play` +
-    (span < 60 ? ": the heat map means more as the match goes on." : ".");
+  const span = Math.max(0, to - from);
+  const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
+  $("heat-span").textContent = whole
+    ? `Covering ${said} of play` + (span < 60 ? ": the heat map means more as the match goes on." : ".")
+    : `Covering ${said} of play: the stretch the tracker followed this player without losing him behind others.`;
   $("player").dataset.t = String(c.t_to);
   const heat = $<HTMLCanvasElement>("heat");
   const v = fit(heat);
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${mid(playerName(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
+  heat.setAttribute("aria-label", `Heat map of ${mid(sayPlayer(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
   // His average position: the heat map's own shares, weighted over its cells' centres.
   const total = c.heat.cells.reduce((a, b) => a + b, 0);
   if (total > 0) {
@@ -1427,9 +1516,12 @@ $("fan-edit").addEventListener("click", () => {
 
 // --- questions -------------------------------------------------------------------------------
 
+/** The three questions /api/ask answers in code for any tracked player (speed now, top speed,
+ * distance, ninety/agents/companion.py), said with his name or, unnamed, where he is (sayPlayer). */
 function playerQuestions(id: string): string[] {
-  const n = mid(playerName(id));
-  return [`How fast is ${n} running now?`, `What is ${n}'s top speed?`, `How far has ${n} run?`];
+  const n = mid(sayPlayer(id));
+  const top = unnamedTrack(id) ? `What top speed has ${n} reached?` : `What is ${n}'s top speed?`; // never "the pitch's"
+  return [`How fast is ${n} running now?`, top, `How far has ${n} run?`];
 }
 
 /** The match questions the Companion's tools answer with a picture. */
@@ -1570,7 +1662,9 @@ function named(text: string, names?: Record<string, string>): string {
   // Answers and cards name TACTICAL tracks: the ID feed's rows for them, under what a payload says.
   const feed: Record<string, string> = {};
   for (const [id, e] of Object.entries(tacticalSheet)) if (e.name) feed[id] = e.name;
-  return nameIds(text, teams, { ...feed, ...names });
+  for (const [id, label] of pickedAs) feed[id] ??= label; // the unnamed player the fan picked, as picked
+  const out = nameIds(text, teams, { ...feed, ...names });
+  return out.replace(/^the /, "The ");
 }
 
 /** The player-ID feed (match.json `identity`): where names come from, never vision (lesson 269). */
@@ -1658,6 +1752,11 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   else if (a.status === "held") body.textContent = "Still being checked, so not shown yet.";
   else if (a.status === "rejected") body.textContent = "The fact-checker turned that answer down, so there's nothing to show.";
   else body.textContent = named(a.text, a.names) || "I can't answer that one. Try a player's speed, an overload or a team's shape.";
+  // A player's speed or distance covers only the stretch his track was followed: said, never "so far"
+  // since kick-off (lesson 294).
+  const who = a?.status === "verified" && /^(speed|peak_speed|distance_run)$/.test(a.metric ?? "") ? a.text.match(/\b[ha]-t\d+\b/)?.[0] : null;
+  const followed = who ? followedFor(who, a!.t_to ?? at) : null;
+  if (followed) body.textContent += ` That covers the ${followed.said} we followed him, ${clock(followed.from)} to ${clock(followed.to)}.`;
   if (a && a.status === "verified") {
     // The headline: a natural phrase for a picture's kind ("1 v 2 round the ball"), else the figure.
     const v = a.visual ? fromScout(a.visual, a.t_to) : null;
@@ -1917,16 +2016,32 @@ function howButton(h: How): HTMLButtonElement {
 
 /** The broadcast picture at match time `t`, drawn onto `canvas` from the bundle's footage, with
  * every detection of that frame boxed and its confidence. Resolves to the detections drawn. */
-async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"]> {
-  if (!bundle) return [];
+/** The footage image that shows match time `t`, and where it sits in the video: through the shared
+ * timeline, at the footage's image rate (fps × footage.timescale, #413). */
+/** How long the frame may take to arrive (design: a seek in the bundle's video takes well under a second
+ * on a range-serving host; past this the browser is not going to show it). */
+const SEEN_TIMEOUT_MS = 8000;
+function imageAt(t: number): { index: number; videoT: number } | null {
+  if (!bundle) return null;
+  const m = bundle.manifest;
+  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
+  const rate = m.fps * timescaleOf(m);
+  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * rate + 1e-6)));
+  return { index, videoT: (index + 0.5) / rate };
+}
+
+/** The broadcast frame at t with what the detector boxed; null when this browser cannot show the frame
+ * (a video it cannot decode, or one that never seeks), so no black box stands in for the picture. */
+async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDetections["detections"] | null> {
+  if (!bundle) return null;
   const m = bundle.manifest;
   const frame = Math.round(t * m.fps);
-  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t - m.t_start;
-  const index = Math.max(0, Math.min(m.footage.frames - 1, Math.floor(v * m.fps)));
+  const { index, videoT } = imageAt(t)!;
   canvas.width = m.width;
   canvas.height = m.height;
   const ctx = canvas.getContext("2d")!;
   const picture = await new Promise<CanvasImageSource | null>((resolve) => {
+    setTimeout(() => resolve(null), SEEN_TIMEOUT_MS);
     if (m.footage.kind === "frames") {
       const img = new Image();
       img.onload = () => resolve(img);
@@ -1937,12 +2052,13 @@ async function drawSeen(canvas: HTMLCanvasElement, t: number): Promise<FrameDete
       video.muted = true;
       video.preload = "auto";
       video.src = new URL(m.footage.src, bundle!.base).toString();
-      video.addEventListener("loadedmetadata", () => (video.currentTime = (index + 0.5) / m.fps), { once: true });
+      video.addEventListener("loadedmetadata", () => (video.currentTime = videoT), { once: true });
       video.addEventListener("seeked", () => resolve(video), { once: true });
       video.addEventListener("error", () => resolve(null), { once: true });
     }
   });
-  if (picture) ctx.drawImage(picture, 0, 0, m.width, m.height);
+  if (!picture) return null;
+  ctx.drawImage(picture, 0, 0, m.width, m.height);
   const found = (await bundleDetections()).get(frame)?.detections ?? [];
   ctx.lineWidth = Math.max(2, m.width / 400);
   ctx.font = `700 ${Math.round(m.width / 45)}px system-ui, sans-serif`;
@@ -2038,7 +2154,7 @@ async function openHow(h: How) {
     const cameras = step("What the cameras saw", canvas);
     steps.push(cameras);
     void drawSeen(canvas, h.t).then((found) => {
-      if (!found.length) {
+      if (!found?.length) {
         cameras.remove(); // a frame with nothing found is no evidence: the step is not shown
         count.textContent = `${list.children.length} checks · all passed`;
         return;
@@ -2275,7 +2391,7 @@ function renderKeyMoments(plays: DetectedEvent[]) {
   // The match's goals (reconciled with the scorebug), then any detected goal none of them tells.
   const now = viewTime();
   const goals: Moment[] = [
-    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? `${teams[side]} goal` : "Goal", goal: true }; }),
+    ...goalsUpTo(now).map((g) => { const side = goalSide(g); return { t: g.t, team: side, text: side ? teams[side] : "", goal: true }; }),
     ...plays
       .filter((e) => e.type === "shot" && e.outcome === "goal" && !toldByGoal(e, now))
       .map((e) => ({ t: e.t, team: sureSide(e), text: playSentence(e)!, goal: true })), // a club's colour only on a side told surely
@@ -2293,6 +2409,12 @@ function renderKeyMoments(plays: DetectedEvent[]) {
       const text = document.createElement("span");
       text.className = "text";
       text.textContent = m.text;
+      if (m.goal) {
+        const tag = document.createElement("span");
+        tag.className = "goal-tag";
+        tag.textContent = "GOAL";
+        text.prepend(tag);
+      }
       li.append(min, text);
       return li;
     }),
@@ -2553,7 +2675,13 @@ export function scorebugAt(events: Iterable<{ type: string; t: number; score?: {
   return best;
 }
 let scorebugKey = "";
+let scorebugT = Number.NaN; // the clock the band last drew at
+/** A jump in the clock (a seek, a late join) larger than this sets the score at once (design: play
+ * runs at a second a second, so a few seconds between draws is a jump, never play). */
+const SCORE_JUMP_S = 3;
 function renderScorebug(t: number) {
+  const jumped = !(Math.abs(t - scorebugT) <= SCORE_JUMP_S);
+  scorebugT = t;
   const read = scorebugAt(scorebugEvents, t);
   const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
   if (key === scorebugKey) return;
@@ -2562,8 +2690,9 @@ function renderScorebug(t: number) {
   for (const side of ["home", "away"] as const) {
     const el = $(`score-${side}`);
     el.hidden = !read;
-    // The first reading is set, not counted up from 0; a change after it ticks.
-    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
+    // The first reading, and any after a jump in the clock, is set; in play only a goal (+1) ticks.
+    const to = Math.max(0, Math.round(read ? read.score[side] : 0));
+    if (read) tickTo(el, to, jumped || el.textContent === "" ? to : undefined, 1);
   }
   const btn = $("score-read");
   btn.hidden = !read;
@@ -2584,7 +2713,7 @@ function showMatch(t: number) {
   const m = state.match;
   if (!m) return;
   const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
-  const c = chapterAt(m.chapters, bundleFps, v);
+  const c = chapterAt(m.chapters, bundleImageRate, v);
   const line = $("scoreline");
   line.hidden = !c;
   const chapter = c ? chapterLabel(c, teams) : "";
@@ -3109,9 +3238,71 @@ let flowAt = 0;
 let flowBusy = false;
 
 $("pitch-mode").addEventListener("ionChange", (e) => {
-  const flow = (e as CustomEvent<{ value: string }>).detail.value === "flow";
-  if (flow !== state.wind) $("wind-toggle").click();
+  const mode = (e as CustomEvent<{ value: string }>).detail.value;
+  if ((mode === "flow") !== state.wind) $("wind-toggle").click();
+  setTeamHeat(mode === "heat");
 });
+
+// --- the team heat map on the radar: where a club has played so far, from the tracked positions ---
+
+const teamHeatCanvas = $<HTMLCanvasElement>("team-heat");
+let teamHeatAt = -Infinity; // the match time the drawn heat map was counted to
+const HEAT_COLOUR = "#ffd54f"; // design: neither club's colour, as the map is both clubs'
+const TEAM_HEAT_EVERY_S = 2; // design: a heat map over minutes barely moves in two seconds
+
+function setTeamHeat(on: boolean) {
+  state.heat = on;
+  teamHeatCanvas.hidden = !on;
+  $("team-heat-box").hidden = !on;
+  $("map").classList.toggle("faint", on || state.wind);
+  teamHeatAt = -Infinity;
+}
+
+/** Every tracked player's share of player-frames in each cell of the cards' 12 by 8 grid
+ * (ninety/intel/window.py HEAT_NX, HEAT_NY), over every tracked frame up to t: both clubs together.
+ * No club split: the side list (`sides_known`) names event tracks, another id space than the radar's
+ * (lesson 259), and the Player ID feed reaches no statistic but an event's side (AGENTS.md). */
+function teamHeat(t: number) {
+  const nx = 12;
+  const ny = 8;
+  const cells = new Array<number>(nx * ny).fill(0);
+  let n = 0;
+  const add = (x: number, y: number) => {
+    const cx = Math.min(nx - 1, Math.max(0, Math.floor((x / 105) * nx)));
+    const cy = Math.min(ny - 1, Math.max(0, Math.floor((y / 68) * ny)));
+    cells[cy * nx + cx] += 1;
+    n += 1;
+  };
+  if (bundleRadar) {
+    for (const f of bundleRadar.data.frames) if (f.t <= t) for (const p of f.players) add(p.x, p.y);
+  } else if (state.minimap) {
+    for (const f of state.minimap.frames) if (f.t <= t) for (const [, x, y] of f.players) add(x, y);
+  }
+  return { nx, ny, cells: n ? cells.map((c) => c / n) : cells, samples: n };
+}
+
+/** Where the play has mostly been, in a third of the pitch as the radar draws it. */
+function busiestThird(heat: { nx: number; cells: number[] }): string {
+  const thirds = [0, 0, 0];
+  heat.cells.forEach((share, k) => (thirds[Math.min(2, Math.floor(((k % heat.nx) * 3) / heat.nx))] += share));
+  const most = thirds.indexOf(Math.max(...thirds));
+  return `${["left", "middle", "right"][most]} third (${Math.round(thirds[most] * 100)}% of the time)`;
+}
+
+function drawTeamHeat(t: number) {
+  if (!state.heat || Math.abs(t - teamHeatAt) < TEAM_HEAT_EVERY_S) return;
+  teamHeatAt = t;
+  const heat = teamHeat(t);
+  const v = fit(teamHeatCanvas);
+  v.ctx.clearRect(0, 0, v.w, v.h);
+  v.ctx.filter = `blur(${Math.round(v.w / 60)}px)`; // design: a soft field, not a grid of tiles
+  drawHeat(v, heat, HEAT_COLOUR);
+  v.ctx.filter = "none";
+  teamHeatCanvas.dataset.samples = String(heat.samples);
+  $("team-heat-words").textContent = heat.samples
+    ? `Every tracked player, to ${clock(t)}: most often in the ${busiestThird(heat)} of the pitch as drawn. Brighter means more time there.`
+    : "No tracked players yet.";
+}
 $("wind-toggle").addEventListener("click", async () => {
   state.wind = !state.wind;
   $("wind-toggle").setAttribute("aria-pressed", String(state.wind));
@@ -3183,6 +3374,8 @@ function frame(now: number) {
   if (state.radar && !$("live").hidden) {
     if (state.tab === "radar") {
       const s = drawMap(t);
+      $("map-empty").hidden = s.players.length > 0;
+      drawTeamHeat(t);
       const pos: Positions = { ball: s.ball ? [s.ball.x, s.ball.y] : [52.5, 34], players: s.players.map((p) => [p.id, p.x, p.y]) };
       lastPositions = s.ball ? pos : null;
       describeMap(t, s, pos);

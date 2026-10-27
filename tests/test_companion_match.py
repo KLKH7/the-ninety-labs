@@ -225,6 +225,16 @@ def test_a_bad_club_or_minutes_is_not_repaired_into_another_call():
     assert calls == [{"name": "overloads", "club": None, "minute_from": 14, "minute_to": 28}]
 
 
+def test_minute_zero_is_kick_off_not_a_bad_window():
+    # Asked at half-time "who had more of the ball in the first half?", the live Companion planned
+    # possession from minute 0 to 45; read as malformed, it was answered over minutes 31 to 45.
+    plan = {"tools": [{"name": "possession", "club": None, "minute_from": 0, "minute_to": 45}]}
+    assert companion._calls(plan, insights(), 45) == [
+        {"name": "possession", "club": None, "minute_from": 1, "minute_to": 45}]
+    bad = {"tools": [{"name": "possession", "club": None, "minute_from": False, "minute_to": 45}]}
+    assert companion._calls(bad, insights(), 45)[0]["minute_from"] == 31
+
+
 @pytest.mark.parametrize(
     "draft, why",
     [
@@ -334,13 +344,13 @@ def test_the_phone_route_answers_a_match_question(monkeypatch):
         "ball": {"x": 52.5, "y": 34.0},
         "players": [{"id": "h7", "team": "home", "x": 10.0, "y": 30.0}],
     }
-    monkeypatch.setattr(
-        comp, "_track", lambda clip: Track("seed7", (frame, {**frame, "frame": 1, "t": 0.04}), (0,))
-    )
+    end = {**frame, "frame": int(Q.t * 25), "t": Q.t}  # the clip runs to the question's time
+    monkeypatch.setattr(comp, "_track", lambda clip: Track("seed7", (frame, end), (0,)))
     monkeypatch.setattr(comp, "_insights", lambda clip: insights())
     app = comp.Companion(passcode="", live=None, allow_truth=True)
     client = TestClient(api.build("k" * 64, app))
     code = client.post("/api/pair", json={"clip": "seed7"}).json()["code"]
+    app.rooms[code].latest["clock"] = {"type": "clock", "t": Q.t, "playing": False}  # the big screen is there
     r = client.post("/api/ask", json={"session": code, "player": None, "text": Q.text, "t": Q.t})
     assert r.status_code == 200, r.text
     body = r.json()
@@ -1064,7 +1074,8 @@ def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing()
 
 
 def test_the_refusal_says_build_up_with_its_hyphen():
-    joke = Question("s1", None, "Tell me a joke", 80 * 60.0)
+    # A message about a club that no tool answers (lesson 287: "Tell me a joke" is small talk now).
+    joke = Question("s1", None, "Tell me a joke about London Athletic", 80 * 60.0)
     a = asyncio.run(companion.answer_match(joke, insights())).answer
     assert a.status == "unanswerable" and "goal build-up" in a.text and "build up" not in a.text
 
@@ -1081,3 +1092,304 @@ def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known()
     for q in ("Who has more of the ball?", "Who has had more possession?"):
         a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
         assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)
+
+
+# -- Kian's preview probe (Oct 26): the named club, a share's sample, no degenerate window -----------
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("text", ["How are Lisbon Esportes playing?", "How are Lisbon playing?",
+                                   "How are {code} playing?", "How are Esportes playing?",
+                                   "Are Lisbon pressing high?"])
+def test_a_question_about_one_club_is_routed_by_any_name_a_fan_uses(text):
+    mi = insights()
+    text = text.format(code=mi.fixture.away_code)  # its code, as the scorebug shows it ("LIS")
+    assert companion.clubs_named(text, mi) == ["Lisbon Esportes"]
+    calls = companion.code_calls(Question("s1", None, text, 60 * 60.0), mi)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls), calls
+
+
+def test_they_follows_the_club_the_last_question_named_and_a_club_cut_through_reads_both():
+    mi = insights()
+    history = [{"question": "How are Lisbon playing?", "answer": "", "calls": []}]
+    calls = companion.code_calls(Question("s1", None, "Are they pressing?", 60 * 60.0), mi, history)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls)
+    cut = companion.code_calls(Question("s1", None, "Which pass cut through Lisbon?", 60 * 60.0), mi)
+    assert all(c["club"] is None for c in cut if c["name"] == "line_breaks")
+
+
+def test_counts_and_comparisons_are_over_the_match_so_far():
+    calls = companion.code_calls(Question("s1", None, "Who has had more shots?", 80 * 60.0), insights())
+    assert next(c for c in calls if c["name"] == "shots")["minute_from"] == 1
+
+
+def test_a_share_needs_its_sample_and_a_one_minute_window_is_said_as_one_minute():
+    share = {"id": "style:channels:home:m1-1", "kind": "channels", "metric": "pass_share_by_channel",
+             "team": "home", "club": "London Athletic", "minute_from": 1, "minute_to": 1, "value": 67,
+             "unit": "%", "lo": 67, "hi": 67, "confident": True, "most": "centre",
+             "shares": {"left": 22, "centre": 67, "right": 11}, "also": [[67, "%", "x"], [9, "passes"]]}
+    assert companion.code_texts(share) == []  # 9 passes: too few for a share
+    enough = share | {"also": [[67, "%", "x"], [20, "passes"]]}
+    (text,) = companion.code_texts(enough)
+    assert "in minute 1" in text and "minute 1 to minute 1" not in text
+
+
+def test_at_kick_off_the_answer_is_too_early_not_a_canned_list():
+    early = Question("s1", None, "How are Lisbon playing?", 1.0)
+    a = asyncio.run(companion.answer_match(early, insights())).answer
+    assert a.text == companion.TOO_EARLY
+
+
+# -- "How are they playing?": an overview ranked by what matters, never a tiny count -----------------
+
+
+def test_how_a_club_is_playing_is_an_overview_led_by_its_biggest_moment_not_a_small_count():
+    a = asyncio.run(companion.answer_match(Question("s1", None, "How are London playing?", 60 * 60.0),
+                                           insights())).answer
+    assert a.status == "verified" and "London Athletic's biggest moment: in minute 23" in a.text, a.text
+    tiny = {"kind": "crosses", "metric": "crosses", "value": 1, "unit": "crosses", "completed": 0}
+    assert companion.tiny(tiny) and companion.tiny(tiny | {"value": 7})  # none found: says nothing
+    assert not companion.tiny(tiny | {"value": 7, "completed": 3})
+    assert not companion.tiny({"value": 2, "unit": "%"})
+    assert not companion.tiny({"kind": "line_break", "value": 4, "unit": "opponents"})  # a moment
+
+
+def test_live_mode_answers_how_they_are_playing_with_the_overview_and_spends_no_model_call():
+    async def ask(prompt):  # the model: never asked for an overview
+        raise AssertionError("a model call was made")
+
+    q = Question("s1", None, "How is London Athletic's attack looking?", 60 * 60.0)
+    r = asyncio.run(companion.answer_match(q, insights(), ask=ask, judge=ask))
+    assert r.source == "code" and "biggest moment" in r.answer.text
+
+
+def _both_sides_broke_lines() -> MatchInsights:
+    """A London pass and a later Lisbon one, each taking 3 out: the Lisbon one is newer and would lead."""
+    mi = insights()
+    lb = next(f for f in mi.facts["line_break"] if f["id"] == "lb:v1")
+    lisbon = {**lb, "id": "lb:v2", "team": "away", "club": "Lisbon Esportes", "minute": 26, "t": 1530.0,
+              "value": 3, "lo": 3, "hi": 3, "event": "v2", "passer": "a-t7", "receiver": "a-t9",
+              "passer_is": None}
+    mi.facts["line_break"] = [{**lb, "value": 3, "lo": 3, "hi": 3}, lisbon]
+    return mi
+
+
+@pytest.mark.parametrize(
+    "text, passer",
+    [
+        ("Which pass broke Lisbon's lines?", "London Athletic"),
+        ("Which pass cut through Lisbon Esportes?", "London Athletic"),
+        ("Which pass broke London's lines?", "Lisbon Esportes"),
+        ("Which Lisbon pass broke the lines?", "Lisbon Esportes"),
+    ],
+)
+def test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs(text, passer):
+    """Preview, Oct 26 (lesson 283): "Which pass broke Lisbon's lines?" was answered with a Lisbon
+    pass ("a Lisbon Esportes player played a pass that took 3 London Athletic players out"): the named
+    club was read as the passer's. A club whose lines were broken is the one the pass beat."""
+    q = Question("s1", None, text, 28 * 60.0)
+    a, _ = companion.code_match_answer(q, _both_sides_broke_lines())
+    beaten = "Lisbon Esportes" if passer == "London Athletic" else "London Athletic"
+    assert a.status == "verified" and f"took 3 {beaten} players" in a.text, a.text
+
+
+def test_no_pass_of_the_beaten_club_answers_it_even_alone():
+    """With only Lisbon's pass in the stretch, "Which pass broke Lisbon's lines?" is not answered with it."""
+    mi = _both_sides_broke_lines()
+    mi.facts["line_break"] = [f for f in mi.facts["line_break"] if f["team"] == "away"]
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    a, _ = companion.code_match_answer(q, mi)
+    assert "Lisbon Esportes player" not in a.text, a.text
+
+
+def test_the_model_citing_the_beaten_clubs_pass_is_refused():
+    mi = _both_sides_broke_lines()
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v2", mi), "evidence": ["lb:v2"]}))
+    q = Question("s1", None, "Which pass broke Lisbon's lines?", 28 * 60.0)
+    r = asyncio.run(companion.answer_match(q, mi, ask))
+    assert r.source == "code" and r.reasons[0].startswith("the question asks for a pass that beat Lisbon")
+    assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
+
+
+SMALL_TALK_PROBES = [
+    "hello", "Hi!", "hey there", "thanks", "Thank you so much", "cheers mate", "ok", "what can you do?",
+    "Who are you?", "help",
+]
+OFF_TOPIC_PROBES = ["asdkjh qwe zzz", "What's the capital of France?", "will it rain tomorrow?"]
+STAT = re.compile(r"\d|%|\bminute\b")
+HISTORY = [{"question": "How are London Athletic playing?", "answer": "x",
+            "calls": [{"name": "line_breaks", "club": "London Athletic",
+                       "minute_from": 14, "minute_to": 28}]}]
+
+
+def _a_friendly_reply(r):
+    a = r.answer
+    assert r.tools == () and a.evidence == () and a.value is None and a.headline is None, a
+    assert not STAT.search(a.text), a.text
+    assert 1 <= len(a.follow_ups) <= 3 and all(companion.route(q) for q in a.follow_ups), a.follow_ups
+
+
+@pytest.mark.parametrize("text", SMALL_TALK_PROBES + OFF_TOPIC_PROBES)
+def test_small_talk_gets_a_friendly_reply_and_suggestions_never_a_stat(text):
+    """Kian, Oct 27 (lesson 287): "hello" in the docked companion got "49% … Lisbon Esportes played most
+    through the left … minute 76 to minute 91": with an earlier question in the conversation, a message
+    that routed to no tool reused the last question's tools. On the code path, small talk and a message
+    about nothing in the match get fixed words and questions the tools can answer, never a stat."""
+    for h in ((), HISTORY):
+        q = Question("s1", None, text, Q.t)
+        _a_friendly_reply(asyncio.run(companion.answer_match(q, insights(), history=h)))
+
+
+@pytest.mark.parametrize("text", SMALL_TALK_PROBES)
+def test_the_model_is_never_asked_about_small_talk(text):
+    async def ask(prompt):  # a model that would answer with a stat if it were ever asked
+        raise AssertionError(f"the model was called for small talk: {prompt[:80]}")
+
+    for h in ((), HISTORY):
+        _a_friendly_reply(asyncio.run(companion.answer_match(Question("s1", None, text, Q.t), insights(), ask,
+                                                             history=h)))
+
+
+@pytest.mark.parametrize("text", OFF_TOPIC_PROBES)
+def test_off_topic_goes_to_the_planner_and_an_empty_plan_gets_the_friendly_reply(text):
+    """A message code routes to no tool may still be one the planner can place (merge-queue review of
+    #422: "how many passes?", "whos winning" were refused before the model saw them). It is asked; a
+    plan with no tools comes back to code's friendly reply."""
+    for h in ((), HISTORY):
+        ask, prompts = scripted(json.dumps({"tools": []}))
+        _a_friendly_reply(asyncio.run(companion.answer_match(Question("s1", None, text, Q.t), insights(), ask,
+                                                             history=h)))
+        assert [p["step"] for p in prompts] == ["plan"]
+
+
+def test_a_question_code_does_not_route_is_answered_by_the_models_plan():
+    """Merge-queue review of #422: in Live mode "how many passes?" and the like reach the planner,
+    and a plan it makes is answered and checked as any other."""
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
+    q = Question("s1", None, "how many passes?", Q.t)
+    assert companion.route(q.text) == [] and companion.chat_kind(q.text, insights()) == "other"
+    r = asyncio.run(companion.answer_match(q, insights(), ask))
+    assert r.source == "model" and r.answer.status == "verified", (r.reasons, r.answer.text)
+
+
+@pytest.mark.parametrize("text", ["And in the first half?", "What about them?", "Which pass cut through?",
+                                  "Who is London Athletic's left-back?", "hi, which pass cut through?"])
+def test_a_question_or_a_follow_up_is_not_small_talk(text):
+    history = [{"question": "Which pass cut through?", "answer": "x",
+                "calls": [{"name": "line_breaks", "club": None, "minute_from": 14, "minute_to": 28}]}]
+    assert companion.chat_kind(text, insights(), history) is None
+
+
+def test_no_window_runs_past_full_time():
+    """Lesson 287: a question at 90:00 or after was read as minute 91; the window ends at full time
+    (Law 7's 90 minutes), on the code path and in the model's plan."""
+    mi = insights()
+    q = Question("s1", None, "Which pass cut through?", 90 * 60.0 + 45)
+    calls = companion.code_calls(q, mi)
+    assert calls and all(c["minute_to"] == 90 for c in calls)
+    plan = {"tools": [{"name": "line_breaks", "club": None, "minute_from": 80, "minute_to": 91}]}
+    minute = json.loads(companion.plan_prompt(q, mi))["minute"]
+    assert minute == 90 and companion._calls(plan, mi, minute)[0]["minute_to"] == 90
+    a, _ = companion.code_match_answer(q, mi)
+    assert "minute 91" not in a.text, a.text
+
+
+@pytest.mark.parametrize("text", ["How much has the left back done?", f"How is {LB.name} doing?",
+                                  f"Tell me about {LB.name.split()[-1]}"])
+def test_a_player_or_a_position_is_not_small_talk(text):
+    assert companion.chat_kind(text, insights()) is None
+
+
+# --- the model path's harness: step budgets, the budget taken late, no Judge on code's sentences ----
+
+
+def live_match_client(monkeypatch, match_ask, judge=None, budget=(20, 400)):
+    from starlette.testclient import TestClient
+
+    from ninety.api import app as api
+    from ninety.api import companion as comp
+    from ninety.match.tracking import Track
+
+    frame = {"frame": 0, "t": 0.0, "source": "truth", "ball": {"x": 52.5, "y": 34.0},
+             "players": [{"id": "h7", "team": "home", "x": 10.0, "y": 30.0}]}
+    end = {**frame, "frame": int(Q.t * 25), "t": Q.t}
+    monkeypatch.setattr(comp, "_track", lambda clip: Track("seed7", (frame, end), (0,)))
+    monkeypatch.setattr(comp, "_insights", lambda clip: insights())
+
+    async def models():
+        async def never(*args):
+            raise AssertionError("not this model")
+
+        return comp.LiveModels(never, judge or never, match_ask)
+
+    app = comp.Companion(passcode="letmein", live=models, allow_truth=True)
+    app.budget = comp.Budget(*budget, app.clock)
+    client = TestClient(api.build("k" * 64, app))
+    code = client.post("/api/pair", json={"clip": "seed7"}).json()["code"]
+    app.rooms[code].latest["clock"] = {"type": "clock", "t": Q.t, "playing": False}
+
+    def post(text):
+        body = {"session": code, "player": None, "text": text, "t": Q.t}
+        return client.post("/api/ask", json=body, headers={comp.PASSCODE_HEADER: "letmein"}).json()
+
+    return post, app
+
+
+def test_small_talk_and_code_only_answers_spend_no_model_budget(monkeypatch):
+    # Audit, Oct 27: the budget was taken before answer_match's small-talk and overview returns.
+    ask, prompts = scripted()
+    post, app = live_match_client(monkeypatch, ask)
+    for text in ("hi", "thanks!", "How are London Athletic playing?"):
+        assert post(text)["source"] == "code"
+    assert prompts == [] and app.budget.today == 0
+
+
+def test_a_model_answer_takes_one_from_the_budget_and_none_once_it_is_spent(monkeypatch):
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+    ask, prompts = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
+    post, app = live_match_client(monkeypatch, ask, budget=(1, 400))
+    assert post("Who cut through their lines?")["source"] == "model"
+    assert app.budget.today == 1 and len(prompts) == 2  # two model steps, one question's budget
+    assert post("Who cut through their lines?")["source"] == "code" and len(prompts) == 2
+
+
+def test_the_match_path_runs_no_judge(monkeypatch):
+    # Its sentences are code's own, checked by code (docs/eval/ask-model-path.md): the Judge can only
+    # reject a true one, at about 2 s a call.
+    async def judge(claim, evidence):
+        raise AssertionError("the Judge ran on the match path")
+
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+    ask, _ = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
+    post, _ = live_match_client(monkeypatch, ask, judge)
+    assert post("Who cut through their lines?")["source"] == "model"
+
+
+@pytest.mark.parametrize("step", ["plan", "answer"])
+def test_a_step_past_its_budget_falls_back_to_code_naming_the_step(monkeypatch, step):
+    from ninety.agents import companion as player_companion
+
+    monkeypatch.setitem(player_companion.STEP_S, step, 0.05)
+    plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 20, "minute_to": 28}]})
+
+    async def ask(prompt):
+        if json.loads(prompt)["step"] == step:
+            await asyncio.sleep(1)
+        return plan if step == "answer" else "{}"
+
+    r = asyncio.run(companion.answer_match(Q, insights(), ask))
+    assert r.source == "code" and r.reasons == (f"model timeout ({step})",)
+
+
+def test_a_spent_budget_is_the_recorded_reason():
+    from ninety.agents.companion import NoModel
+
+    async def ask(prompt):
+        raise NoModel("model budget spent")
+
+    r = asyncio.run(companion.answer_match(Q, insights(), ask))
+    assert r.source == "code" and r.reasons == ("model budget spent",) and r.answer.status == "verified"

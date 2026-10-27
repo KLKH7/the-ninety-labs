@@ -56,6 +56,7 @@ PITCH_WIDTH_M = 68.0
 # The brief's requirement for this track: a line is said within 2 s of what it describes.
 MAX_LAG_S = 2.0
 REPEAT_S = 30.0  # design: a pass line in the same words as one said this recently is not said again
+SCORE_BEFORE_S, SCORE_AFTER_S = 2.0, 15.0  # design: the reading that goes with a goal
 REPEATS = frozenset({"pass", "spell"})  # only these: two interceptions or corners are two facts
 # Design: a breath between lines, so two descriptions do not run into one sentence.
 GAP_S = 0.3
@@ -121,6 +122,12 @@ class Line:
     # may the voice name a player's side ("a home player"), since a track id's letter is that side.
     side_known: bool = True
     kind: str = ""  # the event's type, "spell" or "" (an insight or a shape line): what REPEAT_S reads
+    # A goal's score after it, (home, away), as the broadcast's scorebug read it (measured: #356): said
+    # after the checked line ("London lead 2–1."), never counted from goals.
+    score: tuple[int, int] | None = None
+    # The side of each player the line's event names, as the event tells it surely (its team, which
+    # the player-ID feed may have corrected): said in place of his track id's letter (lesson 283).
+    sides: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -196,12 +203,20 @@ def _versions(event: dict) -> list[str]:
     if kind == "goal" or (kind == "shot" and event.get("outcome") == "goal"):
         # A shot vision saw go in is a goal, said as one, when no goal event follows it (scored_by).
         who = "A player" if who == UNNAMED else who
+        if event.get("player") and side_known(event):
+            # The scoring side is the goal event's own (the side match.json's goals carry,
+            # stats.goal_moments), said by name: never left to the scorer's track id, whose letter is
+            # the tracker's side vote and can be the other club's (lesson 283).
+            team = event["team"]
+            return [f"Goal! {who} scores for {team}, {place}.", f"Goal! {who} scores for {team}."]
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":
         outcome = {"on_target": "on target", "off_target": "off target", "blocked": "blocked"}.get(
             event.get("outcome") or "")
         tail = f", {outcome}." if outcome else "."
         across = place.split(",")[0].removeprefix("on the ").removeprefix("in the ")
+        if event.get("outcome") == "on_target":  # a big chance: called as one
+            return [f"Big chance! {who} shoots from the {across}{tail}", f"Big chance! {who} shoots{tail}"]
         return [f"{who} shoots from the {across}{tail}", f"{who} shoots{tail}"]
     if kind == "pass":
         action = _pass_text(event, "casual")
@@ -279,23 +294,28 @@ as_sentence = _sentence  # the offline stand-in Tactician writes its claim this 
 
 
 def _names(text: str, side_known: bool = True, compact: bool = False,
-           clubs: dict[str, str] | None = None) -> str:
+           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
+           sides: dict[str, str] | None = None) -> str:
     """Ids as a commentator says them. A squad id is its side's shirt number ("Home's number 11", then
     "number 8"). A tracked player has no shirt number the tracker read, so a track id is never said as
     a number: he is "a home player", then "a team-mate", only when the line's side was told surely;
     otherwise "a player", then "another player" (a track id's letter is the tracker's side vote, which
     the voice says only when the gate passes it; the graphic's id still shows it: EVALUATION.md, known
     residual).
-    The same player named again is "the same player". `compact` (a short version) drops the side."""
-    sides: set[str] = set()
+    The same player named again is "the same player". `compact` (a short version) drops the side.
+    `sides` gives a track's side as its event told it surely, over the letter (lesson 283)."""
+    said_sides: set[str] = set()
     seen: dict[str, str] = {}
 
     def say(m: re.Match) -> str:
-        whole, side = m[0], ("home" if m[1] == "h" else "away")
+        whole, side = m[0], (sides or {}).get(m[0]) or ("home" if m[1] == "h" else "away")
+        if names and names.get(whole):  # the player-ID feed names him (#389): said by his name
+            seen[whole] = names[whole]
+            return names[whole]
         if whole in seen:
             return "the same player" if m[3] else f"number {m[2]}"
-        first = side not in sides
-        sides.add(side)
+        first = side not in said_sides
+        said_sides.add(side)
         if m[2]:
             club = (clubs or {}).get(side, side.capitalize())
             phrase = f"number {m[2]}" if compact or not first else f"{club}'s number {m[2]}"
@@ -313,15 +333,18 @@ def _names(text: str, side_known: bool = True, compact: bool = False,
 
 
 def spoken(text: str, side_known: bool = True, compact: bool = False,
-           clubs: dict[str, str] | None = None) -> str:
+           clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
+           sides: dict[str, str] | None = None) -> str:
     """What the voice says for a checked line: a sentence, not a graphic's compact form; ids as a
     commentator names players; units in full. The substitutions are fixed: what is said carries
     exactly the checked line's numbers, and names no side the checked line does not (a track id's
     side only where it was told surely). `clubs` names the sides ({"home": "London", ...}, from the
     bundle's team codes): "London's number 11" rather than "Home's number 11"."""
-    names = clubs or {}
-    out = TEAM_SPOKEN.sub(lambda m: names.get(m[1], m[1].capitalize()), _sentence(text))
-    out = _names(out, side_known, compact, clubs)
+    club_of = clubs or {}
+    out = TEAM_SPOKEN.sub(lambda m: club_of.get(m[1], m[1].capitalize()), _sentence(text))
+    out = _names(out, side_known, compact, clubs, names, sides)
+    # "A Lisbon player scores for Lisbon": the club once.
+    out = re.sub(r"\b(an? (.+?) player scores) for \2\b", r"\1", out)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
     out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
     out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
@@ -406,9 +429,33 @@ def scored_by(events: list[dict]) -> set[str]:
     return out
 
 
+def score_after(t: float, scores: list[dict]) -> tuple[int, int] | None:
+    """The score the scorebug showed just after a goal at `t`: its first reading from SCORE_BEFORE_S
+    before the goal to SCORE_AFTER_S after it (the reader's change is the goal's own frame, #356), and
+    only if that reading differs from the one before it: a goal detected beside a scorebug that did not
+    change (a false goal) is followed by no score. With no earlier reading it cannot be told, so none."""
+    ordered = sorted(scores, key=lambda r: float(r["t"]))
+    shown = [i for i, r in enumerate(ordered) if t - SCORE_BEFORE_S <= float(r["t"]) <= t + SCORE_AFTER_S]
+    if not shown or shown[0] == 0:
+        return None
+    first, before = ordered[shown[0]], ordered[shown[0] - 1]
+    now, was = (int(first["home"]), int(first["away"])), (int(before["home"]), int(before["away"]))
+    return None if now == was else now
+
+
+def score_said(score: tuple[int, int], clubs: dict[str, str] | None) -> str:
+    """The score as a commentator says it after a goal: who leads, or that it is level."""
+    home, away = score
+    names = clubs or {"home": "Home", "away": "Away"}
+    if home == away:
+        return f"It's {home}–{away}."
+    leader = names["home"] if home > away else names["away"]
+    return f"{leader} lead {max(home, away)}–{min(home, away)}."
+
+
 def candidates(
     events: list[dict], cues: list[dict], upgrades: dict[str, str] | None = None,
-    shape: list[dict] | None = None,
+    shape: list[dict] | None = None, scores: list[dict] | None = None,
 ) -> tuple[list[Line], list[dict]]:
     """Every line the Describer may say, each checked, and what it refused to say and why.
 
@@ -515,8 +562,10 @@ def candidates(
         versions = checked(event_versions(event), [event["id"]])
         kind = "goal" if event["type"] == "shot" and event.get("outcome") == "goal" else event["type"]
         if versions:
+            score = score_after(float(event["t"]), scores or []) if kind == "goal" else None
+            told = ((event["player"], event["team"]),) if event.get("player") and side_known(event) else ()
             lines.append(Line(event["id"], event["t"], PRIORITY[kind], pan_for(event["x"]),
-                              [event["id"]], versions, "event", sides_told([event["id"]]), kind))
+                              [event["id"]], versions, "event", sides_told([event["id"]]), kind, score, told))
     lines.extend(insights.values())  # an insight whose last event is not in this list: none today
     for t, text, fact in shape_lines(shape):
         versions = checked([text], [fact])
@@ -533,65 +582,75 @@ def estimate(words: str, _ssml: str) -> tuple[float, str]:
     return estimated_seconds(words), "estimated"
 
 
-def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None = None) -> Track:
+def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None = None,
+             names: dict[str, str] | None = None, timescale: float = 1.0) -> Track:
     """One voice in time order: each line starts when the last ended (plus GAP_S), at most
     MAX_LAG_S after its event; it shortens, then drops, rather than run late or push a more
-    important line coming up past MAX_LAG_S."""
+    important line coming up past MAX_LAG_S. Times are match times; a line spoken for s seconds
+    over footage played at `timescale` covers s x timescale of match, and the lag and the gap are
+    heard in video seconds, so both scale too (ninety/footage.py)."""
+    k = timescale  # match seconds a heard second
     said: list[Said] = []
     dropped: list[dict] = []
     free_at = float("-inf")
     last_said: dict[str, float] = {}
     for i, line in enumerate(lines):
+        told = dict(line.sides)
         if line.kind in REPEATS:
             # A pass or a spell said in the same words as one within REPEAT_S tells the listener
             # nothing new ("A player finds another player, in the middle", again): not said.
-            words = spoken(line.versions[0], line.side_known, clubs=clubs)
+            words = spoken(line.versions[0], line.side_known, clubs=clubs, names=names, sides=told)
             if line.t - last_said.get(words, float("-inf")) < REPEAT_S:
                 dropped.append({"id": line.key, "t": line.t,
                                 "reason": f"said in the same words within {REPEAT_S:g} s"})
                 continue
         start = max(line.t, free_at)
-        if start - line.t > MAX_LAG_S:
+        if start - line.t > MAX_LAG_S * k:
             dropped.append({"id": line.key, "t": line.t, "reason": f"voice busy until {free_at:.2f}"})
             continue
         upcoming = [n for n in lines[i + 1:] if n.priority < line.priority]
         chosen = None
         for n, text in enumerate(line.versions):
-            words = spoken(text, line.side_known, compact=n > 0, clubs=clubs)
+            words = spoken(text, line.side_known, compact=n > 0, clubs=clubs, names=names, sides=told)
+            if line.score is not None:  # the scorebug's reading after a goal, said after it
+                words = f"{words} {score_said(line.score, clubs)}"
             seconds, how = duration(words, ssml(words, line.priority))
-            end = start + seconds
-            if all(end + GAP_S - n2.t <= MAX_LAG_S for n2 in upcoming if n2.t < end + GAP_S):
+            end = start + seconds * k
+            if all(end + GAP_S * k - n2.t <= MAX_LAG_S * k for n2 in upcoming if n2.t < end + GAP_S * k):
                 chosen = (n, text, words, seconds, how)
                 break
         if chosen is None:
             dropped.append({"id": line.key, "t": line.t, "reason": "would push a more important line late"})
             continue
         n, text, words, seconds, how = chosen
-        end = round(start + seconds, 2)
+        end = round(start + seconds * k, 2)
         # A model line that did not fit falls back to the claim's own (code) line.
         source = "insight" if line.source == "model" and n > 0 else line.source
         description = Description(line.key, words, ssml(words, line.priority), line.pan,
                                   "model" if source == "model" else "code")
         said.append(Said(
             id=f"ad-{line.key}", event=line.key, t_event=line.t, t_in=round(start, 2), t_out=end,
-            lag_s=round(start - line.t, 2), pan=description.pan, text=text, spoken=description.text,
+            lag_s=round((start - line.t) / k, 2), pan=description.pan, text=text, spoken=description.text,
             ssml=description.ssml, short=n > 0, source=source, evidence=line.evidence,
             duration_s=seconds, duration_source=how,
         ))
-        free_at = end + GAP_S
+        free_at = end + GAP_S * k
         if line.kind in REPEATS:
-            last_said[spoken(line.versions[0], line.side_known, clubs=clubs)] = line.t
+            last_said[spoken(line.versions[0], line.side_known, clubs=clubs, names=names,
+                             sides=told)] = line.t
     return Track(said, dropped)
 
 
 def describe(events: list[dict], cues: list[dict], duration: Duration = estimate,
              upgrades: dict[str, str] | None = None, shape: list[dict] | None = None,
-             clubs: dict[str, str] | None = None) -> tuple[Track, list[dict]]:
+             clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
+             scores: list[dict] | None = None, timescale: float = 1.0) -> tuple[Track, list[dict]]:
     """The spoken track for detected `events` and the live path's `cues` (and the clip's shape facts,
     when it has tracked positions), and the refusals. `clubs` names the sides when the bundle knows
-    its teams (see `spoken`)."""
-    lines, refused = candidates(events, cues, upgrades, shape)
-    return schedule(lines, duration, clubs), refused
+    its teams (see `spoken`); `names` the players the player-ID feed names, by track; `scores` the
+    scorebug's readings ({t, home, away}), said after each goal."""
+    lines, refused = candidates(events, cues, upgrades, shape, scores)
+    return schedule(lines, duration, clubs, names, timescale), refused
 
 
 # ---------------------------------------------------------------- real synthesis (behind a flag)
@@ -684,7 +743,7 @@ def webvtt(track: Track, t_start: float, timeline: Timeline | None = None) -> st
         position = round((s.pan + 1) * 50)
         position = min(90, max(10, position))
         start = timeline.to_video(s.t_in) if timeline is not None else s.t_in - t_start
-        end = start + (s.t_out - s.t_in)
+        end = start + s.duration_s  # as long as it is spoken, in video seconds
         blocks.append(
             f"{s.id}\n{_vtt_time(start)} --> {_vtt_time(end)} "
             f"position:{position}% align:center\n{s.spoken}\n"

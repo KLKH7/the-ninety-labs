@@ -5,9 +5,12 @@ import { AudioTracks, readCommentary } from "./commentary";
 import { setupDock } from "./dock";
 import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
+import { describe as describeLowerThird, setupLowerThird } from "./lowerthird";
 import { Narrator } from "./narrator";
+import { BAKED, bugAt, codesOf, setupScorebug } from "./scorebug";
+import { rowsAt, scoutAt, setupStats, statsGraphicAt } from "./stats";
 import { attachPlayer } from "./player";
-import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
+import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline, timescaleOf } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 import { airSpeed, airSpeeds, claimSpeeds, commentarySpeeds, spokenSpeeds } from "./speed";
 
@@ -44,7 +47,9 @@ const store = {
   },
 };
 
-/** The footage as one clock: a <video>, or JPEG frames drawn to a canvas at the clip's fps. */
+/** The footage as one clock: a <video>, or JPEG frames drawn to a canvas at the clip's fps (times its
+ * baked speed, manifest footage.timescale). */
+const imageRate = (b: Bundle) => b.manifest.fps * timescaleOf(b.manifest);
 interface Footage {
   time(): number; // seconds since the clip's first frame
   duration: number;
@@ -58,12 +63,12 @@ interface Footage {
  * renderer's STINGER_S (0.6 s, ninety/render/edit.py), and one frame more at 25 fps. */
 const POSTER_S = 0.6 / 2 + 1 / 25;
 
-function videoFootage(b: Bundle): Footage {
+function videoFootage(b: Bundle, startAt = 0): Footage {
   // HLS, else MP4, else the legacy file, recovering from errors and stalls (src/player.ts).
-  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"));
+  const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"), startAt);
   return {
     time: () => video.currentTime,
-    duration: b.manifest.footage.frames / b.manifest.fps,
+    duration: b.manifest.footage.frames / imageRate(b),
     paused: () => video.paused,
     play: () => player.want(true),
     pause: () => player.want(false),
@@ -72,7 +77,8 @@ function videoFootage(b: Bundle): Footage {
 }
 
 function frameFootage(b: Bundle): Footage {
-  const { fps, footage, width, height } = b.manifest;
+  const { footage, width, height } = b.manifest;
+  const fps = imageRate(b);
   video.hidden = true;
   framesCanvas.hidden = false;
   framesCanvas.width = width;
@@ -142,7 +148,7 @@ function renderPipeline(b: Bundle) {
     [
       "Described",
       m.audio
-        ? `${m.audio.lines} lines spoken, ${m.audio.dropped} left out to keep pace, at most ${m.audio.max_lag_s.toFixed(1)} s after the play (${m.audio.mode === "azure" ? "Azure AI Speech" : "timing estimated, browser voice"})`
+        ? `${m.audio.lines} lines ${m.audio.mode === "azure" ? "spoken" : "described"}, ${m.audio.dropped} left out to keep pace, at most ${m.audio.max_lag_s.toFixed(1)} s after the play (${m.audio.mode === "azure" ? "Azure AI Speech" : "timing estimated, not voiced: shown as text"})`
         : "no audio description in this bundle",
       !m.audio,
     ],
@@ -240,8 +246,13 @@ async function start() {
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
   document.documentElement.style.setProperty("--ar", String(m.width / m.height)); // the big screen's fit
-  const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
-  const { matchTime, videoTime, segmentOf } = timeline(m);
+  const big = bigScreen(!!b.match, location.search);
+  // The big screen opens on a clean picture (demo audit 2, row 5): the match's first frames carry the
+  // stinger that joins the broadcast's segments, mid-wipe. It clears within half of the renderer's
+  // STINGER_S (ninety/render/edit.py, edge_stingers), so the player starts just after it, through
+  // the source it attached: never a second source set over it (which dropped HLS for the MP4).
+  const footage = m.footage.kind === "video" ? videoFootage(b, big ? POSTER_S / timescaleOf(m) : 0) : frameFootage(b);
+  const { matchTime, videoTime, segmentOf, timescale, rate } = timeline(m);
   const teams = teamNames(m.teams);
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
@@ -252,18 +263,12 @@ async function start() {
   if (b.audio) b.audio = { ...b.audio, said: spokenSpeeds(b.audio.said, m.speed) };
   (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
   (window as unknown as { ninetySpeed: typeof airSpeed }).ninetySpeed = airSpeed; // read by tests/test_viewer.py
-  const big = bigScreen(!!b.match, location.search);
   if (big) {
     document.body.dataset.screen = "big";
-    // Open on a clean picture (demo audit 2, row 5): the match's first frames carry the stinger that
-    // joins the broadcast's segments, mid-wipe. It clears within half of the renderer's STINGER_S
-    // (ninety/render/edit.py, edge_stingers), so the first frame shown is the one just after it.
-    // A media fragment, not a seek on load: a seek made before the metadata arrives then still wins.
-    if (m.footage.kind === "video") video.src = `${b.base}${m.footage.src}#t=${POSTER_S}`;
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);
-  scrub.step = String(1 / m.fps);
+  scrub.step = String(1 / rate);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
 
   let lastAired = "";
@@ -278,13 +283,15 @@ async function start() {
     ? "This bundle has no audio description: run ninety-e2e again."
     : narrator.state.voice === "recorded"
       ? "Spoken by Azure AI Speech, placed left to right where the play is."
-      : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
+      : "This bundle's audio description is not voiced: each line is shown as text here, for a screen reader to read.";
+  const voiced = narrator.state.voice === "recorded";
   // The voice is off until a fan picks audio description on this page: a remembered choice never
   // starts it speaking on load.
   voiceBox.checked = false;
   const applyVoice = () => {
-    // With the voice on, the live region stays quiet so a screen reader does not say it twice.
-    onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
+    // With the recorded voice on, the live region stays quiet so a screen reader does not say it
+    // twice; with no voice in the bundle, the live region is how the description is heard.
+    onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked && voiced ? "off" : "polite");
   };
   voiceBox.addEventListener("change", () => {
     store.set("voice", voiceBox.checked ? "1" : "0");
@@ -320,8 +327,9 @@ async function start() {
       if (on && focus) btn.focus();
     }
     const audio = p === "audio";
-    $("voice-toggle").hidden = !audio;
-    $("audio-keys").hidden = !audio;
+    // The voice switch and its keys only where there is a voice to switch.
+    $("voice-toggle").hidden = !audio || !voiced;
+    $("audio-keys").hidden = !audio || !voiced;
     audioNote.hidden = !audio;
     if (!audio) narrator.stop();
     applyVoice();
@@ -355,7 +363,7 @@ async function start() {
   // graphics use (lesson 33), so its radar shows the frame on the TV.
   const phone = new PhonePanel(
     m.clip,
-    { time: () => matchTime(footage.time()), playing: () => !footage.paused() },
+    { time: () => matchTime(footage.time()), playing: () => !footage.paused(), rate: timescale },
     new URL(b.base, location.href).pathname,
     big,
   );
@@ -375,6 +383,7 @@ async function start() {
     tracks = new AudioTracks(b.base, commentary, m.stadium ?? null, $("captions"), m.footage.kind === "video" ? video : null,
       m.footage.audio === "muxed");
     tracks.described = !!b.audio;
+    tracks.timescale = timescale;
     (window as unknown as { ninetyTracks: AudioTracks }).ninetyTracks = tracks; // read by tests/test_match_mode.py
     // The companion on the computer (src/dock.ts): the phone app, paired to this screen.
     const dock = setupDock(store);
@@ -386,7 +395,7 @@ async function start() {
     ? setupHud({
         footage,
         video: m.footage.kind === "video" ? video : null,
-        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / m.fps, goal: c.kind === "goal" })),
+        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / rate, goal: c.kind === "goal" })),
         play: playButton,
         scrub,
         clock: clockOut,
@@ -403,7 +412,7 @@ async function start() {
     const target = e.target as HTMLElement;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const inControl = target.tagName === "BUTTON" || target.tagName === "INPUT";
-    const step = 1 / m.fps;
+    const step = 1 / rate;
     switch (e.key) {
       case " ":
       case "k":
@@ -423,7 +432,7 @@ async function start() {
       case ",":
       case ".":
         footage.pause(); // to the middle of the next or previous frame
-        footage.seek((Math.floor(footage.time() * m.fps) + (e.key === "." ? 1 : -1) + 0.5) * step);
+        footage.seek((Math.floor(footage.time() * rate) + (e.key === "." ? 1 : -1) + 0.5) * step);
         break;
       case "f":
         if (!hud) return;
@@ -474,6 +483,31 @@ async function start() {
   });
 
   const broadcast = broadcastSchedule(b.cues);
+  // The big screen's lower third is HTML over the picture (src/lowerthird.ts); the canvas keeps the rest.
+  // Only the ID feed's confident names are set in bold, and a name gives its club only through a track
+  // whose side the fact-checker vouches for (the bundle's sides_known): a track id's letter alone is
+  // the tracker's vote, never a club (src/teams.ts, sideUnsure).
+  const feed = (b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name && p.confident === true);
+  const feedNames = [...new Set(feed.map((p) => p.name!))];
+  const vouched = new Set(m.sides_known ?? []);
+  const nameSides = Object.fromEntries(feed.filter((p) => vouched.has(p.id))
+    .map((p) => [p.name!, p.id.startsWith("h") ? "home" : "away"] as const));
+  const codes = codesOf(teams, m.teams);
+  const lowerThird = big
+    ? setupLowerThird($("lower-third"), { teams, names: feedNames, goals: b.match?.goals ?? [], scorebug: b.scorebug,
+      nameSides, codes, stat: (key: string, at: number) => scoutAt(b.match, key, at) })
+    : null;
+  // The second half's kick-off, when vision detected one (a chapter is named from it): half-time's end.
+  const kick = (b.match?.chapters ?? []).find((c) => c.label.startsWith("Kick-off") && (c.event_t ?? c.t) >= 45 * 60);
+  const secondHalf = kick ? kick.event_t ?? kick.t : null;
+  const scorebug = big
+    ? setupScorebug($("scorebug"), $("clock-tab"), teams, b.scorebug, secondHalf, m.teams, (b.match?.goals ?? []).map((g) => g.t),
+      $("bug-said"))
+    : null;
+  const statsGfx = big && b.match ? setupStats($("stats-card"), $("period-panel"), b.match, teams, codes) : null;
+  const footageStart = matchTime(0);
+  (window as unknown as { ninetyScorebug: unknown }).ninetyScorebug = { bugAt, BAKED, rowsAt, statsGraphicAt }; // tests // read by tests/test_match_mode.py
+  (window as unknown as { ninetyLowerThird: unknown }).ninetyLowerThird = { describe: describeLowerThird }; // read by tests/test_match_mode.py
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
@@ -482,7 +516,11 @@ async function start() {
     const aired: Cue[] = big && persona !== "audio" ? broadcast.filter((c) => c.t_in <= t && t < c.t_out) : onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
-    drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
+    drawCues(ctx, lowerThird ? aired.filter((c) => c.slot !== "lower_third") : aired, { t, reduceMotion: reduceMotionBox.checked, onAir: aired });
+    lowerThird?.tick(aired, t, reduceMotionBox.checked);
+    const ended = v >= footage.duration - 1 / rate;
+    const shownScore = scorebug?.tick(t, ended, reduceMotionBox.checked) ?? null;
+    statsGfx?.tick(v, t, videoTime, footageStart, ended, shownScore, !$("lower-third").hidden);
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
     phone.tick();
     radar.tick(v);
@@ -499,12 +537,16 @@ async function start() {
       tracks?.update(v, t, !footage.paused());
     }
 
+    // Audio description with no voice: the line due now is what #on-air says (shown, and read by a
+    // screen reader through its live region), in place of the graphics' sentence.
+    const described = persona === "audio" && !voiced ? narrator.at(t) : null;
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
     overlay.dataset.t = t.toFixed(2);
-    if (ids !== lastAired) {
-      lastAired = ids;
-      const sentence = aired
+    const shownKey = described ? `ad:${described.id}` : ids;
+    if (shownKey !== lastAired) {
+      lastAired = shownKey;
+      const graphics = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
         .map((c) => {
           // The check's result belongs in How we know, never prefixed to what is shown or said.
@@ -512,8 +554,8 @@ async function start() {
           return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
         })
         .join(". ");
-      onAirText.textContent = sentence;
-      overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");
+      onAirText.textContent = described ? described.spoken : graphics;
+      overlay.setAttribute("aria-label", graphics ? `On-screen graphics: ${graphics}` : "No graphics on screen");
       for (const li of document.querySelectorAll<HTMLElement>("#claims .claim")) {
         const claim = b.claims.find((c) => c.id === li.dataset.claim);
         const live = !!claim && aired.some((c) => c.kind === "insight" && c.evidence.join() === claim.evidence.join());

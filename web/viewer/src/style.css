@@ -293,7 +293,7 @@ body[data-screen="big"][data-dock="closed"] .companion { display: none; }
 
 /* The first-run pill, under the broadcast's scorebug: one quiet line, gone after first use. */
 .ask-hint { display: none; }
-body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 11.5%; z-index: 3;
+body[data-screen="big"] .ask-hint:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; position: absolute; left: 2.6%; top: 15%; z-index: 3;
   padding: 6px 14px; border-radius: 999px; border: 0.5px solid rgba(255, 255, 255, 0.14); background: rgba(28, 28, 30, 0.72); color: #fff;
   -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font: 500 clamp(12px, 1vw, 15px) -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; cursor: pointer; }
 body[data-screen="big"] .ask-hint:hover { background: rgba(44, 44, 46, 0.86); }
@@ -345,3 +345,137 @@ body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: non
    hit area does not shrink below 44 px. */
 .hud .icon { position: relative; }
 .hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+
+/* ---- The big screen's graphics' design tokens: every colour, radius, duration and the font in one
+   place (Kian, Oct 26: sleek, professional, the phone's family; white pills on dark, club colours only
+   as accents, one easing curve). */
+:root {
+  --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; /* the phone's */
+  --g-home: #1b2f5b; --g-away: #e63942;             /* the clubs' own colours (Kian, Oct 24) */
+  --g-home-bar: #3a5fb0; --g-away-bar: #e63942;     /* the split bars: navy lifted to read beside crimson */
+  --g-bug: #0d0e12; --g-tab: #1c1d22; --g-ink: #fff; --g-ink2: rgba(235, 235, 245, 0.6);
+  --g-pill: #fff; --g-pill-ink: #0d0e12; --g-pill-ink2: rgba(13, 14, 18, 0.5); --g-pill-track: rgba(13, 14, 18, 0.1);
+  --g-dim: rgba(0, 0, 0, 0.7);
+  --g-radius-bug: 16; --g-radius-card: 8; --g-radius-pill: 999; /* in --v units (1 px at a 1920 px picture) */
+  --g-ease: cubic-bezier(0.2, 0.8, 0.2, 1); --g-dur: 0.28s;
+  --g-goal-s: 1.6; /* the GOAL band's sweep across the bug, in match seconds (src/scorebug.ts reads it) */
+}
+
+/* Units: --v is 1 px at a 1920 px picture and scales with it exactly; type never goes below --t's floor. */
+.bugstack, .sb, .sb-tab, .sp { display: none; }
+body[data-screen="big"] .stage { container-type: inline-size; }
+body[data-screen="big"] .bugstack, body[data-screen="big"] .sp { --v: 0.0521cqw; --t: max(var(--v), 0.7px); }
+
+/* 1. The scorebug: a dark capsule, crest | code | score – score | code | crest, the clock's tab under it.
+   It is an opaque layer exactly over the baked bug's widest box (render.js layoutBug: 28, 24, 400 by 40
+   at 720 lines, as % of the picture) with a margin (--m) wider than its corner radius cuts in, so the
+   broadcast's own bug never shows. */
+body[data-screen="big"] .bugstack { --m: calc(6 * var(--v) + 2px);
+  position: absolute; z-index: 4; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m)); width: calc(31.25% + 2 * var(--m));
+  display: flex; flex-direction: column; align-items: stretch; pointer-events: none; color: var(--g-ink);
+  font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .bugstack > [hidden] { display: none; }
+body[data-screen="big"] .sb { display: grid; grid-template-columns: 1fr auto 1fr; position: relative; overflow: hidden;
+  height: calc(5.5556cqw / var(--ar, 1.7778) + 2 * var(--m)); border-radius: calc(var(--g-radius-bug) * var(--v)); background: var(--g-bug); }
+.sb-team { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(22 * var(--v)); min-width: 0; }
+.sb-away { flex-direction: row-reverse; }
+.sb-crest { display: inline-flex; width: calc(30 * var(--v)); height: calc(36 * var(--v)); flex: none; }
+.sb-crest svg { width: 100%; height: 100%; }
+.sb-crest[hidden] { display: none; }
+.sb-code { font-size: calc(24 * var(--t)); font-weight: 600; letter-spacing: 0.04em; padding-bottom: calc(3 * var(--v));
+  border-bottom: calc(3 * var(--v)) solid transparent; }
+.sb-home .sb-code { border-bottom-color: var(--g-home-bar); }
+.sb-away .sb-code { border-bottom-color: var(--g-away-bar); }
+.sb-score { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(10 * var(--v)); }
+.sb-digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; min-width: 0.62em; text-align: center;
+  font-size: calc(34 * var(--t)); font-weight: 700; }
+.sb-digit > span { display: block; }
+.sb-now { transform: translateY(calc((1 - var(--roll, 1)) * 100%)); }
+.sb-was { position: absolute; inset: 0; transform: translateY(calc(var(--roll, 1) * -100%)); }
+.sb-dash { font-size: calc(22 * var(--t)); color: var(--g-ink2); }
+body[data-screen="big"] .sb-tab { display: block; align-self: center; margin-top: calc(-1 * var(--v)); padding: calc(5 * var(--v)) calc(16 * var(--v)) calc(6 * var(--v));
+  border-radius: 0 0 calc(10 * var(--v)) calc(10 * var(--v)); background: var(--g-tab); }
+.sb-clock { font-size: calc(18 * var(--t)); font-weight: 600; color: var(--g-ink); }
+.sb-tab[data-period="HT"] .sb-clock, .sb-tab[data-period="FT"] .sb-clock { font-weight: 700; letter-spacing: 0.08em; }
+
+/* 2. A goal: the scoring club's colour slides across the bug with its crest and GOAL, out the other
+   way; then the scorer's pill (src/lowerthird.ts). */
+.sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(16 * var(--v)); }
+.sb[data-goal="home"] .sb-sweep, .sb[data-goal="away"] .sb-sweep { display: flex; }
+.sb[data-goal="home"] .sb-sweep { background: var(--g-home); clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
+.sb[data-goal="away"] .sb-sweep { background: var(--g-away); clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
+.sb-sweep .sb-crest { width: calc(34 * var(--v)); height: calc(42 * var(--v)); }
+.sb-goal { font-size: calc(28 * var(--t)); font-weight: 800; letter-spacing: 0.24em; margin-right: -0.24em; }
+
+/* 3. Under the bug, one card at a time, as a league puts up stats mid-game: flat, a dark header strip
+   (what, whose, when) over white rows; an insight's one short line, its comparison where the Scout
+   has one, a goal's scorer, or the match stats every ten minutes. */
+.lt, .sc { display: none; }
+body[data-screen="big"] .lt, body[data-screen="big"] .sc { display: block; margin-top: calc(8 * var(--v)); }
+body[data-screen="big"] .bugstack > .lt[hidden], body[data-screen="big"] .bugstack > .sc[hidden] { display: none; }
+.card { overflow: hidden; border-radius: calc(var(--g-radius-card) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.card p { margin: 0; }
+.card-head { display: flex; align-items: center; gap: calc(10 * var(--v)); padding: calc(7 * var(--v)) calc(16 * var(--v)) calc(7 * var(--v)) calc(12 * var(--v));
+  border-left: calc(4 * var(--v)) solid transparent; background: var(--g-tab); color: var(--g-ink);
+  font-size: calc(13 * var(--t)); font-weight: 700; letter-spacing: 0.1em; line-height: 1; }
+.lt[data-side="home"] .card-head { border-left-color: var(--g-home-bar); }
+.lt[data-side="away"] .card-head { border-left-color: var(--g-away-bar); }
+.lt[data-side="home"] .card-goal .card-head { background: var(--g-home); }
+.lt[data-side="away"] .card-goal .card-head { background: var(--g-away); }
+.card-head .lt-crest { display: inline-flex; width: calc(18 * var(--v)); height: calc(22 * var(--v)); flex: none; }
+.card-head .lt-crest svg { width: 100%; height: 100%; }
+.card-head .lt-crest[hidden] { display: none; }
+.card-club { color: var(--g-ink2); }
+.card-min { margin-left: auto; color: var(--g-ink2); font-weight: 600; letter-spacing: 0.04em; }
+.card-goal .card-min, .card-goal .card-club { color: var(--g-ink); }
+.card-row { padding: calc(10 * var(--v)) calc(16 * var(--v)); }
+.card-row + .card-row { border-top: 1px solid var(--g-pill-track); }
+.card-line { font-size: calc(20 * var(--t)); font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-line b { font-weight: 800; }
+.card-name { font-size: calc(22 * var(--t)); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-first { font-weight: 300; margin-right: 0.3em; }
+.card-last { font-weight: 800; letter-spacing: 0.01em; }
+.card-teams { display: flex; justify-content: space-between; padding-bottom: 0; font-size: calc(12 * var(--t)); font-weight: 800; letter-spacing: 0.08em; }
+.card-teams span:first-child { color: var(--g-home-bar); }
+.card-teams span:last-child { color: var(--g-away-bar); }
+.card-teams + .card-row { border-top: 0; }
+.card-stat { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; row-gap: calc(6 * var(--v)); }
+.card-stat .stat-h, .card-stat .stat-a { font-size: calc(20 * var(--t)); }
+.card-stat .sbar { grid-column: 1 / -1; }
+.lt[data-on="0"] .card { opacity: 0; transform: translateY(calc(-8 * var(--v))); }
+.lt[data-on="1"] .card { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .lt:not(.still) .card { transition: opacity var(--g-dur) var(--g-ease), transform var(--g-dur) var(--g-ease); }
+  html[data-motion="full"] body[data-screen="big"] .sc:not([hidden]) .card { animation: sc-in var(--g-dur) var(--g-ease); }
+}
+@keyframes sc-in { from { opacity: 0; transform: translateY(calc(-8 * var(--v))); } }
+
+/* A split bar: each side's share in its club's colour, thin. */
+.sbar { display: flex; gap: calc(3 * var(--v)); height: calc(4 * var(--v)); }
+.sbar i { display: block; height: 100%; border-radius: 999px; min-width: calc(3 * var(--v)); }
+.sbar-home { flex: var(--h) 1 0; background: var(--g-home-bar); }
+.sbar-away { flex: calc(1 - var(--h)) 1 0; background: var(--g-away-bar); }
+
+/* 4. Half-time and full time: the picture dimmed, the score large with the crests, a stack of pills. */
+body[data-screen="big"] .sp { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: var(--g-dim);
+  color: var(--g-ink); pointer-events: none; font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body[data-screen="big"] .sp[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] body[data-screen="big"] .sp:not([hidden]) { animation: sp-in var(--g-dur) var(--g-ease); }
+}
+@keyframes sp-in { from { opacity: 0; } }
+.sp p { margin: 0; }
+.sp-stack { width: calc(720 * var(--v)); display: grid; gap: calc(10 * var(--v)); }
+.sp-period { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; letter-spacing: 0.2em; color: var(--g-ink2); }
+.sp-head { display: flex; align-items: center; justify-content: center; gap: calc(36 * var(--v)); }
+.sp-crest { display: inline-flex; width: calc(64 * var(--v)); height: calc(76 * var(--v)); }
+.sp-crest svg { width: 100%; height: 100%; }
+.sp-score { font-size: calc(84 * var(--t)); font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.sp-clubs { display: flex; justify-content: space-between; padding: 0 calc(8 * var(--v)) calc(8 * var(--v)); font-size: calc(16 * var(--t)); font-weight: 600;
+  color: var(--g-ink2); }
+.stat-pill { display: grid; grid-template-columns: calc(90 * var(--v)) 1fr calc(90 * var(--v)); align-items: center;
+  padding: calc(10 * var(--v)) calc(24 * var(--v)); border-radius: calc(var(--g-radius-pill) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.stat-h, .stat-a { font-size: calc(22 * var(--t)); font-weight: 700; }
+.stat-a { text-align: right; }
+.stat-mid { display: grid; gap: calc(5 * var(--v)); }
+.stat-label { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; color: var(--g-pill-ink2); }

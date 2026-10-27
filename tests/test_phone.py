@@ -101,7 +101,7 @@ def browser():
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
-            b = p.chromium.launch()
+            b = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
             yield b
             b.close()
     except Exception as e:  # no Chromium installed
@@ -626,6 +626,62 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
     assert not errors
 
 
+@pytest.fixture(scope="module")
+def scaled_site(viewer_www, tmp_path_factory):
+    """The same bundle encoded faster than real time: 1.25 match seconds per video second (the
+    demo's baked speed, manifest footage.timescale)."""
+    www = tmp_path_factory.mktemp("scaled") / "www"
+    shutil.copytree(viewer_www, www)
+    manifest = www / "bundle" / "manifest.json"
+    body = json.loads(manifest.read_text())
+    body["footage"]["timescale"] = 1.25
+    manifest.write_text(json.dumps(body))
+    server, thread, mp, url = serve_api(www, allow_truth=True, source="truth")
+    yield url
+    server.should_exit = True
+    thread.join(timeout=10)
+    mp.undo()
+
+
+def test_at_a_baked_speed_the_phone_stays_in_step_through_play_and_seeks(browser, scaled_site):
+    """Footage at 1.25 match s per video s: the big screen's clock runs 1.25 times as fast, and the
+    phone, running the clock on between messages through the same timeline, stays within
+    TOLERANCE_S of it while it plays and after every seek."""
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+
+    def lap() -> float:
+        fresh(viewer)
+        return float(viewer.get_attribute("#overlay", "data-t"))
+
+    phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
+    viewer.click("#play")
+    phone.wait_for_function("window.ninetyPhone.laptop.isPlaying()")
+    viewer.wait_for_timeout(500)
+    assert_in_step(lap, phone)
+    for v in (0.4, 1.6, 0.2):  # video seconds: seeks back and forth while it plays
+        viewer.evaluate(f"""(() => {{ const s = document.querySelector('#scrub'); s.step = 'any';
+            s.value = {v}; s.dispatchEvent(new Event('input')); }})()""")
+        viewer.wait_for_timeout(300)
+        assert_in_step(lap, phone)
+    assert not errors
+
+
+def test_at_a_baked_speed_the_phone_shows_the_image_of_the_match_time(browser, scaled_site):
+    """The phone's own picture of a moment (How we know) is the image of that match time: at 1.25
+    match s per video s, image k still shows match frame t_start * fps + k, at (k + 0.5) / (fps *
+    1.25) of video, never floor(v * fps) (#412 review)."""
+    from tests.e2e_clip import FPS, T_START
+
+    viewer, phone, errors, _, _ = pair_through_viewer(browser, scaled_site)
+    phone.wait_for_function("window.ninetyPhone.laptop.cuts !== null", timeout=10_000)
+    for k in (0, 7, 30, 61):
+        t = T_START + (k + 0.5) / FPS  # the middle of match frame T_START * FPS + k
+        got = phone.evaluate(f"window.ninetyPhone.imageAt({t})")
+        assert got["index"] == k, (k, got)
+        assert abs(got["videoT"] - (k + 0.5) / (FPS * 1.25)) < 1e-6
+    assert not errors
+
+
 def test_the_phone_stays_in_step_when_the_big_screen_stops_drawing_frames(browser, api_site):
     """Demo audit, Oct 25: the phone sat at "Screen lost" while the big screen played on. The big
     screen's clock went out only from its frame loop, which a hidden tab or a busy machine stalls.
@@ -745,7 +801,9 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         assert page.locator("#roster .who").count() == 0
         tap_player(page)
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
-        assert re.fullmatch(r"(London|Lisbon) player|A player", page.inner_text("#player-title"))  # no number
+        title = page.inner_text("#player-title")  # no number, and never "a player" (Oct 27)
+        where = r"The player (on the left|in the middle|on the right) of the pitch"
+        assert re.fullmatch(rf"(London|Lisbon)'s \w+ \w+|{where}", title)
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors
@@ -937,4 +995,56 @@ def test_with_the_demo_passcode_ask_is_the_agents_and_a_refused_one_falls_back_t
     said = page.inner_text("#how-body")
     assert "Model off" in said and "Computed from tracking" in said
     assert not errors
+    ctx.close()
+
+
+# A page-side WebSocket that plays a script of opens, messages and closes (Playwright's mocked socket
+# deadlocks when closed from inside its own handler, and cannot send 1012).
+FAKE_SOCKET = """(script) => {
+  window.__joins = 0;
+  window.WebSocket = class extends EventTarget {
+    constructor() {
+      super();
+      const step = script[Math.min(window.__joins++, script.length - 1)];
+      setTimeout(() => {
+        if (step.open) this.dispatchEvent(new Event("open"));
+        if (step.clock !== undefined) this.dispatchEvent(new MessageEvent("message",
+          { data: JSON.stringify({ type: "clock", t: step.clock, playing: false }) }));
+        const close = () => this.dispatchEvent(new CloseEvent("close", { code: step.close }));
+        if (step.close) setTimeout(close, step.after || 0);
+      }, 50);
+    }
+    close() {}
+    send() {}
+  };
+}"""
+
+
+def test_a_phone_that_lost_its_screen_waits_for_a_restarted_server_to_know_its_code_again(browser, prod_site):
+    """desktop-companion, Oct 26: after a server restart the big screen claims its code back within
+    about 2 s. Reconnecting, the phone takes "unknown code" (4404) as the server coming back for
+    RECLAIM_S (30 s), then joins; a code typed on the pairing screen still fails at once."""
+    tracked = {**MOCK_MINIMAP, "source": "tracked", "clip": "demo"}
+    restart = [{"open": True, "clock": 30.0, "close": 1012, "after": 300},  # joined, then the server restarts
+               {"open": True, "close": 4404}, {"open": True, "close": 4404},  # it does not know the code yet
+               {"open": True, "clock": 42.0}]  # the big screen has claimed it back
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    ctx.route(re.compile(r".*/api/minimap\b.*"), lambda r: r.fulfill(content_type="application/json",
+                                                                      body=json.dumps(tracked)))
+    ctx.add_init_script(f"({FAKE_SOCKET})({json.dumps(restart)})")
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo")
+    page.wait_for_function("window.ninetyPhone.laptop.time() >= 42", timeout=20_000)
+    assert page.evaluate("window.__joins") == 4 and page.get_attribute("body", "data-state") == "live"
+    assert not errors
+    ctx.close()
+    # A code typed or scanned that no screen shows still fails at once.
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    ctx.add_init_script(f"({FAKE_SOCKET})({json.dumps([{'close': 4404}])})")
+    page = ctx.new_page()
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo")
+    error = "document.getElementById('pair-error').textContent.includes('No screen is showing that code')"
+    page.wait_for_function(error, timeout=10_000)
+    assert page.evaluate("window.__joins") == 1
     ctx.close()

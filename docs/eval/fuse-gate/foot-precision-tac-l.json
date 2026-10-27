@@ -1,0 +1,65 @@
+{
+  "seeds": [
+    117,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "view": "tac-l",
+  "percentile": 99,
+  "threshold": 0.5,
+  "detections": "ours-tactical",
+  "player": {
+    "n": 9024,
+    "p99_across": 0.2304,
+    "p99_down": 0.1359,
+    "median_across": 0.0618,
+    "median_down": 0.0478,
+    "bias": {
+      "across": {
+        "a": 0.026,
+        "b": 0.0621,
+        "mean_signed": 0.0556,
+        "p99_after": 0.1723
+      },
+      "down": {
+        "a": 0.051,
+        "b": -0.0281,
+        "mean_signed": 0.0376,
+        "p99_after": 0.13
+      }
+    }
+  },
+  "ball": {
+    "n": 268,
+    "p99_across": 0.3901,
+    "p99_down": 0.2651,
+    "median_across": 0.0571,
+    "median_down": 0.0469,
+    "bias": {
+      "across": {
+        "a": 0.0267,
+        "b": 0.0153,
+        "mean_signed": 0.0369,
+        "p99_after": 0.3551
+      },
+      "down": {
+        "a": -0.0249,
+        "b": 0.0559,
+        "mean_signed": 0.0124,
+        "p99_after": 0.2678
+      }
+    }
+  }
+}

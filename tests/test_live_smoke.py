@@ -136,7 +136,7 @@ def test_the_viewer_plays_the_replay_with_its_graphics():
 
     manifest = json.loads(get("/bundle/manifest.json")[2])
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(args=["--mute-audio"])  # never a sound on the machine running it
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         problems: list[str] = []
         page.on("pageerror", lambda e: problems.append(f"page error: {e}"))

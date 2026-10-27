@@ -3218,6 +3218,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
 
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
 ### 268. Two pull requests green separately can be red together
 - **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
   #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
@@ -3283,6 +3298,39 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
   fails if the direct path is on without its gate met.
 
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:**
+  - **The footage** is the codec every browser and phone decodes in hardware: H.264/AAC MP4 with
+    +faststart (`ninety/footage.py`), plus an HLS ladder. The ladder is so that a slow connection drops
+    a rung instead of freezing; that is *planned*: nothing plays it until the viewer's hls.js player
+    lands.
+  - **The encoder** is the producer's system ffmpeg, run as an external tool on their Mac and never
+    shipped, with Apple's VideoToolbox H.264 encoder (libx264 is GPL, AGENTS.md) and ffmpeg's own AAC
+    encoder (THIRD_PARTY_NOTICES.md).
+  - **Macs only:** Linux CI and the Azure image ship JPEG frames.
+  - **H.264/AAC patents:** whether they need anything for our distribution is Kian's question.
+  - **Every encode is checked** by probing the file it writes: codec and profile, frame count,
+    duration, the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and
+    the sound.
+  - **A browser test** seeks a real encoded file, served with byte ranges as the API serves it.
+  - **What CI skips:** these tests need a Mac and, for the browser one, a built viewer (`npm run
+    build --prefix web/viewer`). CI's Linux runner skips them, and a pull request that relies on them
+    says so and gives the local run.
+  - **A playback claim** about real browsers needs a run in one (live-preview), and the result is
+    stated.
+- **Check:** on a Mac, after building the viewer, run
+  `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  (none skipped). On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes
+  50 frames apart, and `hls/master.m3u8` lists every rung.
+
 ### 273. Watch the frames before naming the cause
 - **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
   frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
@@ -3297,3 +3345,192 @@ short and actionable. This file is public: no research sources, product names or
   building on it.
 - **Check:** `uv run pytest tests/test_render_motion.py -k "close_control or in_stride or jumps_round
   or above_his_reach"`: each fails if its drawn behaviour is reverted (mutation-tested).
+
+### 276. An edit that windows events shows whatever surrounds them
+- **What happened:**
+  - demo-match.md's condense rule gave every shot, save and set piece a fixed window. On seed 8080
+    those windows also showed the aimless long balls, lost keeper passes and overhead catches next
+    to them, and Kian called the demo unwatchable.
+  - One window closed at 12:50 with a 54 m ball still in the air.
+  - The match had only one diving save, so a rule that counted saves kept choosing flat-footed
+    catches.
+- **Rule:**
+  - An edit scores what is on screen across the whole window, not the event it is built around. A
+    window holding a flagged moment is never picked.
+  - A window never opens or closes while a pass or shot is in flight. It ends once the play has
+    resolved: the pass has arrived and possession has held for 2.5 s, the shot is over, the ball is
+    dead, or the goal has been celebrated.
+  - Choosing from the answer key is editorial and is stated as such; it never feeds the live path.
+- **Check:** `uv run python scripts/footage_hunt.py <90-min run> <out>`: no `picked` window in
+  `picks.json` contains a flagged moment except a goal's own build-up. The script refuses to start or
+  end a window in flight (`in_flight`). `carries.json` counts the match's long carries and take-ons,
+  so a missing kind of play can be traced to the engine or to the edit.
+
+### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.
+
+### 281. A failure drill that never reaches its failure point tests nothing
+- **What happened:** the live agent run on seed 8324 pre-registered a "Judge down" drill on goal 1's
+  minute: every Judge call fails, so every claim must be held. The claim came out held, as expected,
+  but by a code check (a ball speed vision measures only for ground passes) before the Judge was
+  ever called. The trace showed no Judge call, so the drill had tested nothing. It was re-run,
+  labelled, on goal 2's minute, where the same claim path had reached the Judge and aired: there
+  the Judge was tried twice and the claim held (`service`), with the template kept.
+- **Rule:** a drill passes only when the trace shows the injected fault was hit (the failing call
+  made, the timeout reached) and the expected recovery followed. An expected end state reached by
+  another route is not the drill passing. Choose the drill's moment where the path reaches the
+  fault, or check that it did before reporting.
+- **Check:** `docs/eval/agents-live.md`'s drill table lists each drill's failed calls from the trace
+  (`ninety/eval/agents_live.py` `drill_scores`, `failed_calls`); a drill row with no failed call of
+  the injected role is reported as not exercised.
+
+### 282. A dedupe key built from a field that can be empty merges every item without it
+- **What happened:** the big screen's schedule (`web/viewer/src/match.ts`, `broadcastSchedule`) kept
+  one graphic per moment by the key `kind|evidence`. The INSIGHT bar's overloads are read from
+  positions and carry no event, so every overload had the key `insight|` and only the first of the
+  match ever aired. Separately, the schedule took graphics strictly in time order, so a template "a
+  player scores" shot graphic 1.5 s before a goal took the 30 s slot and the goal's fact-checked
+  insight never aired (seed 8080's first goal). Both surfaced only when the lower third was
+  screenshotted on the real bundle; the schedule's test had one evidence id per cue.
+- **Rule:** a key that identifies an item falls back to the item's own id when its parts are empty;
+  and a schedule that must always show a class of item (every goal) chooses that class first, then
+  fills the gaps, rather than hoping time order puts it first.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is_room`
+  has two evidence-less overloads and a shot just before a goal; reverting either fix turns it red.
+
+### 283. A club named in a question or a track id's letter is not the side that acted
+- **What happened:** two wrong clubs on air in the Oct 26 preview of the final 8080 bundle. (1) Ask:
+  "Which pass broke Lisbon's lines?" was answered "Lisbon … a Lisbon Esportes player played a pass
+  that took 3 London Athletic players out". `code_match_answer` puts the named club's facts first,
+  which is right for "Lisbon's best player" and wrong for a pass through Lisbon: there the named club
+  is the side the pass beat. `code_calls` already read both clubs for `line_breaks` for that reason,
+  but the sort after it undid it, and the model path had no check either. (2) Audio description: goal
+  1 was Lisbon's (the goal event's side from the player-ID feed, which match.json's goals carry), but
+  its scorer's broadcast track was `h-t9029`, and the voice said "Goal! A London player scores": the
+  Describer took the side from the track id's letter (the tracker's side vote), never from the
+  event. Each module's tests used players whose letter matched their side, and questions that named
+  the acting club.
+- **Rule:** a side said on air comes from the event's (or fact's) own side, never a track id's
+  letter, and a goal names its side outright ("Goal! Eli Hourrick scores for Lisbon"). A question that
+  names a club as the one beaten ("broke X's lines", "through X") asks for the other club's pass; the
+  code answer and the model's choice both refuse a pass of the beaten club or of an unknown side.
+- **Check:** `tests/test_describe.py::test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter`
+  (a Lisbon goal by an `h-` track, named and unnamed) and `tests/test_companion_match.py`'s
+  `test_a_pass_that_broke_a_clubs_lines_is_the_other_clubs` (both clubs, both phrasings),
+  `test_no_pass_of_the_beaten_club_answers_it_even_alone` and
+  `test_the_model_citing_the_beaten_clubs_pass_is_refused`; all fail on main 5cd7d524.
+
+### 284. A value the instructions never ruled out is not malformed
+- **What happened:** live on seed 8324, asked at half-time "Who had more of the ball in the first
+  half?", the published Companion planned `possession` from minute 0 to 45. `companion_match._calls`
+  accepts only windows starting at minute 1, so it replaced this one with the default (minutes 31 to
+  45) and said nothing. The model then saw no first-half facts and said unanswerable. The
+  instructions never say minutes start at 1, so minute 0 was a fair way to say "from kick-off". Its
+  docstring said a bad call is "never repaired", while the code silently substituted a window.
+- **Rule:** when code rejects a model's argument, check first that the instructions ruled the value
+  out. Read a value with one clear meaning in football (minute 0 is kick-off, in minute 1) as that
+  meaning; fall back only for values with none, and say in the docstring what the fallback is.
+- **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
+  with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
+
+
+### 287. A message that routes to no tool is not a follow-up by default
+- **What happened:** in the 8324 preview's docked companion at 89:59, Kian typed "hello" and got a
+  statistic: "49% … Lisbon Esportes played most through the left … minute 76 to minute 91". With an
+  earlier question in the conversation, `code_calls` reused the last question's tools for any message
+  that routed to none, which is meant for "and in the first half?" but caught a greeting too. Nothing
+  told small talk apart, and a question at 90:00 or later was read as minute 91, a minute the match
+  does not have. The tests' unrouted messages were all asked with no history.
+- **Rule:** classify the intent before any tool or model call. Small talk (greetings, thanks,
+  questions about the companion) gets fixed words that state no fact, plus three questions the tools
+  can answer, and never reaches the model. A message code routes to no tool is not refused before the
+  planner sees it: "how many passes?" is the planner's to place (merge-queue review). Only an empty
+  plan, or the code path, gets the same friendly reply. Only a message that reads as a follow-up
+  ("and…", "what about…", "they") reuses the last tools. Every window ends at full time (Law 7's 90
+  minutes; the engine plays no added time). The planner prompt is unchanged: it is pinned by
+  `definition_sha`, and small talk never reaches it.
+- **Check:** `tests/test_companion_match.py::test_small_talk_gets_a_friendly_reply_and_suggestions_never_a_stat`
+  (13 probes, with and without history), `test_the_model_is_never_asked_about_small_talk`,
+  `test_off_topic_goes_to_the_planner_and_an_empty_plan_gets_the_friendly_reply`,
+  `test_a_question_code_does_not_route_is_answered_by_the_models_plan`,
+  `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
+  on main 14a33133, and each fails when its guard is removed.
+
+### 293. A grader's rule that accepts any match lets a wrong answer through
+- **What happened:** building the Ask grader (`ninety/eval/ask_grade`), the first look at main's
+  answers found three of its own rules passing wrong answers. "Why did London Athletic score?" →
+  "London Athletic scored in minute 12. Just before it, in minute 32, …" passed, because *any* minute
+  near the goal counted, so the build-up from twenty minutes later passed too. "How many shots have
+  London had?" → "There were 8 shots" passed, because the total vision saw happened to equal London's
+  true 8. "Who's been in the attacking third more?" → one Lisbon player's line-breaking pass passed
+  as a territory comparison, because the truth's leader was Lisbon too. Each rule accepted the
+  first thing that matched and never asked whether the rest of the answer was also right, or about
+  the thing asked.
+- **Rule:** a grading rule checks every element the answer states (every minute, every name), and
+  the scope it states: a count that names no club is a total, and a comparison names both sides.
+  Before trusting a grader's numbers, read a sample of its *passes*, not only its failures, and give
+  each rule a test that fails on the wrong answer it must catch.
+- **Check:** `tests/test_ask_grade.py::test_a_why_that_cites_a_later_minute_is_not_the_build_up`,
+  `test_an_unattributed_total_is_not_one_clubs_count`, `test_one_clubs_figure_is_not_a_comparison`
+  and `test_one_clubs_pass_is_not_where_the_ball_has_been`. Each fails with its guard removed
+  (mutation-tested). The rules were tightened, never loosened, and before any baseline was written.
+  The other way round too: the first model-path run's grader read "London Athletic 1 goal, Lisbon
+  Esportes 1 goal" (the scorebug's own words) as no score, because it knew only "1-1" and per-goal
+  minutes, so a right answer failed (`test_the_scorebugs_wording_is_a_score`). Read the failures as
+  well as the passes. And the truth itself: `truth.py` swapped the teams' ends at half time from
+  memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
+  L3), so every second-half territory truth had the clubs reversed until another session compared it
+  with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
+  the engine's code, not in how football usually goes.
+
+
+### 294. A track's numbers are one stretch of tracking, not the player's match
+- **What happened:** on the 8324 preview at 29:46, a goalkeeper's player card said "So far: 43 metres
+  run" under "Heat map, 0:00 to 29:46, covering 29 min 46 s of play". The track had been followed
+  for 38 s: vision loses a player behind others and picks him up again as a new track, so each card
+  covers one track's stretch. The label came from the minimap's first frame, not from the track's.
+  On the same phone, 29% of tracked player-frames have no Player ID feed row. Tapping one titled the
+  sheet "A player" and the chips asked "How fast is a player running now?" (Kian, Oct 26).
+- **Rule:** a card states the span its own track covers: "Tracked 29:08–29:46", covering 38 s,
+  from the track's first frame to the last sighting at or before now, never later. A player the
+  feed does not name is said by where he is ("the player on the left of the pitch"). He gets no
+  club: a track id's letter is the tracker's vote, and a bundle may carry no side list, in which
+  case the old `sideUnsure()` named every club. The first version of this PR fell into exactly that
+  (merge review, Oct 27). Never "a player", and never the tracker's number. The heat map is every
+  tracked player together. A club split by the feed's sides would let the feed reach a statistic
+  other than an event's side, which AGENTS.md forbids; the review caught it. A split by
+  `sides_known` would read event track ids against the radar's (lesson 259). Joining tracks into a player's match by feed name is a different
+  change. AGENTS.md forbids stitching on whether a track is named, so that rule must change first.
+- **Check:** `tests/test_phone_companion.py::test_a_cards_numbers_say_the_stretch_its_track_was_followed_not_the_match`,
+  `test_a_player_the_feed_does_not_name_is_said_by_where_he_is_never_a_player` and
+  `test_tapping_a_player_the_id_feed_names_says_his_name_in_the_card_and_every_chip` and
+  `test_the_pitch_shows_positions_movement_and_one_heat_map_of_every_tracked_player`, run on the 8324 shape (no
+  `sides_known`, the feed's side differing from the track's letter). Each fails when its guard is
+  removed (mutation-tested).
+
+
+### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
+- **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
+  one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
+  another of those sentences and is never judged. The Judge still ran on every model draft: about 2 s
+  and $0.0006 a question, under one 10 s limit that also had to hold the plan and answer steps, so its
+  own 15 s timeout and retry could never run. Measured on the demo match (docs/eval/ask-model-path.md),
+  the published Judge rejected 2 of 66 true sentences the code check passed, and the code check had
+  already caught every planted defect. Its only effect was a wrong reject and the
+  wait. While measuring this, a capped judge run gathered all its calls at once and lost every
+  answer when the cap stopped one ($0.08 spent, nothing recorded).
+- **Rule:** before adding (or keeping) a check on a path, name the output it would stop and what is
+  shown instead when it does. If the fallback is the same kind of output, unchecked, the check
+  cannot block anything: drop it or move it onto the final answer. Give each model step its own time
+  budget from measured latency, and make a paid run record each answer as it arrives.
+- **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
+  passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
+  and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.

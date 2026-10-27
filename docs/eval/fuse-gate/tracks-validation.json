@@ -1,0 +1,471 @@
+{
+  "seeds": [
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116
+  ],
+  "gate_m": 1.0,
+  "baseline": {
+    "side_frames": 3210,
+    "tracks": 30882,
+    "over": 1333,
+    "abs_diff": 18550,
+    "true_frames": 35310,
+    "found": 29490,
+    "matched": 29490,
+    "right_side": 19482,
+    "id_switches": 414,
+    "tracks_per_side_frame": 9.621,
+    "mean_abs_count_diff": 5.7788,
+    "over_11_share": 0.4153,
+    "player_recall": 0.8352,
+    "player_recall_95": [
+      0.8313,
+      0.839
+    ],
+    "side_accuracy": 0.6606,
+    "side_accuracy_95": [
+      0.6552,
+      0.666
+    ]
+  },
+  "candidate": {
+    "side_frames": 3210,
+    "tracks": 29834,
+    "over": 1254,
+    "abs_diff": 17646,
+    "true_frames": 35310,
+    "found": 29571,
+    "matched": 29571,
+    "right_side": 19361,
+    "id_switches": 61,
+    "tracks_per_side_frame": 9.294,
+    "mean_abs_count_diff": 5.4972,
+    "over_11_share": 0.3907,
+    "player_recall": 0.8375,
+    "player_recall_95": [
+      0.8336,
+      0.8413
+    ],
+    "side_accuracy": 0.6547,
+    "side_accuracy_95": [
+      0.6493,
+      0.6601
+    ]
+  },
+  "rule": {
+    "over_11_lower": true,
+    "count_diff_lower": true,
+    "id_switches_no_more": true,
+    "recall_not_below_baseline_lower_bound": true,
+    "side_not_below_baseline_lower_bound": false,
+    "adopt": false
+  },
+  "per_seed": {
+    "108": {
+      "baseline": {
+        "side_frames": 250,
+        "tracks": 2904,
+        "over": 134,
+        "abs_diff": 288,
+        "true_frames": 2750,
+        "found": 2596,
+        "matched": 2596,
+        "right_side": 2596,
+        "id_switches": 66,
+        "tracks_per_side_frame": 11.616,
+        "mean_abs_count_diff": 1.152,
+        "over_11_share": 0.536,
+        "player_recall": 0.944,
+        "player_recall_95": [
+          0.9348,
+          0.952
+        ],
+        "side_accuracy": 1.0,
+        "side_accuracy_95": [
+          0.9985,
+          1.0
+        ]
+      },
+      "candidate": {
+        "side_frames": 250,
+        "tracks": 2547,
+        "over": 0,
+        "abs_diff": 203,
+        "true_frames": 2750,
+        "found": 2543,
+        "matched": 2543,
+        "right_side": 2540,
+        "id_switches": 3,
+        "tracks_per_side_frame": 10.188,
+        "mean_abs_count_diff": 0.812,
+        "over_11_share": 0.0,
+        "player_recall": 0.9247,
+        "player_recall_95": [
+          0.9143,
+          0.934
+        ],
+        "side_accuracy": 0.9988,
+        "side_accuracy_95": [
+          0.9965,
+          0.9996
+        ]
+      }
+    },
+    "109": {
+      "baseline": {
+        "side_frames": 444,
+        "tracks": 4727,
+        "over": 209,
+        "abs_diff": 1643,
+        "true_frames": 4884,
+        "found": 4623,
+        "matched": 4623,
+        "right_side": 3659,
+        "id_switches": 33,
+        "tracks_per_side_frame": 10.646,
+        "mean_abs_count_diff": 3.7005,
+        "over_11_share": 0.4707,
+        "player_recall": 0.9466,
+        "player_recall_95": [
+          0.9399,
+          0.9525
+        ],
+        "side_accuracy": 0.7915,
+        "side_accuracy_95": [
+          0.7795,
+          0.8029
+        ]
+      },
+      "candidate": {
+        "side_frames": 444,
+        "tracks": 4543,
+        "over": 216,
+        "abs_diff": 1589,
+        "true_frames": 4884,
+        "found": 4523,
+        "matched": 4523,
+        "right_side": 3085,
+        "id_switches": 16,
+        "tracks_per_side_frame": 10.232,
+        "mean_abs_count_diff": 3.5788,
+        "over_11_share": 0.4865,
+        "player_recall": 0.9261,
+        "player_recall_95": [
+          0.9184,
+          0.9331
+        ],
+        "side_accuracy": 0.6821,
+        "side_accuracy_95": [
+          0.6683,
+          0.6955
+        ]
+      }
+    },
+    "110": {
+      "baseline": {
+        "side_frames": 440,
+        "tracks": 2159,
+        "over": 0,
+        "abs_diff": 2681,
+        "true_frames": 4840,
+        "found": 2159,
+        "matched": 2159,
+        "right_side": 853,
+        "id_switches": 2,
+        "tracks_per_side_frame": 4.907,
+        "mean_abs_count_diff": 6.0932,
+        "over_11_share": 0.0,
+        "player_recall": 0.4461,
+        "player_recall_95": [
+          0.4321,
+          0.4601
+        ],
+        "side_accuracy": 0.3951,
+        "side_accuracy_95": [
+          0.3747,
+          0.4159
+        ]
+      },
+      "candidate": {
+        "side_frames": 440,
+        "tracks": 2159,
+        "over": 0,
+        "abs_diff": 2681,
+        "true_frames": 4840,
+        "found": 2159,
+        "matched": 2159,
+        "right_side": 853,
+        "id_switches": 2,
+        "tracks_per_side_frame": 4.907,
+        "mean_abs_count_diff": 6.0932,
+        "over_11_share": 0.0,
+        "player_recall": 0.4461,
+        "player_recall_95": [
+          0.4321,
+          0.4601
+        ],
+        "side_accuracy": 0.3951,
+        "side_accuracy_95": [
+          0.3747,
+          0.4159
+        ]
+      }
+    },
+    "112": {
+      "baseline": {
+        "side_frames": 500,
+        "tracks": 4000,
+        "over": 250,
+        "abs_diff": 3000,
+        "true_frames": 5500,
+        "found": 4000,
+        "matched": 4000,
+        "right_side": 1750,
+        "id_switches": 0,
+        "tracks_per_side_frame": 8.0,
+        "mean_abs_count_diff": 6.0,
+        "over_11_share": 0.5,
+        "player_recall": 0.7273,
+        "player_recall_95": [
+          0.7153,
+          0.7389
+        ],
+        "side_accuracy": 0.4375,
+        "side_accuracy_95": [
+          0.4222,
+          0.4529
+        ]
+      },
+      "candidate": {
+        "side_frames": 500,
+        "tracks": 4000,
+        "over": 250,
+        "abs_diff": 3000,
+        "true_frames": 5500,
+        "found": 4000,
+        "matched": 4000,
+        "right_side": 1750,
+        "id_switches": 0,
+        "tracks_per_side_frame": 8.0,
+        "mean_abs_count_diff": 6.0,
+        "over_11_share": 0.5,
+        "player_recall": 0.7273,
+        "player_recall_95": [
+          0.7153,
+          0.7389
+        ],
+        "side_accuracy": 0.4375,
+        "side_accuracy_95": [
+          0.4222,
+          0.4529
+        ]
+      }
+    },
+    "113": {
+      "baseline": {
+        "side_frames": 286,
+        "tracks": 2711,
+        "over": 143,
+        "abs_diff": 2397,
+        "true_frames": 3146,
+        "found": 2522,
+        "matched": 2522,
+        "right_side": 1101,
+        "id_switches": 3,
+        "tracks_per_side_frame": 9.479,
+        "mean_abs_count_diff": 8.3811,
+        "over_11_share": 0.5,
+        "player_recall": 0.8017,
+        "player_recall_95": [
+          0.7874,
+          0.8152
+        ],
+        "side_accuracy": 0.4366,
+        "side_accuracy_95": [
+          0.4173,
+          0.456
+        ]
+      },
+      "candidate": {
+        "side_frames": 286,
+        "tracks": 2711,
+        "over": 143,
+        "abs_diff": 2397,
+        "true_frames": 3146,
+        "found": 2522,
+        "matched": 2522,
+        "right_side": 1101,
+        "id_switches": 3,
+        "tracks_per_side_frame": 9.479,
+        "mean_abs_count_diff": 8.3811,
+        "over_11_share": 0.5,
+        "player_recall": 0.8017,
+        "player_recall_95": [
+          0.7874,
+          0.8152
+        ],
+        "side_accuracy": 0.4366,
+        "side_accuracy_95": [
+          0.4173,
+          0.456
+        ]
+      }
+    },
+    "114": {
+      "baseline": {
+        "side_frames": 500,
+        "tracks": 5256,
+        "over": 202,
+        "abs_diff": 702,
+        "true_frames": 5500,
+        "found": 5008,
+        "matched": 5008,
+        "right_side": 4592,
+        "id_switches": 70,
+        "tracks_per_side_frame": 10.512,
+        "mean_abs_count_diff": 1.404,
+        "over_11_share": 0.404,
+        "player_recall": 0.9105,
+        "player_recall_95": [
+          0.9027,
+          0.9178
+        ],
+        "side_accuracy": 0.9169,
+        "side_accuracy_95": [
+          0.909,
+          0.9243
+        ]
+      },
+      "candidate": {
+        "side_frames": 500,
+        "tracks": 5249,
+        "over": 250,
+        "abs_diff": 759,
+        "true_frames": 5500,
+        "found": 5245,
+        "matched": 5245,
+        "right_side": 4935,
+        "id_switches": 7,
+        "tracks_per_side_frame": 10.498,
+        "mean_abs_count_diff": 1.518,
+        "over_11_share": 0.5,
+        "player_recall": 0.9536,
+        "player_recall_95": [
+          0.9478,
+          0.9589
+        ],
+        "side_accuracy": 0.9409,
+        "side_accuracy_95": [
+          0.9342,
+          0.947
+        ]
+      }
+    },
+    "115": {
+      "baseline": {
+        "side_frames": 500,
+        "tracks": 5843,
+        "over": 250,
+        "abs_diff": 5343,
+        "true_frames": 5500,
+        "found": 5450,
+        "matched": 5450,
+        "right_side": 2965,
+        "id_switches": 160,
+        "tracks_per_side_frame": 11.686,
+        "mean_abs_count_diff": 10.686,
+        "over_11_share": 0.5,
+        "player_recall": 0.9909,
+        "player_recall_95": [
+          0.988,
+          0.9931
+        ],
+        "side_accuracy": 0.544,
+        "side_accuracy_95": [
+          0.5308,
+          0.5572
+        ]
+      },
+      "candidate": {
+        "side_frames": 500,
+        "tracks": 5482,
+        "over": 250,
+        "abs_diff": 4482,
+        "true_frames": 5500,
+        "found": 5447,
+        "matched": 5447,
+        "right_side": 3219,
+        "id_switches": 18,
+        "tracks_per_side_frame": 10.964,
+        "mean_abs_count_diff": 8.964,
+        "over_11_share": 0.5,
+        "player_recall": 0.9904,
+        "player_recall_95": [
+          0.9874,
+          0.9926
+        ],
+        "side_accuracy": 0.591,
+        "side_accuracy_95": [
+          0.5779,
+          0.604
+        ]
+      }
+    },
+    "116": {
+      "baseline": {
+        "side_frames": 290,
+        "tracks": 3282,
+        "over": 145,
+        "abs_diff": 2496,
+        "true_frames": 3190,
+        "found": 3132,
+        "matched": 3132,
+        "right_side": 1966,
+        "id_switches": 80,
+        "tracks_per_side_frame": 11.317,
+        "mean_abs_count_diff": 8.6069,
+        "over_11_share": 0.5,
+        "player_recall": 0.9818,
+        "player_recall_95": [
+          0.9766,
+          0.9859
+        ],
+        "side_accuracy": 0.6277,
+        "side_accuracy_95": [
+          0.6106,
+          0.6445
+        ]
+      },
+      "candidate": {
+        "side_frames": 290,
+        "tracks": 3143,
+        "over": 145,
+        "abs_diff": 2535,
+        "true_frames": 3190,
+        "found": 3132,
+        "matched": 3132,
+        "right_side": 1878,
+        "id_switches": 12,
+        "tracks_per_side_frame": 10.838,
+        "mean_abs_count_diff": 8.7414,
+        "over_11_share": 0.5,
+        "player_recall": 0.9818,
+        "player_recall_95": [
+          0.9766,
+          0.9859
+        ],
+        "side_accuracy": 0.5996,
+        "side_accuracy_95": [
+          0.5823,
+          0.6166
+        ]
+      }
+    }
+  }
+}

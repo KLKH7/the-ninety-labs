@@ -382,7 +382,7 @@ function boardTexture(p, rand) {
 const BROADCAST_BRANDS = [
   ['VANTIRO', 'MOBILE'], ['QELMORA', 'BANKING'], ['BRISKEL', 'SPORTS DRINK'], ['OSTRAVEN', 'AIRWAYS'],
   ['PALMIRU', 'TYRES'], ['ZENTHA', 'ENERGY'], ['THE NINETY LABS', 'MATCH INSIGHTS'], ['QUIVRANT', 'INSURANCE'],
-  ['ZOLBEK', 'BEER'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
+  ['ZOLBEK', 'SPORTSWEAR'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
   ['KESTRIX', 'BETTING-FREE ZONE'], ['OLVENSTA', 'FREIGHT'], ['DRAVELLO', 'COFFEE'], ['BRAXITO', 'BOOTS'],
 ];
 // One advert is this many metres of board (design: a pitch-side LED advert is a few metres long).
@@ -1286,6 +1286,11 @@ function upperAngles(player, pose, heading, height) {
   if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
     // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
     for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, lean * share, 0, 0);
+  }
+  const roll = pose.roll || 0;
+  if (roll && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
+    // Into a turn the trunk tips the same way, across (scene.pace, meshpose._upper).
+    for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, 0, -roll * share, 0);
   }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
