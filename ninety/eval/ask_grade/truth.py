@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 from array import array
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,7 +59,7 @@ def _dead_frames(events: list[dict]) -> list[tuple[int, int]]:
     for i, e in enumerate(evs):
         if e["type"] in DEAD_FROM:
             end = next((f["frame"] for f in evs[i + 1 :] if f["type"] in DEAD_TO), None)
-            out.append((int(e["frame"]), int(end) if end is not None else 10**9))
+            out.append((int(e["frame"]), int(end) if end is not None else 1_000_000_000))
     return out
 
 
@@ -97,7 +98,7 @@ def build(run: Path, out: Path) -> None:
             ball_x.append(b["x"])
             v = [0.0] * len(ids)
             for p in r["players"]:
-                v[col[p["id"]]] = (p["vx"] ** 2 + p["vy"] ** 2) ** 0.5
+                v[col[p["id"]]] = math.sqrt(p["vx"] * p["vx"] + p["vy"] * p["vy"])  # sqrt is exact (IEEE 754)
             speed.extend(v)
     np.savez_compressed(
         out,
