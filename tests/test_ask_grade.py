@@ -286,8 +286,10 @@ def test_no_goal_yet_must_be_said():
 
 
 def test_a_shares_range_is_not_a_minute():
-    said = ("London Athletic had the ball in their attacking third for 15% to 20% of the time in the footage "
-            "we've seen from minute 1 to minute 11.")
+    said = (
+        "London Athletic had the ball in their attacking third for 15% to 20% of the time in the footage "
+        "we've seen from minute 1 to minute 11."
+    )
     assert set(G.minutes_said(said)) == {1, 11}  # not 20
     assert graded("territory", "Where has the ball been?", 600.0, said)["no_future"] is True
 
@@ -298,3 +300,60 @@ def test_the_teams_do_not_change_ends():
     it = intent("on_top")
     tv = TABLE[G.wkey(it, 3600.0, (2700.0, 3600.0))]["match"]["territory"]
     assert tv["away"] > tv["home"]
+
+
+@pytest.mark.parametrize(
+    "text,minutes",
+    [
+        ("Lisbon had between 22% and 28% of it from minute 31 to minute 34.", {31, 34}),
+        ("London held 22% to 28% of the ball, up to 35′.", {35}),
+        ("In the last 15 minutes, up to 28 passes a minute.", set()),
+        ("Goals in minutes 35, 76 and 85.", {35, 76, 85}),
+        ("From minutes 20 to 34.", {20, 34}),
+        ("At 33:50, in the 34th minute.", {34}),
+    ],
+)
+def test_only_explicit_minutes_are_minutes(text, minutes):
+    assert set(G.minutes_said(text)) == minutes
+
+
+def _shots(half_frame, home_xs, away_xs, start):
+    return [
+        {"type": "shot", "team": t, "x": x, "frame": start + i}
+        for i, (t, x) in enumerate([*(("home", x) for x in home_xs), *(("away", x) for x in away_xs)])
+    ]
+
+
+def test_attacking_directions_come_from_the_data_both_ways():
+    half = 1000
+    kept = _shots(half, [88, 92], [20, 30], 0) + _shots(half, [80, 95], [12, 25], half + 1)
+    assert T.attack_directions(kept, half) == (True, True)
+    swapped = _shots(half, [88, 92], [20, 30], 0) + _shots(half, [15, 22], [85, 90], half + 1)
+    assert T.attack_directions(swapped, half) == (True, False)
+    assert T.attack_directions(_shots(half, [], [], 0), half) == (None, None)
+
+
+def test_the_demo_match_keeps_its_ends():
+    # seed 8324, read from its truth when the table was written: home attacks x = 105 in both halves
+    assert TABLE["_directions"] == {"first_half_home_right": True, "second_half_home_right": True}
+
+
+def test_another_question_set_keeps_the_intents_rules(tmp_path):
+    flat = tmp_path / "flat.json"
+    flat.write_text(
+        json.dumps(
+            [
+                {"intent": "possession", "q": "who's seen more of it"},
+                {"intent": "score", "question": "where's the game at"},
+            ]
+        )
+    )
+    got = G.with_questions(INTENTS, flat)
+    assert [it["id"] for it in got] == ["score", "possession"]
+    assert got[1]["metric"] == intent("possession")["metric"] and got[1]["questions"] == [
+        {"q": "who's seen more of it"}
+    ]
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps([{"intent": "weather", "q": "is it raining"}]))
+    with pytest.raises(ValueError):
+        G.with_questions(INTENTS, bad)

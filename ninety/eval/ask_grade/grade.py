@@ -73,6 +73,29 @@ def load_intents(path: Path = HERE / "intents.json") -> tuple[list[dict], dict]:
     return d["intents"], d["clubs"]
 
 
+def with_questions(intents: list[dict], path: Path) -> list[dict]:
+    """The intents (metric, scope, window rule, relevance) with their questions replaced by another
+    set's: a held-out file shaped like intents.json ({"intents": [{"id", "questions"}]}) or a flat
+    list ([{"intent", "q"}], "question" or "text" for "q"). An intent the file does not name keeps
+    no question; an id the intents do not know is an error. The questions are never printed."""
+    d = json.loads(path.read_text())
+    got: dict[str, list[dict]] = {}
+    if isinstance(d, dict) and "intents" in d:
+        for it in d["intents"]:
+            got.setdefault(it["id"], []).extend(
+                q if isinstance(q, dict) else {"q": q} for q in it["questions"]
+            )
+    else:
+        rows = d["questions"] if isinstance(d, dict) else d
+        for r in rows:
+            q = r.get("q") or r.get("question") or r.get("text")
+            got.setdefault(r["intent"], []).append({"q": q, **({"chip": r["chip"]} if r.get("chip") else {})})
+    unknown = set(got) - {it["id"] for it in intents}
+    if unknown:
+        raise ValueError(f"{path}: intents not in intents.json: {sorted(unknown)}")
+    return [{**it, "questions": got[it["id"]]} for it in intents if got.get(it["id"])]
+
+
 def load_tolerances(path: Path = HERE / "tolerances.json") -> dict:
     return {k: v["value"] for k, v in json.loads(path.read_text()).items() if isinstance(v, dict)}
 
@@ -147,13 +170,16 @@ def club_before(text: str, pos: int, clubs: dict) -> str | None:
 
 
 def minutes_said(text: str) -> list[int]:
-    out = [int(x) for x in re.findall(r"\bminutes? (\d{1,3})\b", text, re.I)]
-    for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and ))+\d{1,3})\b", text, re.I):
+    """The match minutes an answer names, explicit forms only: "minute 34", "minutes 35, 76 and 85",
+    "minutes 20 to 34", "34′" or "34'", "the 34th minute", a clock time "33:50" (minute 34). A bare
+    number is never a minute: "15% to 20%", "up to 28", "the last 15 minutes" (a stretch) are not."""
+    out = [int(x) for x in re.findall(r"\bminutes? (\d{1,3})\b(?!\s*%)", text, re.I)]
+    for run in re.findall(r"\bminutes ((?:\d{1,3}(?:, | and |,? and | to | ?[-–] ?))+\d{1,3})\b", text, re.I):
         out += [int(x) for x in re.findall(r"\d{1,3}", run)[1:]]  # "minutes 35, 76 and 85": the rest
+    out += [int(x) for x in re.findall(r"\bto minute (\d{1,3})\b", text, re.I)]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:′|')", text)]
-    # "to 34" is a minute, "15% to 20%" is not (a share's range)
-    out += [int(x) for x in re.findall(r"\b(?:to|until|through) (?:minute )?(\d{1,3})\b(?!\s*%)", text, re.I)]
     out += [int(x) for x in re.findall(r"\b(\d{1,3})(?:st|nd|rd|th) minute\b", text, re.I)]
+    out += [int(m) + 1 for m in re.findall(r"\b(\d{1,2}):[0-5]\d\b", text)]
     return out
 
 
