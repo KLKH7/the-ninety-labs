@@ -259,14 +259,21 @@ function onRelay(m: RelayMessage) {
   }
 }
 
+/** How long a phone that lost its screen keeps asking for the same code when the server does not know
+ * it (design: a restarted server, whose big screen claims its code back within about 2 s,
+ * desktop-companion, Oct 26); a code typed or scanned still fails at once. */
+const RECLAIM_S = 30;
+let reclaimUntil = 0; // while reconnecting, an unknown code is the server coming back, not a wrong code
 function onClosed(why: Closed) {
-  if (why === "lost") {
+  const reclaiming = (w: unknown) => w === "unknown-code" && Date.now() < reclaimUntil;
+  if (why === "lost" || reclaiming(why)) {
+    if (Date.now() >= reclaimUntil) reclaimUntil = Date.now() + RECLAIM_S * 1000;
     setStatus("lost", "Reconnecting…");
     const retry = async () => {
       try {
         link = await feed.join(state.code, onRelay, onClosed);
       } catch (again) {
-        if (again === "lost" || again === "not-joined") setTimeout(retry, 2000);
+        if (again === "lost" || again === "not-joined" || reclaiming(again)) setTimeout(retry, 2000);
         else backToPairing(again as Closed);
       }
     };

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import hmac
+import mimetypes
 import os
 from pathlib import Path
 
@@ -39,6 +40,11 @@ from ninety.api import companion as companion_api
 from ninety.api.companion import Companion
 from ninety.api.speak import Speaker
 from ninety.mcp import match_server
+
+# The footage's HLS ladder (ninety/footage.py): its playlists and fMP4 segments by their registered
+# types (RFC 8216; ISO BMFF segments), which Python's mimetypes does not know.
+mimetypes.add_type("application/vnd.apple.mpegurl", ".m3u8")
+mimetypes.add_type("video/iso.segment", ".m4s")
 
 ROOT = Path(__file__).resolve().parents[2]
 # Set at image build time (Dockerfile ARG); "dev" when run from a checkout.

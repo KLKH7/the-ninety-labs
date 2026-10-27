@@ -3218,6 +3218,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_speed_score.py -k "true_places"` fails if `true_ball`
   reads a missing velocity as 0; the identical 3D and flat rows of a report are themselves the sign.
 
+### 264. A precision measured on one camera hid a signed lean on another
+- **What happened:** fuse.py's merge gate used the detector's foot-point precision measured on the
+  broadcast camera. It was also used for the two fixed tactical lenses, and fuse-gate.md's Limits
+  said to re-measure, but nothing made that happen. On the lenses, a standing player's box leans
+  away from the image centre. Near halfway, each lens sees him near its own edge, so his two
+  places lie about 0.3 m apart. The 8080 demo then showed every seam player twice (12 v 10, team
+  distance coverage above 1). The absolute 99th percentile could never show this: it has no sign
+  and no position.
+- **Rule:** a precision constant names the camera it was measured on. Before it is used on another
+  camera it is re-measured there, by the same command, together with the signed error as a
+  function of image position. A Limits line that says "re-measure when X exists" becomes a test or
+  a dated task when X arrives.
+- **Check:** `uv run python -m ninety.eval.foot_precision --view tac-l ...` reports `bias`;
+  `tests/test_vision_fuse.py::test_the_tactical_bias_and_precision_are_the_measured_ones`.
+
 ### 268. Two pull requests green separately can be red together
 - **What happened:** #374 made `ninety-e2e` write fictional team sheets into a bundle's `match.json`, and
   #376 made the phone's Players tab list the team sheet. Each passed its own CI. Merged one after the
@@ -3283,6 +3298,39 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_identity_feed.py::test_the_committed_gate_is_used_only_when_its_held_out_half_met_the_target`
   fails if the direct path is on without its gate met.
 
+### 272. Web video is proved in the browsers people use, not in the one the tests drive
+- **What happened:** `ninety-e2e` encoded the demo's video.webm with `-crf 32 -deadline realtime
+  -cpu-used 8`.
+  - The file: every one of 8080's 25,401 frames was a keyframe, 15 Mbps, 1.9 GB, full-range BT.470BG.
+  - In real Chrome, hardware VP9 decode froze on it intermittently (black at 0.34 s, media error 3).
+    live-preview and Kian both saw it.
+  - A standard VP9 re-encode (#397's first version) still froze in Kian's Chrome.
+  - Every test passed throughout: they built bundles with `--frames`, and Playwright's Chromium decodes
+    VP9 in software. The bundle's real file was never played.
+- **Rule:**
+  - **The footage** is the codec every browser and phone decodes in hardware: H.264/AAC MP4 with
+    +faststart (`ninety/footage.py`), plus an HLS ladder. The ladder is so that a slow connection drops
+    a rung instead of freezing; that is *planned*: nothing plays it until the viewer's hls.js player
+    lands.
+  - **The encoder** is the producer's system ffmpeg, run as an external tool on their Mac and never
+    shipped, with Apple's VideoToolbox H.264 encoder (libx264 is GPL, AGENTS.md) and ffmpeg's own AAC
+    encoder (THIRD_PARTY_NOTICES.md).
+  - **Macs only:** Linux CI and the Azure image ship JPEG frames.
+  - **H.264/AAC patents:** whether they need anything for our distribution is Kian's question.
+  - **Every encode is checked** by probing the file it writes: codec and profile, frame count,
+    duration, the keyframe grid, the colour range in the tags and in the pixels, a start at time 0, and
+    the sound.
+  - **A browser test** seeks a real encoded file, served with byte ranges as the API serves it.
+  - **What CI skips:** these tests need a Mac and, for the browser one, a built viewer (`npm run
+    build --prefix web/viewer`). CI's Linux runner skips them, and a pull request that relies on them
+    says so and gives the local run.
+  - **A playback claim** about real browsers needs a run in one (live-preview), and the result is
+    stated.
+- **Check:** on a Mac, after building the viewer, run
+  `uv run pytest tests/test_footage_encode.py tests/test_match_mode.py -k "encoded or rung or mp4"`
+  (none skipped). On a bundle, `ffprobe` shows H.264 High at level 4.0, TV-range BT.709 and keyframes
+  50 frames apart, and `hls/master.m3u8` lists every rung.
+
 ### 273. Watch the frames before naming the cause
 - **What happened:** "glitchy dribbling" was assumed to be the usual suspects (tick rate against
   frame rate, snapping yaw, foot sliding). The engine runs at the render's 25 fps, yaw already turns
@@ -3317,3 +3365,14 @@ short and actionable. This file is public: no research sources, product names or
   `picks.json` contains a flagged moment except a goal's own build-up. The script refuses to start or
   end a window in flight (`in_flight`). `carries.json` counts the match's long carries and take-ons,
   so a missing kind of play can be traced to the engine or to the edit.
+
+### 279. "Every item has it" is true of no items: a test's sample must hold the case it checks
+- **What happened:** the test that the live job hands the flight fit's rows to events marked every
+  ball the stand-in fit saw and asserted that every ball came back marked. The job's 2-frame
+  synthetic clip has no ball, so the marked rows equalled observe's rows, the `all()` was over
+  nothing, and two mutations (events reading the unfitted rows, the fit not applied) both passed.
+  The mutation run caught it before the first commit.
+- **Rule:** a test that asserts a property of every item also asserts the items it needs exist, or
+  marks something every input has (here, each row). Lesson 41 for one assertion, not a whole check.
+- **Check:** `tests/test_vision_live_job.py::test_with_flight_the_events_read_the_fitted_ball_and_no_truth_is_opened`
+  marks every row; each of the five mutations of the `--flight` wiring turns it or its pair red.

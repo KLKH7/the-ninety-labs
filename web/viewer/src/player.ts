@@ -38,8 +38,12 @@ export interface PlayerState {
   stalls: number;
 }
 
-/** Picks the source, attaches it to `video`, and keeps it playing. `spinner` is shown while it waits. */
-export function attachPlayer(video: HTMLVideoElement, base: string, f: FootageSources, spinner: HTMLElement) {
+/** Picks the source, attaches it to `video`, and keeps it playing. `spinner` is shown while it waits.
+ * `startAt`: where the picture opens, in seconds (the big screen's first clean frame, past the
+ * stinger): set through the source itself (hls.js's startPosition, or a seek once the metadata is
+ * in), so nothing replaces the source to get there. */
+export function attachPlayer(video: HTMLVideoElement, base: string, f: FootageSources, spinner: HTMLElement,
+                             startAt = 0) {
   const url = (p: string) => new URL(p, new URL(base, location.href)).href;
   const state: PlayerState = { source: "legacy", recoveries: 0, reloads: 0, capped: -1, stalls: 0 };
   if (f.poster) video.poster = url(f.poster);
@@ -157,7 +161,7 @@ export function attachPlayer(video: HTMLVideoElement, base: string, f: FootageSo
   };
   setInterval(watch, 250);
 
-  load();
+  load(startAt);
   (window as unknown as { ninetyPlayer: unknown }).ninetyPlayer = {
     state,
     hls: () => hls,

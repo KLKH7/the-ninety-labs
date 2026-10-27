@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def hunt(tmp_path_factory):
     run = tmp_path_factory.mktemp("run")
     out = tmp_path_factory.mktemp("out")
-    subprocess.run([sys.executable, "-m", "ninety.sim.cli", "--seed", "7", "--minutes", "6", "--out", str(run)],
-                   check=True, cwd=ROOT, capture_output=True)
+    sim = [sys.executable, "-m", "ninety.sim.cli", "--seed", "7", "--minutes", "6", "--out", str(run)]
+    subprocess.run(sim, check=True, cwd=ROOT, capture_output=True)
     subprocess.run([sys.executable, str(ROOT / "scripts" / "footage_hunt.py"), str(run), str(out)],
                    check=True, cwd=ROOT, capture_output=True)
     ev = [json.loads(x) for x in (run / "events.jsonl").read_text().splitlines() if x.strip()]

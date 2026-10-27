@@ -13,7 +13,9 @@ What it says, and only this:
   confidence gate (`factcheck.MIN_CONFIDENCE`), passed
   through the fact-checker's code half and its confidence gate (`factcheck.check`,
   `confidence_gate`). A club is named only when that event's side was told surely
-  (`factcheck.side_known`), and never a player: the live path has no name it can vouch for yet;
+  (`factcheck.side_known`); a scorer or a shooter by the player-ID feed's name for his track when it
+  names him (`names`, #389), else his club or "a player"; after a goal, the score the broadcast's
+  scorebug read (`scores`, #356);
 - a verified insight (an `insight` cue marked verified: a claim the fact-checking agent accepted),
   as the Describer says it (`describe.spoken`), which names a side only where it was told surely.
 
@@ -77,6 +79,7 @@ class Call:
     evidence: list[str]
     versions: list[str]  # what is said, already checked
     sides: bool  # whether the side words in it were told surely
+    score: tuple[int, int] | None = None  # a goal's score after it, as the scorebug read it (#356)
 
 
 @dataclass
@@ -103,17 +106,23 @@ def _side(event: dict) -> str | None:
     return event["team"] if event.get("team") in ("home", "away") and side_known(event) else None
 
 
-def event_versions(event: dict) -> tuple[str, list[str]] | None:
+def event_versions(event: dict, names: dict[str, str] | None = None) -> tuple[str, list[str]] | None:
     """(kind, versions) for one detected event, in its checked form ("home" and "away" for the
     sides, which the voice says as the clubs); None for an event a commentator does not call."""
     kind, side = event["type"], _side(event)
+    # The player by name only when the player-ID feed names him: "a London player scores" says less
+    # than "London score".
+    player = event.get("player") if (names or {}).get(event.get("player") or "") else None
     if kind == "goal" or (kind == "shot" and event.get("outcome") == "goal"):
-        # A shot vision saw go in is called as the goal when no goal event follows it (calls).
-        return "goal", ([f"Goal! {side} score!", "Goal!"] if side else ["Goal!"])
+        # A shot vision saw go in is called as the goal when no goal event follows it (calls). The
+        # scorer is said by the player-ID feed's name for his track, else his club (describe.spoken).
+        named = [f"Goal! {player} scores!"] if player else []
+        return "goal", ([*named, f"Goal! {side} score!", "Goal!"] if side else [*named, "Goal!"])
     if kind == "shot":
         said = SHOT_SAID.get(event.get("outcome") or "")
         who = f"{side} shoot" if side else "A shot"
-        return "shot", ([f"{who}, {said}.", f"{who}."] if said else [f"{who}."])
+        named = [f"Big chance! {player} shoots, on target!"] if player and said == "on target" else []
+        return "shot", ([*named, f"{who}, {said}.", f"{who}."] if said else [f"{who}."])
     if kind == "kickoff":
         return "restart", [f"{side} kick off." if side else "Kick-off."]
     if kind == "half_time":
@@ -132,7 +141,10 @@ def event_versions(event: dict) -> tuple[str, list[str]] | None:
     return None
 
 
-def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]:
+def calls(
+    events: list[dict], cues: list[dict], scores: list[dict] | None = None,
+    names: dict[str, str] | None = None,
+) -> tuple[list[Call], list[dict]]:
     """Every call the commentator may make, each checked, and what was refused and why."""
     known = {e["id"]: compact(e) for e in events}
     by_id = {e["id"]: e for e in events}
@@ -156,7 +168,7 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
     last_out = float("-inf")  # when the ball was last called out
     outs = 0
     for event in sorted(events, key=lambda e: (e["t"], e["id"])):
-        written = None if event["id"] in scored else event_versions(event)
+        written = None if event["id"] in scored else event_versions(event, names)
         if written is None:
             continue
         if event.get("source") != "vision" or event.get("confidence") is None:
@@ -173,7 +185,9 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
         kind, versions = written
         versions = checked(versions, [event["id"]])
         if versions:
-            out.append(Call(event["id"], event["t"], kind, [event["id"]], versions, _side(event) is not None))
+            score = describe.score_after(float(event["t"]), scores or []) if kind == "goal" else None
+            out.append(Call(event["id"], event["t"], kind, [event["id"]], versions, _side(event) is not None,
+                            score))
             if event["type"] == "out_of_play":  # counted only when called
                 last_out, outs = event["t"], outs + 1
     for spell in spells.spells(events):
@@ -203,10 +217,12 @@ def calls(events: list[dict], cues: list[dict]) -> tuple[list[Call], list[dict]]
     return out, refused
 
 
-def said(call: Call, n: int, clubs: dict[str, str] | None) -> str:
-    """What the voice says for version `n` of a call: the sides as their clubs, ids never as a
-    number or a name (`describe.spoken`, which names a side only where it was told surely)."""
-    return describe.spoken(call.versions[n], call.sides, compact=n > 0, clubs=clubs)
+def said(call: Call, n: int, clubs: dict[str, str] | None, names: dict[str, str] | None = None) -> str:
+    """What the voice says for version `n` of a call: the sides as their clubs, a player by the
+    player-ID feed's name for his track, else never as a number or a name (`describe.spoken`, which
+    names a side only where it was told surely); after a goal, the scorebug's score."""
+    words = describe.spoken(call.versions[n], call.sides, compact=n > 0, clubs=clubs, names=names)
+    return f"{words} {describe.score_said(call.score, clubs)}" if call.score is not None else words
 
 
 def _up(t: float) -> float:
@@ -216,7 +232,8 @@ def _up(t: float) -> float:
 
 def schedule(found: list[Call], clubs: dict[str, str] | None = None,
              duration: Seconds = describe.estimated_seconds,
-             timeline: Timeline | None = None) -> tuple[list[Line], list[dict]]:
+             timeline: Timeline | None = None,
+             names: dict[str, str] | None = None) -> tuple[list[Line], list[dict]]:
     """Place each call by priority, then time, on the video's clock: at the earliest start within
     MAX_LAG_S of its moment that leaves GAP_S of silence on both sides of every line already placed;
     its short form if the full one does not fit; else dropped, with why."""
@@ -228,7 +245,7 @@ def schedule(found: list[Call], clubs: dict[str, str] | None = None,
         at = video(call.t)
         line = None
         for n in range(len(call.versions)):
-            text = said(call, n, clubs)
+            text = said(call, n, clubs, names)
             seconds = duration(text)
             start = _first_gap(placed, at, seconds)
             if start is not None:
@@ -275,10 +292,12 @@ def refit(body: dict, seconds: dict[str, float]) -> dict:
 
 
 def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | None = None,
-               timeline: Timeline | None = None) -> dict:
-    """commentary.json's body for a bundle's detected events and live cues."""
-    found, refused = calls(events, cues)
-    lines, dropped = schedule(found, clubs, timeline=timeline)
+               timeline: Timeline | None = None, names: dict[str, str] | None = None,
+               scores: list[dict] | None = None) -> dict:
+    """commentary.json's body for a bundle's detected events and live cues; `names` and `scores` as
+    describe.describe takes them."""
+    found, refused = calls(events, cues, scores, names)
+    lines, dropped = schedule(found, clubs, timeline=timeline, names=names)
     return {"format": FORMAT, "voice": voice.VOICE, "gap_s": GAP_S, "max_lag_s": MAX_LAG_S,
             "lines": [asdict(line) for line in lines], "dropped": dropped, "refused": refused}
 

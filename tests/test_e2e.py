@@ -55,7 +55,10 @@ def test_bundle_has_every_stage(tmp_path):
         validate(cue, CUE_SCHEMA)
     kinds = [(c["kind"], c["persona"]) for c in cues(out)]
     assert kinds.count(("pass_arc", "casual")) == 2 and kinds.count(("shot_speed", "analyst")) == 1
-    assert kinds.count(("insight", "analyst")) == 1
+    # The agents' claim restates the shot: it is in the trace, never on the INSIGHT bar (no insights
+    # file here, so the bar is empty: it never restates one event).
+    assert kinds.count(("insight", "analyst")) == 0
+    assert json.loads((out / "trace.json").read_text())["claims"]
 
 
 def test_the_answer_key_is_never_opened(tmp_path, monkeypatch):
@@ -108,9 +111,11 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     # Offline the Judge never ran; the trace must not say it did.
     judge = [s for s in claim["steps"] if s["role"] == "judge"]
     assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
-    (insight,) = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight["text"] == claim["text"] and insight["verified"] and insight["evidence"] == ["e2"]
-    assert insight["replaces"] == "cue-e2-analyst"  # it takes the template's place on screen
+    # It only restates the shot: verified in the trace and said by the audio description, never on the
+    # INSIGHT bar (ninety/agents/insight_bar.py), where the shot's own graphic stays.
+    assert not [c for c in cues(out) if c["kind"] == "insight"]
+    said = [s["text"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    assert claim["text"] in said
     assert manifest["agents"]["fallbacks"] == []
 
 
@@ -124,8 +129,8 @@ def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     # The planted number is named in the rejection; the draft that stated it as a speed shows it no more.
     assert "143" in rejected["detail"] and "143" not in claim["steps"][2]["detail"]
     assert rejected["detail"].startswith("back to the tactician")
-    insight = [c for c in cues(out) if c["kind"] == "insight"]
-    assert insight and all("143" not in c["text"] for c in insight)
+    assert "143" not in claim["text"]  # what was verified carries the fixed number, not the planted one
+    assert not [c for c in cues(out) if c["kind"] == "insight"]  # a restatement: never on the bar
     assert manifest["agents"]["planted"]
 
 
@@ -172,7 +177,7 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     assert claim["mode"] == "fallback: single analyst (RuntimeError)"
     # The single Analyst, too, was held for vision's speed and said it again without it.
     assert claim["status"] == "accepted" and claim["text"] == "h8 shoots, on target."
-    assert [c for c in cues(out) if c["kind"] == "insight"]
+    assert claim["status"] == "accepted"  # in the trace; a restatement never reaches the bar
 
 
 def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_path, monkeypatch):
@@ -427,9 +432,9 @@ def test_the_commentary_hears_the_clips_clubs_and_timeline_and_never_the_audio_c
     seen = []
     real = commentary.commentary
 
-    def spy(events, cues, clubs=None, timeline=None):
+    def spy(events, cues, clubs=None, timeline=None, names=None, scores=None):
         seen.append((cues, clubs, timeline))
-        return real(events, cues, clubs, timeline)
+        return real(events, cues, clubs, timeline, names, scores)
 
     monkeypatch.setattr(commentary, "commentary", spy)
     monkeypatch.setattr(e2e, "clubs_of", lambda meta: {"home": "London", "away": "Lisbon"})
@@ -562,3 +567,30 @@ def test_the_manifest_tells_the_screens_whether_speeds_are_measured_and_their_ba
     assert passes and any("km/h" in t for t in shown)
     claim = only_claim(out)
     assert all("101" not in s["detail"] for s in claim["steps"]) and "101" not in claim["text"]
+
+
+def test_a_tactical_camera_name_never_names_a_broadcast_track_with_the_same_id_string(tmp_path):
+    """Lesson 259 in the bundle: the events and cues name BROADCAST tracks, and the insights hold the
+    tactical camera's names under ids numbered from 1 as well. "h-t8" in the events is not the tactical
+    "h-t8": only the association's names (identity_broadcast) may reach an event's text."""
+    from tests.test_companion_match import insights
+
+    events = [{**e, "team_confidence": 0.99} for e in _tracked(EVENTS)]
+    actors = sorted({e[k] for e in events for k in ("player", "receiver") if e.get(k)})
+    assert actors, "the events must name players, or this proves nothing"
+    mi = insights()
+    mi.identity_source = {"source": "id_feed", "label": "Player ID feed", "provider": "sim", "note": "test",
+                          "id_corrections": 0}
+    mi.identity = {actors[0]: {"name": "Tactical Wrongname", "number": 7, "position": "striker",
+                                "confident": True, "source": "id_feed"}}
+    mi.identity_broadcast = {actors[-1]: {"name": "Broadcast Rightname", "number": 9, "position": "striker",
+                                          "confident": True, "source": "id_feed"}}
+    path = tmp_path / "insights.json"
+    path.write_text(json.dumps(mi.as_dict()))
+    out, _ = run(tmp_path, "--insights", str(path), events=events)
+    aired = [c["text"] for c in cues(out) if c["kind"] != "insight"]
+    aired += [line["text"] for line in json.loads((out / "commentary.json").read_text())["lines"]]
+    aired += [s["spoken"] for s in json.loads((out / "audio.json").read_text())["said"]]
+    blob = " ".join(aired)
+    assert "Wrongname" not in blob
+    assert "Rightname" in blob

@@ -1081,3 +1081,74 @@ def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known()
     for q in ("Who has more of the ball?", "Who has had more possession?"):
         a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
         assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)
+
+
+# -- Kian's preview probe (Oct 26): the named club, a share's sample, no degenerate window -----------
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("text", ["How are Lisbon Esportes playing?", "How are Lisbon playing?",
+                                   "How are {code} playing?", "How are Esportes playing?",
+                                   "Are Lisbon pressing high?"])
+def test_a_question_about_one_club_is_routed_by_any_name_a_fan_uses(text):
+    mi = insights()
+    text = text.format(code=mi.fixture.away_code)  # its code, as the scorebug shows it ("LIS")
+    assert companion.clubs_named(text, mi) == ["Lisbon Esportes"]
+    calls = companion.code_calls(Question("s1", None, text, 60 * 60.0), mi)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls), calls
+
+
+def test_they_follows_the_club_the_last_question_named_and_a_club_cut_through_reads_both():
+    mi = insights()
+    history = [{"question": "How are Lisbon playing?", "answer": "", "calls": []}]
+    calls = companion.code_calls(Question("s1", None, "Are they pressing?", 60 * 60.0), mi, history)
+    assert calls and all(c["club"] == "Lisbon Esportes" for c in calls)
+    cut = companion.code_calls(Question("s1", None, "Which pass cut through Lisbon?", 60 * 60.0), mi)
+    assert all(c["club"] is None for c in cut if c["name"] == "line_breaks")
+
+
+def test_counts_and_comparisons_are_over_the_match_so_far():
+    calls = companion.code_calls(Question("s1", None, "Who has had more shots?", 80 * 60.0), insights())
+    assert next(c for c in calls if c["name"] == "shots")["minute_from"] == 1
+
+
+def test_a_share_needs_its_sample_and_a_one_minute_window_is_said_as_one_minute():
+    share = {"id": "style:channels:home:m1-1", "kind": "channels", "metric": "pass_share_by_channel",
+             "team": "home", "club": "London Athletic", "minute_from": 1, "minute_to": 1, "value": 67,
+             "unit": "%", "lo": 67, "hi": 67, "confident": True, "most": "centre",
+             "shares": {"left": 22, "centre": 67, "right": 11}, "also": [[67, "%", "x"], [9, "passes"]]}
+    assert companion.code_texts(share) == []  # 9 passes: too few for a share
+    enough = share | {"also": [[67, "%", "x"], [20, "passes"]]}
+    (text,) = companion.code_texts(enough)
+    assert "in minute 1" in text and "minute 1 to minute 1" not in text
+
+
+def test_at_kick_off_the_answer_is_too_early_not_a_canned_list():
+    early = Question("s1", None, "How are Lisbon playing?", 1.0)
+    a = asyncio.run(companion.answer_match(early, insights())).answer
+    assert a.text == companion.TOO_EARLY
+
+
+# -- "How are they playing?": an overview ranked by what matters, never a tiny count -----------------
+
+
+def test_how_a_club_is_playing_is_an_overview_led_by_its_biggest_moment_not_a_small_count():
+    a = asyncio.run(companion.answer_match(Question("s1", None, "How are London playing?", 60 * 60.0),
+                                           insights())).answer
+    assert a.status == "verified" and "London Athletic's biggest moment: in minute 23" in a.text, a.text
+    tiny = {"kind": "crosses", "metric": "crosses", "value": 1, "unit": "crosses", "completed": 0}
+    assert companion.tiny(tiny) and companion.tiny(tiny | {"value": 7})  # none found: says nothing
+    assert not companion.tiny(tiny | {"value": 7, "completed": 3})
+    assert not companion.tiny({"value": 2, "unit": "%"})
+    assert not companion.tiny({"kind": "line_break", "value": 4, "unit": "opponents"})  # a moment
+
+
+def test_live_mode_answers_how_they_are_playing_with_the_overview_and_spends_no_model_call():
+    async def ask(prompt):  # the model: never asked for an overview
+        raise AssertionError("a model call was made")
+
+    q = Question("s1", None, "How is London Athletic's attack looking?", 60 * 60.0)
+    r = asyncio.run(companion.answer_match(q, insights(), ask=ask, judge=ask))
+    assert r.source == "code" and "biggest moment" in r.answer.text

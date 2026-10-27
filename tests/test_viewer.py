@@ -115,18 +115,18 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
-    page.keyboard.press("2")  # the verified insight airs for the analyst (the graph's Producer)
+    page.keyboard.press("2")  # the analyst's graphics
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "insight-m-e2" in on_air(page):
+        if "cue-e2-analyst" in on_air(page):
             break
         page.keyboard.press(".")
     assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    # The insight replaces its template on screen (`replaces`): the template is not on air beside it.
-    assert set(on_air(page)) == {"insight-m-e2"}
-    # The fixture's speed is not measured, so the graphic leaves it out (src/speed.ts).
-    assert "Crowmere 8 shoots, on target" in page.locator("#on-air").inner_text()
-    assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
+    # The agents' claim about the shot only restates it, so it is not an INSIGHT (ninety/agents/
+    # insight_bar.py): the shot's own graphic airs, and the claim stays in the trace (How we know).
+    assert set(on_air(page)) == {"cue-e2-analyst"}
+    assert "insight" not in page.locator("#on-air").inner_text().lower()
+    assert page.locator("#claims .claim").count() >= 1
 
     page.keyboard.press("1")
     page.wait_for_function("document.querySelector('#overlay').dataset.onAir === 'cue-e2-casual'")
