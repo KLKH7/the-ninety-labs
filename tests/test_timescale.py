@@ -62,9 +62,12 @@ def test_the_encode_keeps_every_image_at_fps_x_timescale_with_the_sound_sped_up_
     from tests.test_footage_encode import clip_of, probe, video_stream
 
     clip = clip_of(tmp_path)  # 230 images at 25 fps: 9.2 s of match
+    # A whistle at match second 8.0 to 8.4 and silence else: sped with the picture it is heard at 6.4 s
+    # of video; not sped, it would fall after the picture ends (7.36 s) and be cut.
     crowd = tmp_path / "crowd.wav"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=220:d=9.2",
-                    str(crowd)], check=True)
+    whistle = ["-f", "lavfi", "-i", "sine=f=1000:d=9.2:r=48000",
+               "-af", "volume='if(between(t,8,8.4),1,0)':eval=frame", "-ac", "1"]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *whistle, str(crowd)], check=True)
     out = tmp_path / "bundle"
     out.mkdir()
     f = footage.write(sorted((clip.dir / "images").glob("*.jpg")), 25, out, crowd, 720, 1280, timescale=K)
@@ -78,7 +81,15 @@ def test_the_encode_keeps_every_image_at_fps_x_timescale_with_the_sound_sped_up_
         # every 2 s of video, on the first image at or after it (1/31.25 s apart), nothing between
         assert key_s == pytest.approx([0.0, 2.0, 4.0, 6.0], abs=1 / (25 * K)), path
     (a,) = probe(out / "video.mp4", "-select_streams", "a", "-show_entries", "stream=duration")["streams"]
-    assert float(a["duration"]) == pytest.approx(9.2 / K, abs=0.1)  # the crowd sped with the picture
+    assert float(a["duration"]) == pytest.approx(9.2 / K, abs=0.1)
+
+    def loudness(at: float) -> float:
+        cut = ["ffmpeg", "-loglevel", "error", "-ss", f"{at}", "-t", "0.2", "-i", str(out / "video.mp4"),
+               "-vn", "-ac", "1", "-f", "s16le", "-"]
+        pcm = subprocess.run(cut, check=True, capture_output=True).stdout
+        samples = [int.from_bytes(pcm[i:i + 2], "little", signed=True) for i in range(0, len(pcm) - 1, 2)]
+        return (sum(x * x for x in samples) / max(1, len(samples))) ** 0.5
+    assert loudness(8.0 / K + 0.05) > 20 * max(1.0, loudness(3.0))  # the whistle where the picture is
 
 
 def test_e2e_sets_the_timescale_only_on_encoded_video(tmp_path):
@@ -90,6 +101,8 @@ def test_e2e_sets_the_timescale_only_on_encoded_video(tmp_path):
     manifest = json.loads((tmp_path / "b" / "manifest.json").read_text())
     assert manifest["footage"]["kind"] == "frames"
     assert "timescale" not in manifest["footage"]  # JPEG frames play as made
+    said = json.loads((tmp_path / "b" / "audio.json").read_text())["said"]
+    assert said and all(s["t_out"] - s["t_in"] == pytest.approx(s["duration_s"], abs=0.011) for s in said)
 
 
 def test_a_highlight_s_window_is_cut_from_the_images_its_video_times_show(tmp_path):
