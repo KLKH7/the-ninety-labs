@@ -6,7 +6,9 @@ given. Needs ffmpeg with VideoToolbox's H.264 encoder (a Mac): libx264 is GPL (A
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -139,3 +141,54 @@ def test_a_hard_cut_keeps_every_rung_on_the_2_s_keyframe_grid(tmp_path):
         text = (out / "hls" / rung / "index.m3u8").read_text()
         lengths = [float(x.split(":")[1].rstrip(",")) for x in text.splitlines() if x.startswith("#EXTINF")]
         assert lengths == pytest.approx([4.0, 4.0, 1.2], abs=1 / FPS), rung
+
+
+def r128(path) -> tuple[float, float]:
+    """Integrated loudness (LUFS) and true peak (dBFS) of a file's sound, by ffmpeg's ebur128."""
+    cmd = ["ffmpeg", "-nostats", "-i", str(path), "-vn", "-af", "ebur128=framelog=quiet:peak=true",
+           "-f", "null", "-"]
+    err = subprocess.run(cmd, capture_output=True, text=True).stderr
+    return (float(re.findall(r"I:\s+(-?[\d.]+) LUFS", err)[-1]),
+            float(re.findall(r"Peak:\s+(-?[\d.]+) dBFS", err)[-1]))
+
+
+def bed_of(tmp_path, expr: str):
+    bed = tmp_path / "bed.wav"
+    source = ["-f", "lavfi", "-i", f"aevalsrc={expr}:s=48000:d=9.2"]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *source, "-ac", "1", str(bed)], check=True)
+    return bed
+
+
+def test_a_quiet_crowd_bed_is_brought_to_broadcast_loudness(tmp_path):
+    # The 8324 bed was rendered at -28.2 LUFS, too quiet to hear on a laptop: one gain to BED_LUFS.
+    bed = bed_of(tmp_path, "0.02*(random(0)*2-1)")  # a crowd's hiss, about -33 LUFS
+    assert r128(bed)[0] < footage.BED_LUFS - 5
+    out = tmp_path / "bundle"
+    out.mkdir()
+    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
+    assert r128(out / "video.mp4")[0] == pytest.approx(footage.BED_LUFS, abs=1.0)
+
+
+def test_the_gain_never_clips_the_whistles(tmp_path, monkeypatch):
+    # A whistle near full scale in a bed the gain lifts a long way: the true-peak limiter holds it.
+    bed = bed_of(tmp_path, "0.8*sin(2*PI*3200*t)*between(t\\,4\\,4.4)+0.02*(random(0)*2-1)")
+    monkeypatch.setattr(footage, "bed_gain", lambda audio, timescale=1.0: 19.0)  # a long lift
+    out = tmp_path / "bundle"
+    out.mkdir()
+    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
+    assert r128(out / "video.mp4")[1] <= footage.PEAK_DBTP + 0.5  # AAC's own overshoot: half a dB
+
+
+def test_the_gain_is_corrected_for_what_the_limiter_takes_off_a_peaky_bed(monkeypatch):
+    # The 8324 bed lost about 2 LU in the limiter: one gain from its raw loudness aired at -23.0.
+    # Modelled here: the chain gives the raw level plus the gain, less 2 LU once it limits.
+    raw, loss = -28.1, 2.0
+
+    def measured(audio, chain=""):
+        if not chain:
+            return raw
+        gain = float(re.search(r"volume=(-?[\d.]+)dB", chain)[1])
+        return raw + gain - loss
+    monkeypatch.setattr(footage, "loudness", measured)
+    gain = footage.bed_gain(Path("bed.wav"), 1.25)
+    assert measured(None, footage._chain(1.25, gain)) == pytest.approx(footage.BED_LUFS, abs=0.3)

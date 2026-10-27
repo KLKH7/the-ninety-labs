@@ -30,6 +30,7 @@ hls.js player is desktop-companion's, in progress); today the viewer and phone p
 from __future__ import annotations
 
 import math
+import re
 import shutil
 import subprocess
 from functools import cache
@@ -44,6 +45,14 @@ MP4_BITRATE = 4_000_000  # design: 720p sport at 25 fps
 # The ladder, largest first: (height, width, bitrate). A rung taller than the source is not made.
 LADDER = ((1080, 1920, 5_000_000), (720, 1280, 3_000_000), (480, 854, 1_200_000))
 AUDIO = ["-c:a", "aac", "-b:a", "128k"]
+# The crowd bed's loudness on air (Oct 26: the 8324 bed was rendered at -28.2 LUFS, too quiet to hear
+# on a laptop). Integrated loudness by EBU R128 (ITU-R BS.1770, ffmpeg's ebur128): the bed is raised
+# or lowered by one gain to BED_LUFS, inside the Coordinator's -23 to -18 LUFS target (design: the
+# middle-low end, so commentary ducked over it still reads clearly). A limiter then keeps the true
+# peak at or under PEAK_DBTP (EBU R128 recommends at most -1 dBTP), so the whistles, the bed's
+# loudest moments, never clip; it acts only on those peaks, the bed's level is the gain's.
+BED_LUFS = -21.0
+PEAK_DBTP = -1.5
 COLOUR = ("scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709,"
           "setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p")
 TAGS = ["-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
@@ -80,9 +89,45 @@ def _length(frames: int, fps: float) -> list[str]:
     return ["-frames:v", str(frames), "-t", f"{frames / fps:.3f}"]
 
 
-def _sound(timescale: float) -> list[str]:
-    """AAC, and the sound sped up with the picture (atempo: the pitch kept)."""
-    return [*AUDIO, *(["-af", f"atempo={timescale:g}"] if timescale != 1 else [])]
+def loudness(audio: Path, chain: str = "") -> float | None:
+    """The track's integrated loudness in LUFS (EBU R128), after `chain` (ffmpeg audio filters) when
+    given, or None for silence or no sound."""
+    af = f"{chain},ebur128=framelog=quiet" if chain else "ebur128=framelog=quiet"
+    err = subprocess.run(["ffmpeg", "-nostats", "-i", str(audio), "-vn", "-af", af,
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    found = re.findall(r"I:\s+(-?[\d.]+) LUFS", err)
+    value = float(found[-1]) if found else None
+    return value if value is not None and value > -70 else None  # -70 LUFS: R128's absolute gate
+
+
+def _chain(timescale: float, gain_db: float) -> str:
+    chain = [f"volume={gain_db:.2f}dB", f"alimiter=limit={10 ** (PEAK_DBTP / 20):.4f}:level=false"]
+    if timescale != 1:
+        chain.append(f"atempo={timescale:g}")
+    return ",".join(chain)
+
+
+def bed_gain(audio: Path, timescale: float = 1.0, passes: int = 2) -> float:
+    """The gain that brings the bed to BED_LUFS as it airs: measured once raw, then through the whole
+    chain (gain, limiter, atempo) and corrected, `passes` times. A bed with many loud peaks loses
+    level in the limiter (seen on 8324: -21 aimed, -23.0 out after one pass), so the first guess
+    lands low. 0 for no sound or silence."""
+    measured = loudness(audio)
+    if measured is None:
+        return 0.0
+    gain = BED_LUFS - measured
+    for _ in range(passes):
+        out = loudness(audio, _chain(timescale, gain))
+        if out is None or abs(out - BED_LUFS) < 0.3:
+            break
+        gain += BED_LUFS - out
+    return gain
+
+
+def _sound(timescale: float, gain_db: float = 0.0) -> list[str]:
+    """AAC; the bed brought to BED_LUFS (`gain_db`, bed_gain) under a true-peak limit; and the sound
+    sped up with the picture (atempo: the pitch kept)."""
+    return [*AUDIO, "-af", _chain(timescale, gain_db)]
 
 
 def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, height: int = 720,
@@ -93,11 +138,12 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     (`footage.timescale` in the manifest; ninety/match/timeline.py maps through it)."""
     n = len(images)
     timescale = checked_timescale(timescale)
+    gain = bed_gain(audio, timescale) if audio is not None else 0.0
     match_fps, fps = fps, fps * timescale  # images a video second, from here on
     sound = [] if audio is None else ["-i", str(audio)]
     shutil.copyfile(images[0], out / "poster.jpg")
     mp4 = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound, "-map", "0:v",
-           *(["-map", "1:a", *_sound(timescale)] if audio else []), "-vf", COLOUR, *video_args(fps),
+           *(["-map", "1:a", *_sound(timescale, gain)] if audio else []), "-vf", COLOUR, *video_args(fps),
            "-b:v", str(MP4_BITRATE), *_length(n, fps), "-movflags", "+faststart", str(out / "video.mp4")]
     subprocess.run(mp4, check=True)
 
@@ -114,7 +160,7 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     hls.mkdir(exist_ok=True)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound,
            "-filter_complex", split + scaled, *maps, *video_args(fps), *rates,
-           *(_sound(timescale) if audio else []),
+           *(_sound(timescale, gain) if audio else []),
            # The video at time 0 on every rung: AAC's priming samples sit before it (players drop them),
            # where shifting both up by 23 ms would put the picture off the MP4's clock.
            *_length(n, fps), "-avoid_negative_ts", "disabled",
