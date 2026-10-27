@@ -53,6 +53,19 @@ AUDIO = ["-c:a", "aac", "-b:a", "128k"]
 # loudest moments, never clip; it acts only on those peaks, the bed's level is the gain's.
 BED_LUFS = -21.0
 PEAK_DBTP = -1.5
+# alimiter limits sample peaks; a true peak (between samples, after AAC) can overshoot them by most of
+# a dB on a bright bed (8324 with its whistles cut: 0.7 dB), so the limiter aims this much lower.
+LIMIT_HEADROOM_DB = 1.0
+# The referee's whistle, tamed (Kian, Oct 27: "a really screechy sound" once the bed was lifted): in
+# the band a pea whistle sits in, a moment more than WHISTLE_OVER_DB over the bed's median is a
+# whistle; inside it that band alone is cut by WHISTLE_CUT_DB, so the whistle stays clear over the
+# crowd (the Coordinator: +10 dB over the bed in band is plenty) without the crowd's own band touched.
+# All design values, checked on the 8324 bed (tests/test_footage_encode.py, the audio check).
+WHISTLE_BAND = (2500, 5000)  # Hz
+WHISTLE_OVER_DB = 20.0
+WHISTLE_CUT_DB = 24.0  # 8324: the loud whistles +30 -> about +16 dB over the bed; soft ones (+13) not cut
+WHISTLE_FRAME_S = 0.05
+WHISTLE_PAD_S = 0.15
 COLOUR = ("scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709,"
           "setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p")
 TAGS = ["-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
@@ -100,14 +113,55 @@ def loudness(audio: Path, chain: str = "") -> float | None:
     return value if value is not None and value > -70 else None  # -70 LUFS: R128's absolute gate
 
 
-def _chain(timescale: float, gain_db: float) -> str:
-    chain = [f"volume={gain_db:.2f}dB", f"alimiter=limit={10 ** (PEAK_DBTP / 20):.4f}:level=false"]
+def whistles(audio: Path) -> list[tuple[float, float]]:
+    """The whistle moments of a bed, as (start, end) seconds of its own time: frames whose
+    WHISTLE_BAND level is more than WHISTLE_OVER_DB over the bed's median there, merged, padded."""
+    import numpy as np
+
+    rate = 16000
+    decode = ["ffmpeg", "-loglevel", "error", "-i", str(audio), "-vn", "-ac", "1", "-ar", str(rate),
+              "-f", "s16le", "-"]
+    pcm = subprocess.run(decode, capture_output=True, check=True).stdout
+    x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768
+    n = int(rate * WHISTLE_FRAME_S)
+    if len(x) < n:
+        return []
+    frames = x[: len(x) // n * n].reshape(-1, n) * np.hanning(n)
+    spec = np.abs(np.fft.rfft(frames, axis=1)) ** 2
+    freqs = np.fft.rfftfreq(n, 1 / rate)
+    band = 10 * np.log10(spec[:, (freqs >= WHISTLE_BAND[0]) & (freqs <= WHISTLE_BAND[1])].sum(axis=1) + 1e-12)
+    loud = np.flatnonzero(band > np.median(band) + WHISTLE_OVER_DB)
+    out: list[tuple[float, float]] = []
+    for i in loud:
+        a, b = max(0.0, i * WHISTLE_FRAME_S - WHISTLE_PAD_S), (i + 1) * WHISTLE_FRAME_S + WHISTLE_PAD_S
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], b)
+        else:
+            out.append((a, b))
+    return [(round(a, 2), round(b, 2)) for a, b in out]
+
+
+def _chain(timescale: float, gain_db: float, tamed: list[tuple[float, float]] | None = None) -> str:
+    """The bed's filters: the gain; a bell cut over the whistle band inside `tamed` (whistles); the
+    true-peak limiter; then atempo. The whistle windows are in the bed's own time, so the cut comes
+    before atempo."""
+    chain = [f"volume={gain_db:.2f}dB"]
+    if tamed:
+        # Times as samples played, which whistles() counts: a bed joined from pieces can carry more
+        # samples than its timestamps say (8324: 1.56 s over 17.5 min), so its `t` drifts from them.
+        chain.insert(0, "asetpts=N/SR/TB")
+        on = "+".join(f"between(t,{a:g},{b:g})" for a, b in tamed)
+        lo, hi = WHISTLE_BAND
+        centre, octaves = (lo * hi) ** 0.5, math.log2(hi / lo)  # a bell over the whole band
+        chain.append(f"equalizer=f={centre:.0f}:t=o:w={octaves:.2f}:g=-{WHISTLE_CUT_DB:g}:enable='{on}'")
+    chain.append(f"alimiter=limit={10 ** ((PEAK_DBTP - LIMIT_HEADROOM_DB) / 20):.4f}:level=false")
     if timescale != 1:
         chain.append(f"atempo={timescale:g}")
     return ",".join(chain)
 
 
-def bed_gain(audio: Path, timescale: float = 1.0, passes: int = 2) -> float:
+def bed_gain(audio: Path, timescale: float = 1.0, passes: int = 2,
+             tamed: list[tuple[float, float]] | None = None) -> float:
     """The gain that brings the bed to BED_LUFS as it airs: measured once raw, then through the whole
     chain (gain, limiter, atempo) and corrected, `passes` times. A bed with many loud peaks loses
     level in the limiter (seen on 8324: -21 aimed, -23.0 out after one pass), so the first guess
@@ -117,17 +171,18 @@ def bed_gain(audio: Path, timescale: float = 1.0, passes: int = 2) -> float:
         return 0.0
     gain = BED_LUFS - measured
     for _ in range(passes):
-        out = loudness(audio, _chain(timescale, gain))
+        out = loudness(audio, _chain(timescale, gain, tamed))
         if out is None or abs(out - BED_LUFS) < 0.3:
             break
         gain += BED_LUFS - out
     return gain
 
 
-def _sound(timescale: float, gain_db: float = 0.0) -> list[str]:
-    """AAC; the bed brought to BED_LUFS (`gain_db`, bed_gain) under a true-peak limit; and the sound
-    sped up with the picture (atempo: the pitch kept)."""
-    return [*AUDIO, "-af", _chain(timescale, gain_db)]
+def _sound(timescale: float, gain_db: float = 0.0,
+           tamed: list[tuple[float, float]] | None = None) -> list[str]:
+    """AAC; the bed brought to BED_LUFS (`gain_db`, bed_gain) with its whistles tamed (`tamed`) under
+    a true-peak limit; and the sound sped up with the picture (atempo: the pitch kept)."""
+    return [*AUDIO, "-af", _chain(timescale, gain_db, tamed)]
 
 
 def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, height: int = 720,
@@ -138,12 +193,14 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     (`footage.timescale` in the manifest; ninety/match/timeline.py maps through it)."""
     n = len(images)
     timescale = checked_timescale(timescale)
-    gain = bed_gain(audio, timescale) if audio is not None else 0.0
+    tamed = whistles(audio) if audio is not None else []
+    gain = bed_gain(audio, timescale, tamed=tamed) if audio is not None else 0.0
     match_fps, fps = fps, fps * timescale  # images a video second, from here on
     sound = [] if audio is None else ["-i", str(audio)]
     shutil.copyfile(images[0], out / "poster.jpg")
     mp4 = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound, "-map", "0:v",
-           *(["-map", "1:a", *_sound(timescale, gain)] if audio else []), "-vf", COLOUR, *video_args(fps),
+           *(["-map", "1:a", *_sound(timescale, gain, tamed)] if audio else []),
+           "-vf", COLOUR, *video_args(fps),
            "-b:v", str(MP4_BITRATE), *_length(n, fps), "-movflags", "+faststart", str(out / "video.mp4")]
     subprocess.run(mp4, check=True)
 
@@ -160,7 +217,7 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     hls.mkdir(exist_ok=True)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps), *sound,
            "-filter_complex", split + scaled, *maps, *video_args(fps), *rates,
-           *(_sound(timescale, gain) if audio else []),
+           *(_sound(timescale, gain, tamed) if audio else []),
            # The video at time 0 on every rung: AAC's priming samples sit before it (players drop them),
            # where shifting both up by 23 ms would put the picture off the MP4's clock.
            *_length(n, fps), "-avoid_negative_ts", "disabled",
