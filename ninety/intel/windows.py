@@ -67,6 +67,13 @@ def _ids(events: Iterable[Mapping]) -> list[str]:
     return [str(e["id"]) for e in events]
 
 
+def until(events: Iterable[Mapping], now: float | None) -> list[Mapping]:
+    """The events before `now` (match seconds), all of them with no `now`. A stat asked for at minute
+    35 (00:34:00 to 00:34:59, ninety/match/facts.minute_of) has now = 35 * 60 and counts nothing that
+    happened after it (lesson 292)."""
+    return [e for e in events if now is None or float(e.get("t", 0)) < now]
+
+
 def _windows(events: list[Mapping], window_s: float) -> list[list[Mapping]]:
     if window_s <= 0:
         raise ValueError("window_s must be positive")
@@ -79,17 +86,20 @@ def _windows(events: list[Mapping], window_s: float) -> list[list[Mapping]]:
     return out
 
 
-def window_span(index: int, events: list[Mapping], window_s: float = WINDOW_S) -> tuple[float, float]:
-    """A window's start and end in seconds. The last window ends at the last event: a clip or a
-    match that stops mid-window has not played the rest of it, so its tempo is not diluted by
-    minutes that never happened."""
+def window_span(index: int, events: list[Mapping], window_s: float = WINDOW_S,
+                now: float | None = None) -> tuple[float, float]:
+    """A window's start and end in seconds. The last window ends at the last event, or at `now` when
+    the stat is asked for during the match: a clip or a match that stops mid-window has not played the
+    rest of it, so its tempo is not diluted by minutes that never happened, and a window asked for at
+    minute 35 ends at minute 35."""
     start = index * window_s
-    last = max((float(e.get("t", 0)) for e in events), default=start)
+    last = now if now is not None else max((float(e.get("t", 0)) for e in events), default=start)
     end = start + window_s
     return start, (end if last >= end else max(last, start))
 
 
-def window_facts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[Fact]:
+def window_facts(events: Iterable[Mapping], window_s: float = WINDOW_S,
+                 now: float | None = None) -> list[Fact]:
     """PPDA, field tilt and passes a minute for each team in each window. A measure with nothing
     to count in a window (no defensive action for PPDA, no attacking-third pass for field tilt) is
     left out rather than given an invented value.
@@ -97,11 +107,12 @@ def window_facts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[
     The same code reads ground truth and detected events (`source: vision`): each counts the events
     it is given. A detected event's confidence is not used to drop it here: one unsure detection
     moves a window's count by one, where it would decide a single-event claim alone, which the
-    fact-checker's confidence gate already holds (ninety/agents/factcheck.py)."""
+    fact-checker's confidence gate already holds (ninety/agents/factcheck.py). With `now`, only the
+    events up to it count and the window running then ends at it (`until`, `window_span`)."""
     facts: list[Fact] = []
-    events = list(events)
+    events = until(events, now)
     for index, window in enumerate(_windows(events, window_s)):
-        start, end = window_span(index, events, window_s)
+        start, end = window_span(index, events, window_s, now)
         for team in ("home", "away"):
             scope = f"team:{team}:window:{index}"
             passes, actions = ppda_events(team, window)
@@ -128,14 +139,15 @@ def leader(window: Iterable[Mapping]) -> tuple[str | None, list[Mapping]]:
     return ("home" if tilt > 0.5 else "away"), counted
 
 
-def territory_shifts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[Fact]:
+def territory_shifts(events: Iterable[Mapping], window_s: float = WINDOW_S,
+                     now: float | None = None) -> list[Fact]:
     """When a window's leader (see `leader`) is the other side from the last window that had one,
     one fact for the side that took over, scoped to that window. Its value is that side's field tilt
     there; it cites the passes counted. A window nobody leads changes nothing, and the first leader
     of the match is no shift."""
     facts: list[Fact] = []
     current: str | None = None
-    for index, window in enumerate(_windows(list(events), window_s)):
+    for index, window in enumerate(_windows(until(events, now), window_s)):
         side, counted = leader(window)
         if side is None or side == current:
             continue
@@ -149,17 +161,18 @@ def territory_shifts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> l
 WINDOW_METRICS = ("ppda", "field_tilt", "passes_per_minute", "territory_shift")
 
 
-def agent_rows(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[dict]:
+def agent_rows(events: Iterable[Mapping], window_s: float = WINDOW_S, now: float | None = None) -> list[dict]:
     """The window facts as the agents read them (the MCP server's `match_info`, and what the
     fact-checker checks a claim against). Same ids and values as the Ledger's facts, plus the
     numbers a sentence about them may state: the window's first and last match minute and, for a
-    share, its percentage. Nothing here is computed anew; it is the facts, re-shaped."""
-    events = list(events)
-    facts = window_facts(events, window_s) + territory_shifts(events, window_s)
+    share, its percentage. Nothing here is computed anew; it is the facts, re-shaped. With `now`
+    (match seconds), only what had happened by then (`window_facts`)."""
+    events = until(events, now)
+    facts = window_facts(events, window_s, now) + territory_shifts(events, window_s)
     rows = []
     for fact in sorted(facts, key=lambda f: f.id):
         _, team, _, index = fact.scope.split(":")
-        start, end = window_span(int(index), events, window_s)
+        start, end = window_span(int(index), events, window_s, now)
         row = {
             "id": fact.id,
             "type": "stat",

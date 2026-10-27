@@ -90,17 +90,19 @@ def events_of(match: str) -> tuple[dict, ...]:
 
 
 @lru_cache(maxsize=len(MATCHES) + len(DETECTED))
-def stats_of(match: str) -> tuple[dict, ...]:
+def stats_of(match: str, minute: int | None = None) -> tuple[dict, ...]:
     """The match's window stats, computed by code from its full events (positions included, which
-    the compact events leave out): detected events for a detected clip, the simulator's otherwise."""
+    the compact events leave out): detected events for a detected clip, the simulator's otherwise.
+    With `minute`, only what had happened by its end, each window ending there (lesson 292)."""
+    now = None if minute is None else 60.0 * minute
     if match in DETECTED:
-        return tuple(agent_rows(detected.load(DETECTED[match]())))
+        return tuple(agent_rows(detected.load(DETECTED[match]()), now=now))
     if match not in MATCHES:
         raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
-    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR else None
+    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR and now is None else None
     if stored and stored.exists():
         return tuple(json.loads(stored.read_text()))
-    return tuple(agent_rows(match_events(MATCHES[match], MINUTES)))
+    return tuple(agent_rows(match_events(MATCHES[match], MINUTES), now=now))
 
 
 def list_events(match: str, minute_from: int, minute_to: int, event_type: str | None) -> list[dict]:
@@ -115,14 +117,15 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
     return rows[:MAX_EVENTS]
 
 
-def match_info(match: str) -> dict:
+def match_info(match: str, minute: int | None = None) -> dict:
     """One match: its id, length in minutes, event types, and stats computed by code for each
-    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Cite a
-    stat by id; quote its value, percent or minutes as given."""
+    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Give the
+    minute you are asked about to see the stats as they stood at its end; null for the whole match.
+    Cite a stat by id; quote its value, percent or minutes as given."""
     events = events_of(match)  # refuses an unknown match
     minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
     return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES),
-            "stats": list(stats_of(match))}
+            "stats": list(stats_of(match, minute))}
 
 
 def fixture_path(clip: str) -> Path:

@@ -432,6 +432,9 @@ def detect(rows: list[dict], join_breaks: bool = True,
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)
         if shot:
+            # The shot's side is the end it goes toward; a track read on the other side names nobody,
+            # never the wrong side (lesson 292, ninety/match/detected.attributed).
+            who = who if a.track.team == shooter else None
             event("shot", a.last, shooter, path[i].x, path[i].y, conf, side_conf,
                   ball_speed_kmh=speed, player=who,
                   outcome=None if result.outcome == "on_target" and not saves else result.outcome)

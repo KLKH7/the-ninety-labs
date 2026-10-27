@@ -3534,3 +3534,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
+
+### 292. A stat computed from what the source gave is not a stat about the match
+- **What happened:** the Oct 27 audit of seed 8324's facts.json, which the agents and the phone say
+  to fans, found five numbers no football fan would accept. (1) Lisbon: 3 goals, 2 shots on target:
+  the 85th-minute goal followed a shot the detector read `off_target`, with the ball's crossing written
+  as `out_of_play` between them, and `shot_facts` counted on target only from shot outcomes, so the goal
+  proved nothing. (2) Lisbon's shot speed, 18.9 km/h, was one reading from 1 of 5 shots, citing all 5;
+  vision's shot speed is unmeasured. (3) `pressure_events` 0 for each side, from a detector that writes
+  no pressure, tackle or interception at all (#386), and a control-vs-chaos index that was pass
+  completion under another name. (4) The window stats the agents read at minute 35 counted passes
+  from after it (`agent_rows` over the whole match in live.py, the MCP server and the slice).
+  (5) "Lisbon Esportes's", and a London goal credited to the Lisbon track `a-t7007` (the detector
+  takes a shot's side from the end it goes toward, its player from the nearest track). Every test
+  used a shot just before each goal, truth events with every speed, events with pressing, and the
+  whole match.
+- **Rule:** a computed stat keeps football's invariants in every scope (goals <= shots on target <=
+  shots: a goal's strike counts on target, a goal with none seen is an implied shot cited by the goal,
+  GROUNDING I28). A number is stated only from what the source measured: cite only the measured
+  events, say how many, and state nothing below a pre-registered coverage (EVALUATION, "Shot speed
+  facts"); a count of a kind the source never detects is left out, not zero. A stat asked for at a
+  minute counts nothing after it, and its window ends there. A possessive goes through
+  `teamsheet.possessive`. A player whose track was read on the other side from a vision-sided event
+  is dropped, the side kept (`detected.attributed`); a feed-sided one keeps him (lesson 283).
+- **Check:** `tests/test_facts_invariants.py`: the 8324 cases by id, a property test over 200 random
+  detector outputs (whole match, each 15-minute window, a random slice), minute 35 through
+  `live.run`, and the attribution through `detected.load`. All fail on main 382996dc but the guard
+  that a source detecting pressing still gets a side's zero.

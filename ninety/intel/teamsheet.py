@@ -41,6 +41,12 @@ CLUBS = {
     "LON": "London Athletic",
     "LIS": "Lisbon Esportes",
 }
+
+
+def possessive(name: str) -> str:
+    """A name's possessive as a broadcaster writes it: "London Athletic's", and a plural-looking name
+    ending in s takes the apostrophe alone, "Lisbon Esportes'" (never "Lisbon Esportes's")."""
+    return f"{name}'" if name.endswith("s") else f"{name}'s"
 # The 4-3-3 the engine plays (ninety/sim/engine.FORMATION, the same role codes; tests hold them
 # equal): role code, shirt number (the common squad numbering of a 4-3-3, *design*), what a fan calls
 # it, and its line.

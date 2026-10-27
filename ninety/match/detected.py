@@ -71,7 +71,7 @@ def load(path: str | Path) -> list[dict]:
     if path.name in TRUTH_NAMES:
         raise ValueError(f"{path}: that is the answer key's name; the live path reads detected events")
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    return [credible(e) for e in check(rows, str(path))]
+    return [attributed(credible(e)) for e in check(rows, str(path))]
 
 
 def credible(event: dict) -> dict:
@@ -80,6 +80,23 @@ def credible(event: dict) -> dict:
     if speed is not None and speed > MAX_BALL_KMH:
         return {**event, "ball_speed_kmh": None}
     return event
+
+
+TRACK_SIDE = {"h-": "home", "a-": "away"}  # a track id's letter: the tracker's kit read (tracked_frames)
+FEED_SIDE = "id_feed"  # identity.SOURCE: the side the player-ID feed gave the very player it named
+
+
+def attributed(event: dict) -> dict:
+    """The event with its player dropped when his track was read on the other side from the event's,
+    the side kept (lesson 292): a London goal never credited to a Lisbon track. The detector takes a
+    shot's side from the end it goes toward and its player from the track nearest the ball
+    (ninety/vision/events.detect), so the two can disagree; it is not known which is wrong, and naming
+    nobody is safer than naming the wrong side. A side the feed gave stays with its player: it is that
+    named player's own side, and the letter is the tracker's misread (identity.sided, lesson 283)."""
+    side = TRACK_SIDE.get(str(event.get("player") or "")[:2])
+    if side is None or side == event.get("team") or event.get("team_source") == FEED_SIDE:
+        return event
+    return {**event, "player": None}
 
 
 @lru_cache(maxsize=4)

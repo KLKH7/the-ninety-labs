@@ -15,6 +15,13 @@ from dataclasses import dataclass
 # The most common absolute sprint threshold in match analysis (docs/GROUNDING.md I22): the one
 # constant every sprint count reads (ninety/intel/physical.py too).
 SPRINT_THRESHOLD_KMH = 25.2
+# Pre-registered (docs/EVALUATION.md, "Shot speed facts"): a team's or a player's shot speed is stated
+# only when more than half of its shots carry a speed that may be said (factcheck.sayable_speed), so
+# the figure describes most of its shots, never one reading standing in for all of them.
+SHOT_SPEED_COVERAGE = 0.5
+# A detector that writes none of these cannot count them as none (lesson 292): a count of them is
+# stated only when the events hold at least one (window_facts's rule for PPDA).
+PRESSING_TYPES = frozenset({"pressure", "tackle", "interception"})
 
 
 @dataclass(frozen=True)
@@ -130,8 +137,11 @@ def goal_moments(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | Non
     before it when that is a shot that went in, as scoring.goals pairs them: the strike and the ball
     over the line are one goal, and the goal event carries its side and confidence. A shot that went
     in with no goal event just after it is a goal on its own (a detector that writes no goal events);
-    a goal with no shot just before it is a goal whose strike was not seen."""
-    rows = sorted(events, key=lambda e: (float(e["t"]), str(e["id"])))
+    a goal with no shot just before it is a goal whose strike was not seen. An `out_of_play` between a
+    shot and its goal is the ball crossing the goal line, the goal itself (Law 9 against Law 10), so it
+    neither parts them nor makes them two goals (lesson 292)."""
+    rows = [e for e in sorted(events, key=lambda e: (float(e["t"]), str(e["id"])))
+            if e.get("type") != "out_of_play"]
     went_in = [e.get("type") == "shot" and e.get("outcome") == "goal" for e in rows]
     out: list[tuple[Mapping, Mapping | None]] = []
     for k, e in enumerate(rows):
@@ -142,8 +152,40 @@ def goal_moments(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | Non
     return out
 
 
+def goal_strikes(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | None]]:
+    """Each goal (goal_moments) with the shot that struck it, or None when no shot of the scoring
+    side was seen just before it. A goal is the whole ball over the line between the posts (Law 10,
+    GROUNDING I24), so its strike was on target whatever outcome the detector gave it: the shot
+    goal_moments pairs, else the event just before the goal when that is the scoring side's shot (on
+    seed 8324 the 85th-minute goal follows a shot read `off_target`). An `out_of_play` between them is
+    looked past, as goal_moments does."""
+    rows = sorted(events, key=lambda e: (float(e["t"]), str(e["id"])))
+    before: dict[str, Mapping] = {}
+    last: Mapping | None = None
+    for e in rows:
+        if e.get("type") == "goal" and last is not None:
+            before[str(e["id"])] = last
+        if e.get("type") != "out_of_play":
+            last = e
+    out: list[tuple[Mapping, Mapping | None]] = []
+    for goal, shot in goal_moments(rows):
+        strike = shot if shot is not None else before.get(str(goal["id"]))
+        if strike is None or strike.get("type") != "shot" or strike.get("team") != goal.get("team"):
+            strike = None
+        out.append((goal, strike))
+    return out
+
+
 def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
-    """Return shot volume, accuracy, goals, and speed facts by team and player."""
+    """Return shot volume, accuracy, goals, and speed facts by team and player.
+
+    Goals <= shots on target <= shots in every scope (lesson 292): a goal's strike counts on target
+    (goal_strikes), and a goal whose strike was not seen is one implied shot on target for the scoring
+    side, cited by the goal's own id. Shot speed is stated only from the shots whose speed may be said
+    (factcheck.sayable_speed), citing those alone, when they are more than half the scope's shots
+    (SHOT_SPEED_COVERAGE), with their count as `shot_speeds_measured`."""
+    from ninety.agents.factcheck import sayable_speed  # the one rule for a speed that may be said
+
     event_list = _events(events)
     shots = [event for event in event_list if event.get("type") == "shot"]
     groups: dict[str, list[Mapping]] = defaultdict(list)
@@ -161,33 +203,42 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
             scored[f"player:{_player(shot)}"].append(goal)
     for scope in scored:
         groups.setdefault(scope, [])
+    # Each goal's strike is on target; a goal with no strike seen is an implied shot, cited by the goal.
+    struck: set[str] = set()
+    implied: dict[str, list[Mapping]] = defaultdict(list)
+    for goal, strike in goal_strikes(event_list):
+        if strike is None:
+            implied[f"team:{_team(goal)}"].append(goal)
+        else:
+            struck.add(str(strike["id"]))
 
     facts: list[Fact] = []
     for scope, group in sorted(groups.items()):
-        ids = [str(event["id"]) for event in group]
+        all_shots = group + implied.get(scope, [])
+        ids = [str(event["id"]) for event in all_shots]
         on_target = [
-            event for event in group if event.get("outcome") in {"on_target", "goal"}
-        ]
+            event for event in group
+            if event.get("outcome") in {"on_target", "goal"} or str(event["id"]) in struck
+        ] + implied.get(scope, [])
         goals = scored.get(scope, [])
-        speeds = [
-            float(event["ball_speed_kmh"])
-            for event in group
-            if event.get("ball_speed_kmh") is not None
-        ]
+        measured = [event for event in group if sayable_speed(dict(event))]
+        speeds = [float(event["ball_speed_kmh"]) for event in measured]
         facts.extend(
             (
-                _fact("shots", len(group), "shots", scope, ids),
+                _fact("shots", len(all_shots), "shots", scope, ids),
                 _fact("shots_on_target", len(on_target), "shots", scope,
                       [str(event["id"]) for event in on_target]),
-                _fact("shot_accuracy", len(on_target) / len(group) if group else 0,
+                _fact("shot_accuracy", len(on_target) / len(all_shots) if all_shots else 0,
                       "ratio", scope, ids),
                 _fact("goals", len(goals), "goals", scope,
                       [str(event["id"]) for event in goals]),
             )
         )
-        if speeds:
-            facts.append(_fact("shot_speed_mean", sum(speeds) / len(speeds), "km/h", scope, ids))
-            facts.append(_fact("shot_speed_max", max(speeds), "km/h", scope, ids))
+        if speeds and len(speeds) > SHOT_SPEED_COVERAGE * len(group):
+            cited = [str(event["id"]) for event in measured]
+            facts.append(_fact("shot_speed_mean", sum(speeds) / len(speeds), "km/h", scope, cited))
+            facts.append(_fact("shot_speed_max", max(speeds), "km/h", scope, cited))
+            facts.append(_fact("shot_speeds_measured", len(speeds), "shots", scope, cited))
     return facts
 
 
@@ -212,9 +263,18 @@ def possession_facts(frames: Iterable[Mapping]) -> list[Fact]:
     ]
 
 
+def detects_pressing(events: Iterable[Mapping]) -> bool:
+    """Whether the events' source detects pressing at all: one pressure, tackle or interception among
+    them. Vision writes none of these yet (#386), so its count of them is unmeasured, never zero."""
+    return any(event.get("type") in PRESSING_TYPES for event in events)
+
+
 def pressure_facts(events: Iterable[Mapping]) -> list[Fact]:
-    """Count pressure events and recoveries by team."""
+    """Count pressure events by team; nothing when the source detects no pressing (a side's zero is
+    stated only when the source could have seen one)."""
     event_list = _events(events)
+    if not detects_pressing(event_list):
+        return []
     pressure = [event for event in event_list if event.get("type") == "pressure"]
     facts: list[Fact] = []
     for team in ("away", "home"):
@@ -296,11 +356,13 @@ def player_movement_facts(frames: Iterable[Mapping], restarts: Iterable[int] = (
 
 
 def control_vs_chaos(events: Iterable[Mapping], window_seconds: float = 60.0) -> list[Fact]:
-    """Compute the documented experimental control-vs-chaos index per team."""
+    """Compute the documented experimental control-vs-chaos index per team. Its chaos is pressure and
+    recoveries, so a source that detects no pressing gets no index (it would be pass completion under
+    another name)."""
     if window_seconds <= 0:
         raise ValueError("window_seconds must be positive")
     event_list = _events(events)
-    if not event_list:
+    if not event_list or not detects_pressing(event_list):
         return []
     max_time = max(float(event.get("t", 0)) for event in event_list)
     window_count = int(max_time // window_seconds) + 1
