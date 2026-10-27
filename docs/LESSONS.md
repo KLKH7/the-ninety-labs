@@ -3544,6 +3544,20 @@ short and actionable. This file is public: no research sources, product names or
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
 
+### 296. A phrase the fact-checker allows is not a phrase it requires
+- **What happened:** #424 put possession on air "give or take 10 points", the error measured when
+  the share missed its 5-point gate. The fact-checker's possession template *allowed* the clause
+  but did not *require* it: the same sentence with the clause deleted still verified, so a
+  model-written possession share could reach the screen with no error (delta review of ff0a17eb).
+  A second miss in the same area: `on_top` named a leader from two seconds of footage ("100% to
+  0%"), with no minimum sample.
+- **Rule:** a qualifier that a number must carry (its error, its coverage) is a check that rejects
+  the sentence without it, not an entry in the list of allowed words. A comparison needs the same
+  sample floor as the measure it rests on.
+- **Check:** `tests/test_possession_territory.py::test_the_possession_sentence_carries_its_measured_error_and_no_other`
+  (the clause left out is rejected) and `tests/test_companion_match.py::test_on_top_is_not_known_on_too_little_footage`;
+  each fails with its guard removed.
+
 ### 297. A router where the first keyword wins answers the word it matched, not the question asked
 - **What happened:** the Ask chose tools from a keyword list, and the first tool routed picked the
   handler. On the demo match (8324), "How many passes?" matched no tool and got "There were 3 shots".

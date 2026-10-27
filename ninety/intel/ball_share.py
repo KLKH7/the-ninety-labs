@@ -15,8 +15,8 @@ wherever the footage does, gaps within the tracker's own limit filled, ninety/vi
 the share in each third of the pitch along the direction a team attacks (the thirds of Law 1's
 length, as the possession layer cuts them). A ball within the players' position error of a third's
 line could be on either side of it, so those seconds are counted apart and give the share bounds,
-and the share is said as them ("between 25% and 31% of the footage shown"), like team distance,
-"from the footage shown" (I16).
+and the share is said as them ("about a quarter of the time (25–31%) in the footage we've seen"), like team
+distance, "from the footage shown" (I16).
 """
 
 from __future__ import annotations
@@ -167,6 +167,19 @@ def possession(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dic
     return out
 
 
+# Design: the plain fraction a share is said as, when its bounds' middle is within FRACTION_NEAR points of
+# it ("about a quarter of the time (22–28%)"); one word each, so no fraction reads as a count.
+FRACTIONS = (("a tenth", 10), ("a fifth", 20), ("a quarter", 25), ("a third", 33), ("half", 50))
+FRACTION_NEAR = 4
+
+
+def share_words(lo: float, hi: float) -> str | None:
+    """"about a quarter" for a share between lo% and hi% whose middle is near a quarter; else None."""
+    mid = (lo + hi) / 2
+    word, at = min(FRACTIONS, key=lambda wa: abs(wa[1] - mid))
+    return f"about {word}" if abs(at - mid) <= FRACTION_NEAR else None
+
+
 def _third(x: float, team: str) -> tuple[str, bool]:
     """The third the ball is in along the direction `team` attacks, and whether it is near a line."""
     depth = x if team == "home" else PITCH_X - x  # home attacks toward x = PITCH_X (Fixture)
@@ -235,4 +248,4 @@ def territory(rows: Sequence[Mapping], minute_from: int, minute_to: int) -> dict
     return out
 
 
-__all__ = ["THIRDS", "possession", "possession_rows", "territory", "territory_rows"]
+__all__ = ["THIRDS", "share_words", "possession", "possession_rows", "territory", "territory_rows"]

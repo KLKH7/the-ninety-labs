@@ -367,14 +367,17 @@ class MatchInsights:
         arbitrary stretch is not used: it is measured only from kick-off and per half (I17b)."""
         got = self._window_summary(ball_share.territory, "territory", minute_from, minute_to, None)
         terr = {r["team"]: r for r in got["summary"]}
+        # Too little footage of the ball says nothing of who is on top: the same floor as possession
+        # (ball_share.MIN_POSSESSION_S, seconds the ball was seen), else not known yet.
+        sure = len(terr) == 2 and min(r["seconds"] for r in terr.values()) >= ball_share.MIN_POSSESSION_S
         lead = None
-        if len(terr) == 2:
+        if sure:
             h, a = terr["home"], terr["away"]
             lead = "home" if h["lo"] > a["hi"] else "away" if a["lo"] > h["hi"] else None
         clubs = self.fixture.clubs
         row = {"id": f"on_top:m{minute_from}-{minute_to}", "kind": "on_top", "metric": "on_top",
                "team": lead, "club": clubs.get(lead), "clubs": clubs, "minute_from": minute_from,
-               "minute_to": minute_to, "confident": len(terr) == 2,
+               "minute_to": minute_to, "confident": sure,
                "evidence": [r["id"] for r in terr.values()]}
         return {"facts": [], "summary": [row, *got["summary"]]}
 

@@ -218,7 +218,7 @@ def test_on_top_since_the_half_hour_is_lisbon_with_both_clubs(mi):
     a = ask(mi, "Who's been on top since the half hour?", 2050.0).answer
     assert a.headline == "Lisbon", a.text
     assert a.text.startswith("Lisbon Esportes have been on top from minute 31 to minute 34"), a.text
-    assert "London Athletic's" in a.text  # a comparison names both clubs
+    assert "London Athletic have had the ball in their attacking third" in a.text  # both clubs
 
 
 def test_how_many_passes_is_answered_with_passes_never_shots(mi):

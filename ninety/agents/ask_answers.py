@@ -387,22 +387,22 @@ def possession(ctx: Ctx) -> Reply:
         r.notes.append(note)
     if lead is None:
         r.say(
-            f"It's even: {c1} and {c2} have had {v1}% of the ball each {w.said}, by time on the ball {SEEN}.",
+            f"It's even: {c1} and {c2} have had {v1}% of the ball each {w.said}, by time on the ball {SEEN}, "
+            f"give or take {ERROR_POINTS} points.",
             f,
         )
     elif lead == first:
         r.say(
             f"{c1} have had more of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-            f"ball {SEEN}.",
+            f"ball {SEEN}, give or take {ERROR_POINTS} points.",
             f,
         )
     else:
         r.say(
             f"{c1} have had less of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-            f"ball {SEEN}.",
+            f"ball {SEEN}, give or take {ERROR_POINTS} points.",
             f,
         )
-    r.say(f"That's give or take {ERROR_POINTS} points.", f)
     r.head = f"{_short(ctx, lead or first)} {got[lead or first]['value']}%"
     return r
 
@@ -413,7 +413,25 @@ def _share(f: dict) -> str:
     return f"{f['lo']}%" if f["lo"] == f["hi"] else f"at least {f['lo']}%"
 
 
+def _territory_lines(ctx: Ctx, terr: dict, first: str) -> list[tuple[str, dict]]:
+    """Each club's share of the footage with the ball in its attacking third, as code_texts says it
+    (its range and the plain fraction it makes, checked against the bounds), `first` club first."""
+    from ninety.agents.companion_match import code_texts
+
+    out = []
+    for team in (first, ctx.other(first)):
+        f = {**terr[team], "clubs": ctx.clubs}
+        text = next(iter(code_texts(f)), None)
+        if text:
+            out.append((text, f))
+    return out
+
+
 def on_top(ctx: Ctx) -> Reply:
+    """Who has been on top over the stretch: the verdict (a club leads only when its least share of the
+    ball in its attacking third beats the other's most), then both clubs' shares."""
+    from ninety.agents.companion_match import ON_TOP_LEVEL, ON_TOP_UNKNOWN
+
     r, w = Reply(), ctx.read.window
     if w.empty:
         r.notes.append(w.empty)
@@ -425,55 +443,38 @@ def on_top(ctx: Ctx) -> Reply:
     got = ctx.mi.on_top(w.lo, w.hi)["summary"]
     top, terr = got[0], {f["team"]: f for f in got[1:]}
     if len(terr) < 2 or not top.get("confident"):
-        r.status = "unanswerable"
-        r.say(f"It's too early to say who has been on top {w.said}: the ball hasn't been seen enough yet.")
+        r.status, r.head, r.notes = "unanswerable", "Not known yet", []
+        r.say(ON_TOP_UNKNOWN)
         return r
     lead = top.get("team")
-    first, second = _order(ctx, lead)
-    t1, t2 = terr[first], terr[second]
+    first, _ = _order(ctx, lead)
     f = ctx.fact(
-        f"on_top:{lead or 'none'}",
-        "ask_on_top_compare",
-        t1["lo"],
-        "%",
-        lead,
-        also=[(t1["hi"], "%"), (t2["lo"], "%"), (t2["hi"], "%")],
-        sources=[top, t1, t2],
-        w=w,
-    )
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    where = (
-        f"the ball was in {possessive(c1)} attacking third {_share(t1)} of the time {SEEN}, against "
-        f"{_share(t2)} in {possessive(c2)}"
+        f"on_top:{lead or 'none'}", "ask_on_top", None, None, lead, sources=[top, *terr.values()], w=w
     )
     if lead is None:
-        r.say(f"It's been even {w.said}, with neither side on top: {where}.", f)
-        r.head = "Even"
-    elif lead == first:
-        r.say(f"{c1} have been on top {w.said}: {where}.", f)
-        r.head = _short(ctx, lead)
+        r.say(ON_TOP_LEVEL.format(span=w.said), f)
+        r.head = "Too close to call"
     else:
-        r.say(f"{c2} have been on top {w.said}: {where}.", f)
+        r.say(f"{ctx.clubs[lead]} have been on top {w.said}.", f)
         r.head = _short(ctx, lead)
+    for text, t in _territory_lines(ctx, terr, first):
+        r.say(text, t)
     return r
 
 
 def territory(ctx: Ctx) -> Reply:
+    """Where the ball has been: both clubs' shares first, then what they add up to."""
     r = on_top(ctx)
     if r.status != "verified":
         return r
-    text, cited = r.lines[-1]
-    f = cited[0]
-    # Where the ball has been, said as where it was, then who that favours.
-    lead = f["team"]
-    verdict = text.split(":", 1)[1].strip()
-    verdict = verdict[0].upper() + verdict[1:]
+    verdict, rest = r.lines[0], r.lines[1:]
+    lead = verdict[1][0].get("team") if verdict[1] else None
     tail = (
-        f" so {ctx.clubs[lead]} have had the better of the territory."
+        f"So {ctx.clubs[lead]} have had the better of the territory."
         if lead
-        else " so neither side has had clearly more of the territory."
+        else "So neither side has had clearly more of the territory."
     )
-    r.lines[-1] = (verdict[:-1] + "," + tail, cited)
+    r.lines = [*rest, (tail, verdict[1])]
     return r
 
 

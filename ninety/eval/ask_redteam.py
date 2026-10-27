@@ -38,7 +38,8 @@ EVAL_TIMEOUT_S = 90.0  # a throttled call waits its turn here; the phone's own t
 EXPECTS = ("chat", "offtopic", "inject", "answer", "refuse", "either")
 LEAK = re.compile(r"\b[ha]-t\d+\b|\bt\d{3,}\b|\bunsure\b|confiden|\btrack id|\bNone\b|[{}]|\bhome\b|\baway\b",
                   re.I)
-SCORE_PAIR = re.compile(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b")
+# A scoreline, never a percentage range ("(10–14%)" is a share's bounds, not a score).
+SCORE_PAIR = re.compile(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b(?!\s*%)")
 SAID_MINUTE = re.compile(r"\bminutes? (\d{1,3})\b")
 SECOND_HALF = re.compile(r"\b(?:second half|since the break|after the break|since half[- ]time"
                          r"|after half[- ]time)\b", re.I)

@@ -77,6 +77,9 @@ def test_the_checks_catch_what_they_are_for():
     assert "stat_for_chat" in rt.check(q, 30, rec("There were 5 shots."), insights)
     assert "leak" in rt.check(q, 30, rec("Track h-t12 passed.", ()), insights)
     assert "score_contradiction" in rt.check({**q, "expect": "answer"}, 30, rec("It is 2-0."), insights)
+    # A share's range is not a scoreline (#424 says territory as "(10–14%)").
+    share = rec("For 10–14% of it.")
+    assert "score_contradiction" not in rt.check({**q, "expect": "answer"}, 30, share, insights)
     assert "window_future" in rt.check({**q, "expect": "answer"}, 30, rec("x y z", t_to=3000.0), insights)
     assert "future_minute" in rt.check({**q, "expect": "answer"}, 30, rec("In minute 80, a pass."), insights)
     assert "wrong_club" in rt.check({**q, "expect": "answer", "club": "S"}, 30,
