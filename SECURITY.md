@@ -36,6 +36,11 @@ Please do not open a public issue. Use GitHub's
   script anywhere, no framing). The phone's pages alone add `style-src 'self' 'unsafe-inline'`,
   because its Ionic components write their own `<style>` elements; it never writes viewer text as
   markup (`ninety/api/app.py`, tested in `tests/test_api_site.py`).
+- **Known limitation: the phone's position feeds are per clip.** `/api/minimap`, `/api/card` and
+  `/api/flow` serve a clip's tracked positions without a room, so they are not clamped to the big
+  screen's playhead, and a modified client could read later positions (spoilers, not secrets: the
+  match is synthetic and public). The Ask is clamped: it answers no later than the room's playhead
+  plus 2 s (`ninety/api/companion.py`, GROUNDING I27).
 
 ### The agents (prompt injection)
 - **Agents read typed facts, not free text.** Events, stats and viewer preferences reach a model
