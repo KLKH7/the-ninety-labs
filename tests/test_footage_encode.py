@@ -64,7 +64,8 @@ def bundle(request, tmp_path_factory):
 def test_the_manifest_lists_the_mp4_the_hls_ladder_and_the_poster(bundle):
     out, f, with_audio = bundle
     assert f == {"kind": "video", "src": "video.mp4", "mp4": "video.mp4", "hls": "hls/master.m3u8",
-                 "poster": "poster.jpg", "frames": N, "fps": FPS, "duration_s": N / FPS, "segment_s": 4,
+                 "poster": "poster.jpg", "frames": N, "fps": FPS, "timescale": 1.0, "duration_s": N / FPS,
+                 "segment_s": 4,
                  "audio": "muxed" if with_audio else None,
                  "renditions": [
                      {"height": 720, "width": 1280, "bitrate": 3_000_000, "playlist": "hls/720p/index.m3u8"},

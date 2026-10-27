@@ -696,7 +696,7 @@ def write_footage(clip: Clip, out: Path, encode: bool, audio: Path | None = None
     if encode and footage.can_encode():
         params = clip.meta.get("params", {})
         return footage.write(images, fps, out, audio, height=int(params.get("height", 720)),
-                             width=params.get("width"))
+                             width=params.get("width"), timescale=clip.meta.get("timescale", 1.0))
     if encode:
         print(f"no {footage.ENCODER} in ffmpeg: shipping the JPEG frames (ninety/footage.py)")
     frames = out / "frames"
@@ -715,6 +715,9 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 async def run(args: argparse.Namespace) -> dict:
     clip = load_clip(args.clip)
+    # Footage played faster as its 1x (Kian, Oct 26: 1.25): only video is; JPEG frames play as made.
+    # Every Timeline.of_clip(clip.meta) then maps video time through it (ninety/match/timeline.py).
+    clip.meta["timescale"] = args.timescale if not args.frames and footage.can_encode() else 1.0
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
 
@@ -793,7 +796,8 @@ async def run(args: argparse.Namespace) -> dict:
             upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
     track, refused = describe.describe(events, spoken_cues, voice or describe.estimate, upgrades,
-                                       clubs=clubs_of(clip.meta), names=names, scores=scores)
+                                       clubs=clubs_of(clip.meta), names=names, scores=scores,
+                                       timescale=clip.meta["timescale"])
     if voice is not None:
         voice.save(track, out)
     # Every text the track writes, as a screen may show it: the checked form names track ids, which never
@@ -1026,6 +1030,9 @@ def parser() -> argparse.ArgumentParser:
                     help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
                          "either, the bar stays empty: it never restates one event")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
+    ap.add_argument("--timescale", type=float, default=1.0,
+                    help="match seconds a video second: the video plays this much faster as its 1x, "
+                         "every image kept (ninety/footage.py); the bundle's times follow")
     ap.add_argument("--footage-audio", type=Path, default=None,
                     help="a sound track for the video (e.g. the render's crowd bed), muxed in as AAC")
     return ap

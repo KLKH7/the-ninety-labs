@@ -253,7 +253,8 @@ def schedule(found: list[Call], clubs: dict[str, str] | None = None,
                 end = _up(start + seconds)
                 event = None if call.kind in ("insight", "spell") else call.key  # a spell cites many
                 t = _up(match(start))
-                line = Line(f"cm-{call.key}", t, _up(t + seconds), text, event, call.kind,
+                k = timeline.timescale if timeline else 1.0  # match seconds a heard second
+                line = Line(f"cm-{call.key}", t, _up(t + seconds * k), text, event, call.kind,
                             PRIORITY[call.kind], n > 0, call.t, call.evidence, start, end)
                 break
         if line is None:
