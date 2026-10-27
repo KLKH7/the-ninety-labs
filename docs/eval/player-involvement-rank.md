@@ -20,8 +20,9 @@ barred). `rank:involvement_order` is on.
 
 ## What a fan is told
 
-`player_rank(club, "involvement", minute)`: "Of the moves the video picked up, X has been most
-involved for <club>, then Y and Z (names: Player ID feed)." No count is given, because the count
+`player_rank(club, "involvement", minute)`: "Most involved for <club> in the moves the video picked
+up, in order: X, Y, Z (names: Player ID feed)." There are always three names. It is never "the most
+involved player", since the leader was wrong in 1 of 4 cases, and never "best". No count is given, because the count
 missed its bar on 8324 (player-stats.md). This needs a club. Across both clubs, and for "best
 player", the answer stays withheld.
 

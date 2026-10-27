@@ -331,8 +331,9 @@ def player_rank(match: str, club: str | None, metric: str, minute: float) -> dic
     involvements, completed passes, shots and goals, never a model's view), involvement, passes,
     passes_completed, shots, goals, fastest or distance. Fastest and distance rank only players
     tracked at least half the footage shown. For one club, involvement may come back `order_only`: its
-    top three in order with no count, said "of the moves the video picked up"; never state a number
-    for it. A ranking not measured well enough has `withheld` set and no facts: say it is not available."""
+    top three in order with no count: say "most involved in the moves the video picked up, in
+    order:" and all three names; never a number, never one "most involved player", never "best".
+    A ranking not measured well enough has `withheld` set and no facts: say it is not available."""
     return _insight(match, "player_rank", club, metric, minute)
 
 

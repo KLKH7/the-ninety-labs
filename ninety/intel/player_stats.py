@@ -354,7 +354,8 @@ def rank(rows: Sequence[Mapping], metric: str, cal: Mapping | None = None) -> di
     return out
 
 
-ORDER_WORDING = "of the moves the video picked up"  # what the order is of, said with it
+ORDER_WORDING = "most involved in the moves the video picked up, in order"  # said with it: three names,
+# never "the most involved player" (the leader was wrong in 1 of 4 held-out cases) and never "best"
 
 
 def order(raw_rows: Sequence[Mapping], cal: Mapping | None = None) -> dict:

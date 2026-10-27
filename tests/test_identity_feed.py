@@ -582,6 +582,7 @@ ALLOWED = {
     "ninety/e2e.py",  # copies the line-up rows and the disclosure into match.json
     "ninety/intel/player_stats.py",  # per-player stats keyed by its names (Kian's decision, Oct 26)
     "ninety/eval/player_stats_eval.py",  # grades those stats against the truth
+    "ninety/eval/player_involvement_rank_eval.py",  # grades the involvement order on a held-out match
 }
 TOKENS = re.compile(r"\b(identity_feed|identity_tracks|identity_broadcast|identity_source|lineup_tactical"
                     r"|identity_mod|load_for)\b"
