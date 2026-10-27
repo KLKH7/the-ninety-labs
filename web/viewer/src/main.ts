@@ -10,7 +10,7 @@ import { Narrator } from "./narrator";
 import { BAKED, bugAt, codesOf, setupScorebug } from "./scorebug";
 import { rowsAt, scoutAt, setupStats, statsGraphicAt } from "./stats";
 import { attachPlayer } from "./player";
-import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
+import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline, timescaleOf } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
 import { airSpeed, airSpeeds, claimSpeeds, commentarySpeeds, spokenSpeeds } from "./speed";
 
@@ -47,7 +47,9 @@ const store = {
   },
 };
 
-/** The footage as one clock: a <video>, or JPEG frames drawn to a canvas at the clip's fps. */
+/** The footage as one clock: a <video>, or JPEG frames drawn to a canvas at the clip's fps (times its
+ * baked speed, manifest footage.timescale). */
+const imageRate = (b: Bundle) => b.manifest.fps * timescaleOf(b.manifest);
 interface Footage {
   time(): number; // seconds since the clip's first frame
   duration: number;
@@ -66,7 +68,7 @@ function videoFootage(b: Bundle, startAt = 0): Footage {
   const player = attachPlayer(video, b.base, b.manifest.footage, $("spinner"), startAt);
   return {
     time: () => video.currentTime,
-    duration: b.manifest.footage.frames / b.manifest.fps,
+    duration: b.manifest.footage.frames / imageRate(b),
     paused: () => video.paused,
     play: () => player.want(true),
     pause: () => player.want(false),
@@ -75,7 +77,8 @@ function videoFootage(b: Bundle, startAt = 0): Footage {
 }
 
 function frameFootage(b: Bundle): Footage {
-  const { fps, footage, width, height } = b.manifest;
+  const { footage, width, height } = b.manifest;
+  const fps = imageRate(b);
   video.hidden = true;
   framesCanvas.hidden = false;
   framesCanvas.width = width;
@@ -248,8 +251,8 @@ async function start() {
   // stinger that joins the broadcast's segments, mid-wipe. It clears within half of the renderer's
   // STINGER_S (ninety/render/edit.py, edge_stingers), so the player starts just after it, through
   // the source it attached: never a second source set over it (which dropped HLS for the MP4).
-  const footage = m.footage.kind === "video" ? videoFootage(b, big ? POSTER_S : 0) : frameFootage(b);
-  const { matchTime, videoTime, segmentOf, timescale } = timeline(m);
+  const footage = m.footage.kind === "video" ? videoFootage(b, big ? POSTER_S / timescaleOf(m) : 0) : frameFootage(b);
+  const { matchTime, videoTime, segmentOf, timescale, rate } = timeline(m);
   const teams = teamNames(m.teams);
   // The graphics name players by id (h4, a-t5); on screen they are the club's (src/teams.ts). Only
   // the names change, never a number, so what the fact-checking agent passed is what airs.
@@ -265,7 +268,7 @@ async function start() {
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
   }
   scrub.max = String(footage.duration);
-  scrub.step = String(1 / m.fps);
+  scrub.step = String(1 / rate);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
 
   let lastAired = "";
@@ -389,7 +392,7 @@ async function start() {
     ? setupHud({
         footage,
         video: m.footage.kind === "video" ? video : null,
-        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / m.fps, goal: c.kind === "goal" })),
+        chapters: (b.match?.chapters ?? []).map((c) => ({ at: c.index / rate, goal: c.kind === "goal" })),
         play: playButton,
         scrub,
         clock: clockOut,
@@ -406,7 +409,7 @@ async function start() {
     const target = e.target as HTMLElement;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const inControl = target.tagName === "BUTTON" || target.tagName === "INPUT";
-    const step = 1 / m.fps;
+    const step = 1 / rate;
     switch (e.key) {
       case " ":
       case "k":
@@ -426,7 +429,7 @@ async function start() {
       case ",":
       case ".":
         footage.pause(); // to the middle of the next or previous frame
-        footage.seek((Math.floor(footage.time() * m.fps) + (e.key === "." ? 1 : -1) + 0.5) * step);
+        footage.seek((Math.floor(footage.time() * rate) + (e.key === "." ? 1 : -1) + 0.5) * step);
         break;
       case "f":
         if (!hud) return;
@@ -504,7 +507,7 @@ async function start() {
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, lowerThird ? aired.filter((c) => c.slot !== "lower_third") : aired, { t, reduceMotion: reduceMotionBox.checked, onAir: aired });
     lowerThird?.tick(aired, t, reduceMotionBox.checked);
-    const ended = v >= footage.duration - 1 / m.fps;
+    const ended = v >= footage.duration - 1 / rate;
     const shownScore = scorebug?.tick(t, ended, reduceMotionBox.checked) ?? null;
     statsGfx?.tick(v, t, videoTime, footageStart, ended, shownScore, !$("lower-third").hidden);
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);

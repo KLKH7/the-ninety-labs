@@ -5,6 +5,7 @@
 
 import { type Bundle, type Cue, type Manifest, clock } from "./bundle";
 import { crestOf } from "./crests";
+import { timescaleOf } from "./radar";
 import type { TeamNames } from "./teams";
 
 export type Kind = "goal" | "save" | "shot" | "set_piece" | "build_up";
@@ -152,7 +153,8 @@ export function setupMatch(b: Bundle, seek: (videoT: number) => void, teams: Tea
     statsPanel.hidden = true;
     return null;
   }
-  const fps = b.manifest.fps;
+  // Chapters count images; the video shows fps * timescale of them a second (the baked speed).
+  const fps = b.manifest.fps * timescaleOf(b.manifest);
   const total = b.manifest.footage.frames;
   root.hidden = false;
   statsPanel.hidden = false;

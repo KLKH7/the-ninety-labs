@@ -1386,8 +1386,9 @@ def test_at_the_footage_s_end_the_full_time_panel_shows_the_match_s_stats_and_th
 
 
 def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site):  # noqa: F811
-    """manifest footage.timescale = 1.25 (match s per video s): each image moves the match on 1.25
-    match frames, so the clock, the cues and the phone (one timeline, src/radar.ts) run faster."""
+    """manifest footage.timescale = 1.25 (match s per video s, #413): image k still shows one match
+    frame, and the video shows 25 * 1.25 images a second, so the clock, the cues, the chapters and
+    the phone (one timeline, src/radar.ts) run faster."""
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
 
     def manifest(route):
@@ -1398,9 +1399,18 @@ def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site): 
     page = ctx.new_page()
     page.goto(site + "?bundle=match/")
     page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
-    for image, (index, frame) in ((10, (0, 1500)), (30, (0, 1500)), (50, (40, 1550))):
-        seek(page, image)
-        want = (frame + (image + 0.5 - index) * 1.25) / FPS
+    rate = FPS * 1.25
+    for image, (index, frame) in ((10, (0, 1500)), (30, (0, 1500)), (50, (40, 1550)), (74, (40, 1550))):
+        v = (image + 0.5) / rate  # the middle of image `image` in the faster video
+        page.evaluate(f"""(() => {{ const s = document.querySelector('#scrub');
+            s.step = 'any'; s.value = {v}; s.dispatchEvent(new Event('input')); }})()""")
+        page.wait_for_function(f"Math.abs(document.querySelector('#scrub').value - {v}) < 0.001")
+        page.wait_for_timeout(150)
+        want = (frame + image + 0.5 - index) / FPS
         got = float(page.get_attribute("#overlay", "data-t"))
         assert abs(got - want) < 0.011, (image, got, want)
+    # The second chapter starts at image 40: in the faster video, at 40 / rate, not 40 / 25.
+    assert page.evaluate(f"window.ninetyMatch.chapterAt({40.5 / rate}).n") == 2
+    assert page.evaluate(f"window.ninetyMatch.chapterAt({39.5 / rate}).n") == 1
+    assert float(page.get_attribute("#scrub", "max")) == pytest.approx(75 / rate, abs=0.01)
     ctx.close()
