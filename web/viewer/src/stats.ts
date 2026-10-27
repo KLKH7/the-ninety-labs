@@ -1,12 +1,13 @@
-// The big screen's half-time and full-time stats (Kian, Oct 26): the score large with the crests, then a
-// stack of white pills, one per measured row (home | the split bar and label | away).
+// The big screen's match stats (Kian, Oct 26), as leagues put them up: a card under the scorebug every
+// ten minutes of match time (two rows, numbers either side over a thin two-colour bar), and at
+// half-time and full time the score large with the crests over a stack of white rows.
 // Rows are only what the bundle measured: the team stats counted from detected events (match.json
 // `stats`) and the Insight Scout's confident rows (`insight_stats`, the phone's gate: an unsure row
 // is not shown). A count that contradicts the scorebug (fewer attempts than goals: every goal is an
 // attempt) is not shown either. The score is the scorebug's read (src/scorebug.ts), never counted.
 
 import { crestOf } from "./crests";
-import { splitBar } from "./lowerthird";
+import { cardHead, splitBar, statRow } from "./lowerthird";
 import type { MatchData } from "./match";
 import type { Side, TeamNames } from "./teams";
 import { fullName } from "./teams";
@@ -20,8 +21,8 @@ type Stats = MatchData & { insight_stats?: { rows?: ScoutRow[] } };
 /** A share of passes means something only over this many (web/phone MIN_SHARE_PASSES, ninety/agents
  * companion_match: "a share only over 15 passes"). */
 const MIN_SHARE_PASSES = 15;
-/** How long the half-time panel stays up (Kian: ~8 s); full time holds on the last frame. */
-export const PANEL_S = 8;
+/** The card's cadence and length, and the half-time panel's (Kian: ~10 min, ~8 s); full time holds. */
+export const CARD_EVERY_S = 600, CARD_S = 8, PANEL_S = 8;
 const HALF_S = 45 * 60, MATCH_S = 90 * 60, FT_LEAD_S = 1.2;
 
 /** A Scout row's confident values at match time t: its latest bin at or before t. */
@@ -63,17 +64,27 @@ export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
   return out;
 }
 
-/** Whether the panel is up at video time v (match time t): at half-time, the first PANEL_S of footage
- * from the clock's 45:00; at full time, from the engine's 90:00 (Law 7) or the footage's end, held. */
+/** Which stats graphic is up at video time v (match time t): the panel at half-time (the first
+ * PANEL_S of footage from the clock's 45:00) or full time (from the engine's 90:00, Law 7, or the
+ * footage's end, held), else the card for CARD_S from each tenth minute the footage reaches; or none. */
 export function statsGraphicAt(v: number, t: number, videoTime: (t: number) => number, start: number, ended: boolean):
-  { kind: "panel"; period: "HT" | "FT" } | null {
+  { kind: "panel"; period: "HT" | "FT" } | { kind: "card"; minute: number } | null {
   if (ended || t >= MATCH_S - FT_LEAD_S) return { kind: "panel", period: "FT" };
   if (start < HALF_S) {
     const ht = videoTime(HALF_S);
     if (v >= ht && v < ht + PANEL_S) return { kind: "panel", period: "HT" };
   }
+  for (let b = CARD_EVERY_S; b < MATCH_S; b += CARD_EVERY_S) {
+    if (b <= start || b === HALF_S) continue;
+    const at = videoTime(b);
+    if (v >= at && v < at + CARD_S) return { kind: "card", minute: b / 60 };
+  }
   return null;
 }
+
+/** The card's two rows: possession and attempts when measured, as leagues show them, else passes
+ * and pass accuracy. */
+const CARD_ROWS = ["possession", "shots", "passes", "accuracy"];
 
 function el(tag: string, cls: string, ...kids: (Node | string)[]): HTMLElement {
   const e = document.createElement(tag);
@@ -94,18 +105,27 @@ function statPill(r: Row): HTMLElement {
     el("span", "stat-mid", el("span", "stat-label", r.label), splitBar(r.home, r.away)), el("span", "stat-a", `${r.away}${r.unit}`));
 }
 
-/** The half-time and full-time panel, built when what it shows changes. */
-export function setupStats(panel: HTMLElement, m: Stats | null, teams: TeamNames) {
+/** The card under the bug and the half-time and full-time panel, built when what they show changes.
+ * `busy`: another graphic is under the bug (an insight or a goal), so the card waits its turn. */
+export function setupStats(card: HTMLElement, panel: HTMLElement, m: Stats | null, teams: TeamNames, codes: Record<Side, string>) {
   let key = "";
   return {
-    tick(v: number, t: number, videoTime: (t: number) => number, start: number, ended: boolean, score: Pair | null) {
-      const g = m ? statsGraphicAt(v, t, videoTime, start, ended) : null;
-      const rows = g ? rowsAt(m, t, score) : [];
-      const k = g ? `${g.period}|${score?.home}-${score?.away}|${rows.map((r) => `${r.key}${r.home}${r.away}`).join()}` : "";
+    tick(v: number, t: number, videoTime: (t: number) => number, start: number, ended: boolean, score: Pair | null, busy: boolean) {
+      const g0 = m ? statsGraphicAt(v, t, videoTime, start, ended) : null;
+      const g = g0?.kind === "card" && busy ? null : g0;
+      const rows = g ? rowsAt(m, g.kind === "card" ? g.minute * 60 : t, score) : [];
+      const pick = g?.kind === "card" ? rows.filter((r) => CARD_ROWS.includes(r.key)).slice(0, 2) : rows;
+      const k = g ? `${g.kind}|${"period" in g ? g.period : g.minute}|${score?.home}-${score?.away}|${pick.map((r) => r.key + r.home + r.away).join()}` : "";
       if (k === key) return;
       key = k;
-      panel.hidden = !g;
-      if (!g) return;
+      card.hidden = !(g?.kind === "card" && pick.length);
+      panel.hidden = g?.kind !== "panel";
+      if (g?.kind === "card" && pick.length) {
+        card.replaceChildren(el("div", "card", cardHead("MATCH STATS", `${g.minute}′`, null, { teams, codes }),
+          el("p", "card-row card-teams", el("span", "", codes.home), el("span", "", codes.away)),
+          ...pick.map((r) => statRow(r.label, r.home, r.away, r.unit))));
+      }
+      if (g?.kind !== "panel") return;
       panel.dataset.period = g.period;
       panel.replaceChildren(el("div", "sp-stack",
         el("p", "sp-period", g.period === "HT" ? "HALF-TIME" : "FULL-TIME"),

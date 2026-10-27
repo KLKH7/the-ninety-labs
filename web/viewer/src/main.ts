@@ -7,8 +7,8 @@ import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { describe as describeLowerThird, setupLowerThird } from "./lowerthird";
 import { Narrator } from "./narrator";
-import { BAKED, bugAt, setupScorebug } from "./scorebug";
-import { rowsAt, setupStats, statsGraphicAt } from "./stats";
+import { BAKED, bugAt, codesOf, setupScorebug } from "./scorebug";
+import { rowsAt, scoutAt, setupStats, statsGraphicAt } from "./stats";
 import { attachPlayer } from "./player";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
@@ -480,15 +480,16 @@ async function start() {
   const feed = (b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name);
   const feedNames = [...new Set(feed.map((p) => p.name!))];
   const nameSides = Object.fromEntries(feed.map((p) => [p.name!, p.id.startsWith("h") ? "home" : "away"] as const));
+  const codes = codesOf(teams, m.teams);
   const lowerThird = big
     ? setupLowerThird($("lower-third"), { teams, names: feedNames, goals: b.match?.goals ?? [], scorebug: b.scorebug,
-      nameSides })
+      nameSides, codes, stat: (key: string, at: number) => scoutAt(b.match, key, at) })
     : null;
   // The second half's kick-off, when vision detected one (a chapter is named from it): half-time's end.
   const kick = (b.match?.chapters ?? []).find((c) => c.label.startsWith("Kick-off") && (c.event_t ?? c.t) >= 45 * 60);
   const secondHalf = kick ? kick.event_t ?? kick.t : null;
   const scorebug = big ? setupScorebug($("scorebug"), $("clock-tab"), teams, b.scorebug, secondHalf, m.teams) : null;
-  const statsGfx = big && b.match ? setupStats($("period-panel"), b.match, teams) : null;
+  const statsGfx = big && b.match ? setupStats($("stats-card"), $("period-panel"), b.match, teams, codes) : null;
   const footageStart = matchTime(0);
   (window as unknown as { ninetyScorebug: unknown }).ninetyScorebug = { bugAt, BAKED, rowsAt, statsGraphicAt }; // tests // read by tests/test_match_mode.py
   (window as unknown as { ninetyLowerThird: unknown }).ninetyLowerThird = { describe: describeLowerThird }; // read by tests/test_match_mode.py
@@ -504,7 +505,7 @@ async function start() {
     lowerThird?.tick(aired, t, reduceMotionBox.checked);
     const ended = v >= footage.duration - 1 / m.fps;
     const shownScore = scorebug?.tick(t, ended, reduceMotionBox.checked) ?? null;
-    statsGfx?.tick(v, t, videoTime, footageStart, ended, shownScore);
+    statsGfx?.tick(v, t, videoTime, footageStart, ended, shownScore, !$("lower-third").hidden);
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
     phone.tick();
     radar.tick(v);

@@ -869,36 +869,39 @@ def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10
     seek(page, image)  # image 10: 60.4 s
     page.wait_for_selector("#lower-third[data-on='1']")
     page.wait_for_function(
-        "!document.querySelector('#lower-third .pill').getAnimations().length"
+        "!document.querySelector('#lower-third .card').getAnimations().length"
     )  # slid in
     return page, errors
 
 
 @pytest.mark.parametrize("dock", ["open", "closed"])
-def test_the_insight_is_one_pill_under_the_scorebug_in_its_club_s_colour(browser, site, dock):  # noqa: F811
-    """No INSIGHT box and no panel over the play: one rounded pill under the bug's clock tab, a small
-    caps label (the fact's kind and minute) over one short bold line of the sentence's words, the ID
-    feed's name in bold, the club's crest, a check glyph; in the club's colour when it is about one
-    club; docked or not."""
+def test_the_insight_is_a_flat_stat_card_under_the_scorebug(browser, site, dock):  # noqa: F811
+    """As a league puts up stats mid-game, no pill and no panel over the play: one flat card under the
+    bug's clock tab, as wide as the bug, a dark header strip (the fact's kind, its club's code and
+    crest, the minute, the club's colour down its edge) over a white row with one short line of the
+    sentence's words, the ID feed's name in bold; docked or not."""
     page, errors = lower_third_page(browser, site, dock)
     assert page.get_attribute("body", "data-dock") == dock
-    assert page.inner_text("#lower-third .pill-label") == "LINE BREAK · 2′"
+    assert page.inner_text("#lower-third .card-kind") == "LINE BREAK"
+    assert page.inner_text("#lower-third .card-club") == "LON"  # Kai Laiddon's club, by his track
+    assert page.inner_text("#lower-third .card-min") == "2′"
     assert "INSIGHT" not in page.inner_text("#lower-third")
-    assert page.inner_text("#lower-third .pill-line") == "Kai Laiddon: pass took 4 players out of the game"
-    assert page.inner_text("#lower-third .pill-line b") == "Kai Laiddon"
-    assert page.get_attribute("#lower-third .lt-check", "aria-label") == "Fact-checked"
-    assert page.locator("#lower-third .pill .lt-crest svg").count() == 1
-    assert page.get_attribute("#lower-third", "data-side") == "home"  # Kai Laiddon's club, by his track
-    bg = page.evaluate("getComputedStyle(document.querySelector('#lower-third .pill')).backgroundColor")
-    assert bg == "rgb(27, 47, 91)"  # London's navy, #1B2F5B
-    assert page.locator("#lower-third .pill").count() == 1  # at most one
+    assert page.inner_text("#lower-third .card-line") == "Kai Laiddon: pass took 4 players out of the game"
+    assert page.inner_text("#lower-third .card-line b") == "Kai Laiddon"
+    assert page.locator("#lower-third .card-head .lt-crest svg").count() == 1
+    assert page.get_attribute("#lower-third", "data-side") == "home"
+    head = "document.querySelector('#lower-third .card-head')"
+    edge = page.evaluate(f"getComputedStyle({head}).borderLeftColor")
+    assert edge == "rgb(58, 95, 176)"  # London's bar colour (--g-home-bar)
+    assert page.locator("#lower-third .card").count() == 1  # at most one
     bug = page.locator("#scorebug").bounding_box()
     clock = page.locator("#clock-tab").bounding_box()
-    pill = page.locator("#lower-third .pill").bounding_box()
+    card = page.locator("#lower-third .card").bounding_box()
     assert clock["y"] >= bug["y"] + bug["height"] - 1.5  # the clock's tab hangs under the bug
-    assert pill["y"] >= clock["y"] + clock["height"] - 0.5  # the pill under that
-    assert abs(pill["x"] - bug["x"]) < 1 and abs(pill["width"] - bug["width"]) < 1  # as wide as the bug
-    assert pill["height"] <= 0.1 * page.locator("#stage").bounding_box()["height"]  # a pill, not a panel
+    assert card["y"] >= clock["y"] + clock["height"] - 0.5  # the card under that
+    assert abs(card["x"] - bug["x"]) < 1 and abs(card["width"] - bug["width"]) < 1  # as wide as the bug
+    assert card["height"] <= 0.12 * page.locator("#stage").bounding_box()["height"]  # a strip, not a panel
+    assert page.is_hidden("#stats-card")  # one graphic under the bug at a time
     assert "insight-lb:v1" in page.get_attribute("#overlay", "data-on-air")  # still said to a screen reader
     assert not errors
     page.context.close()
@@ -1153,11 +1156,11 @@ def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site)
     ctx.close()
 
 
-def test_a_goal_sweeps_the_bug_in_its_club_s_colour_then_one_scorer_pill_then_it_collapses(browser, site):  # noqa: F811
+def test_a_goal_sweeps_the_bug_in_its_club_s_colour_then_one_scorer_card_then_it_collapses(browser, site):  # noqa: F811
     """The scorebug's read change is the goal: the scoring club's colour sweeps the bug with GOAL,
-    then the score the scorebug changed to; one pill under it (the crest, the scorer the feed names,
-    else the club, first word light and the rest bold, the minute in a circle) once the band has
-    swept, gone by GOAL_PILL_OUT_S. A reading under the gate gives no change at all."""
+    then the score the scorebug changed to; one card under it (the crest, the scorer the feed names,
+    else the club, first word light and the rest bold; GOAL and the minute in its header) once the
+    band has swept, gone by GOAL_PILL_OUT_S. A reading under the gate gives no change at all."""
     goal = bar_cue("insight-goal:v2", 59.0, "London Athletic scored in minute 1.", ["v2"], hold=4.2)
     reads = [
         {"type": "score_read", "t": 0.0, "score": {"home": 0, "away": 0}, "confidence": 0.99},
@@ -1172,11 +1175,12 @@ def test_a_goal_sweeps_the_bug_in_its_club_s_colour_then_one_scorer_pill_then_it
     page, errors = lower_third_page(browser, site, "closed", cue=goal, scorebug=reads)  # 60.4 s: 1.3 s in
     assert page.get_attribute("#scorebug", "data-goal") == "home"
     assert page.inner_text("#scorebug .sb-goal") == "GOAL"
-    assert page.inner_text("#lower-third .pill-first") == "London"
-    assert page.inner_text("#lower-third .pill-last") == "ATHLETIC"
-    assert page.inner_text("#lower-third .pill-min") == "1′"
-    assert page.locator("#lower-third .pill-goal .lt-crest svg").count() == 1
-    seek(page, 63)  # 62.94 s: the band and the pill both over
+    assert page.inner_text("#lower-third .card-goal .card-kind") == "GOAL"
+    assert page.inner_text("#lower-third .card-first") == "London"
+    assert page.inner_text("#lower-third .card-last") == "ATHLETIC"
+    assert page.inner_text("#lower-third .card-min") == "1′"
+    assert page.locator("#lower-third .card-goal .lt-crest svg").count() == 1
+    seek(page, 63)  # 62.94 s: the band and the card both over
     assert page.get_attribute("#scorebug", "data-goal") == ""
     digits = page.eval_on_selector_all("#scorebug .sb-now", "els => els.map(e => e.textContent)")
     assert digits == ["1", "0"]
@@ -1345,7 +1349,8 @@ def test_the_stats_graphics_show_only_rows_the_bundle_measured_surely(browser, s
 @pytest.mark.parametrize(
     ("v", "start", "ended", "want"),
     [
-        (600.5, 0, False, None),  # no other stats graphic: only the panel (Kian, Oct 26)
+        (600.5, 0, False, {"kind": "card", "minute": 10}),  # the card every tenth minute, for CARD_S
+        (608.6, 0, False, None),
         (2703.0, 0, False, {"kind": "panel", "period": "HT"}),  # the first PANEL_S (8 s) from 45:00
         (2707.9, 0, False, {"kind": "panel", "period": "HT"}),
         (2708.1, 0, False, None),
@@ -1354,7 +1359,7 @@ def test_the_stats_graphics_show_only_rows_the_bundle_measured_surely(browser, s
         (5399.0, 0, False, {"kind": "panel", "period": "FT"}),  # the engine's 90:00 (Law 7)
     ],
 )
-def test_the_stats_panel_airs_at_half_time_and_full_time_only(
+def test_the_stats_card_airs_every_ten_minutes_and_the_panel_at_half_and_full_time(
     browser, site, v, start, ended, want  # noqa: F811
 ):
     page, errors = open_viewer(browser, site + "?bundle=match/")

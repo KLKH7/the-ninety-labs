@@ -1,8 +1,9 @@
-// The big screen's pill under the scorebug (Kian, Oct 26: sleek, the phone's family): one white
-// rounded pill, in its club's colour when it is about one club. An insight is a small caps label (its
-// kind and minute) over one short bold line; a goal is the scorer's pill (crest, the name the ID feed
-// gives in the sentence, else the club; the minute in a circle) after the bug's GOAL sweep. The short
-// line keeps the checked sentence's own words, in order (only a lead's words are dropped).
+// The big screen's graphic under the scorebug (Kian, Oct 26: like the stats a league puts up mid-game):
+// a flat card attached under the bug, a dark header strip (the fact's kind, its club, the minute) over
+// white rows: the one short line, and, where the Insight Scout has a confident comparison for that
+// kind (overloads, counters, one-twos, regains), its numbers either side over a thin two-colour bar.
+// A goal is the scorer's card after the bug's GOAL sweep. The short line keeps the checked sentence's
+// own words, in order (only a lead's words are dropped).
 
 import type { Cue } from "./bundle";
 import { crestOf } from "./crests";
@@ -38,18 +39,32 @@ export interface ScoreRead {
   confidence?: number | null;
 }
 
+/** A confident stat row's values at match time t (src/stats.ts), or null. */
+export type StatAt = (key: string, t: number) => { home: number; away: number } | null;
+
 export interface Context {
   teams: TeamNames;
   /** Every player name the ID feed gives (match.json `lineup`, source id_feed). */
   names: string[];
   /** Each such name's side, by its track (h-…, a-…): a sentence led by a player is his club's. */
   nameSides?: Record<string, Side>;
+  /** The Insight Scout's confident rows, by key and time; absent, no comparison. */
+  stat?: StatAt;
+  /** The clubs' three-letter codes, as the scorebug shows them. */
+  codes?: Record<Side, string>;
   /** match.json `goals`: each detected goal's side, by its event. */
   goals: { t: number; team: Side | null; event: string }[];
   /** The scorebug's readings that pass the bundle's gate. */
   scorebug: ScoreRead[];
 }
 
+/** The comparison an insight kind has in the Scout's rows (match.json insight_stats keys). */
+const COMPARE: Record<string, { key: string; label: string }> = {
+  ov: { key: "overload_moments", label: "Overloads" },
+  counter: { key: "counters", label: "Counters to a shot" },
+  onetwo: { key: "one_twos", label: "One-twos" },
+  cp: { key: "regains_within_5s", label: "Won back in 5 s" },
+};
 
 export interface Graphic {
   id: string;
@@ -64,6 +79,7 @@ export interface Graphic {
   kind: string; // "Overload"
   minute: number;
   brief: string; // one short line, the sentence's own words in order
+  compare: { key: string; label: string } | null;
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -117,7 +133,7 @@ export function describe(cue: Cue, c: Context): Graphic {
   const { head, sub } = split(text);
   const scorer = goal ? c.names.find((n) => text.includes(`${n} scor`)) ?? null : null;
   return { id: cue.id, goal, label: `${kind} · ${minute}′`, side, head, sub, score, scorer, verified: !!cue.verified,
-    kind, minute, brief: brief(fact, text, head, c.names) };
+    kind, minute, brief: brief(fact, text, head, c.names), compare: fact ? COMPARE[fact] ?? null : null };
 }
 
 /** The sentence as one short line, by the bar's sentence shapes (ninety/agents/companion_match
@@ -146,8 +162,6 @@ function withNames(text: string, names: string[]): Node[] {
   });
 }
 
-const CHECK =
-  '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.25"/><path d="m4.9 8.2 2.1 2.1 4.1-4.4"/></svg>';
 
 function el(tag: string, cls: string, ...kids: (Node | string)[]): HTMLElement {
   const e = document.createElement(tag);
@@ -164,15 +178,6 @@ function crest(side: Side | null, teams: TeamNames): HTMLElement {
   return box;
 }
 
-function check(verified: boolean): HTMLElement {
-  const box = el("span", "lt-check");
-  box.innerHTML = CHECK;
-  box.title = "Fact-checked";
-  box.setAttribute("role", "img");
-  box.setAttribute("aria-label", "Fact-checked");
-  box.hidden = !verified;
-  return box;
-}
 
 /** A split bar in the two clubs' colours: each side's share of the two numbers. */
 export function splitBar(home: number, away: number): HTMLElement {
@@ -186,22 +191,34 @@ export function splitBar(home: number, away: number): HTMLElement {
 /** A name as a broadcast graphic sets it: the first name light, the rest bold in capitals. */
 function nameNodes(name: string): Node[] {
   const [first, ...rest] = name.split(" ");
-  return rest.length ? [el("span", "pill-first", first), el("span", "pill-last", rest.join(" ").toUpperCase())]
-    : [el("span", "pill-last", name.toUpperCase())];
+  return rest.length ? [el("span", "card-first", first), el("span", "card-last", rest.join(" ").toUpperCase())]
+    : [el("span", "card-last", name.toUpperCase())];
 }
 
-/** The pill for one graphic: a goal's (crest, the scorer the ID feed names in the sentence, else the
- * club; the minute in a small circle), or an insight's (a small caps label and one short bold line,
- * tinted in its club's colour when it is about one club). */
-function build(g: Graphic, c: Context): Node[] {
+/** One stat row: home's number, the label, away's number, a thin two-colour bar under them. */
+export function statRow(label: string, home: number, away: number, unit = ""): HTMLElement {
+  return el("div", "card-row card-stat", el("span", "stat-h", `${home}${unit}`), el("span", "stat-label", label),
+    el("span", "stat-a", `${away}${unit}`), splitBar(home, away));
+}
+
+/** The card's dark header strip: what it is (with its club and crest), and when. */
+export function cardHead(kind: string, minute: string, side: Side | null, c: Pick<Context, "teams" | "codes">): HTMLElement {
+  const code = side ? c.codes?.[side] ?? c.teams[side].slice(0, 3).toUpperCase() : "";
+  return el("p", "card-head", crest(side, c.teams), el("span", "card-kind", kind), ...(code ? [el("span", "card-club", code)] : []),
+    el("span", "card-min", minute));
+}
+
+/** The card for one graphic. */
+function build(g: Graphic, c: Context, t: number): Node[] {
+  const head = cardHead(g.goal ? "GOAL" : g.kind.toUpperCase(), `${g.minute}′`, g.side, c);
   if (g.goal) {
     const who = g.scorer ?? (g.side ? fullName(c.teams[g.side]) : g.head);
-    return [el("div", "pill pill-goal", crest(g.side, c.teams), el("p", "pill-name", ...nameNodes(who)),
-      el("span", "pill-min", `${g.minute}′`), check(g.verified))];
+    return [el("div", "card card-goal", head, el("p", "card-row card-name", ...nameNodes(who)))];
   }
-  return [el("div", "pill", crest(g.side, c.teams),
-    el("div", "pill-text", el("p", "pill-label", `${g.kind.toUpperCase()} · ${g.minute}′`), el("p", "pill-line", ...withNames(g.brief, c.names))),
-    check(g.verified))];
+  const card = el("div", "card", head, el("p", "card-row card-line", ...withNames(g.brief, c.names)));
+  const row = g.compare ? c.stat?.(g.compare.key, t) : null;
+  if (row && g.compare) card.append(statRow(g.compare.label, row.home, row.away));
+  return [card];
 }
 
 /** The insight tab on screen: the big screen's cue on air, slid down out of the scorebug and back up
@@ -217,7 +234,7 @@ export function setupLowerThird(root: HTMLElement, c: Context) {
         cue = next;
         if (next) {
           shown = describe(next, c);
-          root.replaceChildren(...build(shown, c));
+          root.replaceChildren(...build(shown, c, next.t_in));
           root.dataset.side = shown.side ?? "";
           root.dataset.goal = shown.goal ? "1" : "0";
           root.dataset.id = next.id;
