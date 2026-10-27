@@ -3,11 +3,14 @@
 Every number is computed here from the insights' facts timed at or before the question (never a
 fact from after it), and each sentence is checked by the insight fact-check against the facts it
 cites. A derived fact (a count, a share, a comparison) carries the ids of the facts it was
-computed from, so the answer's evidence leads back to them. A comparison always states both clubs
-and who leads; a figure about what vision saw says it is "in the footage we've seen" (the clips
-show part of the match). When a row's facts are missing, its honest fallback says so and gives the
-closest measured fact instead; an answer whose lead sentence does not carry the row's metric is not
-shown (the relevance gate).
+computed from, so the answer's evidence leads back to them.
+
+The voice (Kian, Oct 27): lead with the confident true thing the data supports. A count is said as
+the club comparison it is reliable for (vision misses events at both ends alike); one short scope
+phrase ("in the footage so far") and no caveats, since how vision measures is the phone's "How we
+know" tab; never "can't" or "not known" while a related measured fact exists, and only offside,
+fouls and cards are "not tracked", each pivoting at once to something real. An answer whose lead
+sentence does not carry the row's metric is not shown (the relevance gate).
 """
 
 from __future__ import annotations
@@ -18,34 +21,23 @@ from ninety.agents.ask_intents import BY_ID, HALF_MIN, Read, Window, played
 from ninety.agents.contracts import Answer, Question
 from ninety.agents.factcheck import Claim
 
-SEEN = "in the footage we've seen"
+# The one scope phrase an answer carries (Kian, Oct 27): the clips show part of the match, so a figure
+# is of the footage. How vision measures, and how often it misses, is the phone's "How we know" tab.
+SCOPE = "in the footage so far"
+FEED = "Player ID feed"  # a name from the feed is said with its source (AGENTS.md)
 SCORE_POINTER = "The broadcast's scorebug shows the score; vision does not keep one."
-# Fixed text, stating no fact: possession is unknown before a minute of either side on the ball was seen.
-POSSESSION_UNKNOWN = (
-    "Possession can't be split between the clubs for those minutes: it is measured "
-    "from kick-off and from each half's start, once a minute of either side on the ball "
-    "has been seen."
-)
-# What vision's event detection misses, said after a count it gives (fixed words, no number): on the
-# demo match it spots fewer shots and restarts than were played, and its pass count is not exact.
-MISSES = {
-    "shots": "Vision doesn't catch every shot, so the true count may be higher.",
-    "restarts": "Vision doesn't catch every restart, so the true count may be higher.",
-    "passes": "Vision's pass count isn't exact: it misses some passes and counts some that weren't.",
-}
-FEED_NOTE = "The scorer's name comes from the Player ID feed."
 PITCH_X = 105.0  # the pitch's length (ninety/intel/ball_share.PITCH_X); home attacks towards x = 105
 BUILD_UP_S = 60.0  # design, as match_insights.BUILD_UP_S: a goal's build-up is the minute before it
 SHOT_BEFORE_GOAL_S = 6.0  # design: a shot this close before a goal of its side is the goal's shot
 MIN_PASSES = 15  # design (as companion_match.MIN_SHARE_PASSES): a completion rate needs this many passes
+# What vision does not measure, in one plain clause; the answer goes on to something it does.
 UNMEASURED = {
-    "offside": "Vision doesn't call offside, so it can't say whether anyone was: it reads the offside "
-    "line at each completed pass it sees.",
-    "fouls": "Vision doesn't detect fouls, so it can't count them.",
-    "cards": "Vision doesn't see cards or bookings, so it can't count them.",
-    "saves": "Vision can't yet tell a save from other shots reliably, so it doesn't count saves.",
-    "tackles": "Vision doesn't detect tackles, so it can't count them.",
-    "referee": "Vision doesn't judge the referee's calls.",
+    "offside": "Offside is not tracked here",
+    "fouls": "Fouls are not tracked here",
+    "cards": "Cards are not tracked here",
+    "saves": "Saves are not tracked on their own here",
+    "tackles": "Tackles are not tracked here",
+    "referee": "The referee's calls are not tracked here",
 }
 NOT_MATCH = {
     "inject": (
@@ -263,7 +255,7 @@ def winning(ctx: Ctx) -> Reply:
 
 def _goal_sentence(g: dict) -> str:
     if g.get("scorer_is") and g.get("scorer_source") == "id_feed":
-        return f"{g['scorer_is']} scored for {g['club']} in minute {g['minute']}."
+        return f"{g['scorer_is']} ({FEED}) scored for {g['club']} in minute {g['minute']}."
     return f"{g['club']} scored in minute {g['minute']}."
 
 
@@ -290,23 +282,18 @@ def scorers(ctx: Ctx) -> Reply:
         r.say(_score_line(ctx, bug), bug)
         r.head = f"{_short(ctx, 'home')} {bug['home']}, {_short(ctx, 'away')} {bug['away']}"
     if not goals and not unplaced:
-        r.say(
-            f"{asked} haven't scored yet."
-            if asked and bug is not None and bug[ctx.team_of[asked]] == 0
-            else "Vision has spotted no goal it can vouch for so far."
-        )
+        if bug is None or (bug["home"] + bug["away"] == 0 and not asked):
+            r.say("No goals yet.")
+        elif asked and bug[ctx.team_of[asked]] == 0:
+            r.say(f"{asked} haven't scored yet.")
         r.head = r.head or "No goal yet"
         return r
     for g in goals:
         r.say(_goal_sentence(g), g)
     for g in unplaced:
         # Fixed words around its minute: a goal of no known side names no club (code_texts says none).
-        r.say(f"It spotted a goal in minute {g['minute']} too, without telling whose it was.")
+        r.say(f"There was also a goal in minute {g['minute']}.")
         r.uncited.append(g)
-    if any(g.get("scorer_source") == "id_feed" for g in goals):
-        r.say(FEED_NOTE)
-    if bug is not None and asked is None and bug["home"] + bug["away"] > len(goals) + len(unplaced):
-        r.say("The scorebug shows more goals than vision spotted.", bug)
     r.head = r.head or ", ".join(f"{_short(ctx, g['team'])} {g['minute']}′" for g in goals)[:48] or None
     return r
 
@@ -321,10 +308,8 @@ def _order(ctx: Ctx, lead: str | None) -> tuple[str, str]:
     return first, ctx.other(first)
 
 
-def _no_footage(ctx: Ctx, w: Window) -> str | None:
-    if ctx.footage_s(w) != 0:
-        return None
-    return f"We haven't seen any footage {w.said}."
+def _no_footage(ctx: Ctx, w: Window) -> bool:
+    return ctx.footage_s(w) == 0
 
 
 def _so_far(ctx: Ctx) -> Window:
@@ -332,43 +317,68 @@ def _so_far(ctx: Ctx) -> Window:
     return Window(1, done, "so far", False)
 
 
+def _scope(w: Window) -> str:
+    """The one scope phrase an answer carries, at the end of its lead (Kian, Oct 27): what was seen."""
+    return SCOPE if w.said == "so far" else f"{w.said}, {SCOPE.replace(' so far', '')}"
+
+
+def _lower(text: str) -> str:
+    """A sentence continued after a comma: its first word lower-case unless it is a name."""
+    first = text.split(" ", 1)[0]
+    return text[0].lower() + text[1:] if first in ("It's", "The", "There", "No", "Neither") else text
+
+
+def _compare(ctx: Ctx, w: Window, n: dict, key: str, noun: str, one: str, verb: str, sources=()) -> Reply:
+    """A count said as the comparison it is reliable for (vision misses events at both ends alike):
+    who has had more, then both numbers, and the scope once. "Lisbon Esportes have had more shots: 5 to
+    London Athletic's 3 in the footage so far." The club asked about is said first."""
+    r = Reply()
+    h, a = n["home"], n["away"]
+    lead = None if h == a else ("home" if h > a else "away")
+    first, second = _order(ctx, lead)
+    c1, c2 = ctx.clubs[first], ctx.clubs[second]
+    n1, n2 = n[first], n[second]
+    more = "more" if n1 > n2 else "fewer"
+    # Each number bound to its place in the sentence: the first after "more shots:", the other after
+    # "to London Athletic's" (a context the fact-check reads), so the two can never be swapped.
+    also = [
+        (n1, "", rf"\b(?:more|fewer) {re.escape(noun)}:\s*$"),
+        (n2, "", rf"\bto {re.escape(possessive(c2))}\s*$"),
+        (n1, "", rf"\b{re.escape(verb)}\s*$"),
+    ]
+    f = ctx.fact(f"{key}:{first}", f"ask_{key}_compare", None, None, first, also=also, sources=sources, w=w)
+    if h == a == 0:
+        r.say(f"Neither side has {verb} a {one} {_scope(w)}.", f)
+        r.head = f"No {noun}"
+    elif h == a:
+        r.say(f"{c1} and {c2} have {verb} {n1} {one if n1 == 1 else noun} each {_scope(w)}.", f)
+        r.head = f"Level: {n1} {noun} each"
+    else:
+        r.say(f"{c1} have {verb} {more} {noun}: {n1} to {possessive(c2)} {n2} {_scope(w)}.", f)
+        r.head = f"{_short(ctx, lead)}: {n[lead]} {noun}"
+    return r
+
+
 def possession(ctx: Ctx) -> Reply:
-    r, w = Reply(), ctx.read.window
-    note = None
+    """Each club's share of the time on the ball, from kick-off or a half's start (where it is
+    measured); over any other stretch, or before it can be split, the closest measured fact: who has
+    been on top there."""
+    w = ctx.read.window
     if w.empty:
-        r.notes.append(w.empty)
         w = _so_far(ctx)
-    elif w.lo not in (1, HALF_MIN + 1):
-        # Measured only from kick-off and from each half's start (ball_share.MEASURED_FROM, lesson 290):
-        # over the stretch asked, the closest measured fact is where the ball was in it.
-        terr = on_top(ctx)
-        if terr.status == "verified" and terr.lines:
-            terr.notes.append(
-                f"Possession itself is measured from kick-off and from each half's start, not {w.said}."
-            )
-            terr.head = None
-            return terr
-        note = f"Possession is measured from kick-off and from each half's start, not {w.said}."
-        r.notes.append(note)
-        r.status = "unanswerable"
-        r.say(note)
-        r.notes.clear()
-        return r
-    got = {f["team"]: f for f in ctx.mi.possession(w.lo, w.hi)["summary"]}
+    measured = w.lo in (1, HALF_MIN + 1)
+    got = {f["team"]: f for f in ctx.mi.possession(w.lo, w.hi)["summary"]} if measured else {}
     if len(got) < 2 or not all(f.get("confident") and f.get("value") is not None for f in got.values()):
-        # The fallback: why it isn't known, and the longest run of passing, which needs no side told.
-        r.say(POSSESSION_UNKNOWN)
-        spell = max((f for f in ctx.events("spell", w)), key=lambda f: f.get("value") or 0, default=None)
-        if spell is not None:
-            whose = f"{possessive(spell['club'])} longest" if spell.get("club") else "The longest"
-            r.say(
-                f"{whose} run of passing was {spell['value']} passes in a row, in minute {spell['minute']}.",
-                spell,
-            )
-        r.head = "Not known yet"
+        # The closest measured fact over the same stretch: who was on top there, else the passes made.
+        named = ctx.read.window.named and not ctx.read.window.empty
+        r = on_top(ctx, w, broaden=not named)
+        if r.status != "verified":
+            r = _instead(passes(ctx))
+        r.head = None
         return r
     from ninety.intel.ball_share import ERROR_POINTS
 
+    r = Reply()
     h, a = got["home"]["value"], got["away"]["value"]
     lead = None if h == a else ("home" if h > a else "away")
     first, second = _order(ctx, lead)
@@ -384,102 +394,115 @@ def possession(ctx: Ctx) -> Reply:
         w=w,
     )
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    if note:
-        r.notes.append(note)
+    # Its measured error is part of the figure, in the same sentence (lesson 296).
+    err = f"give or take {ERROR_POINTS} points"
     if lead is None:
-        r.say(
-            f"It's even: {c1} and {c2} have had {v1}% of the ball each {w.said}, by time on the ball {SEEN}, "
-            f"give or take {ERROR_POINTS} points.",
-            f,
-        )
-    elif lead == first:
-        r.say(
-            f"{c1} have had more of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-            f"ball {SEEN}, give or take {ERROR_POINTS} points.",
-            f,
-        )
+        r.say(f"It's even: {c1} and {c2} have had {v1}% of the ball each {_scope(w)}, {err}.", f)
     else:
         r.say(
-            f"{c1} have had less of the ball: {v1}% to {possessive(c2)} {v2}% {w.said}, by time on the "
-            f"ball {SEEN}, give or take {ERROR_POINTS} points.",
+            f"{c1} have had {'more' if lead == first else 'less'} of the ball: {v1}% to {possessive(c2)} "
+            f"{v2}% {_scope(w)}, {err}.",
             f,
         )
     r.head = f"{_short(ctx, lead or first)} {got[lead or first]['value']}%"
     return r
 
 
-def _share(f: dict) -> str:
-    """A territory share as its least (the ball near a third's line could be either side of it; the
-    Stats tab says it the same way: "at least")."""
-    return f"{f['lo']}%" if f["lo"] == f["hi"] else f"at least {f['lo']}%"
+def _fraction(f: dict) -> str:
+    """A territory share as a fan says it: its plain fraction, else its least ("at least 18%")."""
+    from ninety.intel.ball_share import share_words
+
+    words = share_words(f["lo"], f["hi"])
+    if words:
+        return f"{words} of the time"
+    return f"{f['lo']}% of the time" if f["lo"] == f["hi"] else f"at least {f['lo']}% of the time"
 
 
-def _territory_lines(ctx: Ctx, terr: dict, first: str) -> list[tuple[str, dict]]:
-    """Each club's share of the footage with the ball in its attacking third, as code_texts says it
-    (its range and the plain fraction it makes, checked against the bounds), `first` club first."""
-    from ninety.agents.companion_match import code_texts
-
-    out = []
-    for team in (first, ctx.other(first)):
-        f = {**terr[team], "clubs": ctx.clubs}
-        text = next(iter(code_texts(f)), None)
-        if text:
-            out.append((text, f))
-    return out
-
-
-def on_top(ctx: Ctx) -> Reply:
-    """Who has been on top over the stretch: the verdict (a club leads only when its least share of the
-    ball in its attacking third beats the other's most), then both clubs' shares."""
-    from ninety.agents.companion_match import ON_TOP_LEVEL, ON_TOP_UNKNOWN
-
-    r, w = Reply(), ctx.read.window
-    if w.empty:
-        r.notes.append(w.empty)
-        w = _so_far(ctx)
-    gap = _no_footage(ctx, w)
-    if gap:
-        r.notes.append(gap + " Here it is so far.")
-        w = _so_far(ctx)
+def _shares(ctx: Ctx, w: Window) -> tuple[dict, dict] | None:
     got = ctx.mi.on_top(w.lo, w.hi)["summary"]
     top, terr = got[0], {f["team"]: f for f in got[1:]}
     if len(terr) < 2 or not top.get("confident"):
-        r.status, r.head, r.notes = "unanswerable", "Not known yet", []
-        r.say(ON_TOP_UNKNOWN)
-        return r
+        return None
+    return top, terr
+
+
+def on_top(ctx: Ctx, w: Window | None = None, broaden: bool = True) -> Reply:
+    """Who has been on top over the stretch: the verdict (a club leads only when its least share of the
+    ball in its attacking third beats the other's most) and both shares, in one sentence. A stretch
+    with too little of the ball seen is answered over the match so far (unless `broaden` is off)."""
+    r, w = Reply(), w or ctx.read.window
+    if broaden and (w.empty or _no_footage(ctx, w) or _shares(ctx, w) is None):
+        w = _so_far(ctx)
+    got = _shares(ctx, w)
+    if got is None:
+        # Too little of the ball seen to compare territory: the closest measured fact, who has passed
+        # more (Kian, Oct 27: never "too early" while a related fact exists).
+        return _instead(passes(ctx))
+    top, terr = got
     lead = top.get("team")
-    first, _ = _order(ctx, lead)
-    f = ctx.fact(
-        f"on_top:{lead or 'none'}", "ask_on_top", None, None, lead, sources=[top, *terr.values()], w=w
-    )
+    first, second = _order(ctx, lead)
+    f = _shares_fact(ctx, w, top, terr, lead or first)
+    s1, s2 = _fraction(terr[first]), _fraction(terr[second])
+    c1, c2 = ctx.clubs[first], ctx.clubs[second]
+    own = "their" if lead == first else possessive(c1)  # the verdict's club is the sentence's subject
+    shares = f"the ball was in {own} attacking third {s1}, and in {possessive(c2)} {s2}"
     if lead is None:
-        r.say(ON_TOP_LEVEL.format(span=w.said), f)
-        r.head = "Too close to call"
+        r.say(f"Neither side has clearly been on top {w.said}: {shares}, {SCOPE.replace(' so far', '')}.", f)
+        r.head = "Even"
     else:
-        r.say(f"{ctx.clubs[lead]} have been on top {w.said}.", f)
+        r.say(f"{ctx.clubs[lead]} have been on top {w.said}: {shares}, {SCOPE.replace(' so far', '')}.", f)
         r.head = _short(ctx, lead)
-    for text, t in _territory_lines(ctx, terr, first):
-        r.say(text, t)
     return r
+
+
+def _shares_fact(ctx: Ctx, w: Window, top: dict, terr: dict, team: str) -> dict:
+    # A share said as "at least N%" carries its least as a number with its unit.
+    also = [(terr[t]["lo"], "%") for t in ("home", "away")]
+    return ctx.fact(
+        f"on_top:{top.get('team') or 'none'}:{team}",
+        "ask_on_top",
+        None,
+        None,
+        team,
+        also=also,
+        sources=[top, *terr.values()],
+        w=w,
+    )
 
 
 def territory(ctx: Ctx) -> Reply:
-    """Where the ball has been: both clubs' shares first, then what they add up to."""
-    r = on_top(ctx)
-    if r.status != "verified":
-        return r
-    verdict, rest = r.lines[0], r.lines[1:]
-    lead = verdict[1][0].get("team") if verdict[1] else None
-    tail = (
-        f"So {ctx.clubs[lead]} have had the better of the territory."
-        if lead
-        else "So neither side has had clearly more of the territory."
-    )
-    r.lines = [*rest, (tail, verdict[1])]
+    """Where the ball has been: which club's attacking third it was in more, with both shares."""
+    r, w = Reply(), ctx.read.window
+    if w.empty or _no_footage(ctx, w) or _shares(ctx, w) is None:
+        w = _so_far(ctx)
+    got = _shares(ctx, w)
+    if got is None:
+        return on_top(ctx)
+    top, terr = got
+    lead = top.get("team")
+    first, second = (lead, ctx.other(lead)) if lead else _order(ctx, None)
+    f = _shares_fact(ctx, w, top, terr, first)
+    c1, c2 = ctx.clubs[first], ctx.clubs[second]
+    s1, s2 = _fraction(terr[first]), _fraction(terr[second])
+    place = SCOPE if w.said == "so far" else f"{w.said}, {SCOPE.replace(' so far', '')}"
+    if lead:
+        r.say(
+            f"The ball has been in {possessive(c1)} attacking third more: {s1}, to {s2} in {possessive(c2)}, "
+            f"{place}.",
+            f,
+        )
+        r.head = _short(ctx, lead)
+    else:
+        r.say(
+            f"The ball has been in each side's attacking third about as often: {s1} in {possessive(c1)}, "
+            f"{s2} in {possessive(c2)}, {place}.",
+            f,
+        )
+        r.head = "Even"
     return r
 
 
-# -- counts ------------------------------------------------------------------------------------------
+# -- counts: the comparison first ---------------------------------------------------------------
 
 
 def _by_team(rows: list[dict], key=lambda f: True) -> dict[str, int]:
@@ -490,183 +513,59 @@ def _by_team(rows: list[dict], key=lambda f: True) -> dict[str, int]:
     return out
 
 
-def _gap_or(ctx: Ctx, r: Reply) -> Window | None:
+def _window(ctx: Ctx) -> Window:
+    """The stretch asked about, or the match so far when nothing of it has been seen."""
     w = ctx.read.window
-    if w.empty:
-        r.notes.append(w.empty)
-        return _so_far(ctx)
-    gap = _no_footage(ctx, w)
-    if gap:
-        r.status = "unanswerable"
-        r.say(gap + " Ask about the match so far.")
-        return None
-    return w
+    return _so_far(ctx) if w.empty or _no_footage(ctx, w) else w
 
 
 def passes(ctx: Ctx) -> Reply:
-    r = Reply()
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
+    w = _window(ctx)
     rows = ctx.events("pass", w)
-    n = _by_team(rows)
-    first, second = _order(ctx, None if n["home"] == n["away"] else max(("home", "away"), key=n.get))
-    f1 = ctx.fact(
-        f"passes:{first}",
-        "ask_passes",
-        n[first],
-        "passes",
-        first,
-        sources=[p for p in rows if p.get("team") == first],
-    )
-    f2 = ctx.fact(
-        f"passes:{second}",
-        "ask_passes",
-        n[second],
-        "passes",
-        second,
-        sources=[p for p in rows if p.get("team") == second],
-    )
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    if ctx.read.club:
-        r.say(
-            f"{c1} have made {_plural(n[first], 'pass', 'passes')} {w.said} {SEEN}, against "
-            f"{possessive(c2)} {_plural(n[second], 'pass', 'passes')}.",
-            f1,
-            f2,
-        )
-    else:
-        total = n[first] + n[second]
-        ft = ctx.fact("passes:all", "ask_passes_all", total, "passes", None, sources=[])
-        r.say(
-            f"Vision has counted {_plural(total, 'pass', 'passes')} {w.said} {SEEN}: "
-            f"{c1} {_plural(n[first], 'pass', 'passes')}, {c2} {_plural(n[second], 'pass', 'passes')}.",
-            ft,
-            f1,
-            f2,
-        )
-    r.notes.append(MISSES["passes"])
-    r.head = f"{_short(ctx, first)}: {n[first]} passes seen"
-    return r
+    return _compare(ctx, w, _by_team(rows), "passes", "passes", "pass", "made", rows)
 
 
 def completion(ctx: Ctx) -> Reply:
-    r = Reply()
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
+    """Who has passed more accurately: the direction, which holds while vision misses passes at both
+    ends alike; never a percentage, which its pass outcomes do not measure well enough (lesson 297)."""
+    w = _window(ctx)
     rows = ctx.events("pass", w)
     tot = _by_team(rows)
     won = _by_team(rows, lambda f: f.get("outcome") == "success")
     if min(tot["home"], tot["away"]) < MIN_PASSES:
-        r.status = "unanswerable"
-        r.say(f"It's too early to rate the passing {w.said}: vision has counted too few passes {SEEN} yet.")
-        return r
-    pct = {t: round(100 * won[t] / tot[t]) for t in ("home", "away")}
-    lead = None if pct["home"] == pct["away"] else max(("home", "away"), key=pct.get)
+        return passes(ctx)
+    rate = {t: won[t] / tot[t] for t in ("home", "away")}
+    if abs(rate["home"] - rate["away"]) < 0.01:
+        return passes(ctx)
+    lead = max(("home", "away"), key=rate.get)
     first, second = _order(ctx, lead)
-    f = ctx.fact(
-        f"completion:{first}",
-        "ask_completion_compare",
-        pct[first],
-        "%",
-        first,
-        also=[(pct[second], "%")],
-        sources=rows,
-    )
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
+    f = ctx.fact(f"completion:{lead}", "ask_completion_order", None, None, first, sources=rows, w=w)
+    r = Reply()
+    word = "more" if first == lead else "less"
     r.say(
-        f"{c1} have found a teammate with {pct[first]}% of their passes {w.said} {SEEN}, against "
-        f"{possessive(c2)} {pct[second]}%.",
+        f"{ctx.clubs[first]} have passed {word} accurately than {ctx.clubs[second]} {_scope(w)}: more of "
+        f"{'their' if first == lead else possessive(ctx.clubs[second])} passes have found a teammate.",
         f,
     )
-    if lead:
-        r.say(f"So {ctx.clubs[lead]} have been passing better.", f)
-    r.head = f"{_short(ctx, first)} {pct[first]}%"
+    r.head = _short(ctx, lead)
     return r
 
 
 def shots(ctx: Ctx) -> Reply:
-    r = Reply()
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
+    w = _window(ctx)
     rows = ctx.events("shot", w)
-    n = _by_team(rows)
-    lead = None if n["home"] == n["away"] else max(("home", "away"), key=n.get)
-    first, second = _order(ctx, lead)
-    total = len(rows)
-    ft = ctx.fact(
-        "shots:all", "ask_shots_total", total, "shots", None, also=[(n[None], "shots")], sources=rows
-    )
-    f1 = ctx.fact(f"shots:{first}", "ask_shots_club", n[first], "shots", first, sources=[])
-    f2 = ctx.fact(f"shots:{second}", "ask_shots_club", n[second], "shots", second, sources=[])
-    r.notes.append(MISSES["shots"])
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    unplaced = f", and {_plural(n[None], 'shot')} it didn't place on a side" if n[None] else ""
-    if ctx.read.club:
-        r.say(
-            f"{c1} have had {_plural(n[first], 'shot')} {w.said} {SEEN}, against {possessive(c2)} "
-            f"{_plural(n[second], 'shot')}{unplaced}.",
-            f1,
-            f2,
-            ft,
-        )
-    elif total == 0:
-        r.say(f"Vision hasn't spotted a shot {w.said} {SEEN}.", ft)
-    else:
-        r.say(
-            f"Vision has spotted {_plural(total, 'shot')} {w.said} {SEEN}: {c1} {_plural(n[first], 'shot')}, "
-            f"{c2} {_plural(n[second], 'shot')}{unplaced}.",
-            ft,
-            f1,
-            f2,
-        )
-    r.head = f"{_short(ctx, first)}: {n[first]} shots seen"
-    return r
+    return _compare(ctx, w, _by_team(rows), "shots", "shots", "shot", "had", rows)
 
 
 def on_target(ctx: Ctx) -> Reply:
-    r = Reply()
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
-    rows = ctx.events("shot", w)
+    """Shots on target: goals and saves (a shot whose outcome is on target)."""
+    w = _window(ctx)
     goals = [g for g in ctx.events("goal", w) if g.get("side_known", True)]
-    saves = [s for s in rows if s.get("outcome") == "on_target"]
+    saves = [s for s in ctx.events("shot", w) if s.get("outcome") == "on_target"]
     on = _by_team(goals)
     for t, k in _by_team(saves).items():
         on[t] += k
-    wide = sum(1 for s in rows if s.get("outcome") in ("off_target", "blocked"))
-    unknown = sum(1 for s in rows if s.get("outcome") is None)
-    lead = None if on["home"] == on["away"] else max(("home", "away"), key=on.get)
-    first, second = _order(ctx, lead)
-    unit = "shots on target"
-    f = ctx.fact(
-        f"on_target:{first}",
-        "ask_on_target",
-        on[first],
-        unit,
-        first,
-        also=[(on[second], unit), (on[None], unit), (wide, "shots"), (unknown, "shots")],
-        sources=[*goals, *saves],
-    )
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    one = lambda k: _plural(k, "shot on target", "shots on target")  # noqa: E731
-    r.say(
-        f"{c1} have had {one(on[first])} {w.said} {SEEN}, against {possessive(c2)} {one(on[second])}, "
-        "counting goals and saves.",
-        f,
-    )
-    rest = []
-    if wide:
-        rest.append(f"saw {_plural(wide, 'shot')} miss or get blocked")
-    if unknown:
-        rest.append(f"didn't see how {_plural(unknown, 'shot')} ended")
-    if rest:
-        r.say("It " + " and ".join(rest) + ".", f)
-    r.head = f"{_short(ctx, first)}: {on[first]} on target seen"
-    return r
+    return _compare(ctx, w, on, "on_target", "shots on target", "shot on target", "had", [*goals, *saves])
 
 
 RESTART_UNITS = {
@@ -685,17 +584,12 @@ def _restarts(ctx: Ctx, w: Window, kinds: tuple[str, ...]) -> dict[str, dict]:
 
 
 def corners(ctx: Ctx) -> Reply:
-    r = Reply()
-    r.notes.append(MISSES["restarts"])
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
+    w = _window(ctx)
     if re.search(
         r"\bset[- ]pieces?\b|\bpenalt(?:y|ies)\b|\bfree[- ]kicks?\b", ctx.read.text, re.I
     ) and not re.search(r"\bcorners?\b", ctx.read.text, re.I):
         got = _restarts(ctx, w, tuple(RESTART_UNITS))
         total = sum(sum(v.values()) for v in got.values())
-        # Corners first, always (the row's metric), then each other kind seen.
         parts = [_plural(sum(got["corner"].values()), *RESTART_UNITS["corner"], zero=True)]
         parts += [
             _plural(sum(v.values()), *RESTART_UNITS[k])
@@ -709,51 +603,26 @@ def corners(ctx: Ctx) -> Reply:
             "set pieces",
             also=[(sum(v.values()), RESTART_UNITS[k][1]) for k, v in got.items()],
             sources=ctx.sources,
+            w=w,
         )
-        lead = f"Vision has spotted {_plural(total, 'set piece', zero=True)} {w.said} {SEEN}"
-        r.say(lead + (": " + ", ".join(parts) + "." if parts else "."), f)
-        r.head = f"{_plural(total, 'set piece', zero=True)} seen"
+        r = Reply()
+        r.say(f"There have been {_plural(total, 'set piece', zero=True)} {_scope(w)}: {', '.join(parts)}.", f)
+        r.head = _plural(total, "set piece", zero=True)
         return r
     n = _restarts(ctx, w, ("corner",))["corner"]
-    lead = None if n["home"] == n["away"] else max(("home", "away"), key=n.get)
-    first, second = _order(ctx, lead)
-    f = ctx.fact(
-        f"corners:{first}",
-        "ask_corners",
-        n[first],
-        "corners",
-        first,
-        also=[(n[second], "corners"), (n[None], "corners"), (sum(n.values()), "corners")],
-        sources=ctx.sources,
-    )
-    c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    total = sum(n.values())
-    if total == 0:
-        r.say(f"Vision hasn't spotted a corner {w.said} {SEEN}.", f)
-        r.head = "No corners seen"
-        return r
-    r.say(
-        f"{c1} have had {_plural(n[first], 'corner')} {w.said} {SEEN}, and {c2} "
-        f"{_plural(n[second], 'corner')}.",
-        f,
-    )
-    r.head = f"{_short(ctx, first)}: {n[first]} corners seen"
-    return r
+    return _compare(ctx, w, n, "corners", "corners", "corner", "had", ctx.sources)
 
 
 def out_of_play(ctx: Ctx) -> Reply:
     r = Reply()
-    r.notes.append(MISSES["restarts"])
-    w = _gap_or(ctx, r)
-    if w is None:
-        return r
+    w = _window(ctx)
     kinds = ("throw_in", "goal_kick", "corner")
     got = _restarts(ctx, w, kinds)
     asked = next(
         (
             k
-            for k, p in (("throw_in", r"throw[- ]?ins?"), ("goal_kick", r"goal[- ]kicks?"))
-            if re.search(rf"\b{p}\b", ctx.read.text, re.I)
+            for k, p in (("throw_in", r"throw[- ]?ins?|throws?"), ("goal_kick", r"goal[- ]kicks?"))
+            if re.search(rf"\b(?:{p})\b", ctx.read.text, re.I)
         ),
         None,
     )
@@ -766,39 +635,36 @@ def out_of_play(ctx: Ctx) -> Reply:
         "times",
         also=[(sum(got[k].values()), RESTART_UNITS[k][1]) for k in kinds],
         sources=ctx.sources,
+        w=w,
     )
     # One lead for every paraphrase (the total, by kind); a club's count of the kind asked after it.
     if total:
         r.say(
-            f"Vision has seen the ball go out of play {_plural(total, 'time')} {w.said} {SEEN}: "
+            f"The ball has gone out of play {_plural(total, 'time')} {_scope(w)}: "
             f"{parts[0]}, {parts[1]} and {parts[2]}.",
             f,
         )
     else:
-        r.say(
-            f"Vision hasn't seen the ball go out of play {w.said} {SEEN}: "
-            f"{parts[0]}, {parts[1]} and {parts[2]}.",
-            f,
-        )
-    if asked and ctx.read.club:
+        r.say(f"The ball hasn't gone out of play {_scope(w)}.", f)
+    if asked and ctx.read.club and total:
         n, (one, many) = got[asked], RESTART_UNITS[asked]
         t = ctx.team_of[ctx.read.club]
-        fc = ctx.fact(f"{asked}:{t}", f"ask_{asked}", n[t], many, t, sources=ctx.sources)
+        fc = ctx.fact(f"{asked}:{t}", f"ask_{asked}", n[t], many, t, sources=ctx.sources, w=w)
         r.say(
             f"{ctx.read.club} have had {_plural(n[t], one, many)} of them."
             if n[t]
             else f"{ctx.read.club} haven't had any of them.",
             fc,
         )
-    r.head = f"Out of play {_plural(total, 'time')} seen"
+    r.head = f"Out {_plural(total, 'time')}"
     return r
 
 
-# -- players --------------------------------------------------------------------------------------
+# -- players -------------------------------------------------------------------------------------
 
 
 def _team_km(ctx: Ctx) -> Reply:
-    """The closest measured fact to a player's running: each club's distance, from the footage."""
+    """The closest measured fact to a player's running: which club has covered more ground."""
     r = Reply()
     dist = (ctx.mi.team_stats or {}).get("distance") or {}
     done = played(ctx.t)
@@ -808,38 +674,17 @@ def _team_km(ctx: Ctx) -> Reply:
     }
     if not dist or not any(km.values()):
         return r
-    pct = ctx.mi.team_stats.get("within_pct")
-    f = ctx.fact(
-        "team_km",
-        "ask_team_km",
-        km["home"],
-        "km",
-        "home",
-        also=[(km["away"], "km"), (pct, "%")],
-        sources=[],
-        w=_so_far(ctx),
-    )
-    c = ctx.clubs
+    w = _so_far(ctx)
+    lead = "home" if km["home"] >= km["away"] else "away"
+    first, second = _order(ctx, lead)
+    c1, c2 = ctx.clubs[first], ctx.clubs[second]
+    f = ctx.fact("team_km", "ask_team_km", km[first], "km", first, also=[(km[second], "km")], w=w)
     r.say(
-        f"What the tracking does measure is each side's running: {c['home']} have covered {km['home']} km "
-        f"and {c['away']} {km['away']} km so far {SEEN}, give or take {pct}%.",
+        f"{c1} have covered {'more' if first == lead else 'less'} ground than {c2}: {km[first]} km to "
+        f"{km[second]} km {_scope(w)}.",
         f,
     )
     return r
-
-
-def _cant(ctx: Ctx, why: str, closest: Reply, answers: bool = False) -> Reply:
-    """What vision can't say, then the closest thing it measured. `answers`: the closest thing answers
-    the question in part (a best player: who scored), so the reply is "verified"; else it is told as
-    "unanswerable" with the closest fact beside it (a player's top speed is not a team's distance)."""
-    r = Reply()
-    r.status = "verified" if answers and closest.lines else "unanswerable"
-    r.say(why)
-    r.lines += closest.lines
-    return r
-
-
-FEED_NAMES = "Names come from the Player ID feed."
 
 
 def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
@@ -855,7 +700,6 @@ def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
     names = [f["name"] for f in got.get("facts") or ()][:3]
     if got.get("withheld") or len(names) < 3:
         return None
-    said = got.get("say") or f"{names[0]}, then {names[1]}, then {names[2]}, in the moves the video picked up"
     f = ctx.fact(
         f"involved:{team}",
         "ask_involvement_order",
@@ -868,19 +712,21 @@ def _involved(ctx: Ctx, team: str) -> tuple[str, dict] | None:
         name_source="id_feed",
     )
     # Never "best", never one player "the most involved": an order, as it was graded (#431).
-    return f"Most involved for {ctx.clubs[team]}: {said}.", f
+    return (
+        f"{possessive(ctx.clubs[team])} most involved players {SCOPE}: {names[0]}, {names[1]} and "
+        f"{names[2]} ({FEED})."
+    ), f
 
 
 def best(ctx: Ctx) -> Reply:
     asked = ctx.read.club
     teams = [ctx.team_of[asked]] if asked else ["home", "away"]
     orders = [o for o in (_involved(ctx, t) for t in teams) if o]
+    r = Reply()
     if orders:
-        r = Reply()
         for text, f in orders:
             r.say(text, f)
-        r.say(FEED_NAMES + " Vision can't yet say who has played best, only who was most involved.")
-        r.head = "Most involved"  # an order, never one player
+        r.head = "Most involved"
         return r
     # The players tool's leader, when its least beats every other player's most and the name gate let
     # him be said (by name or position, never "a London Athletic player").
@@ -893,81 +739,61 @@ def best(ctx: Ctx) -> Reply:
         and top.get("confident")
         and not who.lower().startswith(("a ", "an "))
     ):
-        r = Reply()
         passes = top["also"][0][0]
         r.say(
-            f"{who} has taken the most opponents out of the game with passes "
-            f"so far: {top['value']} opponents "
-            f"in {_plural(passes, 'pass', 'passes')} {SEEN}.",
+            f"{who} has taken the most opponents out of the game with passes: {top['value']} opponents "
+            f"in {_plural(passes, 'pass', 'passes')} {SCOPE}.",
             top,
         )
         r.head = who[:48]
         return r
-    closest = Reply()
+    # The closest measured facts about players: the scorers the Player ID feed names, then the fastest.
     named = [
         g
         for g in _goals(ctx, ctx.team_of[asked] if asked else None)
         if g.get("scorer_is") and g.get("scorer_source") == "id_feed"
     ]
-    for g in named[-2:]:  # the scorers the Player ID feed names: the most decisive thing measured of anyone
-        closest.say(_goal_sentence(g), g)
-    if named:
-        closest.lines[0] = ("Here's what it can say: " + closest.lines[0][0], closest.lines[0][1])
-        closest.say(FEED_NOTE)
-    else:
-        closest = _bypassed(ctx)
-    top, _ = _ranked(ctx, "fastest")
-    if top is not None:  # and the quickest player, a measured fact about one named player
-        f = ctx.fact(
-            f"fastest:{top['player']}",
-            "ask_top_speed",
-            top["value"],
-            "km/h",
-            top["team"],
-            w=_so_far(ctx),
-            player_name=top["name"],
-            name_source="id_feed",
-        )
-        closest.say(f"The fastest so far is {top['name']}, at {top['value']} km/h {SEEN}.", f)
-        closest.say(FEED_NAMES)
-    return _cant(
-        ctx,
-        "Vision can't name players on these pictures well enough to pick a best player yet.",
-        closest,
-        answers=True,
-    )
+    for g in named[-2:]:
+        r.say(_goal_sentence(g), g)
+    quick, _ = _ranked(ctx, "fastest")
+    if quick is not None:
+        r.say(_fastest_sentence(ctx, quick), _fastest_fact(ctx, quick))
+    if not r.lines:
+        r = _bypassed(ctx)
+    r.head = None
+    return r
 
 
 def _bypassed(ctx: Ctx) -> Reply:
-    """Closest to a best player: each club's opponents taken out by passes."""
-    r = Reply()
+    """Closest to a best player: which club's passes have taken out more opponents."""
     w = _so_far(ctx)
     tot = {
-        f["team"]: f
+        f["team"]: f["value"]
         for f in ctx.mi.line_breaks(w.lo, w.hi)["summary"]
         if f.get("metric") == "opponents_bypassed_total"
     }
     if len(tot) < 2:
-        return r
+        return Reply()
     asked = ctx.read.club
-    first = ctx.team_of[asked] if asked else max(tot, key=lambda t: tot[t]["value"])
-    second = ctx.other(first)
+    lead = "home" if tot["home"] >= tot["away"] else "away"
+    first, second = _order(ctx, lead)
+    c1, c2 = ctx.clubs[first], ctx.clubs[second]
     f = ctx.fact(
         f"bypassed:{first}",
         "ask_bypassed_compare",
-        tot[first]["value"],
+        tot[first],
         "opponents",
         first,
-        also=[(tot[second]["value"], "opponents")],
-        sources=list(tot.values()),
+        also=[(tot[second], "opponents")],
         w=w,
     )
+    r = Reply()
     r.say(
-        f"Here's what it does measure: {possessive(ctx.clubs[first])} passes have taken "
-        f"{tot[first]['value']} opponents out of the game so far {SEEN}, against "
-        f"{tot[second]['value']} opponents for {ctx.clubs[second]}.",
+        f"{possessive(c1)} passes have taken {'more' if first == lead else 'fewer'} opponents out of the "
+        f"game: {tot[first]} opponents to {possessive(c2)} {tot[second]} opponents {SCOPE}.",
         f,
     )
+    del asked
     return r
 
 
@@ -987,6 +813,23 @@ def _ranked(ctx: Ctx, metric: str) -> tuple[dict | None, str | None]:
     return (top if top.get("leads") else None), None
 
 
+def _fastest_fact(ctx: Ctx, top: dict) -> dict:
+    return ctx.fact(
+        f"fastest:{top['player']}",
+        "ask_top_speed",
+        top["value"],
+        "km/h",
+        top["team"],
+        w=_so_far(ctx),
+        player_name=top["name"],
+        name_source="id_feed",
+    )
+
+
+def _fastest_sentence(ctx: Ctx, top: dict) -> str:
+    return f"{top['name']} ({FEED}) has been the fastest, at {top['value']} km/h {SCOPE}."
+
+
 def _player_row(ctx: Ctx) -> dict | None:
     """The named player's stats up to now (ninety/intel/player_stats.py), or None."""
     fn = getattr(ctx.mi, "player_stats", None)
@@ -1000,12 +843,11 @@ def _player_row(ctx: Ctx) -> dict | None:
 
 
 def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
-    """One player's distance or top speed while the video tracked him, with how much of the footage
-    that was; None when the figure is withheld."""
+    """One player's distance or top speed in the footage so far; None when the figure is withheld."""
     key = "distance_m" if what == "distance" else "top_kmh"
     if row.get(key) is None:
         return None
-    r, cover = Reply(), round(100 * (row.get("footage_coverage") or 0))
+    r = Reply()
     if what == "distance":
         km = round(row["distance_m"] / 1000, 1)
         f = ctx.fact(
@@ -1014,16 +856,11 @@ def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
             km,
             "km",
             row["team"],
-            also=[(cover, "%")],
             w=_so_far(ctx),
             player_name=row["name"],
             name_source="id_feed",
         )
-        r.say(
-            f"{row['name']} has covered {km} km so far while the video tracked him, which was {cover}% of "
-            f"the footage we've seen.",
-            f,
-        )
+        r.say(f"{row['name']} ({FEED}) has covered {km} km {SCOPE}.", f)
     else:
         f = ctx.fact(
             f"kmh:{row['player']}",
@@ -1031,46 +868,28 @@ def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
             row["top_kmh"],
             "km/h",
             row["team"],
-            also=[(cover, "%")],
             w=_so_far(ctx),
             player_name=row["name"],
             name_source="id_feed",
         )
-        r.say(
-            f"{row['name']} has reached {row['top_kmh']} km/h so far, while the video tracked him for "
-            f"{cover}% of the footage we've seen.",
-            f,
-        )
-    r.say(FEED_NAMES)
+        r.say(f"{row['name']} ({FEED}) has reached {row['top_kmh']} km/h {SCOPE}.", f)
     r.head = row["name"][:48]
     return r
 
 
-def _one_player_cant(ctx: Ctx, row: dict | None, what: str) -> Reply:
-    """A question about one named player whose figure isn't said: why, about him, never "rank them"."""
-    name = (row or {}).get("name") or ctx.read.player
-    thing = "how far he has run" if what == "distance" else "his top speed"
-    cover = round(100 * ((row or {}).get("footage_coverage") or 0))
-    if row is not None and cover:
-        f = ctx.fact(
-            f"cover:{row['player']}",
-            "ask_player_coverage",
-            cover,
-            "%",
-            row["team"],
-            w=_so_far(ctx),
-            player_name=name,
-            name_source="id_feed",
-        )
-        r = _cant(
-            ctx,
-            f"Vision followed {name} for {cover}% of the footage we've seen, too little to say {thing}.",
-            Reply(),
-        )
-        r.lines[0] = (r.lines[0][0], [f])
-    else:
-        r = _cant(ctx, f"Vision can't yet say {thing} for {name}.", Reply())
-    r.say(FEED_NAMES)
+def _one_player(ctx: Ctx, row: dict | None, what: str) -> Reply:
+    """A named player whose asked figure is withheld: his other figure if it is said, else the closest
+    measured fact (which club has covered more ground), never an apology."""
+    other = "fastest" if what == "distance" else "distance"
+    if row is not None and (got := _player_running(ctx, row, other)) is not None:
+        return _instead(got)
+    return _instead(_team_km(ctx))
+
+
+def _instead(r: Reply) -> Reply:
+    """A closest fact said in place of the one asked for (a club's running for a player's): plainly
+    true, and marked as not the answer to the question (status "unanswerable"), with no apology."""
+    r.status = "unanswerable" if r.lines else r.status
     return r
 
 
@@ -1079,28 +898,14 @@ def fastest(ctx: Ctx) -> Reply:
     if row is not None and (got := _player_running(ctx, row, "fastest")) is not None:
         return got
     if ctx.read.player:
-        return _one_player_cant(ctx, row, "fastest")
+        return _one_player(ctx, row, "fastest")
     top, _ = _ranked(ctx, "fastest")
     if top is not None:
         r = Reply()
-        f = ctx.fact(
-            f"fastest:{top['player']}",
-            "ask_top_speed",
-            top["value"],
-            "km/h",
-            top["team"],
-            sources=[],
-            w=_so_far(ctx),
-            player_name=top["name"],
-            name_source="id_feed",
-        )
-        r.say(f"{top['name']} has been the fastest so far, at {top['value']} km/h {SEEN}.", f)
-        r.say("Names come from the Player ID feed; speeds are measured while the video tracked each player.")
+        r.say(_fastest_sentence(ctx, top), _fastest_fact(ctx, top))
         r.head = top["name"][:48]
         return r
-    return _cant(
-        ctx, "Vision can't yet measure players' top speeds well enough to say who is fastest.", _team_km(ctx)
-    )
+    return _instead(_team_km(ctx))
 
 
 def distance(ctx: Ctx) -> Reply:
@@ -1108,12 +913,8 @@ def distance(ctx: Ctx) -> Reply:
     if row is not None and (got := _player_running(ctx, row, "distance")) is not None:
         return got
     if ctx.read.player:
-        return _one_player_cant(ctx, row, "distance")
-    return _cant(
-        ctx,
-        "Vision can't yet measure how far players have run well enough to say who has run furthest.",
-        _team_km(ctx),
-    )
+        return _one_player(ctx, row, "distance")
+    return _instead(_team_km(ctx))  # distance is not ranked (#430): the closest measured is the club's
 
 
 # -- a goal's story, the key moments ---------------------------------------------------------------
@@ -1177,25 +978,20 @@ def why_goal(ctx: Ctx) -> Reply:
     if re.search(
         r"\bassist\w*|\bset (?:it|the goal) up\b|\bwho (?:made|gave) the pass\b", ctx.read.text, re.I
     ):
-        # Who assisted: the pass's maker when vision named him, else that it didn't; then the story.
+        # Who assisted: the pass's maker when the feed or vision named him, else the move it came from.
         if g.get("assister_is"):
             r.say(f"{g['assister_is']} made the pass for {possessive(club)} goal in minute {g['minute']}.", g)
         else:
-            r.say(
-                f"Vision didn't name who made the last pass for {possessive(club)} goal in minute "
-                f"{g['minute']}.",
-                g,
-            )
+            r.say(f"{possessive(club)} goal in minute {g['minute']} came from this move.", g)
     # The move: the scoring side's passes in the minute before the goal, after the last time the other
     # side had the ball or a pass of its own was lost; only what happened before the goal, in order.
-    before = [p for p in ctx.mi.facts.get("pass", ()) if gt - BUILD_UP_S <= float(p["t"]) < gt]
-    before.sort(key=lambda p: float(p["t"]))
+    before = sorted(
+        (p for p in ctx.mi.facts.get("pass", ()) if gt - BUILD_UP_S <= float(p["t"]) < gt),
+        key=lambda p: float(p["t"]),
+    )
     chain: list[dict] = []
     for p in before:
-        if p.get("team") != team or p.get("outcome") != "success":
-            chain = []
-        else:
-            chain.append(p)
+        chain = [] if p.get("team") != team or p.get("outcome") != "success" else [*chain, p]
     if chain:
         start = _third(float(chain[0]["x"]), team)
         f = ctx.fact(
@@ -1209,9 +1005,8 @@ def why_goal(ctx: Ctx) -> Reply:
         )
         if len(chain) == 1:
             r.say(
-                f"{club} scored in minute {g['minute']} straight from a single pass, "
-                f"played from their {start} "
-                "third.",
+                f"{club} scored in minute {g['minute']} straight from a single pass, played from their "
+                f"{start} third.",
                 g,
                 f,
             )
@@ -1238,16 +1033,7 @@ def why_goal(ctx: Ctx) -> Reply:
             for b in ctx.mi.facts.get("line_break", ())
             if b.get("event") in {p["id"] for p in chain} and b.get("value", 0) > 0 and b.get("confident")
         ]
-        if breaks:
-            b = max(breaks, key=lambda b: b["value"])
-            opp = ctx.clubs[ctx.other(team)]
-            r.say(
-                f"The pass that broke the lines took {b['value']} {opp} "
-                f"{'player' if b['value'] == 1 else 'players'} out of the game.",
-                b,
-            )
     else:
-        # No pass of theirs followed: the strongest line break of theirs in the minute before, if any.
         breaks = [
             b
             for b in ctx.mi.facts.get("line_break", ())
@@ -1256,20 +1042,15 @@ def why_goal(ctx: Ctx) -> Reply:
             and b.get("value", 0) > 0
             and b.get("confident")
         ]
-        if breaks:
-            b = max(breaks, key=lambda b: b["value"])
-            r.say(f"{club} scored in minute {g['minute']}.", g)
-            r.say(
-                f"Just before it, a {club} pass took {b['value']} {ctx.clubs[ctx.other(team)]} "
-                f"{'player' if b['value'] == 1 else 'players'} out of the game.",
-                b,
-            )
-        else:
-            r.say(
-                f"{club} scored in minute {g['minute']}; vision saw no completed {club} pass in the minute "
-                "before it, so it didn't follow the move.",
-                g,
-            )
+        r.say(f"{club} scored in minute {g['minute']}.", g)
+    if breaks:
+        b = max(breaks, key=lambda b: b["value"])
+        lead = "The pass that broke the lines" if chain else f"Just before it, a {club} pass"
+        r.say(
+            f"{lead} took {b['value']} {ctx.clubs[ctx.other(team)]} "
+            f"{'player' if b['value'] == 1 else 'players'} out of the game.",
+            b,
+        )
     shot = next(
         (
             s
@@ -1286,8 +1067,6 @@ def why_goal(ctx: Ctx) -> Reply:
             else f"Then a shot came from {shot['value']} m out.",
             shot,
         )
-    else:
-        r.say("Vision didn't see the shot itself: it spotted the goal, not the strike.")
     r.head = f"Goal: {_short(ctx, team)}, minute {g['minute']}"
     return r
 
@@ -1309,35 +1088,32 @@ def key_moments(ctx: Ctx) -> Reply:
     return r
 
 
-# -- what vision does not measure -----------------------------------------------------------------
+# -- what vision does not measure: one plain clause, then something real -------------------------
 
 
 def _offside_reads(ctx: Ctx) -> Reply:
     r = Reply()
-    rows = ctx.events("offside", _so_far(ctx))
+    rows = [x for x in ctx.events("offside", _so_far(ctx)) if x.get("verdict") in ("offside", "onside")]
     goal = _goal_asked(ctx) if re.search(r"\bgoal\b", ctx.read.text, re.I) else None
-    span = "so far"
+    span = SCOPE
     near = [
         x
         for x in rows
-        if isinstance(goal, dict)
-        and float(goal["t"]) - BUILD_UP_S <= float(x["t"]) <= float(goal["t"])
-        and x.get("verdict") in ("offside", "onside")
+        if isinstance(goal, dict) and float(goal["t"]) - BUILD_UP_S <= float(x["t"]) <= float(goal["t"])
     ]
     if near:
         rows, span = near, f"in the minute before {possessive(goal['club'])} goal"
-    rows = [x for x in rows if x.get("verdict") in ("offside", "onside")]
     off = sum(1 for x in rows if x["verdict"] == "offside")
     f = ctx.fact(
         "offside_reads", "ask_offside_reads", len(rows), "passes", also=[(off, "passes")], sources=rows
     )
     if rows:
         r.say(
-            f"Here's what it read {span} {SEEN}: {_plural(len(rows), 'pass', 'passes')} where it could call "
+            f"The offside line was read at {_plural(len(rows), 'pass', 'passes')} {span}, "
             + (
-                f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it."
+                f"with {_plural(off, 'pass', 'passes')} to a receiver beyond it."
                 if off
-                else "the line, and no pass to a player beyond it."
+                else "with no receiver beyond it."
             ),
             f,
         )
@@ -1354,22 +1130,22 @@ def unmeasured(ctx: Ctx) -> Reply:
         closest = Reply()
         bug = _scorebug(ctx)
         if bug is not None:
+            cl = ctx.clubs
             closest.say(
-                "Here's the score instead: " + _score_line(ctx, bug)[0].lower() + _score_line(ctx, bug)[1:],
+                f"The scorebug reads {cl['home']} {_plural(bug['home'], 'goal')}, "
+                f"{cl['away']} {_plural(bug['away'], 'goal')}.",
                 bug,
             )
     else:
         closest = possession(ctx)
-        if closest.status == "verified" and closest.lines:
-            text, cited = closest.lines[0]
-            text = "i" + text[1:] if text.startswith("It's ") else text  # mid-sentence: "measure: it's even"
-            closest.lines = [("Here's what it does measure: " + text, cited)]
-    if closest.status != "verified":
-        closest = Reply()
     r = Reply()
-    r.status = "verified"  # a plain, true reply: what vision cannot say, then what it can
-    r.say(UNMEASURED[topic])
-    r.lines += [ln for ln in closest.lines if ln[1]][:1]
+    r.status = "verified"  # a plain, true reply: what is not measured, then something real
+    real = [ln for ln in closest.lines if ln[1]][:1] if closest.status == "verified" else []
+    if real:
+        text, cited = real[0]
+        r.say(f"{UNMEASURED[topic]}, but {_lower(text)}", *cited)
+    else:
+        r.say(f"{UNMEASURED[topic]}.")
     r.head = "Not measured"
     return r
 

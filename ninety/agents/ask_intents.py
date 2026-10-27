@@ -93,7 +93,7 @@ INTENTS = (
     Intent(
         "possession",
         ("possession",),
-        r"\b(?:possession|of the ball|on the ball|\d+%)",
+        r"\b(?:possession|of the ball|on the ball|on top|attacking third|\d+%)",
         "so_far",
         "compare",
         "Who has had more of the ball?",
@@ -111,7 +111,7 @@ INTENTS = (
     Intent(
         "completion",
         ("passing",),
-        r"\b(?:found a teammate|complet\w*|\d+%)",
+        r"\b(?:found a teammate|complet\w*|accurate\w*|\d+%|passes)",
         "so_far",
         "compare",
         "Who's passing better?",
@@ -159,7 +159,7 @@ INTENTS = (
     Intent(
         "best",
         ("players",),
-        r"\b(?:best|most involved|passes|opponents|name)\b",
+        r"\b(?:best|most involved|passes|opponents|scored|fastest|km/h|ground)\b",
         "so_far",
         "rank",
         "Who has been the best player?",
@@ -169,7 +169,7 @@ INTENTS = (
     Intent(
         "fastest",
         ("physical",),
-        r"\b(?:fast\w*|speed|km/h|pace)\b",
+        r"\b(?:fast\w*|speed|km/h|pace|covered|ground)\b",
         "so_far",
         "rank",
         "Who is the fastest on the pitch?",
@@ -205,7 +205,7 @@ INTENTS = (
     Intent(
         "unmeasured",
         ("referee",),
-        r"\b(?:doesn't|does not|can't|cannot)\b",
+        r"\b(?:not tracked|doesn't|does not|can't|cannot)\b",
         "so_far",
         "unmeasured",
         None,

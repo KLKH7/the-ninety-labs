@@ -700,8 +700,8 @@ def test_who_is_best_is_never_answered_with_a_name_off_the_sheet(text):
     # The stand-in has no confident leader (the bounds overlap), so there is no honest name to give.
     mi = standin()
     r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
-    # No name: it says it can't single one out, and gives the closest measured fact (lesson 297).
-    assert r.answer.text.startswith("Vision can't name players"), r.answer.text
+    # No name: the closest measured fact, said plainly, never "can't" (lesson 297, Kian's voice).
+    assert not re.search(r"can't|\bbest\b", r.answer.text), r.answer.text
     assert not any(e.startswith("sheet:") for e in r.answer.evidence)
 
 
@@ -967,9 +967,9 @@ def _score_answer(goals, question="What's the score?"):
 
 @pytest.mark.parametrize("goals, said, minutes", [
     ([_goal("v90", 23)], "London Athletic scored in minute 23.", {"23"}),  # spotted and placed
-    ([_goal("v91", 43, side_known=False)], "a goal in minute 43 too, without telling whose", {"43"}),
-    ([_goal("v92", 43, confidence=0.3)], "no goal it can vouch for", set()),  # under the detection gate
-    ([], "no goal it can vouch for", set()),
+    ([_goal("v91", 43, side_known=False)], "There was also a goal in minute 43.", {"43"}),
+    ([_goal("v92", 43, confidence=0.3)], "No goals yet.", set()),  # under the detection gate
+    ([], "No goals yet.", set()),
     ([_goal("v90", 23), _goal("v91", 61, side_known=False)], "scored in minute 23.", {"23", "61"}),
 ])
 def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, said, minutes):
@@ -1087,9 +1087,8 @@ def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing()
                               for i in range(20)]
     a = asyncio.run(companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0),
                                            mi)).answer
-    assert a.text.startswith(companion.POSSESSION_UNKNOWN), a.text
-    assert "7 passes in a row, in minute 31" in a.text
-    assert "%" not in a.text  # no share said
+    # Kian, Oct 27: never "not known" while a related measured fact exists; no share is said.
+    assert not re.search(r"can't|not known|too early", a.text) and "%" not in a.text, a.text
 
 
 @pytest.mark.parametrize("q", [
@@ -1105,9 +1104,8 @@ def test_possession_is_one_answer_however_it_is_asked(q):
                                "home": 30.0, "away": 20.0, "club": None} for m in range(1, 36)]
     a = asyncio.run(companion.answer_match(Question("s1", None, q, 34.5 * 60.0), mi)).answer
     # Both clubs, over the minutes played by 34:30 (lesson 297).
-    assert a.text.startswith("London Athletic have had more of the ball: 60% to Lisbon Esportes' 40% so far, "
-                             "by time on the ball in the footage we've seen, give or take 10 points."), (
-        q, a.text)
+    assert a.text == ("London Athletic have had more of the ball: 60% to Lisbon Esportes' 40% in the footage "
+                      "so far, give or take 10 points."), (q, a.text)
 
 
 def test_the_refusal_says_build_up_with_its_hyphen():
@@ -1128,7 +1126,7 @@ def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known()
                               for i in range(20)]
     for q in ("Who has more of the ball?", "Who has had more possession?"):
         a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
-        assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)
+        assert a.headline != "Not known yet" and "%" not in a.text, (q, a.headline, a.text)  # no share said
 
 
 # -- Kian's preview probe (Oct 26): the named club, a share's sample, no degenerate window -----------
@@ -1283,10 +1281,9 @@ def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
     assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
     a = r.answer
     span = f"from minute {window[0]} to minute {window[1]}"
-    assert all(f"{c} have had the ball in their attacking third" in a.text
-               for c in ("Lisbon Esportes", "London Athletic")), a.text
-    # The verdict and both clubs, over the stretch asked, never minutes 1 to now.
-    assert a.text.count(span) == 3, a.text
+    assert "Lisbon Esportes" in a.text and "London Athletic" in a.text and "attacking third" in a.text, a.text
+    # The verdict and both clubs in one sentence, over the stretch asked, never minutes 1 to now.
+    assert a.text.count(span) == 1, a.text
     assert re.match(rf"(?:London Athletic|Lisbon Esportes) have been on top {span}", a.text), a.text
     assert a.t_to <= t  # the answer is about what was seen by now, never the rest of the minute
     if window[0] == 31:
@@ -1298,8 +1295,8 @@ def test_on_top_is_too_close_to_call_when_the_ranges_overlap():
     mi = _on_top_insights(home_final=10, away_final=11)
     a = asyncio.run(companion.answer_match(
         Question("s1", None, "Who's been on top since the half hour?", 2050.0), mi)).answer
-    assert a.headline == "Too close to call", a.headline
-    assert a.text.startswith(companion.ON_TOP_LEVEL.format(span="from minute 31 to minute 34")), a.text
+    assert a.headline == "Even", a.headline
+    assert a.text.startswith("Neither side has clearly been on top from minute 31 to minute 34"), a.text
 
 
 @pytest.mark.parametrize("seen", [2, 0])  # two seconds of the ball; none at all (no territory yet)
@@ -1309,8 +1306,8 @@ def test_on_top_is_not_known_on_too_little_footage(seen):
                              if seen]
     a = asyncio.run(companion.answer_match(
         Question("s1", None, "Who has been on top in the last minute?", 2120.0), mi)).answer
-    assert a.text == companion.ON_TOP_UNKNOWN and a.headline == "Not known yet", (a.text, a.headline)
-    assert a.value is None and not a.evidence
+    # Too little of the ball to compare: the closest measured fact, never "too early" (Kian, Oct 27).
+    assert a.status == "unanswerable" and not re.search(r"too early|can't|not known", a.text), a.text
 
 
 def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():

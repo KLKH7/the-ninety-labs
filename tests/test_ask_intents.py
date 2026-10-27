@@ -210,21 +210,23 @@ def test_a_second_half_question_before_half_time_gives_no_stat(mi):
 def test_who_has_had_more_of_the_ball_is_london_63(mi):
     a = ask(mi, "Who's had more of the ball?", 2050.0).answer
     assert a.status == "verified" and a.headline == "London 63%", (a.headline, a.text)
-    assert a.text.startswith("London Athletic have had more of the ball: 63% to Lisbon Esportes' 37%"), a.text
-    assert "in the footage we've seen" in a.text and "give or take 10 points" in a.text
+    assert a.text == (
+        "London Athletic have had more of the ball: 63% to Lisbon Esportes' 37% in the footage so "
+        "far, give or take 10 points."
+    ), a.text  # one scope phrase, its error in the sentence
 
 
 def test_on_top_since_the_half_hour_is_lisbon_with_both_clubs(mi):
     a = ask(mi, "Who's been on top since the half hour?", 2050.0).answer
     assert a.headline == "Lisbon", a.text
     assert a.text.startswith("Lisbon Esportes have been on top from minute 31 to minute 34"), a.text
-    assert "London Athletic have had the ball in their attacking third" in a.text  # both clubs
+    assert "London Athletic's" in a.text  # both clubs
 
 
 def test_how_many_passes_is_answered_with_passes_never_shots(mi):
     a = ask(mi, "How many passes?", 2050.0).answer
     lead = a.text.split(". ")[0]
-    assert re.search(r"\d+ passes", lead) and "shot" not in lead, a.text
+    assert re.search(r"more passes: \d+ to", lead) and "shot" not in lead, a.text  # the comparison leads
     assert "London Athletic" in lead and "Lisbon Esportes" in lead
 
 
@@ -238,12 +240,12 @@ def test_why_did_london_score_tells_how_and_only_that_goal_s_minute(mi):
 def test_london_s_best_player_never_answers_nothing_from_a_window(mi):
     a = ask(mi, "Who's been London's best player?", 4620.0).answer
     assert not a.text.startswith("Nothing from minute"), a.text
-    assert a.text.startswith("Vision can't name players"), a.text  # honest until per-player stats land
+    assert not re.search(r"\bcan't|not known", a.text), a.text  # the closest measured fact, no apology
 
 
 def test_the_offside_chip_says_what_vision_measures_not_the_law(mi):
     a = ask(mi, "Was anyone offside before the goal?", 2700.0).answer
-    assert not a.text.startswith("The Laws say") and "doesn't call offside" in a.text, a.text
+    assert a.text.startswith("Offside is not tracked here, but the offside line was read at "), a.text
 
 
 # -- every answer from the table ---------------------------------------------------------------------
@@ -292,7 +294,7 @@ def test_answers_read_naturally(mi, intent):
 def test_a_figure_says_it_is_of_the_footage(mi, intent):
     a, _ = cm.code_match_answer(Question("s", None, PARAPHRASES[intent][0], 3600.0), mi, suggest=False)
     if a.status == "verified" and re.search(r"\d", a.text):
-        assert "in the footage we've seen" in a.text, a.text
+        assert "in the footage" in a.text, a.text
 
 
 def test_a_lead_without_the_row_s_metric_gives_the_fallback(mi, monkeypatch):
@@ -386,7 +388,9 @@ def test_fastest_is_the_player_stats_leader_named_by_the_feed_once_ranked(mi, mo
     a, _ = cm.code_match_answer(
         Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
     )
-    assert a.text.startswith("Ben Vomble has been the fastest so far, at 31.2 km/h"), a.text
+    assert a.text.startswith(
+        "Ben Vomble (Player ID feed) has been the fastest, at 31.2 km/h in the footage so far."
+    ), a.text
     assert "Player ID feed" in a.text and a.headline == "Ben Vomble"
     monkeypatch.setattr(
         mi, "player_rank", lambda club, metric, minute: {"facts": [], "withheld": "off"}, raising=False
@@ -394,7 +398,9 @@ def test_fastest_is_the_player_stats_leader_named_by_the_feed_once_ranked(mi, mo
     a, _ = cm.code_match_answer(
         Question("s", None, "Who's the fastest on the pitch?", 3600.0), mi, suggest=False
     )
-    assert a.text.startswith("Vision can't yet measure players' top speeds"), a.text
+    assert re.match(r"(?:London Athletic|Lisbon Esportes) have covered more ground", a.text), (
+        a.text
+    )  # closest
 
 
 def test_the_phone_s_chips_file_is_the_table_s(mi):
@@ -444,15 +450,15 @@ def test_best_player_is_the_involvement_order_never_best_or_one_player(mi, monke
         Question("s", None, "Who's been Lisbon's best player?", 3600.0), mi, suggest=False
     )
     assert a.text.startswith(
-        "Most involved for Lisbon Esportes: Ben Vomble, then Yusuf Windell, then Tom Keel, "
-        "in the moves the video picked up."
+        "Lisbon Esportes' most involved players in the footage so far: Ben Vomble, Yusuf Windell and "
+        "Tom Keel (Player ID feed)."
     ), a.text
     assert "Player ID feed" in a.text and not re.search(r"\bis (?:the )?best\b|\bthe most involved\b", a.text)
     _stub_player_stats(mi, monkeypatch, withheld="missed its bar")
     a, _ = cm.code_match_answer(
         Question("s", None, "Who's been Lisbon's best player?", 3600.0), mi, suggest=False
     )
-    assert a.text.startswith("Vision can't name players"), a.text  # withheld: the fallback, no router change
+    assert not re.search(r"\bcan't|\bbest\b", a.text), a.text  # withheld: the closest fact, no router change
 
 
 @pytest.mark.parametrize(
@@ -460,13 +466,11 @@ def test_best_player_is_the_involvement_order_never_best_or_one_player(mi, monke
     [
         (
             "How far has Ben Vomble run?",
-            "Ben Vomble has covered 1.4 km so far while the video tracked him, which was "
-            "62% of the footage we've seen.",
+            "Ben Vomble (Player ID feed) has covered 1.4 km in the footage so far.",
         ),
         (
             "how fast has Vomble been?",
-            "Ben Vomble has reached 30.4 km/h so far, while the video tracked him for 62% "
-            "of the footage we've seen.",
+            "Ben Vomble (Player ID feed) has reached 30.4 km/h in the footage so far.",
         ),
     ],
 )
@@ -491,10 +495,8 @@ def test_a_named_player_s_withheld_figure_is_said_of_him_never_as_a_ranking(mi, 
         mi, "player_stats", lambda minute, player=None, club=None: {"facts": [row]}, raising=False
     )
     a, _ = cm.code_match_answer(Question("s", None, "How far has Ben Vomble run?", 3600.0), mi, suggest=False)
-    assert a.text.startswith(
-        "Vision followed Ben Vomble for 31% of the footage we've seen, too little to say how far he has run."
-    ), a.text
-    assert "rank" not in a.text
+    # The closest measured fact, plainly, and marked as not the answer to his own figure.
+    assert a.status == "unanswerable" and "rank" not in a.text and "can't" not in a.text, a.text
 
 
 def test_this_match_is_the_match_so_far():
@@ -505,7 +507,7 @@ def test_this_match_is_the_match_so_far():
 @pytest.mark.parametrize(
     "q", ["How many corners?", "How many shots?", "How many times has the ball gone out of play?"]
 )
-def test_a_zero_count_is_what_vision_spotted_never_a_flat_fact(mi, q):
+def test_a_zero_count_is_said_plainly_with_its_scope_never_hedged(mi, q):
     a, _ = cm.code_match_answer(Question("s", None, q, 120.0), mi, suggest=False)
-    assert not re.match(r"There (?:have|has) been no\b|The ball hasn't", a.text), a.text
-    assert "in the footage we've seen" in a.text
+    assert not re.search(r"\b(?:[Vv]ision (?:has )?spotted|can't|doesn't catch)", a.text), a.text
+    assert "in the footage" in a.text

@@ -1553,6 +1553,10 @@ def plausible_rows(read) -> set[str]:
     return rows & set(INTENT_ROWS)
 
 
+CHIP_CANT = re.compile(r"\b(?:can't|cannot|not known|unknown|not tracked|too early|haven't scored"
+                       r"|no goals? yet)\b", re.I)
+
+
 def chips(insights, t: float, club: str | None = None) -> list[dict]:
     """The phone's chips at match second t: the intent table's questions (ninety/agents/ask_chips.json)
     with the fan's club filled in, each kept only when code answers it now from a checked fact."""
@@ -1563,7 +1567,9 @@ def chips(insights, t: float, club: str | None = None) -> list[dict]:
     for c in chips_table():
         q = c["q"].format(club=club)
         a, _ = code_match_answer(Question("chips", None, q, float(t)), insights, suggest=False)
-        if a.status == "verified" and a.evidence:  # a checked fact, never only "no goal yet"
+        # A checked fact, never only "no goal yet", and never a chip whose answer would be a "can't"
+        # (Kian, Oct 27: no chip is offered that the Ask cannot answer outright).
+        if a.status == "verified" and a.evidence and not CHIP_CANT.search(a.text):
             out.append({**c, "q": q})
     return out
 
