@@ -511,3 +511,35 @@ def test_a_zero_count_is_said_plainly_with_its_scope_never_hedged(mi, q):
     a, _ = cm.code_match_answer(Question("s", None, q, 120.0), mi, suggest=False)
     assert not re.search(r"\b(?:[Vv]ision (?:has )?spotted|can't|doesn't catch)", a.text), a.text
     assert "in the footage" in a.text
+
+
+def test_how_do_you_know_is_the_last_answer_s_method_with_only_measured_rates(mi):
+    """Kian, Oct 27: the detector's measured hit rate is the answer's How-we-know, never its text."""
+    a, _ = cm.code_match_answer(Question("s", None, "How many passes?", 3000.0), mi, suggest=False)
+    assert "recall" not in a.text and a.how is not None and "7 of 13 passes (recall 0.54" in a.how
+    history = [{"question": "How many passes?", "answer": a.text, "calls": []}]
+    r = asyncio.run(
+        cm.answer_match(Question("s", None, "how accurate is that?", 3000.0), mi, history=history)
+    )
+    assert r.answer.text == a.how and not r.answer.evidence
+    shots, _ = cm.code_match_answer(Question("s", None, "How many shots?", 3000.0), mi, suggest=False)
+    assert "not measured yet" in shots.how and not re.search(r"\d", shots.how)  # no rate it does not have
+    assert cm.read_question("how accurate is Lisbon's passing", mi, 3000.0).intent == "completion"
+
+
+def test_a_level_count_says_level_plainly(mi, monkeypatch):
+    a, _ = cm.code_match_answer(
+        Question("s", None, "How many shots has Lisbon had?", 4800.0), mi, suggest=False
+    )
+    if "each" in a.text:
+        assert a.text.startswith("It's level: ") and a.headline.startswith("Level"), a.text
+
+
+def test_on_top_is_one_takeaway_and_one_number_pair(mi):
+    a, _ = cm.code_match_answer(Question("s", None, "Who's on top?", 4800.0), mi, suggest=False)
+    assert re.match(
+        r"(?:Lisbon Esportes|London Athletic) have been on top [^,]+, with the ball in their attacking "
+        r"third [^,]+ of the time, to (?:Lisbon Esportes'|London Athletic's) [^,]+, in the footage\.$",
+        a.text,
+    ), a.text
+    assert "at least" not in a.text

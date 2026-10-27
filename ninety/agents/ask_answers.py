@@ -30,6 +30,75 @@ PITCH_X = 105.0  # the pitch's length (ninety/intel/ball_share.PITCH_X); home at
 BUILD_UP_S = 60.0  # design, as match_insights.BUILD_UP_S: a goal's build-up is the minute before it
 SHOT_BEFORE_GOAL_S = 6.0  # design: a shot this close before a goal of its side is the goal's shot
 MIN_PASSES = 15  # design (as companion_match.MIN_SHARE_PASSES): a completion rate needs this many passes
+# How each row's figures are made, for the answer's How-we-know field and the reply to "how do you
+# know?" (Kian, Oct 27: never in the answer's text). Only rates docs/EVALUATION.md measures are said
+# (passes: event detection on the frozen test clips; goals: shot outcomes; possession:
+# docs/eval/possession-time.json); a rate not measured is said as not measured, and no total is ever
+# corrected or estimated.
+_GOALS = (
+    "Goals are detected in the broadcast video (on the frozen test clips it found 10 of 15 goals, "
+    "recall 0.67, 95% interval 0.42 to 0.85) and the score is read from the broadcast's scorebug; "
+    "a scorer's name comes from the Player ID feed."
+)
+_PASSES = (
+    "Passes are detected in the broadcast video by following the ball from one player to another. On "
+    "the frozen test clips the detector found 7 of 13 passes (recall 0.54, 95% interval 0.29 to 0.77)."
+)
+_RESTARTS = (
+    "Restarts (corners, throw-ins, goal kicks, free kicks) are read from where the ball left the "
+    "pitch and how play restarted in the broadcast video; how many it misses is not measured yet."
+)
+_WHERE = (
+    "Where the ball was comes from the tracked ball: each club's share of the footage with the ball in "
+    "its attacking third. A club is on top only when its smallest possible share beats the other's "
+    "largest (the ball near a third's line could be either side)."
+)
+_PLAYERS = (
+    "Players are named by the Player ID feed, as a broadcaster licenses identity from a tracking "
+    "provider. Running and speed come from tracked positions while the video followed each player; "
+    "who was most involved is an order of the moves the video picked up, with no count."
+)
+HOW = {
+    "score": "The score is read from the broadcast's scorebug.",
+    "winning": "The score is read from the broadcast's scorebug.",
+    "scorers": _GOALS,
+    "key_moments": _GOALS,
+    "why_goal": _GOALS + " A goal's build-up is the scoring side's passes in the minute before it, in order.",
+    "passes": _PASSES,
+    "completion": _PASSES + " Whether a pass found a teammate is read from where the ball went next.",
+    "shots": (
+        "Shots are detected in the broadcast video from the ball leaving a player towards goal; how many "
+        "the detector misses is not measured yet."
+    ),
+    "on_target": (
+        "Shots on target are goals and saves. "
+        + _GOALS.split(" and the score")[0]
+        + "; saves are not yet detected reliably (2 of 49 on the same clips)."
+    ),
+    "corners": _RESTARTS,
+    "out_of_play": _RESTARTS,
+    "possession": (
+        "Possession is each club's share of the time one of its players had the ball, in the footage "
+        "shown; dead and contested time count for neither. Against the answer key it was within 8.1 "
+        "points over six stretches of two matches (mean error 5.75 points), so it is said give or "
+        "take 10 points."
+    ),
+    "on_top": _WHERE,
+    "momentum": _WHERE,
+    "territory": _WHERE,
+    "best": _PLAYERS,
+    "fastest": _PLAYERS,
+    "distance": _PLAYERS,
+    "unmeasured": (
+        "Offside, fouls and cards are not detected; the fact said instead is measured as in its own answer."
+    ),
+}
+HOW_DEFAULT = (
+    "Every number is computed by code from what the cameras tracked, and checked against those facts "
+    "before it is shown."
+)
+
+
 # What vision does not measure, in one plain clause; the answer goes on to something it does.
 UNMEASURED = {
     "offside": "Offside is not tracked here",
@@ -351,8 +420,8 @@ def _compare(ctx: Ctx, w: Window, n: dict, key: str, noun: str, one: str, verb: 
         r.say(f"Neither side has {verb} a {one} {_scope(w)}.", f)
         r.head = f"No {noun}"
     elif h == a:
-        r.say(f"{c1} and {c2} have {verb} {n1} {one if n1 == 1 else noun} each {_scope(w)}.", f)
-        r.head = f"Level: {n1} {noun} each"
+        r.say(f"It's level: {c1} and {c2} have {verb} {n1} {one if n1 == 1 else noun} each {_scope(w)}.", f)
+        r.head = f"Level: {n1} each"
     else:
         r.say(f"{c1} have {verb} {more} {noun}: {n1} to {possessive(c2)} {n2} {_scope(w)}.", f)
         r.head = f"{_short(ctx, lead)}: {n[lead]} {noun}"
@@ -418,6 +487,22 @@ def _fraction(f: dict) -> str:
     return f"{f['lo']}% of the time" if f["lo"] == f["hi"] else f"at least {f['lo']}% of the time"
 
 
+def _amount(f: dict) -> str:
+    """A territory share as a fan says it: its plain fraction ("about a third"), else its range."""
+    from ninety.intel.ball_share import share_words
+
+    words = share_words(f["lo"], f["hi"])
+    if words:
+        return words
+    return f"{f['lo']}%" if f["lo"] == f["hi"] else f"{f['lo']} to {f['hi']}%"
+
+
+def _pair(a: dict, b: dict, b_owner: str) -> str:
+    """One number pair: "about a third of the time, to London Athletic's about a tenth"."""
+    sa, sb = _amount(a), _amount(b)
+    return f"{sa} of the time, to {b_owner} {sb}"
+
+
 def _shares(ctx: Ctx, w: Window) -> tuple[dict, dict] | None:
     got = ctx.mi.on_top(w.lo, w.hi)["summary"]
     top, terr = got[0], {f["team"]: f for f in got[1:]}
@@ -442,22 +527,45 @@ def on_top(ctx: Ctx, w: Window | None = None, broaden: bool = True) -> Reply:
     lead = top.get("team")
     first, second = _order(ctx, lead)
     f = _shares_fact(ctx, w, top, terr, lead or first)
-    s1, s2 = _fraction(terr[first]), _fraction(terr[second])
     c1, c2 = ctx.clubs[first], ctx.clubs[second]
-    own = "their" if lead == first else possessive(c1)  # the verdict's club is the sentence's subject
-    shares = f"the ball was in {own} attacking third {s1}, and in {possessive(c2)} {s2}"
+    when = "so far" if w.said == "so far" else w.said
     if lead is None:
-        r.say(f"Neither side has clearly been on top {w.said}: {shares}, {SCOPE.replace(' so far', '')}.", f)
+        sa, sb = _amount(terr[first]), _amount(terr[second])
+        where = (
+            f"the ball has been in each side's attacking third {sa} of the time"
+            if sa == sb
+            else f"the ball has been in {possessive(c1)} attacking third {sa} of the time, and in "
+            f"{possessive(c2)} {sb}"
+        )
+        r.say(f"It's been even {when}: {where}, {SCOPE.replace(' so far', '')}.", f)
         r.head = "Even"
     else:
-        r.say(f"{ctx.clubs[lead]} have been on top {w.said}: {shares}, {SCOPE.replace(' so far', '')}.", f)
+        other = possessive(ctx.clubs[ctx.other(lead)])
+        r.say(
+            f"{ctx.clubs[lead]} have been on top {when}, with the ball in their attacking third "
+            f"{_pair(terr[lead], terr[ctx.other(lead)], other)}, {SCOPE.replace(' so far', '')}.",
+            f,
+        )
         r.head = _short(ctx, lead)
+    del c1
     return r
 
 
 def _shares_fact(ctx: Ctx, w: Window, top: dict, terr: dict, team: str) -> dict:
     # A share said as "at least N%" carries its least as a number with its unit.
-    also = [(terr[t]["lo"], "%") for t in ("home", "away")]
+    also = [(terr[t][k], "%") for t in ("home", "away") for k in ("lo", "hi")]
+    also += [(terr[t]["lo"], "", r"(?:attacking third|'s?)\s*$") for t in ("home", "away")]
+    # "a tenth" ends a clause and reads as the ordinal 10th: its fraction, where its bounds make one.
+    from ninety.intel.ball_share import FRACTIONS, share_words
+
+    said = {share_words(terr[t]["lo"], terr[t]["hi"]) for t in ("home", "away")}
+    from ninety.agents.factcheck import spelled_as_digits
+
+    for word, _ in FRACTIONS:  # the number the fact-check reads the fraction's word as ("tenth": 10)
+        if f"about {word}" in said:
+            also += [
+                (float(n), "", r"\ba\s*$") for n in re.findall(r"\d+", spelled_as_digits(f"x {word}, y"))
+            ]
     return ctx.fact(
         f"on_top:{top.get('team') or 'none'}:{team}",
         "ask_on_top",
@@ -487,18 +595,19 @@ def territory(ctx: Ctx) -> Reply:
     place = SCOPE if w.said == "so far" else f"{w.said}, {SCOPE.replace(' so far', '')}"
     if lead:
         r.say(
-            f"The ball has been in {possessive(c1)} attacking third more: {s1}, to {s2} in {possessive(c2)}, "
-            f"{place}.",
+            f"The ball has been in {possessive(c1)} attacking third more, "
+            f"{_pair(terr[first], terr[second], possessive(c2))}, {place}.",
             f,
         )
         r.head = _short(ctx, lead)
     else:
         r.say(
-            f"The ball has been in each side's attacking third about as often: {s1} in {possessive(c1)}, "
-            f"{s2} in {possessive(c2)}, {place}.",
+            f"The ball has been in each side's attacking third about as often: in {possessive(c1)} "
+            f"{_amount(terr[first])} of the time, and in {possessive(c2)} {_amount(terr[second])}, {place}.",
             f,
         )
         r.head = "Even"
+    del s1, s2
     return r
 
 
@@ -1233,6 +1342,7 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
         min(max(ts), float(question.t)) if ts else None,
         spoken=text or None,
         headline=r.head if r.head and all(n in text for n in re.findall(r"\d+", r.head)) else None,
+        how=HOW.get(read.intent, HOW_DEFAULT),
     )
     return answer, [
         {

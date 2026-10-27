@@ -212,6 +212,7 @@ INTENTS = (
         "the closest thing vision does measure",
     ),
     Intent("tactics", (), r".", "now", "story", "How are {club} playing?", "the old tool routing"),
+    Intent("how_known", (), r".", "so_far", "unmeasured", None, "how the last answer was measured"),
     Intent("small_talk", (), r".", "so_far", "unmeasured", None, "suggested questions"),
 )
 BY_ID = {i.id: i for i in INTENTS}
@@ -369,6 +370,23 @@ UNMEASURED_TOPICS = (
 # A goal named any way a fan names one: a goal, scoring, the opener, the equaliser, the winner, a strike.
 GOAL_WORDS = r"\b(?:goals?|scor\w*|opener|equali[sz]\w*|winner|strike|netted|finish)\b"
 PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
+    # "How do you know?", "how accurate is that?": how the last answer was measured (its How-we-know).
+    "how_known": (
+        (
+            r"\bhow (?:do|did|can|could) (?:you|we|they|it) (?:know"
+            r"|tell|measure|count|work (?:that|it) out)\b"
+            r"|\bhow (?:accurate|reliable|sure|confident|trustworthy"
+            r"|exact) (?:is|are|was|were) (?:that|this|it|those"
+            r"|these|you|the (?:numbers?|figures?|stats?))\b"
+            r"|\bhow sure are you\b|\bwhere (?:does|do|did) (?:that"
+            r"|this|these|those|the) (?:numbers?|figures?|stats?"
+            r"|data)\b.{0,12}\bcome from\b|\bis (?:that|this) "
+            r"(?:right|accurate|true|correct|reliable)\b|\bhow (?:is"
+            r"|was|are) (?:that|this|it|those) (?:measured|"
+            r"counted|worked out|calculated)\b",
+            10,
+        ),
+    ),
     "unmeasured": tuple((p, 8) for _, p in UNMEASURED_TOPICS),
     "why_goal": (
         (r"\b(?:why|how) (?:did|was|were|come)\b.{0,40}" + GOAL_WORDS, 9),
@@ -535,6 +553,7 @@ TACTICS_TOOLS = (
     "lineup",
 )
 TIE_BREAK = (
+    "how_known",
     "unmeasured",
     "why_goal",
     "scorers",

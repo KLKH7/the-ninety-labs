@@ -1588,6 +1588,13 @@ def table_answer(question: Question, insights, history=(), suggest: bool = True)
         ups = follow_ups([], [], insights, asked, t) if suggest else ()
         return Answer("unanswerable", ask_answers.NOT_MATCH[read.topic], None, None, None, (), None, None,
                       follow_ups=ups), []
+    if read.intent == "how_known":
+        # "How do you know?": how the last answer's figures were made (its How-we-know), fixed text with
+        # only the rates docs/EVALUATION.md measures; with no last answer, how every answer is made.
+        last = history[-1].get("question", "") if history else ""
+        prev = read_question(last, insights, question.t).intent if last else None
+        how = ask_answers.HOW.get(prev, ask_answers.HOW_DEFAULT)
+        return Answer("verified", how, None, None, None, (), None, None, spoken=how, how=how), []
     if history and FOLLOW_ON.search(question.text) and read.intent in ("small_talk", "tactics"):
         return None
     if history and FOLLOW_ON.search(question.text):
