@@ -1,8 +1,9 @@
 # "Most involved", as an order without a count: results
 
 These are graded once, on held-out seed 8080 (`runs/demo-8080-hunt`), against
-[player-involvement-rank-plan.md](player-involvement-rank-plan.md). The plan (3476d244) and its
-addendum (5b3b67e2) were committed before any truth for 8080 was read. The run is at 5b3b67e2,
+[player-involvement-rank-plan.md](player-involvement-rank-plan.md). The plan (3476d244; f77cfa08
+after the rebase onto main) and its addendum (5b3b67e2; 8fb2310d after the rebase) were committed
+before any truth for 8080 was read. The run is at 5b3b67e2 (8fb2310d, the same code),
 and the raw output is [player-involvement-rank.json](player-involvement-rank.json). Names cross
 the camera join only, because 8080's broadcast vision runs are no longer on the machine (see the
 addendum).
