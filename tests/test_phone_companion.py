@@ -149,7 +149,8 @@ def test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot(b
     box = page.locator("#map").bounding_box()  # measured once the page has stopped moving
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
-    assert page.inner_text("#player-title") == "Dunhollow player"  # a sure side; no track number
+    # No ID-feed name: where he is, never his club from the tracker's vote, nor a track number (Oct 27).
+    assert page.inner_text("#player-title") == "The player in the middle of the pitch"
     assert not errors
 
 
@@ -163,7 +164,8 @@ def test_a_tracked_player_on_an_unsure_side_is_never_named_by_club_on_the_phone(
     box = page.locator("#map").bounding_box()
     page.touchscreen.tap(box["x"] + x, box["y"] + y)
     page.wait_for_selector("#player:not([hidden])")
-    assert page.inner_text("#player-title") == "A player"  # neither his side nor the tracker's number
+    # Neither his side nor the tracker's number, and never "a player" (Kian, Oct 27): where he is.
+    assert page.inner_text("#player-title") == "The player on the left of the pitch"
     assert not errors
 
 
@@ -1874,5 +1876,160 @@ def test_every_key_moment_row_has_one_type_and_a_goal_is_told_by_its_label(brows
       const s = getComputedStyle(t); return [s.fontSize, s.fontWeight]; })""")
     assert styles and all(s == ["17px", "400"] for s in styles), styles
     assert page.inner_text("#key-rows .moment-row.goal .goal-tag") == "GOAL"
+    assert not errors
+    ctx.close()
+
+
+# --- the player sheet on the demo (Oct 27): names on tap, every map findable ---------------------
+
+def named_phone(browser, site, t: float):  # noqa: F811
+    """The phone with the ID feed naming a-t3 (match.json `lineup_tactical`), the big screen at t, on
+    the 8324 bundle's shape: the feed's name is on the HOME team sheet (`sheets`), so the feed's side
+    is not the track id's letter (the tracker's vote), and the manifest carries no `sides_known`."""
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+
+    def match(route):
+        body = route.fetch().json()
+        body["lineup_tactical"] = [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "striker",
+                                    "confident": True, "source": "id_feed"}]
+        nine = {"number": 9, "position": "striker", "line": "forward"}
+        body["sheets"] = {"home": [{**nine, "name": "Tac Named"}], "away": [{**nine, "name": "Other Nine"}]}
+        body["identity"] = {"source": "id_feed", "label": "Player ID feed", "provider": "sim"}
+        route.fulfill(json=body)
+
+    def manifest(route):
+        body = route.fetch().json()
+        body.pop("sides_known", None)
+        route.fulfill(json=body)
+
+    ctx.route("**/bundle/match.json", match)
+    ctx.route("**/bundle/manifest.json", manifest)
+    laptop = ctx.new_page()
+    laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
+    laptop.fill("#seek", str(t))
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.match && window.ninetyPhone.state.radar")
+    page.wait_for_function(f"Math.abs(window.ninetyPhone.laptop.time() - {t}) < 0.05")
+    page.wait_for_function("document.querySelector('#status').dataset.state === 'paused'")
+    return ctx, page, errors
+
+
+def followed_late(page) -> bool:
+    """Whether the clip's tracks start after the minimap feed's first frame (a track's span is said)."""
+    return page.evaluate("(window.ninetyPhone.state.minimap?.frames[0]?.t ?? 0) + 1 < 60")
+
+
+def tap_at(page, x: float, y: float):
+    sx, sy = page.evaluate(f"window.ninetyPhone.screenOf({x}, {y})")
+    box = page.locator("#map").bounding_box()
+    page.touchscreen.tap(box["x"] + sx, box["y"] + sy)
+    page.wait_for_selector("#player:not([hidden])")
+
+
+def test_tapping_a_player_the_id_feed_names_says_his_name_in_the_card_and_every_chip(
+    browser, site,  # noqa: F811
+):
+    """Kian (Oct 27): he tapped a player and the chips said "a player". a-t3 is named by the feed."""
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS)
+    tap_at(page, 70, 20)  # a-t3 stands still at (70, 20)
+    assert page.inner_text("#player-title").startswith("Tac Named, #9")
+    chips = page.locator("#chips button").all_inner_texts()
+    assert chips == ["How fast is Tac Named running now?", "What is Tac Named's top speed?",
+                     "How far has Tac Named run?"]
+    assert page.inner_text("#ask-who") == "Tac Named"
+    assert not errors
+    ctx.close()
+
+
+def test_a_player_the_feed_does_not_name_is_said_by_where_he_is_never_a_player(
+    browser, site,  # noqa: F811
+):
+    """h-t1 (at x 21, the left third) has no feed row and an unsure side: no club, no track number,
+    and never "a player" in the title, the chips or the answer that names him."""
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS)
+    tap_at(page, 21, 30)
+    assert page.inner_text("#player-title") == "The player on the left of the pitch"
+    chips = page.locator("#chips button").all_inner_texts()
+    assert len(chips) == 3 and all("the player on the left of the pitch" in c for c in chips), chips
+    assert not any(re.search(r"\ba player\b|h-t1|\b1\b", c, re.I) for c in chips), chips
+    assert "What top speed has the player on the left of the pitch reached?" in chips  # never "the pitch's"
+    # The answer's player id is said as the sheet says him (the API answers by id).
+    said = page.evaluate("window.ninetyPhone.answer('x', {status: 'verified',"
+                         " text: 'h-t1 has covered 12 m so far.', metric: 'distance_run', value: 12,"
+                         " unit: 'm', evidence: [], t_from: 0, t_to: 60})")
+    assert said == "verified"
+    last = page.locator("#answers .answer:not(.pending)").last
+    assert "The player on the left of the pitch has covered 12 m" in last.inner_text()
+    # h-t2 is followed from 60.0 s, past the mock feed's first frame: his answer says so.
+    page.evaluate("window.ninetyPhone.answer('y', {status: 'verified', text: 'h-t2 has covered 30 m so far.',"
+                  " metric: 'distance_run', value: 30, unit: 'm', evidence: [], t_from: 0, t_to: 61})")
+    covered = page.locator("#answers .answer:not(.pending)").last.inner_text()
+    assert followed_late(page)  # else this check would hold vacuously
+    assert "That covers the 1 s we followed him, 1:00 to 1:01." in covered, covered
+    assert not errors
+    ctx.close()
+
+
+def test_a_cards_numbers_say_the_stretch_its_track_was_followed_not_the_match(
+    browser, site,  # noqa: F811
+):
+    """Lesson 294: a track is one unbroken stretch of tracking. h-t2 is seen from 60.0 s to the cut
+    and again after it; asked at 61 s his stretch ends at 61 s, never later (no look-ahead)."""
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS)
+    assert page.evaluate("window.ninetyPhone.trackSpan('h-t2', 61)") == [60.0, 61.0]
+    # Inside his gap (unseen from frame 1537 to the cut), the span ends where he was last seen.
+    assert page.evaluate("window.ninetyPhone.trackSpan('h-t2', 61.9)") == [60.0, 1536 / FPS]
+    assert page.evaluate("window.ninetyPhone.trackSpan('h-t2', 70)") == [60.0, 1584 / FPS]
+    assert page.evaluate("window.ninetyPhone.trackSpan('h-t2', 59)") is None  # not yet seen
+    assert page.evaluate("window.ninetyPhone.trackSpan('nobody', 70)") is None
+    assert not errors
+    ctx.close()
+
+
+def test_the_pitch_shows_positions_movement_and_one_heat_map_of_every_tracked_player(
+    browser, site,  # noqa: F811
+):
+    """The minimap, the wind map and the heat map are the Live pitch's three modes; each draws. The
+    heat map is both clubs together and counts every track alike, named or not: the ID feed reaches
+    no statistic but an event's side, and nothing filters on whether a track is named (AGENTS.md;
+    merge review of #426)."""
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS)
+    page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
+    assert page.locator("#map-empty").is_hidden()
+    page.click("#pitch-mode ion-segment-button[value=flow]")
+    page.wait_for_selector("#wind:not([hidden])")
+    assert page.get_attribute("#wind-toggle", "aria-pressed") == "true"
+    page.click("#pitch-mode ion-segment-button[value=heat]")
+    page.wait_for_selector("#team-heat:not([hidden])")
+    assert page.locator("#wind").is_hidden()  # one overlay at a time
+    # Frames 1500-1505 by 60.2 s, four tracks in each (a-t3 named by the feed, three not): 24.
+    page.wait_for_function("Number(document.querySelector('#team-heat').dataset.samples) > 0")
+    assert page.get_attribute("#team-heat", "data-samples") == "24"
+    assert page.locator("#heat-side").count() == 0  # no club switch
+    inked = """() => { const c = document.querySelector('#team-heat'); const d = c.getContext('2d')
+      .getImageData(0, 0, c.width, c.height).data; let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; }"""
+    assert page.evaluate(inked) > 0
+    words = page.inner_text("#team-heat-words")
+    third = r"most often in the (left|middle|right) third \(\d+% of the time\) of the pitch as drawn"
+    said = rf"Every tracked player, to 1:00: {third}\. Brighter means more time there\."
+    assert re.fullmatch(said, words), words
+    assert "Crowmere" not in words and "Dunhollow" not in words and "ID feed" not in words
+    page.click("#pitch-mode ion-segment-button[value=players]")
+    page.wait_for_selector("#team-heat", state="hidden")
+    assert not errors
+    ctx.close()
+
+
+def test_an_empty_pitch_says_players_appear_when_the_big_screen_shows_play(
+    browser, site,  # noqa: F811
+):
+    """At 0:00, before any tracked frame, the pitch was blank with no word: Kian could not find it."""
+    ctx, page, errors = named_phone(browser, site, 0)
+    page.wait_for_selector("#map-empty:not([hidden])")
+    assert page.get_attribute("#map", "data-dots") == "0"
     assert not errors
     ctx.close()
