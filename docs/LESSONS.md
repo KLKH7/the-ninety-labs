@@ -3470,8 +3470,8 @@ short and actionable. This file is public: no research sources, product names or
   another of those sentences and is never judged. The Judge still ran on every model draft: about 2 s
   and $0.0006 a question, under one 10 s limit that also had to hold the plan and answer steps, so its
   own 15 s timeout and retry could never run. Measured on the demo match (docs/eval/ask-model-path.md),
-  the published Judge rejected 3 of 59 true sentences the code check passed, and the code check had
-  already caught every planted defect the Judge caught. Its only effect was a wrong reject and the
+  the published Judge rejected 2 of 66 true sentences the code check passed, and the code check had
+  already caught every planted defect. Its only effect was a wrong reject and the
   wait. While measuring this, a capped judge run gathered all its calls at once and lost every
   answer when the cap stopped one ($0.08 spent, nothing recorded).
 - **Rule:** before adding (or keeping) a check on a path, name the output it would stop and what is

@@ -46,54 +46,41 @@
  "judge": {
   "events": {
    "true, code passed": {
-    "claims": 59,
-    "judge_rejected": 3
+    "claims": 66,
+    "judge_rejected": 2
    },
    "true, code rejected": {
-    "claims": 8,
-    "judge_rejected": 3
-   },
-   "planted, code passed": {
     "claims": 1,
     "judge_rejected": 0
    },
+   "planted, code passed": {
+    "claims": 0,
+    "judge_rejected": 0
+   },
    "planted, code rejected": {
-    "claims": 31,
-    "judge_rejected": 22
+    "claims": 32,
+    "judge_rejected": 26
    }
   },
   "insights": {
    "true, code passed": {
-    "claims": 59,
+    "claims": 66,
     "judge_rejected": 0
    },
    "true, code rejected": {
-    "claims": 8,
-    "judge_rejected": 0
-   },
-   "planted, code passed": {
     "claims": 1,
     "judge_rejected": 0
    },
+   "planted, code passed": {
+    "claims": 0,
+    "judge_rejected": 0
+   },
    "planted, code rejected": {
-    "claims": 31,
+    "claims": 32,
     "judge_rejected": 25
    }
   }
  },
- "judge_escapes": [
-  {
-   "arm": "events",
-   "kind": "club",
-   "text": "Lisbon Esportes 1 goal, London Athletic 1 goal, read from the broadcast's scorebug.",
-   "judge_ok": true
-  },
-  {
-   "arm": "insights",
-   "kind": "club",
-   "text": "Lisbon Esportes 1 goal, London Athletic 1 goal, read from the broadcast's scorebug.",
-   "judge_ok": true
-  }
- ],
- "spend_usd": 0.1987
+ "judge_escapes": [],
+ "spend_usd": 0.3104
 }

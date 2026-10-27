@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
-import random
 import statistics
 import subprocess
 import time
@@ -53,7 +53,7 @@ QUESTIONS = (
     ("Who has run the furthest?", 4000.0),
 )
 PER_KIND = 4  # judge set: true claims per fact kind, planted claims per defect kind
-SEED = 8324  # the sample's shuffle, fixed
+SEED = 8324  # salts the hash that orders the sample
 
 
 def _commit() -> str:
@@ -96,16 +96,16 @@ async def latency(args) -> None:
 
 
 def judge_set(insights) -> tuple[list[dict], dict]:
-    """True and planted claims on the demo match's insight facts, PER_KIND of each kind, shuffled
-    with a fixed seed so the sample does not depend on dict order."""
+    """True and planted claims on the demo match's insight facts, PER_KIND of each kind, in an order
+    fixed by a hash of each fact's id."""
     rows = insight_claims.facts_and_summaries(insights)
     known = {f["id"]: {**f, "clubs": insights.fixture.clubs} for f in rows}
     by_kind: dict[str, dict] = {}
     for f in rows:
         if f.get("confident", True):
             by_kind.setdefault(f["kind"], f)
-    rng = random.Random(SEED)
-    rng.shuffle(rows)
+    # A fixed order that does not depend on dict order or a platform's random module (tests/test_fmath.py).
+    rows = sorted(rows, key=lambda f: hashlib.sha256(f"{SEED}:{f['id']}".encode()).hexdigest())
     true, planted = {}, {}
     for f in rows:
         if not f.get("confident", True):
@@ -221,7 +221,9 @@ def _step(row: dict) -> str:
 # drills (a Judge forced down, a Companion forced slow) are faults it injected, so they are left out.
 AGENTS_LIVE = ROOT / "docs/eval/agents-live/seed8324/trace.jsonl"
 BUDGET_FACTOR, BUDGET_STEP_S = 1.5, 0.5  # design: a step's budget is 1.5 x its p95, rounded up to 0.5 s
-LOST_RUN_USD = 0.0769  # the first judge-set run: capped mid-way, its answers discarded unrecorded
+# Judge-set runs whose rows are not the committed ones: the first, capped mid-way with its answers
+# discarded ($0.0769); the second, sampled with random.Random, which tests/test_fmath.py bans here ($0.1121).
+LOST_RUN_USD = 0.0769 + 0.1121
 
 
 def budget_for(p95_ms: float) -> float:

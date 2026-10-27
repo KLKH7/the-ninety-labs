@@ -5,6 +5,10 @@ The phone's Ask in Live mode (the `x-ninety-passcode` header). The match Compani
 the Judge (`ninety-judge:4`) then judged that sentence, all under one 10 s limit. An audit on Oct 27
 found five problems with this harness. This report measures it and records what changed.
 
+Agent definitions: `ninety-companion-match:4` definition `b06b66dd6637d0b5`, `ninety-judge:4` definition `2b04c8ad1ac3c950`.
+The judge set (section 2) ran two local Judge definitions on the same model: the published
+instructions (the same text as `ninety-judge:4`) and `judge.MATCH_INSTRUCTIONS`, which is not published.
+
 Reproduce (the first two call Foundry and cost model tokens):
 
     uv run python -m ninety.eval.ask_model_path latency --insights <insights.json> --arm before|after
@@ -38,7 +42,7 @@ that slowed the Companion answered in 10.04 s. Now a slow plan is cut at 5.5 s.
 `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`
 re-derives the budgets from `report.json` and fails if `STEP_S` drifts from them.
 
-**Not measured:** the player path (a question about one tapped player, `ninety-companion:1`). Its
+**Not measured:** the player path (a question about one tapped player, answered by the player Companion). Its
 draft borrows the answer step's budget (same model, a one-sentence reply from a smaller prompt).
 
 ## 2. The Judge on the match path
@@ -52,7 +56,7 @@ one code sentence for another, never keep a wrong one off the screen.
 sentence for up to 4 confident facts of each kind (67). The planted claims are those sentences with
 one defect each, up to 4 per defect kind (32): number, number in words, clubs swapped, "the home side",
 a track id for the name, another fact's evidence, the minute, the direction. They come from
-`ninety/eval/insight_claims.py`, with the sample fixed by seed 8324. Every claim went through the code
+`ninety/eval/insight_claims.py`, the sample ordered by a sha256 of each fact's id (salted 8324). Every claim went through the code
 check (`_verify`) and to the Judge twice, both as local definitions on gpt-4.1-mini: once under its
 published instructions (written for events, ids like h7, home/away) and once under
 `judge.MATCH_INSTRUCTIONS` (rewritten for insight facts: club names, names only from the Player ID
@@ -60,28 +64,30 @@ feed's `*_is` fields, `also` figures, minute ranges, counts of the tracked foota
 
 | claims | n | Judge rejects (event instructions) | Judge rejects (insight instructions) |
 |---|---|---|---|
-| true, code check passed (what the match path can air) | 59 | **3** (2 wrong rejects, 1 service error held) | **0** |
-| true, code check rejected | 8 | 3 | 0 |
-| planted, code check rejected | 31 | 22 | 25 |
-| planted, code check passed | 1 | 0 | 0 |
+| true, code check passed (what the match path can air) | 66 | **2** | **0** |
+| true, code check rejected | 1 | 0 | 0 |
+| planted, code check rejected | 32 | 26 | 25 |
+| planted, code check passed | 0 | – | – |
 
-The one planted claim the code check passed swaps the clubs in a 1–1 scorebug reading, so it is still
-true. The Judge passed it under both instructions, correctly. The Judge's two wrong rejects under the
-published instructions: "had 1 player near it in the next 5 seconds" (it wanted the timing spelled
-out) and "4 opponents in 1 pass" (it read the total as spread over passes).
+The code check caught every planted defect, so there was nothing left for the Judge to catch. Under
+the published instructions, the Judge's two wrong rejects were "In minute 89, a London Athletic
+player lost the ball with no teammate free further up the pitch" (it read the fact as not saying the
+ball was lost) and "4 opponents in 1 pass" (it read the total as spread over passes).
 
 **Choice: run no Judge on the match path; keep it where the model writes its own words** (a player
 question, `ninety/agents/companion.py`). On this set the Judge caught nothing the code check missed
-(0 of 1 escapes, and that one is true). Under the instructions it is published with, it rejected 3 of
-59 airable true sentences (5%). Each call costs about 2.1 s (p50) and $0.0006. Running it on the final
+(no planted claim got past the code check). Under the instructions it is published with, it rejected
+2 of 66 airable true sentences (3%). Each call costs about 2.1 s (p50) and $0.0006. Running it on the final
 answer instead would put that wait and that false-reject rate on every Live answer, code's included,
 to block nothing more. `MATCH_INSTRUCTIONS` fixes the false rejects (0 of 67) but is not published:
 no live path needs it while the match Companion only picks code's sentences. If it ever writes its own
 words again, publish it and gate that path with it.
 
-**Also found:** 8 of code's own first sentences for confident facts fail code's check (two offside
-margins, two pass-option lines, a 0–0 scorebug, a one-player line break, a regain-to-shot, a shot
-angle), so code never says them. This is outside this change; it is listed as a follow-up.
+**Also found:** some of code's own first sentences for confident facts fail code's own check, so
+code never says them. Here 1 of 67 does ("lost the ball and had 2 players near it"). A superseded
+sample (below) had 8 of 67: two offside margins, two pass-option lines, a 0–0 scorebug, a one-player
+line break, a regain-to-shot and a shot angle. This is outside this change; it is listed as a
+follow-up.
 
 ## 3. Before and after
 
@@ -121,6 +127,11 @@ about $0.0006.
 
 ## Spend
 
-$0.199 on model calls in all: latency before $0.0052 (8 calls), after $0.0045 (6 calls), the judge set
-$0.112 (206 calls, retries included). It also includes $0.077 on a first judge-set run that hit its
-call cap: it gathered every call at once, so the cap discarded every answer (lesson 295).
+$0.310 on model calls in all: latency before $0.0052 (8 calls), after $0.0045 (6 calls), the committed
+judge set $0.112 (198 calls). Two earlier judge-set runs are not the committed rows:
+- $0.077 on a run that hit its call cap. It gathered every call at once, so the cap discarded every
+  answer (lesson 295).
+- $0.112 on a complete run whose sample was drawn with `random.Random`, which the portability check
+  (`tests/test_fmath.py`) bans in evaluation code. It was re-run with the hash order. That run gave
+  the same conclusion: 3 of 59 true sentences rejected under the published instructions, 0 under the
+  insight-fact ones, and no planted defect past the code check that was false.
