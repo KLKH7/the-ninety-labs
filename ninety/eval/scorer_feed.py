@@ -40,9 +40,9 @@ def _truth(truth: Path) -> tuple[dict[int, dict[str, tuple[float, float]]], list
         import numpy as np
 
         z = np.load(truth)
-        ids = [str(i) for i in z["ids"]]
+        ids, xy = [str(i) for i in z["ids"]], z["xy"]  # each z[...] decompresses the whole array: once
         for n in want:
-            at[n] = {ids[k]: (float(z["xy"][n][k][0]), float(z["xy"][n][k][1])) for k in range(len(ids))}
+            at[n] = {ids[k]: (float(xy[n][k][0]), float(xy[n][k][1])) for k in range(len(ids))}
         ev_path = truth.parent / "events.jsonl"
     else:
         with (truth / "frames.jsonl").open() as fh:

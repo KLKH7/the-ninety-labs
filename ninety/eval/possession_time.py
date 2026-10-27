@@ -38,8 +38,8 @@ def truth_frames(truth: Path) -> tuple[dict[int, tuple[str, float, float]], list
         import numpy as np
 
         z = np.load(truth)
-        out = {i: (str(z["poss"][i]), float(z["ball"][i][1]), float(z["ball"][i][2]))
-               for i in range(len(z["poss"]))}
+        poss, ball = z["poss"], z["ball"]  # each z[...] decompresses the whole array: once
+        out = {i: (str(poss[i]), float(ball[i][1]), float(ball[i][2])) for i in range(len(poss))}
         ev_path = truth.parent / "events.jsonl"
     else:
         out = {}
@@ -62,8 +62,9 @@ def truth_sides(frames: dict[int, tuple[str, float, float]], events: list[dict])
             end = next((f["frame"] for f in evs[i + 1:] if f["type"] in DEAD_TO), None)
             dead.append((int(e["frame"]), int(end) if end is not None else 10 ** 9))
     dead_at = set()
+    last = max(frames)
     for a, b in dead:
-        dead_at.update(range(a, min(b, max(frames) + 1)))
+        dead_at.update(range(a, min(b, last + 1)))
     out, team = {}, None
     for n in sorted(frames):
         who, x, y = frames[n]
