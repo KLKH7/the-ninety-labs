@@ -15,7 +15,7 @@ wherever the footage does, gaps within the tracker's own limit filled, ninety/vi
 the share in each third of the pitch along the direction a team attacks (the thirds of Law 1's
 length, as the possession layer cuts them). A ball within the players' position error of a third's
 line could be on either side of it, so those seconds are counted apart and give the share bounds,
-and the share is said as them ("between 25% and 31% of the footage shown"), like team distance,
+and the share is said as them ("for 25% to 31% of the time in the footage we've seen"), like team distance,
 "from the footage shown" (I16).
 """
 

@@ -1085,6 +1085,21 @@ def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing()
     assert "%" not in a.text  # no share said
 
 
+@pytest.mark.parametrize("q", [
+    "Who has had more possession?", "Who has had more of the ball?", "Who's dominating possession?",
+    "Are London dominating?", "Which team has been better in possession?", "Who has the ball more?",
+])
+def test_possession_is_one_answer_however_it_is_asked(q):
+    # Paraphrases never flip it: the same coverage-honest sentence with its window and its error.
+    mi = insights()
+    mi.facts["possession"] = [{"id": f"poss:m{m}", "kind": "possession_minute", "minute": m, "frames": 60.0,
+                               "home": 30.0, "away": 20.0, "club": None} for m in range(1, 36)]
+    a = asyncio.run(companion.answer_match(Question("s1", None, q, 34.5 * 60.0), mi)).answer
+    assert a.text.startswith("London Athletic have had 60% of the ball in the footage we've seen "
+                             "from minute 1 to minute 35, by time on the ball, give or take 10 points."), (
+        q, a.text)
+
+
 def test_the_refusal_says_build_up_with_its_hyphen():
     # A message about a club that no tool answers (lesson 287: "Tell me a joke" is small talk now).
     joke = Question("s1", None, "Tell me a joke about London Athletic", 80 * 60.0)
@@ -1257,8 +1272,11 @@ def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
     assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
     a = r.answer
     span = f"from minute {window[0]} to minute {window[1]}"
-    assert "Lisbon Esportes's attacking third" in a.text and "London Athletic's attacking third" in a.text
-    assert a.text.count(span) == 2, a.text  # both clubs, over the stretch asked, never minutes 1 to now
+    assert "Lisbon Esportes' attacking third" in a.text and "London Athletic's attacking third" in a.text
+    # The verdict and both clubs, over the stretch asked, never minutes 1 to now.
+    assert a.text.count(span) == 3, a.text
+    assert re.match(rf"(?:London Athletic|Lisbon Esportes) have been on top {span}", a.text), a.text
+    assert a.t_to <= t  # the answer is about what was seen by now, never the rest of the minute
     if window[0] == 31:
         assert a.headline == "Lisbon", a.headline  # the comparison's verdict, not one club's number
         assert a.text.index("Lisbon") < a.text.index("London")  # the leader first
@@ -1269,7 +1287,18 @@ def test_on_top_is_too_close_to_call_when_the_ranges_overlap():
     a = asyncio.run(companion.answer_match(
         Question("s1", None, "Who's been on top since the half hour?", 2050.0), mi)).answer
     assert a.headline == "Too close to call", a.headline
-    assert a.text.endswith(companion.ON_TOP_LEVEL)
+    assert a.text.startswith(companion.ON_TOP_LEVEL.format(span="from minute 31 to minute 35")), a.text
+
+
+@pytest.mark.parametrize("seen", [2, 0])  # two seconds of the ball; none at all (no territory yet)
+def test_on_top_is_not_known_on_too_little_footage(seen):
+    mi = insights()
+    mi.facts["territory"] = [_territory_minute(t, 35, final=seen, seen=seen) for t in ("home", "away")
+                             if seen]
+    a = asyncio.run(companion.answer_match(
+        Question("s1", None, "Who has been on top in the last minute?", 2120.0), mi)).answer
+    assert a.text == companion.ON_TOP_UNKNOWN and a.headline == "Not known yet", (a.text, a.headline)
+    assert a.value is None and not a.evidence
 
 
 def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():

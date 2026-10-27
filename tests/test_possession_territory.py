@@ -100,8 +100,8 @@ def test_the_share_is_always_said_after_a_minute_of_possession_and_never_before(
     assert got["home"]["confident"] and got["home"]["value"] + got["away"]["value"] == 100
     assert got["home"]["value"] == round(100 * 40 / 61)
     assert cm.code_texts({**got["home"], "club": "London Athletic", "minute_from": 1, "minute_to": 2}) == [
-        f"London Athletic had {got['home']['value']}% of possession from minute 1 to minute 2, "
-        f"counted by time on the ball, give or take {terr.ERROR_POINTS} points."]
+        f"London Athletic have had {got['home']['value']}% of the ball in the footage we've seen "
+        f"from minute 1 to minute 2, by time on the ball, give or take {terr.ERROR_POINTS} points."]
 
 
 def frame(k, x):
@@ -118,21 +118,22 @@ def test_territory_is_the_ball_by_third_along_each_teams_attack():
     assert away["shares"]["final"] == round(100 * 2 / 9)  # away attacks toward x = 0
     assert home["seconds"] == 9 and home["confident"]
     assert cm.code_texts({**home, "club": "London Athletic"}) == [
-        f"The ball was in London Athletic's attacking third between 67% and 78% {SHOWN}"
+        f"The ball was in London Athletic's attacking third for 67% to 78% {SHOWN}"
     ]
 
 
-SHOWN = "of the footage shown in minute 1."  # one minute is "in minute 1", never "from minute 1 to minute 1"
+# One minute is "in minute 1", never "from minute 1 to minute 1".
+SHOWN = "of the time in the footage we've seen in minute 1."
 XS = [80, 90, 100, 75, 72, 95, 10, 20, 35.5, None]
 
 
 @pytest.mark.parametrize(
     "text, ok",
     [
-        (f"The ball was in London Athletic's attacking third between 67% and 78% {SHOWN}", True),
-        (f"The ball was in London Athletic's attacking third 90% {SHOWN}", False),
-        (f"The ball was rarely in London Athletic's attacking third between 67% and 78% {SHOWN}", False),
-        (f"The ball was in Lisbon Esportes's attacking third between 67% and 78% {SHOWN}", False),
+        (f"The ball was in London Athletic's attacking third for 67% to 78% {SHOWN}", True),
+        (f"The ball was in London Athletic's attacking third for 90% {SHOWN}", False),
+        (f"The ball was rarely in London Athletic's attacking third for 67% to 78% {SHOWN}", False),
+        (f"The ball was in Lisbon Esportes' attacking third for 67% to 78% {SHOWN}", False),
     ],
 )
 def test_a_territory_sentence_is_said_in_its_own_words(text, ok):
@@ -187,7 +188,7 @@ def test_the_error_said_beside_possession_is_the_committed_measurement():
     assert body["gate"]["mae_points_at_most"] == 5.0
 
 
-@pytest.mark.parametrize("error, ok", [(None, True), (5, False)])
+@pytest.mark.parametrize("error, ok", [(None, True), (5, False), ("", False)])
 def test_the_possession_sentence_carries_its_measured_error_and_no_other(error, ok):
     from ninety.agents.factcheck import Claim
     from ninety.agents.insight_check import verify
@@ -199,7 +200,10 @@ def test_the_possession_sentence_carries_its_measured_error_and_no_other(error, 
     fact = {**terr.possession(rows, 1, 2)["home"], "club": "London Athletic", "clubs": fx.clubs}
     text = cm.code_texts(fact)[0]
     assert f"give or take {terr.ERROR_POINTS} points" in text
-    if error is not None:
+    if error == "":  # the error left out (a model's sentence): rejected, never on air without it
+        text = text.replace(f", give or take {terr.ERROR_POINTS} points", "")
+        assert "give or take" not in text
+    elif error is not None:
         text = text.replace(f"give or take {terr.ERROR_POINTS} points", f"give or take {error} points")
     names = [s.name for t in ("home", "away") for s in fx.sheet(t)]
     assert verify(Claim(text, [fact["id"]]), {fact["id"]: fact}, fx.clubs, {}, names).ok is ok

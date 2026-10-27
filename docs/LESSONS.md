@@ -3509,3 +3509,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** say a statistic only over the windows its measurement covered (here: from kick-off and
   from a half's start); a window it was not measured on is "not known", or a measured one is used.
 - **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
+
+### 296. A phrase the fact-checker allows is not a phrase it requires
+- **What happened:** #424 put possession on air "give or take 10 points", the error measured when
+  the share missed its 5-point gate. The fact-checker's possession template *allowed* the clause
+  but did not *require* it: the same sentence with the clause deleted still verified, so a
+  model-written possession share could reach the screen with no error (delta review of ff0a17eb).
+  A second miss in the same area: `on_top` named a leader from two seconds of footage ("100% to
+  0%"), with no minimum sample.
+- **Rule:** a qualifier that a number must carry (its error, its coverage) is a check that rejects
+  the sentence without it, not an entry in the list of allowed words. A comparison needs the same
+  sample floor as the measure it rests on.
+- **Check:** `tests/test_possession_territory.py::test_the_possession_sentence_carries_its_measured_error_and_no_other`
+  (the clause left out is rejected) and `tests/test_companion_match.py::test_on_top_is_not_known_on_too_little_footage`;
+  each fails with its guard removed.

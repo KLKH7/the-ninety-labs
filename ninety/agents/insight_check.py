@@ -427,6 +427,12 @@ def check(
             if re.search(rf"\b{re.escape(name)}\b", claim.text) and name not in sided:
                 reasons.append(f"{name} is named, but the side of the cited fact is not known")
 
+    # A possession share missed its gate and is said only with its measured error (lesson 285): a
+    # sentence citing one carries "give or take N points", N the fact's own (the number check above).
+    shares = [f for f in cited if f.get("metric") == "possession_share" and f.get("value") is not None]
+    if shares and not re.search(rf"\bgive or take {_N} points\b", text):
+        reasons.append("a possession share is said with its error: 'give or take N points'")
+
     # Kind words.
     kinds = {f.get("kind") for f in cited}
     for kind, words in KIND_WORDS.items():
@@ -584,7 +590,7 @@ TEMPLATES = {
     "player_sprints": [rf"sprinted {_N} times? above {_N} km/h", rf"did not sprint above {_N} km/h"],
     "player_zone": [rf"was most often {_THIRD}", r"in the footage the video named him in"],
     "pair_passes": [r"passed to", rf"{_N} times?", r"of the passes the video could name both players of"],
-    "possession_share": [rf"had {_N}% of possession", r"counted by time on the ball",
+    "possession_share": [rf"have had {_N}% of the ball", r"in the footage we've seen", r"by time on the ball",
                          rf"give or take {_N} points"],
     "score": [
         r"by minute \d+", rf"had scored {_N} goals? and", rf"{_N} goals?", r"neither nor had scored",
@@ -608,7 +614,7 @@ TEMPLATES = {
     ],
     "final_third_share": [
         r"the ball was in",
-        rf"attacking third (?:{_N}%|between {_N}% and {_N}%) of the footage shown",
+        rf"attacking third for (?:{_N}%|{_N}% to {_N}%) of the time in the footage we've seen",
     ],
 }
 
