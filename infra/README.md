@@ -185,19 +185,20 @@ NINETY_LIVE_URL="$(azd env get-value API_URL)" uv run pytest -q tests/test_live_
 Tasks), and [preprovision.sh](preprovision.sh) stops it early if a Key Vault secret or the budget
 address is missing. Set `RENDER_COMMIT` too if the render queue job should keep its commit.
 
-The pinned bundle (`replay-seed8080-match-3531970`, Oct 26): the demo match, seed 8080 re-cut for
-watchability (footage hunt, #404: 51 segments, 16.2 min, LON 4-1 LIS), from main's live path:
+The pinned bundle (`replay-seed8324-match-b8bde43`, Oct 27): the demo match, seed 8324 on engine v2
+re-cut for watchability (footage hunt: 46 segments, 17.5 min, LON 1-3 LIS), from main's live path:
 vision's detected events sided by the player-ID feed (lesson 269), the offline agents, H.264/AAC
-footage with an HLS ladder (ninety/footage.py, #397, lesson 272). The full sequence (identity feed,
-sided events, match insights, Scout cards, ninety-e2e and the bundle checks) is the producer's
-`final-rebuild.sh`; its e2e step, at 3531970:
+footage with an HLS ladder (ninety/footage.py, #397, lesson 272) baked at footage.timescale 1.25
+(#413), the crowd bed at -21.6 LUFS (#416). The full sequence (identity feed, sided events, match
+insights, Scout cards, ninety-e2e and the bundle, on-air and audio checks) is the producer's
+`final-rebuild.sh`; its e2e step, at b8bde434 (main beb7f551 + #415 + #416):
 
 ```bash
-uv run ninety-e2e runs/demo-8080-hunt --out runs/demo-8080-bundle-final --demo --match --agents offline \
-  --describer code --detections runs/demo-8080-hunt/detections.jsonl --events-file <detected.sided.jsonl> \
-  --tracked runs/demo-8080-hunt/tracked.json --observations runs/demo-8080-hunt/observations.jsonl \
-  --views runs/demo-8080-hunt/views --cards <cards.json> --scorebug runs/demo-8080-hunt/scorebug.jsonl \
-  --team-stats <insights.json> --footage-audio runs/demo-8080-hunt/condensed.mp4
+uv run ninety-e2e runs/demo-8324-final --out runs/demo-8324-bundle-final --demo --match --agents offline \
+  --describer code --detections runs/demo-8324-final/detections.jsonl --events-file <detected.sided.jsonl> \
+  --tracked runs/demo-8324-final/tracked.json --observations runs/demo-8324-final/observations.jsonl \
+  --views runs/demo-8324-final/views --cards <cards.json> --scorebug runs/demo-8324-final/scorebug.jsonl \
+  --team-stats <insights.json> --footage-audio runs/demo-8324-final/crowd.m4a --timescale 1.25
 ```
 
 The bundle before it (`replay-seed900001-0f101db`) was the frozen test clip seed900001 with one false
@@ -252,10 +253,10 @@ The wind map, the player card and Ask then work for that clip (`ninety/match/tra
 `served_clips`). The image takes the demo match's package as a pinned release asset (`served.tar.gz`
 in the same release as the bundle, 3 MB compressed), packed by [served.py](served.py), which refuses
 simulator positions, ground-truth events and clip.json keys beyond the ones read, and unpacks it to
-`NINETY_SERVED_DIR=/app/served` (`seed8080-match`):
+`NINETY_SERVED_DIR=/app/served` (`seed8324-match`):
 
 ```bash
-python3 infra/served.py pack runs/demo-8080-hunt seed8080-match runs/served.tar.gz <detected.sided.jsonl>
+python3 infra/served.py pack runs/demo-8324-final seed8324-match runs/served.tar.gz <detected.sided.jsonl>
 ```
 
 ## The MCP key
