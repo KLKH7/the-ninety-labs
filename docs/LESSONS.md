@@ -3594,3 +3594,14 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_possession_territory.py::test_the_possession_sentence_carries_its_measured_error_and_no_other`
   (the clause left out is rejected) and `tests/test_companion_match.py::test_on_top_is_not_known_on_too_little_footage`;
   each fails with its guard removed.
+
+### 298. A "within ±1" bar holds trivially for a rare event
+- **What happened:** the per-player stats plan set one bar for every count: at least 80% of
+  players within max(1, 21%) of the truth. Shots and goals met it (95% of players) while 5 shots
+  of 18 and 1 goal of 4 were found, because a player who never scores is "within 1" of 0 whatever
+  the detector does. Graded at 6cfdcfc5 on seed 8324 ([player-stats.md](eval/player-stats.md)).
+- **Rule:** a per-player bar on a count also needs the match total to be within the same margin,
+  or rare events pass by being missed. A check added after looking may only turn a stat off,
+  never on. That is how this one was added, and it is marked so in the code.
+- **Check:** `ninety/eval/player_stats_eval.py` (`total_ok`), and
+  `ninety/intel/player_stats_calibration.json` has `shots` and `goals` off.
