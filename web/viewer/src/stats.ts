@@ -127,6 +127,8 @@ export function setupStats(card: HTMLElement, panel: HTMLElement, m: Stats | nul
       key = k;
       card.hidden = !(g?.kind === "card" && pick.length);
       panel.hidden = g?.kind !== "panel";
+      // Nothing else shows through a period panel (the time-skip label faded behind it at full time).
+      document.body.toggleAttribute("data-period-panel", g?.kind === "panel");
       if (g?.kind === "card" && pick.length) {
         card.replaceChildren(el("div", "card", cardHead("MATCH STATS", `${g.minute}′`, null, { teams, codes }),
           el("p", "card-row card-teams", el("span", "", codes.home), el("span", "", codes.away)),
