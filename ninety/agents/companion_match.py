@@ -116,7 +116,9 @@ TOOL_WORDS = (
     ),
     (
         "score",
-        r"\b(?:what(?:'s| is) the score|the score|score|scoreline|who scored|scorers?|assists?|assisted"
+        r"\b(?:what(?:'s| is) the score|the score|(?<![\w ])score|score (?:please|now|update|so far)"
+        r"|final score"
+        r"|scoreline|who scored|scorers?|assists?|assisted"
         r"|saves?|how many goals|who(?:'s| is) (?:winning(?! (?:the|in|at|on) )|ahead|leading|in front"
         r"|in the lead)|is it (?:a )?(?:draw|level)"
         r"|is it \d+ ?[-–] ?\d+|drawing|are .{1,30} (?:winning|level|losing|ahead|behind|in front))\b",
@@ -162,7 +164,8 @@ TOOL_WORDS = (
     ),
     (
         "halves",
-        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|the two halves|half[- ]time"
+        r"\b(?:halves|compar\w*[^?.]{0,40}\b(?:first|second)\b|the two halves|since the break|after the break"
+        r"|half[- ]time"
         r"|first half (?:and|v|vs|against) (?:the )?second)\b",
     ),
     (
@@ -232,7 +235,8 @@ def asked_role(text: str) -> str | None:
 def route(text: str) -> list[str]:
     lowered = text.lower()
     tools = [tool for tool, words in TOOL_WORDS if re.search(words, lowered)]
-    if SECOND_HALF.search(lowered):
+    if SECOND_HALF.search(lowered) and not re.search(r"\b(?:compar\w*|chang\w*|differen\w*|than|vs|versus)\b",
+                                                     lowered):
         tools = [t for t in tools if t != "halves"]  # a stretch of the match, not the halves compared
     if re.search(r"\b(?:high|deep|back|defensive|offside) line\b", lowered) and "team_shape" in tools:
         tools = [t for t in tools if t != "line_breaks"]  # a back line's height is the shape's to answer
@@ -398,6 +402,8 @@ def chat_kind(text: str, insights, history=()) -> str | None:
     if any(re.search(rf"\b(?:{words})", lowered) for _, words in ROLE_WORDS):
         return None
     if hasattr(insights, "sheet_names") and asked_players(text, insights):
+        return None
+    if asked_players(text, insights):  # "how much has the left back done?": about a player of this match
         return None
     if history and FOLLOW_ON.search(text):
         return None
@@ -1543,11 +1549,27 @@ def why_result(question: Question, insights, minute: int, known: dict) -> list[t
         text = _checked(bug, known, insights)
         if text is not None:
             said.append((text, bug))
-    if not goals:
-        return said or None
     conceding = re.search(r"\b(?:losing|lose|lost|concede\w*|conced\w*|struggl\w*|behind|worse|can'?t score"
                           r"|cannot score)\b", question.text, re.I)
     club = named[0] if len(named) == 1 else None
+    if club is not None and bug is not None:
+        # A premise the scorebug contradicts is said first ("why are London losing?" at 1-1): fixed words
+        # from its reading, the sentence before them the reading itself.
+        home = club == insights.fixture.clubs["home"]
+        own, other = (bug["home"], bug["away"]) if home else (bug["away"], bug["home"])
+        cant = re.search(r"\bcan'?t score|cannot score|not scoring\b", question.text, re.I)
+        losing = conceding and not cant and not re.search(r"\bconced", question.text, re.I)
+        winning = re.search(r"\b(?:winning|ahead|in front|leading|on top)\b", question.text, re.I)
+        if cant and own > 0:
+            said.append((f"{club} have scored, though.", bug))
+        elif losing and own >= other:
+            state = "it is level" if own == other else "they are ahead"
+            said.append((f"{club} aren't behind: {state}.", bug))
+        elif winning and own <= other:
+            state = "it is level" if own == other else "they are behind"
+            said.append((f"{club} aren't ahead: {state}.", bug))
+    if not goals:
+        return said or None
     if club is not None and conceding:
         wanted = [g for g in goals if g["club"] != club]
     elif club is not None:

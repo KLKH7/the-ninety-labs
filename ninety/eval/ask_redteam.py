@@ -30,7 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS = ROOT / "docs" / "eval" / "ask-redteam-questions.json"
 MINUTES = (5, 30, 45, 70, 89)
 CONCURRENT = 3  # questions in flight at once: under the deployment's tokens a minute (8 got 429s)
-RETRIES = 6
+BACKOFF_S = (2.0, 4.0, 8.0, 16.0, 32.0, 64.0)  # design: doubling waits, about two minutes in all
+RETRIES = len(BACKOFF_S)
 EVAL_TIMEOUT_S = 90.0  # a throttled call waits its turn here; the phone's own timeout is not this
 
 # What each expectation allows (docs/eval/ask-redteam-plan.md).
@@ -253,7 +254,7 @@ async def patient(call):
         except Exception as exc:  # noqa: BLE001  the SDK's rate-limit error has no stable type
             if "429" not in str(exc) and "rate" not in str(exc).lower() or k == RETRIES - 1:
                 raise
-            await asyncio.sleep(2.0 * 2**k)
+            await asyncio.sleep(BACKOFF_S[k])
 
 
 def main() -> None:
