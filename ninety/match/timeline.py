@@ -8,6 +8,7 @@ It reads no ground truth: the segments are the broadcast's own timecode.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -36,6 +37,14 @@ def segments(frames: list[int]) -> list[Segment]:
     return out
 
 
+def checked_timescale(value: float) -> float:
+    """A timescale (match seconds a video second): a finite number above 0, else ValueError."""
+    x = float(value)
+    if not math.isfinite(x) or x <= 0:
+        raise ValueError(f"timescale {value!r}: a finite number above 0 (match seconds a video second)")
+    return x
+
+
 class Timeline:
     """Video time against match time, for a clip whose picture cuts: a reader that shows or
     schedules anything by time (the viewer, the audio description) maps through this."""
@@ -52,7 +61,7 @@ class Timeline:
 
     def __init__(self, segs: list[Segment] | list[dict], fps: float, timescale: float = 1.0):
         self.fps = fps  # images a match second: one image is one match frame
-        self.timescale = timescale  # match seconds a video second: the footage plays timescale x
+        self.timescale = checked_timescale(timescale)  # match seconds a video second: plays timescale x
         self.video_fps = fps * timescale  # images a video second
         self.segs = [s if isinstance(s, Segment) else Segment(s["index"], s["frame"], s["frames"])
                      for s in segs]

@@ -35,6 +35,8 @@ import subprocess
 from functools import cache
 from pathlib import Path
 
+from ninety.match.timeline import checked_timescale
+
 ENCODER = "h264_videotoolbox"
 KEY_S = 2  # a keyframe every 2 s (design: a seek lands within 2 s, the common web default)
 SEGMENT_S = 4  # HLS segment length: two keyframe intervals (design; Apple's guidance is about 6 s)
@@ -90,6 +92,7 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
     image is still shown, at fps x timescale a video second, and the sound is sped up with it
     (`footage.timescale` in the manifest; ninety/match/timeline.py maps through it)."""
     n = len(images)
+    timescale = checked_timescale(timescale)
     match_fps, fps = fps, fps * timescale  # images a video second, from here on
     sound = [] if audio is None else ["-i", str(audio)]
     shutil.copyfile(images[0], out / "poster.jpg")
@@ -131,7 +134,7 @@ def write(images: list[Path], fps: int, out: Path, audio: Path | None = None, he
 
 def clip(images: list[Path], first: int, end: int, fps: int, dest: Path, timescale: float = 1.0) -> None:
     """Images [first, end) as an MP4 with the footage's settings and speed (a highlight's window)."""
-    fps = fps * timescale
+    fps = fps * checked_timescale(timescale)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *_input(images, fps, first), "-vf", COLOUR, *video_args(fps),
            "-b:v", str(MP4_BITRATE), *_length(end - first, fps), "-movflags", "+faststart", str(dest)]
     subprocess.run(cmd, check=True)

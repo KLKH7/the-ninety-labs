@@ -120,3 +120,47 @@ def test_a_highlight_s_window_is_cut_from_the_images_its_video_times_show(tmp_pa
     # 60.4 s is image 10 and 62.8 s is image 60 (past the cut), at 31.25 images a video second.
     assert rec["images"] == [10, 60] and rec["shot_image"] == 50
     assert rec["video_t"] == [round(10 / (25 * K), 2), round(60 / (25 * K), 2)]
+
+
+# ---------------------------------------------------------------- commentary and the guard
+
+
+def test_a_commentary_line_lasts_its_heard_seconds_times_the_timescale_in_match_time():
+    from ninety.speech import commentary
+
+    calls = [commentary.Call("v1", 61.0, "shot", ["v1"], ["A shot from distance."], True),
+             commentary.Call("v2", 62.6, "goal", ["v2"], ["It's in!"], True)]
+    lines, _ = commentary.schedule(calls, timeline=Timeline(SEGS, 25, K), duration=lambda text: 1.6)
+    assert lines
+    for line in lines:
+        assert line.t_end - line.t == pytest.approx((line.v_end - line.v) * K, abs=0.011)
+
+
+def test_refit_keeps_the_timescale_once_the_audio_is_measured():
+    from ninety.speech import commentary
+
+    from dataclasses import asdict
+
+    calls = [commentary.Call("v1", 61.0, "shot", ["v1"], ["A shot from distance."], True)]
+    lines, _ = commentary.schedule(calls, timeline=Timeline(SEGS, 25, K), duration=lambda text: 1.6)
+    body = {"lines": [asdict(line) for line in lines], "dropped": [], "timescale": K}
+    (line,) = commentary.refit(body, {lines[0].id: 2.4})["lines"]  # its audio: 2.4 s heard
+    assert line["v_end"] - line["v"] == pytest.approx(2.4, abs=0.011)
+    assert line["t_end"] - line["t"] == pytest.approx(2.4 * K, abs=0.011)
+
+
+def test_commentary_json_says_its_timescale_only_when_the_footage_is_faster():
+    from ninety.speech import commentary
+
+    assert "timescale" not in commentary.commentary([], [], timeline=Timeline(SEGS, 25))
+    assert commentary.commentary([], [], timeline=Timeline(SEGS, 25, K))["timescale"] == K
+
+
+@pytest.mark.parametrize("bad", [0, -1, float("nan"), float("inf")])
+def test_a_timescale_that_is_not_a_finite_number_above_0_is_refused_everywhere(tmp_path, bad):
+    with pytest.raises(ValueError):
+        Timeline(SEGS, 25, bad)
+    with pytest.raises(ValueError):
+        footage.write([tmp_path / "00000.jpg"], 25, tmp_path, timescale=bad)
+    with pytest.raises(SystemExit):  # before anything runs, --frames or not
+        e2e.parser().parse_args(["clip", "--out", "o", "--frames", "--timescale", str(bad)])

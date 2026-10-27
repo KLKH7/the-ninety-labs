@@ -279,10 +279,11 @@ def refit(body: dict, seconds: dict[str, float]) -> dict:
     of the estimate: kept by priority, then time; a line that would now overlap one kept before it
     is dropped, with why. Starts never move: a line is said at its moment or not at all."""
     kept: list[dict] = []
+    k = body.get("timescale", 1.0)  # match seconds a heard second (footage played faster, schedule)
     for line in sorted(body["lines"], key=lambda li: (li["priority"], li["v"], li["id"])):
         length = seconds.get(line["id"])
         if length is not None:
-            line = {**line, "v_end": _up(line["v"] + length), "t_end": _up(line["t"] + length)}
+            line = {**line, "v_end": _up(line["v"] + length), "t_end": _up(line["t"] + length * k)}
         if all(line["v_end"] + GAP_S <= k["v"] or line["v"] >= k["v_end"] + GAP_S for k in kept):
             kept.append(line)
         else:
@@ -299,8 +300,11 @@ def commentary(events: list[dict], cues: list[dict], clubs: dict[str, str] | Non
     describe.describe takes them."""
     found, refused = calls(events, cues, scores, names)
     lines, dropped = schedule(found, clubs, timeline=timeline, names=names)
-    return {"format": FORMAT, "voice": voice.VOICE, "gap_s": GAP_S, "max_lag_s": MAX_LAG_S,
+    body = {"format": FORMAT, "voice": voice.VOICE, "gap_s": GAP_S, "max_lag_s": MAX_LAG_S,
             "lines": [asdict(line) for line in lines], "dropped": dropped, "refused": refused}
+    if timeline is not None and timeline.timescale != 1:  # refit reads it once the audio is measured
+        body["timescale"] = timeline.timescale
+    return body
 
 
 def write(body: dict, out: Path) -> dict:

@@ -976,6 +976,16 @@ async def caption_reel(reel: dict, events: list[dict], mode: str, sure: list[str
     return {"mode": mode, "calls": [{"event": r["event"], **r["call"]} for r in results if "call" in r],
             "tokens": tokens, "unavailable": unavailable}
 
+def _timescale_arg(value: str) -> float:
+    """--timescale as argparse checks it: refused before anything runs, --frames or not."""
+    from ninety.match.timeline import checked_timescale
+
+    try:
+        return checked_timescale(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Run the chain on one clip and write a bundle for the viewer.")
     ap.add_argument("clip", type=Path, help="a rendered clip directory (clip.json and images/)")
@@ -1030,7 +1040,7 @@ def parser() -> argparse.ArgumentParser:
                     help="MatchInsights' insights.json for the INSIGHT bar (default: --team-stats'); without "
                          "either, the bar stays empty: it never restates one event")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding the video")
-    ap.add_argument("--timescale", type=float, default=1.0,
+    ap.add_argument("--timescale", type=_timescale_arg, default=1.0,
                     help="match seconds a video second: the video plays this much faster as its 1x, "
                          "every image kept (ninety/footage.py); the bundle's times follow")
     ap.add_argument("--footage-audio", type=Path, default=None,
