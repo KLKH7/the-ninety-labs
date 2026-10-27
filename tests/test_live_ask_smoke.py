@@ -23,7 +23,10 @@ from ninety.api.companion import PASSCODE_HEADER
 URL = os.environ.get("NINETY_LIVE_URL", "").rstrip("/")
 PASSCODE = os.environ.get("NINETY_DEMO_PASSCODE", "")
 CLIP = os.environ.get("NINETY_LIVE_CLIP", "seed900001")  # the served clip with tracked positions
-AT_S = 120.0  # design: two minutes in, enough of the match for a possession question to have an answer
+AT_S = 120.0  # design: two minutes in, enough of the match for its tactics to have an answer
+# A tactics question: the intent table (#432) leaves it to the model's planner, where the score,
+# possession or a count is answered by code even in Live mode, so `source` would read "code" anyway.
+QUESTION = os.environ.get("NINETY_LIVE_QUESTION", "Where are the overloads happening?")
 pytestmark = pytest.mark.skipif(not (URL and PASSCODE), reason="no live URL or passcode")
 
 
@@ -53,8 +56,7 @@ async def ask_with_the_screen_at(code: str, t: float, text: str) -> tuple[int, d
 def test_a_live_question_is_answered_by_the_foundry_agents():
     status, paired = post("/api/pair", {"clip": CLIP})
     assert status == 201, paired
-    question = "Who has had more of the ball?"
-    status, message = asyncio.run(ask_with_the_screen_at(paired["code"], AT_S, question))
+    status, message = asyncio.run(ask_with_the_screen_at(paired["code"], AT_S, QUESTION))
     assert status == 200, message
     assert message["type"] == "answer" and message["answer"]["text"]
     assert message["source"] == "model", f"answered by {message['source']}: Live did not reach Foundry"
