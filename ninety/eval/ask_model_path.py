@@ -280,8 +280,11 @@ def report() -> dict:
     return {
         "match": "seed8324-match",
         "steps": steps,
-        "before": summary(_asks(live, "key") + _asks(before, "question")),
+        # Like for like: the same three questions, asked here before and after the change.
+        "before": summary(_asks(before, "question")),
         "after": summary(_asks(after, "question")),
+        # Every pre-change question, the agents-live run's eight included: more calls, other questions.
+        "before_all": summary(_asks(live, "key") + _asks(before, "question")),
         "judge": judge,
         "judge_escapes": [{"arm": r["arm"], "kind": r["kind"], "text": r["text"], "judge_ok": r["judge_ok"]}
                           for r in judged if r["label"] == "planted" and r["code_ok"]],

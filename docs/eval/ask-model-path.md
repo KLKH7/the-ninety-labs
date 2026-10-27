@@ -42,8 +42,9 @@ that slowed the Companion answered in 10.04 s. Now a slow plan is cut at 5.5 s.
 `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`
 re-derives the budgets from `report.json` and fails if `STEP_S` drifts from them.
 
-**Not measured:** the player path (a question about one tapped player, answered by the player Companion). Its
-draft borrows the answer step's budget (same model, a one-sentence reply from a smaller prompt).
+**Not measured:** the player path (a question about one tapped player, answered by the player
+Companion). Its draft's 2.5 s is a *design* value: it borrows the answer step's budget, because it is
+the same model writing one sentence from a smaller prompt than the match answer step's.
 
 ## 2. The Judge on the match path
 
@@ -94,12 +95,19 @@ follow-up.
 Every model answer is one budget take, with a ~1,000–3,000-token prompt per step at gpt-4.1-mini's list
 price (Azure Retail Prices, read 2026-10-19). Latency is the whole `answer_match` call.
 
-| | questions | code fallbacks | p50 | p95 | cost per answer |
+Like for like, the same three questions asked here before and after the change:
+
+| | questions | code fallbacks | p50 | p95 (= max) | cost per answer |
 |---|---|---|---|---|---|
-| before (plan, answer, Judge; one 10 s limit) | 11 | 2 (both "model: unanswerable") | 5.50 s | 6.67 s | $0.00195 |
+| before (plan, answer, Judge; one 10 s limit) | 3 | 1 ("model: unanswerable") | 5.36 s | 5.49 s | $0.00175 |
 | after (plan, answer; per-step budgets) | 3 | 1 ("model: unanswerable") | 4.21 s | 4.66 s | $0.00151 |
 
-The same three questions, before → after: "What led to that goal?" 5.36 → 4.66 s; "Where are London
+For a wider "before", all 11 pre-change questions on this match (the agents-live run's 8 included,
+other questions) had 2 code fallbacks (both "model: unanswerable"), p50 5.50 s, p95 6.67 s and
+$0.00195 per answer. There is no "after" of the same size, so do not compare these with the 3-question
+"after" row.
+
+Per question, before → after: "What led to that goal?" 5.36 → 4.66 s; "Where are London
 Athletic outnumbering Lisbon Esportes?" 5.49 → 3.34 s; "Who had more of the ball in the first half?"
 2.00 → 4.21 s. The last went to code both times: the possession figure is held because vision could
 not tell the sides apart, so the model declined and code's answer says why. After, its plan alone took 3.16 s; that is plan-step

@@ -32,7 +32,9 @@ TIMEOUT_S = 10.0  # design: a phone answer later than this is worse than the cod
 # covers the whole Live answer, every model step and the tools between them
 # Each model step's own budget: 1.5 times its p95 measured on the demo match, rounded up to 0.5 s
 # (docs/eval/ask-model-path.md: p95 3.47 s, 1.39 s and 3.95 s). A path's steps sum under TIMEOUT_S:
-# the match path's plan and answer 8 s; the player path's draft (the answer budget) and Judge 8.5 s.
+# the match path's plan and answer 8 s; the player path's draft and Judge 8.5 s. The player draft is not
+# measured: it borrows the answer step's budget (*design*: the same model writing one sentence from a
+# smaller prompt than the match answer step's).
 # A step past its budget gives the code answer, with the step named in the reason.
 STEP_S = {"plan": 5.5, "answer": 2.5, "judge": 6.0}
 

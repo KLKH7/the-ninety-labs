@@ -24,14 +24,14 @@
   }
  },
  "before": {
-  "questions": 11,
-  "code_fallbacks": 2,
+  "questions": 3,
+  "code_fallbacks": 1,
   "fallback_reasons": [
    "model: unanswerable"
   ],
-  "ms_p50": 5503.8,
-  "ms_p95": 6669.7,
-  "usd_per_answer": 0.001951
+  "ms_p50": 5362.3,
+  "ms_p95": 5489.8,
+  "usd_per_answer": 0.001748
  },
  "after": {
   "questions": 3,
@@ -42,6 +42,16 @@
   "ms_p50": 4209.1,
   "ms_p95": 4655.2,
   "usd_per_answer": 0.001506
+ },
+ "before_all": {
+  "questions": 11,
+  "code_fallbacks": 2,
+  "fallback_reasons": [
+   "model: unanswerable"
+  ],
+  "ms_p50": 5503.8,
+  "ms_p95": 6669.7,
+  "usd_per_answer": 0.001951
  },
  "judge": {
   "events": {
