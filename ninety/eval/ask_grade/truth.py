@@ -5,7 +5,7 @@ the live path may import it (tests/test_ask_grade.py). Two scopes for every valu
 
 - "match": the whole match from the full simulated run (the answer key of every minute played);
 - "footage": only the frames the footage shows (the clip windows in <work>/clips/*/meta.json), what
-  vision could have seen. The demo footage shows about 19% of the match (1033 s of 5400).
+  vision could have seen. The demo's clip windows show 20.9% of the match (1129 s of 5400).
 
 A pass over the full run's frames (455 MB on seed 8324) is reduced once to a small cache (`build`):
 per frame, the side in possession (#424's truth rule, ninety/eval/possession_time.py: the latest
@@ -284,21 +284,19 @@ class Truth:
 
 def load(run: Path, work: Path, cache: Path, fixture) -> Truth:
     """The truth for a run: its events, the footage windows, the frame cache (built if missing)
-    and the engine roster's names as the team sheets give them (ninety/sim/identity_feed.roster)."""
+    and each engine player's name and shirt from the fixture's team sheet, by side and role (the
+    sheet is public; the grader reads no player-ID feed)."""
     import numpy as np
-
-    from ninety.sim import identity_feed
 
     if not cache.exists():
         build(run, cache)
     z = np.load(cache)
     meta = json.loads((run / "meta.json").read_text())
-    players, ids = identity_feed.roster(meta["roster"], fixture)
-    by_pid = {p["player_id"]: p for p in players}
-    names = {
-        eid: {"name": by_pid[pid]["name"], "team": by_pid[pid]["team"], "number": by_pid[pid]["jersey"]}
-        for eid, pid in ids.items()
-    }
+    sheets = {side: {s.role: s for s in fixture.sheet(side)} for side in ("home", "away")}
+    names = {}
+    for r in meta["roster"]:
+        s = sheets[r["team"]][r["role"]]
+        names[r["id"]] = {"name": s.name, "team": r["team"], "number": s.number}
     return Truth(
         events=_jsonl(run / "events.jsonl"),
         shown=footage_windows(work),

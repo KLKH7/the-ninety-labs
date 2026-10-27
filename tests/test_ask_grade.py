@@ -86,6 +86,10 @@ def test_an_unattributed_total_is_not_one_clubs_count():
         "shots", "How many shots have London had?", 5100.0, "There were 8 shots from minute 1 to minute 85."
     )
     assert c["correct"] is False
+    total = graded(
+        "shots", "How many shots have London had?", 5100.0, "There were 31 shots from minute 1 to minute 85."
+    )
+    assert total["correct"] is False  # the match's total is not London's count
     c = graded(
         "shots",
         "How many shots have London had?",
@@ -210,17 +214,24 @@ def test_the_asks_rates_only_go_up():
     # every column on its own (the core pass rate, each check, the all-checks rate), per intent,
     # overall and for the chips. A change to how insights are built refreshes the fixture (rebuild it
     # from runs/demo-8324-final with that code: run.py grade --rebuild-insights) and the baseline in
-    # the same PR; a check with no answer it applies to (None) is not a drop, `answered` holds those.
+    # the same PR. An intent may not disappear, and a rate that becomes None (no answer it applies to)
+    # is a drop unless the block's `answered` rate did not change.
     base = json.loads(R.BASELINE.read_text())
     now = R.ratchet_rates()
+    missing = set(base["intents"]) - set(now["intents"])
+    assert not missing, f"intents gone from the grade: {sorted(missing)}"
     blocks = [("all", base["all"], now["all"]), ("chips", base["chips"], now["chips"])]
-    blocks += [(iid, rates, now["intents"].get(iid, {})) for iid, rates in base["intents"].items()]
-    down = [
-        f"{name} {k} {v} -> {got.get(k)}"
-        for name, rates, got in blocks
-        for k, v in rates.items()
-        if v is not None and got.get(k) is not None and got[k] < v  # None: no answer it applies to
-    ]
+    blocks += [(iid, rates, now["intents"][iid]) for iid, rates in base["intents"].items()]
+    down = []
+    for name, rates, got in blocks:
+        for k, v in rates.items():
+            if v is None:
+                continue
+            if got.get(k) is None:
+                if got.get("answered") != rates.get("answered"):
+                    down.append(f"{name} {k} {v} -> None")
+            elif got[k] < v:
+                down.append(f"{name} {k} {v} -> {got[k]}")
     assert not down, (
         "the Ask's graded rates went down on the frozen fixture (docs/eval/companion-full-eval.md):\n"
         + "\n".join(down)
@@ -258,3 +269,17 @@ def test_the_scorebugs_wording_is_a_score():
     said = "London Athletic 1 goal, Lisbon Esportes 1 goal, read from the broadcast's scorebug."
     assert graded("score", "What's the score?", 2700.0, said)["correct"] is True
     assert graded("score", "What's the score?", 5400.0, said)["correct"] is False  # 1-3 at full time
+
+
+def test_no_goal_yet_must_be_said():
+    busy = graded("scorers", "Who scored?", 600.0, "Alex Finnet has been the busiest player so far.")
+    assert busy["correct"] is False
+    none = graded("scorers", "Who scored?", 600.0, "No goals yet: London Athletic 0, Lisbon Esportes 0.")
+    assert none["correct"] is True
+    bug = graded(
+        "scorers",
+        "Who scored?",
+        600.0,
+        "London Athletic 0 goals, Lisbon Esportes 0 goals, read from the broadcast's scorebug.",
+    )
+    assert bug["correct"] is True

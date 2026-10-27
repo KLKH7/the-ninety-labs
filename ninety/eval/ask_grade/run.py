@@ -27,6 +27,7 @@ import gzip
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -52,7 +53,7 @@ def load_insights(path: Path):
     return MatchInsights.from_dict(json.loads(raw))
 
 
-def rebuild_insights(package: Path, out: Path) -> Path:
+def rebuild_insights(package: Path, out: Path, extra: tuple[str, ...] = ()) -> Path:
     """The insights rebuilt from a package's tracked frames, detected events and scorebug, by the
     checked-out code's own builder (ninety/intel/match_insights.main), in a child process so its
     memory is returned. Run it through ~/ninety-notes/heavy.sh."""
@@ -76,13 +77,10 @@ def rebuild_insights(package: Path, out: Path) -> Path:
     ]
     if (package / "association.json").exists():
         cmd += ["--association", str(package / "association.json")]
-    if (work / "identity_feed.jsonl").exists():
-        cmd += ["--identity-feed", str(work / "identity_feed.jsonl")]
-        vision = (
-            package.parent / f"{package.name}-work" / "vision"
-        )  # the segments' runs, as the package built
-        if vision.exists():
-            cmd += ["--broadcast-vision", str(vision)]
+    # Anything else the package was built with (the player-ID feed's names and the segments' vision
+    # runs, as the package's own build script passes them) comes from the caller, word for word: the
+    # grader neither names nor opens that feed (AGENTS.md, the player-ID feed exception).
+    cmd += list(extra)
     subprocess.run(cmd, check=True)
     return out
 
@@ -521,7 +519,11 @@ def cmd_grade(args) -> None:
     from ninety.eval.ask_grade import truth as T
 
     if args.rebuild_insights:
-        args.insights = rebuild_insights(args.rebuild_insights, args.out.with_suffix(".insights.json"))
+        args.insights = rebuild_insights(
+            args.rebuild_insights,
+            args.out.with_suffix(".insights.json"),
+            tuple(shlex.split(args.rebuild_extra)),
+        )
     insights = load_insights(args.insights)
     intents, clubs = G.load_intents()
     table = T.read(args.truth_table)
@@ -598,7 +600,9 @@ def cmd_baseline(args) -> None:
 EXPORT = ("ninety", "schemas", "docs/GROUNDING.md", "pyproject.toml")  # what a ref needs to answer
 
 
-def _graded_ref(ref: str, insights: Path | None, package: Path | None, work: Path) -> list[dict]:
+def _graded_ref(
+    ref: str, insights: Path | None, package: Path | None, work: Path, extra: str = ""
+) -> list[dict]:
     """Grade one git ref's Ask: export the ref (git archive), put this checkout's grader in it, so
     both sides of a comparison are graded by the same rules, and run `grade` with the export first
     on the path."""
@@ -617,7 +621,11 @@ def _graded_ref(ref: str, insights: Path | None, package: Path | None, work: Pat
     shutil.rmtree(dest, ignore_errors=True)
     shutil.copytree(HERE, dest, ignore=shutil.ignore_patterns("__pycache__"))
     out = work / "rows.jsonl"
-    src = ["--rebuild-insights", str(package)] if package else ["--insights", str(insights)]
+    src = (
+        ["--rebuild-insights", str(package), "--rebuild-extra", extra]
+        if package
+        else ["--insights", str(insights)]
+    )
     cmd = [
         sys.executable,
         "-m",
@@ -670,7 +678,9 @@ def cmd_compare(args) -> None:
     with tempfile.TemporaryDirectory(prefix="ask-grade-compare-") as tmp:
         sums = []
         for i, ref in enumerate(args.refs):
-            rows = _graded_ref(ref, args.insights, args.rebuild_insights, Path(tmp) / str(i))
+            rows = _graded_ref(
+                ref, args.insights, args.rebuild_insights, Path(tmp) / str(i), args.rebuild_extra
+            )
             sums.append(summarise(rows))
     print(delta_table(args.refs[0], args.refs[1], *sums))
 
@@ -700,6 +710,11 @@ def main(argv: list[str] | None = None) -> None:
         metavar="PACKAGE",
         help="rebuild the insights from a package (tracked.json, detected, scorebug) first",
     )
+    g.add_argument(
+        "--rebuild-extra",
+        default="",
+        help="further arguments for ninety.intel.match_insights, as the package's build passed them",
+    )
     g.add_argument("--truth-table", type=Path, default=TRUTH_TABLE)
     g.add_argument("--label", default="run")
     g.add_argument("--out", type=Path, required=True)
@@ -722,6 +737,7 @@ def main(argv: list[str] | None = None) -> None:
         metavar="PACKAGE",
         help="rebuild the insights with each ref's own code from a package (heavy: use heavy.sh)",
     )
+    c.add_argument("--rebuild-extra", default="", help="as for grade")
     args = ap.parse_args(argv)
     if args.cmd == "compare":
         cmd_compare(args)

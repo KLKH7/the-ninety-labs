@@ -287,7 +287,11 @@ def correct(
         truth_goals = [g for g in v["goals"] if one is None or g["team"] == one]
         said = goals_said(text, clubs)
         if not truth_goals:
-            return (not said) and (kind == "moments" or bool(NO_GOAL.search(text)) or not said), scope
+            if kind == "moments":
+                return not said, scope
+            # "who scored?" before a goal: says there is none (in words or a 0-0), and states no goal
+            none = bool(NO_GOAL.search(text)) or scoreline(text, clubs) == {"home": 0, "away": 0}
+            return none and not said, scope
         tm = tol["goal_minute"]
         hit = all(
             any(abs(m - g["minute"]) <= tm and s in (None, g["team"]) for s, m in said) for g in truth_goals
@@ -317,9 +321,11 @@ def correct(
         ), scope
     if kind == "count":
         lo, hi = v["count_lo"], v["count_hi"]
-        # a count that names no club is a total, whatever the question asked (lesson 293: "There were
-        # 8 shots" is not London's 8)
-        key = one if one is not None and one in clubs_in(text, clubs) else "total"
+        # a club's question needs that club's count: an answer that names no club is a total, and a
+        # total is neither London's 8 nor right for London when it happens to equal it (lesson 293)
+        if one is not None and one not in clubs_in(text, clubs):
+            return False, scope
+        key = one or "total"
         said = counts_said(text, it["metric"])
         if not said:
             return False, scope
