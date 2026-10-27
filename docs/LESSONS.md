@@ -3404,7 +3404,7 @@ short and actionable. This file is public: no research sources, product names or
   event. Each module's tests used players whose letter matched their side, and questions that named
   the acting club.
 - **Rule:** a side said on air comes from the event's (or fact's) own side, never a track id's
-  letter, and a goal names its side outright ("Goal for Lisbon! Eli Hourrick scores"). A question that
+  letter, and a goal names its side outright ("Goal! Eli Hourrick scores for Lisbon"). A question that
   names a club as the one beaten ("broke X's lines", "through X") asks for the other club's pass; the
   code answer and the model's choice both refuse a pass of the beaten club or of an unknown side.
 - **Check:** `tests/test_describe.py::test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter`

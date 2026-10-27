@@ -405,7 +405,9 @@ def test_a_goal_is_said_for_the_goal_events_side_never_the_scorers_track_letter(
     for names, scorer in (({"h-t9029": "Eli Hourrick"}, "Eli Hourrick"), ({}, "A Lisbon player")):
         track, _ = d.describe([goal], [], clubs=clubs, names=names)
         (said,) = track.said
-        assert said.spoken.startswith(f"Goal for Lisbon! {scorer} scores"), said.spoken
+        opening = (f"Goal! {scorer} scores for Lisbon", f"Goal! {scorer} scores,")
+        assert said.spoken.startswith(opening), said.spoken
+        assert "Lisbon" in said.spoken
         assert "London" not in said.spoken
     # A goal whose side is not told surely names no side at all.
     unsure = {**goal, "team_confidence": 0.5, "team_source": None}

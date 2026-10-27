@@ -208,7 +208,7 @@ def _versions(event: dict) -> list[str]:
             # stats.goal_moments), said by name: never left to the scorer's track id, whose letter is
             # the tracker's side vote and can be the other club's (lesson 283).
             team = event["team"]
-            return [f"Goal for {team}! {who} scores, {place}.", f"Goal for {team}! {who} scores."]
+            return [f"Goal! {who} scores for {team}, {place}.", f"Goal! {who} scores for {team}."]
         return [f"Goal! {who} scores, {place}.", f"Goal! {who} scores."]
     if kind == "shot":
         outcome = {"on_target": "on target", "off_target": "off target", "blocked": "blocked"}.get(
@@ -343,6 +343,8 @@ def spoken(text: str, side_known: bool = True, compact: bool = False,
     club_of = clubs or {}
     out = TEAM_SPOKEN.sub(lambda m: club_of.get(m[1], m[1].capitalize()), _sentence(text))
     out = _names(out, side_known, compact, clubs, names, sides)
+    # "A Lisbon player scores for Lisbon": the club once.
+    out = re.sub(r"\b(an? (.+?) player scores) for \2\b", r"\1", out)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
     out = re.sub(rf"({_NUM}) m pass\b", r"\1-metre pass", out)
     out = re.sub(rf"({_NUM}) m\b", r"\1 metres", out)
