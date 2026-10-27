@@ -2560,7 +2560,13 @@ export function scorebugAt(events: Iterable<{ type: string; t: number; score?: {
   return best;
 }
 let scorebugKey = "";
+let scorebugT = Number.NaN; // the clock the band last drew at
+/** A jump in the clock (a seek, a late join) larger than this sets the score at once (design: play
+ * runs at a second a second, so a few seconds between draws is a jump, never play). */
+const SCORE_JUMP_S = 3;
 function renderScorebug(t: number) {
+  const jumped = !(Math.abs(t - scorebugT) <= SCORE_JUMP_S);
+  scorebugT = t;
   const read = scorebugAt(scorebugEvents, t);
   const key = read ? `${read.score.home}-${read.score.away}|${teams.home}|${teams.away}` : "";
   if (key === scorebugKey) return;
@@ -2569,8 +2575,9 @@ function renderScorebug(t: number) {
   for (const side of ["home", "away"] as const) {
     const el = $(`score-${side}`);
     el.hidden = !read;
-    // The first reading is set, not counted up from 0; a change after it ticks.
-    if (read) tickTo(el, read.score[side], el.hidden || el.textContent === "" ? read.score[side] : undefined);
+    // The first reading, and any after a jump in the clock, is set; in play only a goal (+1) ticks.
+    const to = Math.max(0, Math.round(read ? read.score[side] : 0));
+    if (read) tickTo(el, to, jumped || el.textContent === "" ? to : undefined, 1);
   }
   const btn = $("score-read");
   btn.hidden = !read;
