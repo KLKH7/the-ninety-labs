@@ -259,7 +259,10 @@ def first_object(reply: str) -> object:
 
 def _calls(plan: object, insights, minute: int) -> list[dict]:
     """The model's tool calls, kept only when well formed: a known tool, a club of this match or
-    none, minutes within the match so far. Anything else is dropped, never repaired into a call."""
+    none, minutes within the match so far. A call with an unknown tool is dropped; an unknown club
+    becomes both clubs, and a malformed window the default one, never another club or minute. Minute
+    0 is read as minute 1: "from minute 0" means from kick-off, and football's first minute is 1
+    (the instructions never say so, and without this a first-half question got minutes 31 to 45)."""
     calls = []
     tools = plan.get("tools") if isinstance(plan, dict) else None
     for c in tools if isinstance(tools, list) else []:
@@ -272,6 +275,8 @@ def _calls(plan: object, insights, minute: int) -> list[dict]:
         ):
             club = None
         lo, hi = c.get("minute_from"), c.get("minute_to")
+        if lo == 0 and not isinstance(lo, bool):
+            lo = 1
         if not isinstance(lo, int) or not isinstance(hi, int) or not 1 <= lo <= hi:
             lo, hi = max(1, minute - WINDOW_MIN + 1), minute
         calls.append({"name": c["name"], "club": club, "minute_from": lo, "minute_to": min(hi, minute)})

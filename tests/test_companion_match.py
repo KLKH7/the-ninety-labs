@@ -225,6 +225,16 @@ def test_a_bad_club_or_minutes_is_not_repaired_into_another_call():
     assert calls == [{"name": "overloads", "club": None, "minute_from": 14, "minute_to": 28}]
 
 
+def test_minute_zero_is_kick_off_not_a_bad_window():
+    # Asked at half-time "who had more of the ball in the first half?", the live Companion planned
+    # possession from minute 0 to 45; read as malformed, it was answered over minutes 31 to 45.
+    plan = {"tools": [{"name": "possession", "club": None, "minute_from": 0, "minute_to": 45}]}
+    assert companion._calls(plan, insights(), 45) == [
+        {"name": "possession", "club": None, "minute_from": 1, "minute_to": 45}]
+    bad = {"tools": [{"name": "possession", "club": None, "minute_from": False, "minute_to": 45}]}
+    assert companion._calls(bad, insights(), 45)[0]["minute_from"] == 31
+
+
 @pytest.mark.parametrize(
     "draft, why",
     [
