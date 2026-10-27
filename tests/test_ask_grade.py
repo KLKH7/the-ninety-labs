@@ -408,6 +408,7 @@ def _counts(home, away, slack=0):
             True,
         ),
         (_counts(3, 5), "Each club's shots: London Athletic 3, Lisbon Esportes 5.", False),
+        (_counts(4, 5, slack=1), "Each club has had shots in the footage so far.", False),  # no comparison
     ],
 )
 def test_a_count_leads_with_the_right_club(truth, text, ok):
