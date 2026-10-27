@@ -347,137 +347,122 @@ body[data-screen="big"]:has(#audio-menu:not([hidden])) .pair-card { display: non
 .hud .icon::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
 
 /* ---- The big screen's graphics' design tokens: every colour, radius, duration and the font in one
-   place, so an identity's tokens.json swaps in here and nowhere else. */
+   place (Kian, Oct 26: sleek, professional, the phone's family; white pills on dark, club colours only
+   as accents, one easing curve). */
 :root {
-  --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  --g-home-band: #1b2f5b; --g-away-band: #e63942;   /* the clubs' own colours (Kian, Oct 24) */
-  --g-home-ink: #8fa8e0; --g-away-ink: #ff8a90;     /* the same, lifted to read on the plate */
-  --g-home-bar: #4f74c4; --g-away-bar: #e63942;     /* the split bars */
-  --g-plate: #0c0d11; --g-plate2: #17181d; --g-ink: #fff; --g-ink2: rgba(235, 235, 245, 0.62);
-  --g-ink3: rgba(235, 235, 245, 0.35); --g-neutral-band: rgba(235, 235, 245, 0.3); --g-dim: rgba(0, 0, 0, 0.6);
-  --g-hairline: rgba(255, 255, 255, 0.1);
-  --g-radius: 6; --g-radius-lg: 14;                  /* in --v units (1 px at a 1920 px picture) */
-  --g-ease: cubic-bezier(0.2, 0.9, 0.3, 1.2); --g-dur-in: 0.3s; --g-dur-fade: 0.26s; --g-dur-panel: 0.4s;
-  --g-goal-s: 2; /* the GOAL moment on the bug, in match seconds (src/scorebug.ts reads it) */
+  --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; /* the phone's */
+  --g-home: #1b2f5b; --g-away: #e63942;             /* the clubs' own colours (Kian, Oct 24) */
+  --g-home-bar: #3a5fb0; --g-away-bar: #e63942;     /* the split bars: navy lifted to read beside crimson */
+  --g-bug: #0d0e12; --g-tab: #1c1d22; --g-ink: #fff; --g-ink2: rgba(235, 235, 245, 0.6);
+  --g-pill: #fff; --g-pill-ink: #0d0e12; --g-pill-ink2: rgba(13, 14, 18, 0.5); --g-pill-track: rgba(13, 14, 18, 0.1);
+  --g-dim: rgba(0, 0, 0, 0.7);
+  --g-radius-bug: 16; --g-radius-pill: 999;          /* in --v units (1 px at a 1920 px picture) */
+  --g-ease: cubic-bezier(0.2, 0.8, 0.2, 1); --g-dur: 0.28s;
+  --g-goal-s: 1.6; /* the GOAL band's sweep across the bug, in match seconds (src/scorebug.ts reads it) */
 }
 
-/* ---- The big screen's graphics (src/scorebug.ts, lowerthird.ts, stats.ts; Kian, Oct 26): as a
-   league presents them, our own identity (London navy #1B2F5B, Lisbon crimson #E63942, our crests,
-   the system font). Top left in one stack: the scorebug's row, an opaque layer exactly over the baked
-   bug's widest box (render.js: 28, 24, 400 by 40 at 720 lines, as % of the picture, + a margin of 6
-   units for the encode's soft edge and the corners), the clock tab under it, then the insight tab
-   and the mini stats card attached below. Units (--v) are 1 px at a 1920 px picture and scale with
-   it exactly; type never goes below --t's floor. */
-.bugstack, .sb, .sb-tab, .lt, .sc, .sp { display: none; }
+/* Units: --v is 1 px at a 1920 px picture and scales with it exactly; type never goes below --t's floor. */
+.bugstack, .sb, .sb-tab, .lt, .sp { display: none; }
 body[data-screen="big"] .stage { container-type: inline-size; }
-body[data-screen="big"] .bugstack { --v: 0.0521cqw; --t: max(var(--v), 0.7px); --m: calc(6 * var(--v) + 2px);
+body[data-screen="big"] .bugstack, body[data-screen="big"] .sp { --v: 0.0521cqw; --t: max(var(--v), 0.7px); }
+
+/* 1. The scorebug: a dark capsule, crest | code | score – score | code | crest, the clock's tab under it.
+   It is an opaque layer exactly over the baked bug's widest box (render.js layoutBug: 28, 24, 400 by 40
+   at 720 lines, as % of the picture) with a margin (--m) wider than its corner radius cuts in, so the
+   broadcast's own bug never shows. */
+body[data-screen="big"] .bugstack { --m: calc(6 * var(--v) + 2px);
   position: absolute; z-index: 4; left: calc(2.1875% - var(--m)); top: calc(3.3333% - var(--m)); width: calc(31.25% + 2 * var(--m));
   display: flex; flex-direction: column; align-items: stretch; pointer-events: none; color: var(--g-ink);
-  font-family: var(--g-font); -webkit-font-smoothing: antialiased;
-  font-variant-numeric: tabular-nums; }
+  font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
 body[data-screen="big"] .bugstack > [hidden] { display: none; }
-
-/* The bug: the home club's tab, the score, the away club's tab; opaque edge to edge. */
 body[data-screen="big"] .sb { display: grid; grid-template-columns: 1fr auto 1fr; position: relative; overflow: hidden;
-  height: calc(5.5556cqw / var(--ar, 1.7778) + 2 * var(--m)); border-radius: calc(var(--g-radius) * var(--v)); background: var(--g-plate); }
-.sb-team { display: flex; align-items: center; gap: calc(12 * var(--v)); padding: 0 calc(18 * var(--v)); min-width: 0; }
-.sb-home { background: var(--g-home-band); }
-.sb-away { background: var(--g-away-band); flex-direction: row-reverse; }
+  height: calc(5.5556cqw / var(--ar, 1.7778) + 2 * var(--m)); border-radius: calc(var(--g-radius-bug) * var(--v)); background: var(--g-bug); }
+.sb-team { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(22 * var(--v)); min-width: 0; }
+.sb-away { flex-direction: row-reverse; }
 .sb-crest { display: inline-flex; width: calc(30 * var(--v)); height: calc(36 * var(--v)); flex: none; }
 .sb-crest svg { width: 100%; height: 100%; }
 .sb-crest[hidden] { display: none; }
-.sb-code { font-size: calc(25 * var(--t)); font-weight: 700; letter-spacing: 0.06em; }
-.sb-score { display: flex; align-items: center; gap: calc(12 * var(--v)); padding: 0 calc(24 * var(--v)); background: var(--g-plate); }
+.sb-code { font-size: calc(24 * var(--t)); font-weight: 600; letter-spacing: 0.04em; padding-bottom: calc(3 * var(--v));
+  border-bottom: calc(3 * var(--v)) solid transparent; }
+.sb-home .sb-code { border-bottom-color: var(--g-home-bar); }
+.sb-away .sb-code { border-bottom-color: var(--g-away-bar); }
+.sb-score { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: 0 calc(10 * var(--v)); }
 .sb-digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; min-width: 0.62em; text-align: center;
-  font-size: calc(36 * var(--t)); font-weight: 700; }
+  font-size: calc(34 * var(--t)); font-weight: 700; }
 .sb-digit > span { display: block; }
 .sb-now { transform: translateY(calc((1 - var(--roll, 1)) * 100%)); }
 .sb-was { position: absolute; inset: 0; transform: translateY(calc(var(--roll, 1) * -100%)); }
-.sb-dash { font-size: calc(24 * var(--t)); color: var(--g-ink3); }
-/* The clock's tab, under the score. */
-body[data-screen="big"] .sb-tab { display: block; align-self: center; margin-top: -1px; padding: calc(5 * var(--v)) calc(18 * var(--v)) calc(6 * var(--v));
-  border-radius: 0 0 calc(var(--g-radius) * var(--v)) calc(var(--g-radius) * var(--v)); background: var(--g-plate2); }
-.sb-clock { font-size: calc(19 * var(--t)); font-weight: 600; color: var(--g-ink); }
-.sb-tab[data-period="HT"] .sb-clock, .sb-tab[data-period="FT"] .sb-clock { color: var(--g-ink); font-weight: 800; letter-spacing: 0.08em; }
-/* A goal: the scoring club's band sweeps across the bug with its crest and GOAL, then out. */
+.sb-dash { font-size: calc(22 * var(--t)); color: var(--g-ink2); }
+body[data-screen="big"] .sb-tab { display: block; align-self: center; margin-top: calc(-1 * var(--v)); padding: calc(5 * var(--v)) calc(16 * var(--v)) calc(6 * var(--v));
+  border-radius: 0 0 calc(10 * var(--v)) calc(10 * var(--v)); background: var(--g-tab); }
+.sb-clock { font-size: calc(18 * var(--t)); font-weight: 600; color: var(--g-ink); }
+.sb-tab[data-period="HT"] .sb-clock, .sb-tab[data-period="FT"] .sb-clock { font-weight: 700; letter-spacing: 0.08em; }
+
+/* 2. A goal: the scoring club's colour slides across the bug with its crest and GOAL, out the other
+   way; then the scorer's pill (src/lowerthird.ts). */
 .sb-sweep { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: calc(16 * var(--v)); }
 .sb[data-goal="home"] .sb-sweep, .sb[data-goal="away"] .sb-sweep { display: flex; }
-.sb[data-goal="home"] .sb-sweep { background: var(--g-home-band); clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
-.sb[data-goal="away"] .sb-sweep { background: var(--g-away-band); clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
-.sb-sweep .sb-crest { width: calc(36 * var(--v)); height: calc(44 * var(--v)); }
-.sb-goal { font-size: calc(30 * var(--t)); font-weight: 900; letter-spacing: 0.3em; margin-right: -0.3em; }
+.sb[data-goal="home"] .sb-sweep { background: var(--g-home); clip-path: inset(0 calc((1 - var(--in, 0)) * 100%) 0 calc(var(--out, 0) * 100%)); }
+.sb[data-goal="away"] .sb-sweep { background: var(--g-away); clip-path: inset(0 calc(var(--out, 0) * 100%) 0 calc((1 - var(--in, 0)) * 100%)); }
+.sb-sweep .sb-crest { width: calc(34 * var(--v)); height: calc(42 * var(--v)); }
+.sb-goal { font-size: calc(28 * var(--t)); font-weight: 800; letter-spacing: 0.24em; margin-right: -0.24em; }
 
-/* The insight tab: a slim card attached under the bug, the club's band down its left. */
-body[data-screen="big"] .lt { display: block; margin-top: calc(6 * var(--v)); }
-.lt-tab { display: flex; overflow: hidden; border-radius: calc(var(--g-radius) * var(--v)); background: var(--g-plate); }
-.lt-band { width: calc(6 * var(--v)); flex: none; background: var(--g-neutral-band); }
-.lt[data-side="home"] .lt-band { background: var(--g-home-band); box-shadow: inset -1px 0 0 var(--g-home-ink); }
-.lt[data-side="away"] .lt-band { background: var(--g-away-band); }
-.lt-body { flex: 1; min-width: 0; display: grid; gap: calc(5 * var(--v)); padding: calc(10 * var(--v)) calc(16 * var(--v)) calc(12 * var(--v)); }
+/* 3. The pill under the bug: an insight (a small caps label, one short bold line), or a goal's
+   scorer. White; in its club's colour when it is about one club. At most one. */
+body[data-screen="big"] .lt { display: block; margin-top: calc(10 * var(--v)); }
 .lt p { margin: 0; }
-.lt-label { display: flex; align-items: center; gap: calc(8 * var(--v)); font-size: calc(14 * var(--t)); line-height: 1; }
-.lt-label .lt-crest { display: inline-flex; width: calc(16 * var(--v)); height: calc(20 * var(--v)); flex: none; }
-.lt-label .lt-crest svg { width: 100%; height: 100%; }
-.lt-label .lt-crest[hidden] { display: none; }
-.lt-kind { font-weight: 800; letter-spacing: 0.1em; }
-.lt-code { font-weight: 800; letter-spacing: 0.06em; color: var(--g-ink2); }
-.lt[data-side="home"] .lt-code { color: var(--g-home-ink); }
-.lt[data-side="away"] .lt-code { color: var(--g-away-ink); }
-.lt-min { margin-left: auto; color: var(--g-ink2); font-weight: 600; }
-.lt-check { display: inline-flex; width: calc(14 * var(--t)); height: calc(14 * var(--t)); flex: none; }
-.lt-check svg { width: 100%; height: 100%; fill: none; stroke: var(--g-ink2); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pill { display: flex; align-items: center; gap: calc(14 * var(--v)); padding: calc(10 * var(--v)) calc(18 * var(--v)) calc(10 * var(--v)) calc(12 * var(--v));
+  border-radius: calc(var(--g-radius-pill) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.lt[data-side="home"] .pill { background: var(--g-home); color: #fff; }
+.lt[data-side="away"] .pill { background: var(--g-away); color: #fff; }
+.pill .lt-crest { display: inline-flex; width: calc(34 * var(--v)); height: calc(34 * var(--v)); flex: none; padding: calc(4 * var(--v));
+  border-radius: 50%; background: #fff; box-sizing: border-box; }
+.pill .lt-crest svg { width: 100%; height: 100%; }
+.pill .lt-crest[hidden] { display: none; }
+.pill-text { flex: 1; min-width: 0; display: grid; gap: calc(2 * var(--v)); }
+.pill-label { font-size: calc(12 * var(--t)); font-weight: 600; letter-spacing: 0.08em; opacity: 0.62; }
+.pill-line { font-size: calc(20 * var(--t)); font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-line b { font-weight: 800; }
+.pill-name { flex: 1; min-width: 0; margin: 0; font-size: calc(22 * var(--t)); line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-first { font-weight: 300; margin-right: 0.3em; }
+.pill-last { font-weight: 800; letter-spacing: 0.01em; }
+.pill-min { flex: none; display: grid; place-items: center; width: calc(38 * var(--v)); height: calc(38 * var(--v)); border-radius: 50%;
+  border: calc(2 * var(--v)) solid currentColor; font-size: calc(14 * var(--t)); font-weight: 700; opacity: 0.9; }
+.lt-check { display: inline-flex; width: calc(14 * var(--t)); height: calc(14 * var(--t)); flex: none; opacity: 0.6; }
+.lt-check svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .lt-check[hidden] { display: none; }
-.lt-head { font-size: calc(21 * var(--t)); font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lt-head b { font-weight: 800; }
-.lt[data-on="0"] .lt-tab { opacity: 0; transform: translateY(calc(-10 * var(--v))); }
-.lt[data-on="1"] .lt-tab { opacity: 1; transform: none; }
+.lt[data-on="0"] .pill { opacity: 0; transform: translateY(calc(-8 * var(--v))); }
+.lt[data-on="1"] .pill { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .lt:not(.still) .lt-tab { transition: opacity var(--g-dur-fade) var(--g-ease), transform var(--g-dur-in) var(--g-ease); }
+  .lt:not(.still) .pill { transition: opacity var(--g-dur) var(--g-ease), transform var(--g-dur) var(--g-ease); }
 }
 
-/* A stat row: home's number, the label, away's number, and a split bar in the two clubs' colours. */
-.srow { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; column-gap: calc(10 * var(--v)); row-gap: calc(5 * var(--v)); }
-.srow-h, .srow-a { font-size: calc(18 * var(--t)); font-weight: 700; }
-.srow-a { text-align: right; }
-.srow-l { font-size: calc(13 * var(--t)); font-weight: 600; text-align: center; color: var(--g-ink2); letter-spacing: 0.02em; }
-.sbar { grid-column: 1 / -1; display: flex; gap: calc(3 * var(--v)); height: calc(4 * var(--v)); }
+/* A split bar: each side's share in its club's colour, thin. */
+.sbar { display: flex; gap: calc(3 * var(--v)); height: calc(4 * var(--v)); }
 .sbar i { display: block; height: 100%; border-radius: 999px; min-width: calc(3 * var(--v)); }
 .sbar-home { flex: var(--h) 1 0; background: var(--g-home-bar); }
 .sbar-away { flex: calc(1 - var(--h)) 1 0; background: var(--g-away-bar); }
 
-/* The mini stats card, under the bug every ten minutes. */
-body[data-screen="big"] .sc { display: grid; gap: calc(10 * var(--v)); margin-top: calc(6 * var(--v)); padding: calc(10 * var(--v)) calc(16 * var(--v)) calc(14 * var(--v));
-  border-radius: calc(var(--g-radius) * var(--v)); background: var(--g-plate); }
-.sc p { margin: 0; }
-.sc-head { display: flex; align-items: center; justify-content: space-between; font-size: calc(13 * var(--t)); font-weight: 800; letter-spacing: 0.08em; }
-.sc-head .sc-code:first-child { color: var(--g-home-ink); }
-.sc-head .sc-code:last-child { color: var(--g-away-ink); }
-.sc-title { color: var(--g-ink2); }
-@media (prefers-reduced-motion: no-preference) {
-  html[data-motion="full"] body[data-screen="big"] .sc:not([hidden]) { animation: sc-in var(--g-dur-in) var(--g-ease); }
-  html[data-motion="full"] body[data-screen="big"] .sp:not([hidden]) { animation: sp-in var(--g-dur-panel) ease-out; }
-}
-@keyframes sc-in { from { opacity: 0; transform: translateY(calc(-10 * var(--v))); } }
-@keyframes sp-in { from { opacity: 0; } }
-
-/* The half-time and full-time panel: the whole picture, dimmed, the match's stats over it. */
-body[data-screen="big"] .sp { --v: 0.0521cqw; --t: max(var(--v), 0.7px);
-  position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: var(--g-dim); color: var(--g-ink); pointer-events: none;
-  font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+/* 4. Half-time and full time: the picture dimmed, the score large with the crests, a stack of pills. */
+body[data-screen="big"] .sp { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: var(--g-dim);
+  color: var(--g-ink); pointer-events: none; font-family: var(--g-font); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
 body[data-screen="big"] .sp[hidden] { display: none; }
-.sp-card { width: calc(920 * var(--v)); display: grid; gap: calc(22 * var(--v)); padding: calc(28 * var(--v)) calc(40 * var(--v)) calc(34 * var(--v));
-  border-radius: calc(var(--g-radius-lg) * var(--v)); background: var(--g-plate); box-shadow: 0 0 0 1px var(--g-hairline) inset; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] body[data-screen="big"] .sp:not([hidden]) { animation: sp-in var(--g-dur) var(--g-ease); }
+}
+@keyframes sp-in { from { opacity: 0; } }
 .sp p { margin: 0; }
-.sp-period { text-align: center; font-size: calc(15 * var(--t)); font-weight: 800; letter-spacing: 0.2em; color: var(--g-ink2); }
-.sp-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: calc(24 * var(--v));
-  padding-bottom: calc(20 * var(--v)); border-bottom: 1px solid var(--g-hairline); }
-.sp-team { display: flex; align-items: center; gap: calc(16 * var(--v)); }
-.sp-away { justify-content: flex-end; }
-.sp-crest { display: inline-flex; width: calc(52 * var(--v)); height: calc(64 * var(--v)); }
+.sp-stack { width: calc(720 * var(--v)); display: grid; gap: calc(10 * var(--v)); }
+.sp-period { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; letter-spacing: 0.2em; color: var(--g-ink2); }
+.sp-head { display: flex; align-items: center; justify-content: center; gap: calc(36 * var(--v)); }
+.sp-crest { display: inline-flex; width: calc(64 * var(--v)); height: calc(76 * var(--v)); }
 .sp-crest svg { width: 100%; height: 100%; }
-.sp-name { font-size: calc(26 * var(--t)); font-weight: 700; letter-spacing: -0.01em; }
-.sp-score { font-size: calc(58 * var(--t)); font-weight: 800; letter-spacing: -0.02em; }
-.sp-rows { display: grid; gap: calc(18 * var(--v)); }
-.sp .srow-h, .sp .srow-a { font-size: calc(24 * var(--t)); }
-.sp .srow-l { font-size: calc(16 * var(--t)); }
-.sp .sbar { height: calc(6 * var(--v)); }
+.sp-score { font-size: calc(84 * var(--t)); font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.sp-clubs { display: flex; justify-content: space-between; padding: 0 calc(8 * var(--v)) calc(8 * var(--v)); font-size: calc(16 * var(--t)); font-weight: 600;
+  color: var(--g-ink2); }
+.stat-pill { display: grid; grid-template-columns: calc(90 * var(--v)) 1fr calc(90 * var(--v)); align-items: center;
+  padding: calc(10 * var(--v)) calc(24 * var(--v)); border-radius: calc(var(--g-radius-pill) * var(--v)); background: var(--g-pill); color: var(--g-pill-ink); }
+.stat-h, .stat-a { font-size: calc(22 * var(--t)); font-weight: 700; }
+.stat-a { text-align: right; }
+.stat-mid { display: grid; gap: calc(5 * var(--v)); }
+.stat-label { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; color: var(--g-pill-ink2); }

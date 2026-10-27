@@ -1,12 +1,12 @@
-// The big screen's stats graphics (Kian, Oct 26), as leagues present them: a mini card attached under
-// the scorebug every ten minutes of match time, and a full stats panel at half-time and full time.
+// The big screen's half-time and full-time stats (Kian, Oct 26): the score large with the crests, then a
+// stack of white pills, one per measured row (home | the split bar and label | away).
 // Rows are only what the bundle measured: the team stats counted from detected events (match.json
 // `stats`) and the Insight Scout's confident rows (`insight_stats`, the phone's gate: an unsure row
 // is not shown). A count that contradicts the scorebug (fewer attempts than goals: every goal is an
 // attempt) is not shown either. The score is the scorebug's read (src/scorebug.ts), never counted.
 
 import { crestOf } from "./crests";
-import { statRow } from "./lowerthird";
+import { splitBar } from "./lowerthird";
 import type { MatchData } from "./match";
 import type { Side, TeamNames } from "./teams";
 import { fullName } from "./teams";
@@ -20,8 +20,8 @@ type Stats = MatchData & { insight_stats?: { rows?: ScoutRow[] } };
 /** A share of passes means something only over this many (web/phone MIN_SHARE_PASSES, ninety/agents
  * companion_match: "a share only over 15 passes"). */
 const MIN_SHARE_PASSES = 15;
-/** The mini card's cadence and length, and the period panel's (design, Kian: ~10 min, ~10 s). */
-export const CARD_EVERY_S = 600, CARD_S = 8, PANEL_S = 10;
+/** How long the half-time panel stays up (Kian: ~8 s); full time holds on the last frame. */
+export const PANEL_S = 8;
 const HALF_S = 45 * 60, MATCH_S = 90 * 60, FT_LEAD_S = 1.2;
 
 /** A Scout row's confident values at match time t: its latest bin at or before t. */
@@ -63,20 +63,14 @@ export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
   return out;
 }
 
-/** Which stats graphic is up at video time v (match time t): the full panel at half-time (the first
- * PANEL_S of footage from the clock's 45:00) or full time (from the engine's 90:00, Law 7, or the
- * footage's end, held there), else the mini card for CARD_S from each tenth minute; or none. */
+/** Whether the panel is up at video time v (match time t): at half-time, the first PANEL_S of footage
+ * from the clock's 45:00; at full time, from the engine's 90:00 (Law 7) or the footage's end, held. */
 export function statsGraphicAt(v: number, t: number, videoTime: (t: number) => number, start: number, ended: boolean):
-  { kind: "panel"; period: "HT" | "FT" } | { kind: "card"; minute: number } | null {
+  { kind: "panel"; period: "HT" | "FT" } | null {
   if (ended || t >= MATCH_S - FT_LEAD_S) return { kind: "panel", period: "FT" };
   if (start < HALF_S) {
     const ht = videoTime(HALF_S);
     if (v >= ht && v < ht + PANEL_S) return { kind: "panel", period: "HT" };
-  }
-  for (let b = CARD_EVERY_S; b < MATCH_S; b += CARD_EVERY_S) {
-    if (b <= start || b === HALF_S) continue;
-    const at = videoTime(b);
-    if (v >= at && v < at + CARD_S) return { kind: "card", minute: b / 60 };
   }
   return null;
 }
@@ -94,37 +88,32 @@ function crestBox(teams: TeamNames, side: Side): HTMLElement {
   return box;
 }
 
-/** The mini card and the period panel, built when what they show changes. */
-export function setupStats(card: HTMLElement, panel: HTMLElement, m: Stats | null, teams: TeamNames, codes: Record<Side, string>) {
+/** One stat as a pill: home's number, the label over a thin split bar, away's number. */
+function statPill(r: Row): HTMLElement {
+  return el("div", "stat-pill", el("span", "stat-h", `${r.home}${r.unit}`),
+    el("span", "stat-mid", el("span", "stat-label", r.label), splitBar(r.home, r.away)), el("span", "stat-a", `${r.away}${r.unit}`));
+}
+
+/** The half-time and full-time panel, built when what it shows changes. */
+export function setupStats(panel: HTMLElement, m: Stats | null, teams: TeamNames) {
   let key = "";
   return {
     tick(v: number, t: number, videoTime: (t: number) => number, start: number, ended: boolean, score: Pair | null) {
       const g = m ? statsGraphicAt(v, t, videoTime, start, ended) : null;
-      const rows = g ? rowsAt(m, g.kind === "card" ? g.minute * 60 : t, score) : [];
-      const k = g ? `${g.kind}|${"period" in g ? g.period : g.minute}|${score?.home}-${score?.away}|${rows.length}` : "";
+      const rows = g ? rowsAt(m, t, score) : [];
+      const k = g ? `${g.period}|${score?.home}-${score?.away}|${rows.map((r) => `${r.key}${r.home}${r.away}`).join()}` : "";
       if (k === key) return;
       key = k;
-      card.hidden = !(g?.kind === "card" && rows.length);
-      panel.hidden = !(g?.kind === "panel" && rows.length);
-      if (g?.kind === "card" && rows.length) {
-        const pick = rows.filter((r) => ["possession", "shots", "passes", "accuracy"].includes(r.key)).slice(0, 2);
-        card.replaceChildren(
-          el("p", "sc-head", el("span", "sc-code", codes.home), el("span", "sc-title", `MATCH STATS · ${g.minute}′`), el("span", "sc-code", codes.away)),
-          ...pick.map((r) => statRow(r.label, r.home, r.away, r.unit)),
-        );
-      }
-      if (g?.kind === "panel" && rows.length) {
-        const sc = score ? `${score.home}–${score.away}` : "";
-        panel.replaceChildren(el("div", "sp-card",
-          el("p", "sp-period", g.period === "HT" ? "HALF-TIME" : "FULL-TIME"),
-          el("div", "sp-head",
-            el("span", "sp-team sp-home", crestBox(teams, "home"), el("span", "sp-name", fullName(teams.home))),
-            el("span", "sp-score", sc),
-            el("span", "sp-team sp-away", el("span", "sp-name", fullName(teams.away)), crestBox(teams, "away"))),
-          el("div", "sp-rows", ...rows.map((r) => statRow(r.label, r.home, r.away, r.unit))),
-        ));
-        panel.dataset.period = g.period;
-      }
+      panel.hidden = !g;
+      if (!g) return;
+      panel.dataset.period = g.period;
+      panel.replaceChildren(el("div", "sp-stack",
+        el("p", "sp-period", g.period === "HT" ? "HALF-TIME" : "FULL-TIME"),
+        el("div", "sp-head", crestBox(teams, "home"), el("span", "sp-score", score ? `${score.home} – ${score.away}` : ""),
+          crestBox(teams, "away")),
+        el("p", "sp-clubs", el("span", "", fullName(teams.home)), el("span", "", fullName(teams.away))),
+        ...rows.map(statPill),
+      ));
     },
   };
 }

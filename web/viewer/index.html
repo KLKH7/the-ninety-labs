@@ -45,14 +45,13 @@
             </div>
           </div>
           <p class="captions" id="captions" hidden></p>
-          <!-- The big screen's graphics, top left as a league's (src/scorebug.ts, lowerthird.ts, stats.ts):
-               the scorebug over the broadcast's own, its clock tab, the insight tab and the mini stats card
-               under it. #on-air and #score say them to a screen reader. -->
+          <!-- The big screen's graphics (src/scorebug.ts, lowerthird.ts): the scorebug over the broadcast's
+               own, its clock tab, and one pill under it (an insight, or a goal's scorer). The half-time and
+               full-time panel is #period-panel (src/stats.ts). #on-air and #score say them to a screen reader. -->
           <div class="bugstack" id="bugstack" aria-hidden="true">
             <div class="sb" id="scorebug" hidden></div>
             <div class="sb-tab" id="clock-tab" hidden></div>
             <div class="lt" id="lower-third" hidden></div>
-            <div class="sc" id="stats-card" hidden></div>
           </div>
           <div class="sp" id="period-panel" aria-hidden="true" hidden></div>
           <!-- First run only: one pill under the scorebug, pointing at the companion; gone after first use. -->

@@ -7,8 +7,8 @@ import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
 import { describe as describeLowerThird, setupLowerThird } from "./lowerthird";
 import { Narrator } from "./narrator";
-import { BAKED, bugAt, codesOf, setupScorebug } from "./scorebug";
-import { rowsAt, scoutAt, setupStats, statsGraphicAt } from "./stats";
+import { BAKED, bugAt, setupScorebug } from "./scorebug";
+import { rowsAt, setupStats, statsGraphicAt } from "./stats";
 import { attachPlayer } from "./player";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 import { type TeamNames, nameIds, setSidesKnown, teamNames } from "./teams";
@@ -480,17 +480,15 @@ async function start() {
   const feed = (b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name);
   const feedNames = [...new Set(feed.map((p) => p.name!))];
   const nameSides = Object.fromEntries(feed.map((p) => [p.name!, p.id.startsWith("h") ? "home" : "away"] as const));
-  const codes = codesOf(teams, m.teams);
-  const scoutStat = (key: string, at: number) => scoutAt(b.match, key, at);
   const lowerThird = big
     ? setupLowerThird($("lower-third"), { teams, names: feedNames, goals: b.match?.goals ?? [], scorebug: b.scorebug,
-      stat: scoutStat, codes, nameSides })
+      nameSides })
     : null;
   // The second half's kick-off, when vision detected one (a chapter is named from it): half-time's end.
   const kick = (b.match?.chapters ?? []).find((c) => c.label.startsWith("Kick-off") && (c.event_t ?? c.t) >= 45 * 60);
   const secondHalf = kick ? kick.event_t ?? kick.t : null;
   const scorebug = big ? setupScorebug($("scorebug"), $("clock-tab"), teams, b.scorebug, secondHalf, m.teams) : null;
-  const statsGfx = big && b.match ? setupStats($("stats-card"), $("period-panel"), b.match, teams, codes) : null;
+  const statsGfx = big && b.match ? setupStats($("period-panel"), b.match, teams) : null;
   const footageStart = matchTime(0);
   (window as unknown as { ninetyScorebug: unknown }).ninetyScorebug = { bugAt, BAKED, rowsAt, statsGraphicAt }; // tests // read by tests/test_match_mode.py
   (window as unknown as { ninetyLowerThird: unknown }).ninetyLowerThird = { describe: describeLowerThird }; // read by tests/test_match_mode.py

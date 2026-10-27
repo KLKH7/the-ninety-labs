@@ -1,14 +1,12 @@
-// The big screen's insight tab (Kian, Oct 26: the lower thirds looked "terrible and Claude-made"):
-// as a league's on-screen graphics, a slim tab attached under the scorebug (src/scorebug.ts), the
-// fact's kind and club beside its crest and one short line, never a panel over the play. Where the
-// insight has a comparison the match's stats carry (overloads, counters, one-twos, regains), a split
-// bar in the two clubs' colours. The short line keeps the checked sentence's own words, in order
-// (only a lead's words are dropped); its numbers are the sentence's, and the comparison's are the
-// Insight Scout's confident rows (match.json insight_stats), never ours.
+// The big screen's pill under the scorebug (Kian, Oct 26: sleek, the phone's family): one white
+// rounded pill, in its club's colour when it is about one club. An insight is a small caps label (its
+// kind and minute) over one short bold line; a goal is the scorer's pill (crest, the name the ID feed
+// gives in the sentence, else the club; the minute in a circle) after the bug's GOAL sweep. The short
+// line keeps the checked sentence's own words, in order (only a lead's words are dropped).
 
 import type { Cue } from "./bundle";
 import { crestOf } from "./crests";
-import { type Side, type TeamNames, CLUBS, short } from "./teams";
+import { type Side, type TeamNames, CLUBS, fullName, short } from "./teams";
 
 /** The insight bar's fact kinds (ninety/agents/insight_bar.py, SIGNIFICANCE), by the prefix of the
  * fact id its cue carries (`insight-<fact id>`), as a broadcaster labels them. */
@@ -25,7 +23,10 @@ const LABELS: Record<string, string> = {
 const KIND_LABELS: Record<string, string> = { shot_speed: "Shot", recap: "Recap", insight: "Insight" };
 
 /** The slide in and the slide out (design: a TV graphics cadence). */
-const SLIDE_S = 0.5;
+const SLIDE_S = 0.3;
+/** A goal (Kian, Oct 26: ~3 s): the club's band sweeps the bug first (src/scorebug.ts), then the
+ * scorer's pill, until the moment ends (design). */
+export const GOAL_PILL_IN_S = 1.0, GOAL_PILL_OUT_S = 3.2;
 /** A goal and the scorebug's change for it, at most this far apart (web/phone, SCOREBUG_MATCH_S). */
 const SCOREBUG_MATCH_S = 3;
 
@@ -37,9 +38,6 @@ export interface ScoreRead {
   confidence?: number | null;
 }
 
-/** A confident stat row's values at match time t (src/stats.ts), or null. */
-export type StatAt = (key: string, t: number) => { home: number; away: number } | null;
-
 export interface Context {
   teams: TeamNames;
   /** Every player name the ID feed gives (match.json `lineup`, source id_feed). */
@@ -50,19 +48,8 @@ export interface Context {
   goals: { t: number; team: Side | null; event: string }[];
   /** The scorebug's readings that pass the bundle's gate. */
   scorebug: ScoreRead[];
-  /** The Insight Scout's confident rows, by key and time; absent, no comparison. */
-  stat?: StatAt;
-  /** The clubs' three-letter codes, as the scorebug shows them. */
-  codes?: Record<Side, string>;
 }
 
-/** The comparison an insight kind has in the Scout's rows (match.json insight_stats keys). */
-const COMPARE: Record<string, { key: string; label: string }> = {
-  ov: { key: "overload_moments", label: "Overloads" },
-  counter: { key: "counters", label: "Counters to a shot" },
-  onetwo: { key: "one_twos", label: "One-twos" },
-  cp: { key: "regains_within_5s", label: "Won back in 5 s" },
-};
 
 export interface Graphic {
   id: string;
@@ -77,7 +64,6 @@ export interface Graphic {
   kind: string; // "Overload"
   minute: number;
   brief: string; // one short line, the sentence's own words in order
-  compare: { key: string; label: string } | null;
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -131,7 +117,7 @@ export function describe(cue: Cue, c: Context): Graphic {
   const { head, sub } = split(text);
   const scorer = goal ? c.names.find((n) => text.includes(`${n} scor`)) ?? null : null;
   return { id: cue.id, goal, label: `${kind} · ${minute}′`, side, head, sub, score, scorer, verified: !!cue.verified,
-    kind, minute, brief: brief(fact, text, head, c.names), compare: fact ? COMPARE[fact] ?? null : null };
+    kind, minute, brief: brief(fact, text, head, c.names) };
 }
 
 /** The sentence as one short line, by the bar's sentence shapes (ninety/agents/companion_match
@@ -197,21 +183,25 @@ export function splitBar(home: number, away: number): HTMLElement {
   return bar;
 }
 
-/** One stat row: home's number, the label, away's number, the split bar under them. */
-export function statRow(label: string, home: number, away: number, unit = ""): HTMLElement {
-  return el("div", "srow", el("span", "srow-h", `${home}${unit}`), el("span", "srow-l", label),
-    el("span", "srow-a", `${away}${unit}`), splitBar(home, away));
+/** A name as a broadcast graphic sets it: the first name light, the rest bold in capitals. */
+function nameNodes(name: string): Node[] {
+  const [first, ...rest] = name.split(" ");
+  return rest.length ? [el("span", "pill-first", first), el("span", "pill-last", rest.join(" ").toUpperCase())]
+    : [el("span", "pill-last", name.toUpperCase())];
 }
 
-/** The tab for one graphic. */
-function build(g: Graphic, c: Context, t: number): Node[] {
-  const code = g.side ? c.codes?.[g.side] ?? c.teams[g.side].toUpperCase() : "";
-  const label = el("p", "lt-label", crest(g.side, c.teams), el("span", "lt-kind", g.kind.toUpperCase()),
-    ...(code ? [el("span", "lt-code", code)] : []), el("span", "lt-min", `${g.minute}′`), check(g.verified));
-  const body = el("div", "lt-body", label, el("p", "lt-head", ...withNames(g.brief, c.names)));
-  const row = g.compare ? c.stat?.(g.compare.key, t) : null;
-  if (row && g.compare) body.append(statRow(g.compare.label, row.home, row.away));
-  return [el("div", "lt-tab", el("span", "lt-band"), body)];
+/** The pill for one graphic: a goal's (crest, the scorer the ID feed names in the sentence, else the
+ * club; the minute in a small circle), or an insight's (a small caps label and one short bold line,
+ * tinted in its club's colour when it is about one club). */
+function build(g: Graphic, c: Context): Node[] {
+  if (g.goal) {
+    const who = g.scorer ?? (g.side ? fullName(c.teams[g.side]) : g.head);
+    return [el("div", "pill pill-goal", crest(g.side, c.teams), el("p", "pill-name", ...nameNodes(who)),
+      el("span", "pill-min", `${g.minute}′`), check(g.verified))];
+  }
+  return [el("div", "pill", crest(g.side, c.teams),
+    el("div", "pill-text", el("p", "pill-label", `${g.kind.toUpperCase()} · ${g.minute}′`), el("p", "pill-line", ...withNames(g.brief, c.names))),
+    check(g.verified))];
 }
 
 /** The insight tab on screen: the big screen's cue on air, slid down out of the scorebug and back up
@@ -227,7 +217,7 @@ export function setupLowerThird(root: HTMLElement, c: Context) {
         cue = next;
         if (next) {
           shown = describe(next, c);
-          root.replaceChildren(...build(shown, c, next.t_in));
+          root.replaceChildren(...build(shown, c));
           root.dataset.side = shown.side ?? "";
           root.dataset.goal = shown.goal ? "1" : "0";
           root.dataset.id = next.id;
@@ -246,7 +236,10 @@ export function setupLowerThird(root: HTMLElement, c: Context) {
         if (reduceMotion || !root.getAnimations().length) root.hidden = true;
         return;
       }
-      root.dataset.on = !reduceMotion && t > cue.t_out - SLIDE_S ? "0" : "1";
+      // A goal's pill comes up under the bug once its band has swept it, and goes with the moment.
+      const from = shown.goal ? cue.t_in + GOAL_PILL_IN_S : cue.t_in;
+      const to = shown.goal ? Math.min(cue.t_out, cue.t_in + GOAL_PILL_OUT_S) : cue.t_out;
+      root.dataset.on = t >= from && (reduceMotion || t <= to - SLIDE_S) && t < to ? "1" : "0";
     },
   };
 }
