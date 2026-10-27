@@ -82,12 +82,19 @@
                 <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
                   <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
                   <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
+                  <ion-segment-button value="heat" id="heat-button"><ion-label>Heat</ion-label></ion-segment-button>
               </ion-segment>
                 <section class="card pitch-card" aria-label="Pitch">
               <div class="pitch-wrap">
                 <div class="map" id="map-box">
                   <canvas id="map" role="img" aria-label="Pitch"></canvas>
                   <canvas id="wind" aria-hidden="true" hidden></canvas>
+                  <canvas id="team-heat" aria-hidden="true" hidden></canvas>
+                  <p class="map-empty" id="map-empty" hidden>Players appear here when the big screen shows play.</p>
+                </div>
+                <!-- Heat: where every tracked player has been so far, both clubs together (the dots fade). -->
+                <div id="team-heat-box" hidden>
+                  <p class="fine" id="team-heat-words" aria-live="polite"></p>
                 </div>
                 <div class="which" id="which" role="group" aria-labelledby="which-title" hidden>
                   <p id="which-title">Which player?</p>
@@ -301,7 +308,7 @@
             <button type="button" class="close" id="close-player" aria-label="Close the player card"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
           <ion-list inset id="so-far-box" hidden>
-            <ion-list-header><ion-label class="caps">So far</ion-label></ion-list-header>
+            <ion-list-header><ion-label class="caps" id="so-far-title">So far</ion-label></ion-list-header>
             <div class="stats">
               <p class="stat"><span class="value" id="speed">–</span><span class="label">km/h now</span></p>
               <p class="stat top"><span class="value" id="peak">–</span><span class="label">top km/h</span></p>

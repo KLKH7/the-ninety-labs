@@ -3441,6 +3441,33 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
   with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
 
+### 285. A share stated only when every input is sure is never stated
+- **What happened:** the Stats tab's possession was each club's share of the detected passes, said
+  only when no pass of the window had an unsure side (I17). On the demo match (seed 8324) a few
+  passes in every window had one, so the row read "unsure" from kick-off to full time, and the big
+  screen's half-time and full-time panels, which show only confident rows, never had possession.
+  Each gate was right on its own; together they made a headline number that could not appear.
+- **Rule:** before shipping a gated statistic, count how often its gate opens on the demo match. A
+  gate that needs every one of hundreds of inputs to pass is a gate that never opens: measure the
+  statistic's error instead and state it with its error. Possession is now time on the ball
+  (I17b), stated once a minute of possession was seen, its error against the answer key published
+  (docs/eval/possession-time.json).
+- **Check:** `tests/test_possession_territory.py::test_the_share_is_always_said_after_a_minute_of_possession_and_never_before`
+  (fails with the old all-sure gate).
+
+### 286. A label for "nobody named" in a name's slot says the club twice
+- **What happened:** where vision's scorer was not named, his `say` was the generic "a Lisbon
+  Esportes player", and the Companion put it where a name goes: "a Lisbon Esportes player scored
+  for Lisbon Esportes in minute 35". The feed did name that goal's track (Ben Vomble), but goal
+  facts never read the feed's names, so the line said the club twice and no one.
+- **Rule:** a sentence with a person's slot is said only with a name or a role, never with the
+  fallback label that is only the club; and a name the approved source gives (the player-ID feed,
+  through the goal's own player) reaches the fact that needs it. A new attribution step (the feed
+  player nearest the ball at the strike) is pre-registered and gated like any other: it missed
+  (0.40 against 0.95 on held-out seed 8080, the misses shots vision detected where there were
+  none) and is off.
+- **Check:** `tests/test_companion_match.py::test_a_scorer_who_is_only_his_club_is_not_said_twice`;
+  `tests/test_identity_feed.py::test_the_shooter_step_is_off_while_its_committed_score_missed`.
 
 ### 287. A message that routes to no tool is not a follow-up by default
 - **What happened:** in the 8324 preview's docked companion at 89:59, Kian typed "hello" and got a
@@ -3464,6 +3491,78 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
   on main 14a33133, and each fails when its guard is removed.
 
+### 289. "Who's on top" headed by one club's number names a winner without a comparison
+- **What happened:** on the 8324 preview at 33:50, "Who has been on top in the half hour" was headed
+  "London" from one sentence about London's attacking-third share (13% to 18%, minutes 1 to 34). It
+  never looked at Lisbon, ignored "the half hour", and 13% to 18% is no sign of being on top: over
+  minutes 31 to 34 Lisbon had the ball in London's third more (the answer key: 27% against 8%).
+- **Rule:** a comparative question is answered by a comparison: both clubs over the window the fan
+  named, the verdict only when the measures' own bounds separate them, else "Too close to call".
+  The headline is the comparison's verdict, never the first fact's club.
+- **Check:** `tests/test_companion_match.py::test_on_top_compares_both_clubs_over_the_stretch_asked`
+  and `::test_on_top_is_too_close_to_call_when_the_ranges_overlap`.
+
+### 290. A statistic measured on halves is not measured on five minutes
+- **What happened:** time-based possession (I17b) was graded on halves and whole matches (MAE
+  5.75 points). Asked over minutes 31 to 35 of 8324 it read London 65%; the answer key says 36%,
+  the other club. 99 seconds of possession are too few for a share, and no such window was graded.
+- **Rule:** say a statistic only over the windows its measurement covered (here: from kick-off and
+  from a half's start); a window it was not measured on is "not known", or a measured one is used.
+- **Check:** `tests/test_companion_match.py::test_possession_is_not_said_for_a_stretch_it_was_not_measured_on`.
+
+### 293. A grader's rule that accepts any match lets a wrong answer through
+- **What happened:** building the Ask grader (`ninety/eval/ask_grade`), the first look at main's
+  answers found three of its own rules passing wrong answers. "Why did London Athletic score?" →
+  "London Athletic scored in minute 12. Just before it, in minute 32, …" passed, because *any* minute
+  near the goal counted, so the build-up from twenty minutes later passed too. "How many shots have
+  London had?" → "There were 8 shots" passed, because the total vision saw happened to equal London's
+  true 8. "Who's been in the attacking third more?" → one Lisbon player's line-breaking pass passed
+  as a territory comparison, because the truth's leader was Lisbon too. Each rule accepted the
+  first thing that matched and never asked whether the rest of the answer was also right, or about
+  the thing asked.
+- **Rule:** a grading rule checks every element the answer states (every minute, every name), and
+  the scope it states: a count that names no club is a total, and a comparison names both sides.
+  Before trusting a grader's numbers, read a sample of its *passes*, not only its failures, and give
+  each rule a test that fails on the wrong answer it must catch.
+- **Check:** `tests/test_ask_grade.py::test_a_why_that_cites_a_later_minute_is_not_the_build_up`,
+  `test_an_unattributed_total_is_not_one_clubs_count`, `test_one_clubs_figure_is_not_a_comparison`
+  and `test_one_clubs_pass_is_not_where_the_ball_has_been`. Each fails with its guard removed
+  (mutation-tested). The rules were tightened, never loosened, and before any baseline was written.
+  The other way round too: the first model-path run's grader read "London Athletic 1 goal, Lisbon
+  Esportes 1 goal" (the scorebug's own words) as no score, because it knew only "1-1" and per-goal
+  minutes, so a right answer failed (`test_the_scorebugs_wording_is_a_score`). Read the failures as
+  well as the passes. And the truth itself: `truth.py` swapped the teams' ends at half time from
+  memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
+  L3), so every second-half territory truth had the clubs reversed until another session compared it
+  with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
+  the engine's code, not in how football usually goes.
+
+
+### 294. A track's numbers are one stretch of tracking, not the player's match
+- **What happened:** on the 8324 preview at 29:46, a goalkeeper's player card said "So far: 43 metres
+  run" under "Heat map, 0:00 to 29:46, covering 29 min 46 s of play". The track had been followed
+  for 38 s: vision loses a player behind others and picks him up again as a new track, so each card
+  covers one track's stretch. The label came from the minimap's first frame, not from the track's.
+  On the same phone, 29% of tracked player-frames have no Player ID feed row. Tapping one titled the
+  sheet "A player" and the chips asked "How fast is a player running now?" (Kian, Oct 26).
+- **Rule:** a card states the span its own track covers: "Tracked 29:08–29:46", covering 38 s,
+  from the track's first frame to the last sighting at or before now, never later. A player the
+  feed does not name is said by where he is ("the player on the left of the pitch"). He gets no
+  club: a track id's letter is the tracker's vote, and a bundle may carry no side list, in which
+  case the old `sideUnsure()` named every club. The first version of this PR fell into exactly that
+  (merge review, Oct 27). Never "a player", and never the tracker's number. The heat map is every
+  tracked player together. A club split by the feed's sides would let the feed reach a statistic
+  other than an event's side, which AGENTS.md forbids; the review caught it. A split by
+  `sides_known` would read event track ids against the radar's (lesson 259). Joining tracks into a player's match by feed name is a different
+  change. AGENTS.md forbids stitching on whether a track is named, so that rule must change first.
+- **Check:** `tests/test_phone_companion.py::test_a_cards_numbers_say_the_stretch_its_track_was_followed_not_the_match`,
+  `test_a_player_the_feed_does_not_name_is_said_by_where_he_is_never_a_player` and
+  `test_tapping_a_player_the_id_feed_names_says_his_name_in_the_card_and_every_chip` and
+  `test_the_pitch_shows_positions_movement_and_one_heat_map_of_every_tracked_player`, run on the 8324 shape (no
+  `sides_known`, the feed's side differing from the track's letter). Each fails when its guard is
+  removed (mutation-tested).
+
+
 ### 295. A gate whose rejection falls back to the same kind of answer blocks nothing
 - **What happened:** on the Live match Ask (since v4 of the match Companion) the model may only pick
   one of code's own checked sentences, and a rejected draft falls back to code's answer, which is
@@ -3481,6 +3580,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_the_match_path_runs_no_judge` (fails when the API
   passes the Judge to `answer_match`), `test_a_step_past_its_budget_falls_back_to_code_naming_the_step`,
   and `tests/test_api_companion.py::test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit`.
+
+### 296. A phrase the fact-checker allows is not a phrase it requires
+- **What happened:** #424 put possession on air "give or take 10 points", the error measured when
+  the share missed its 5-point gate. The fact-checker's possession template *allowed* the clause
+  but did not *require* it: the same sentence with the clause deleted still verified, so a
+  model-written possession share could reach the screen with no error (delta review of ff0a17eb).
+  A second miss in the same area: `on_top` named a leader from two seconds of footage ("100% to
+  0%"), with no minimum sample.
+- **Rule:** a qualifier that a number must carry (its error, its coverage) is a check that rejects
+  the sentence without it, not an entry in the list of allowed words. A comparison needs the same
+  sample floor as the measure it rests on.
+- **Check:** `tests/test_possession_territory.py::test_the_possession_sentence_carries_its_measured_error_and_no_other`
+  (the clause left out is rejected) and `tests/test_companion_match.py::test_on_top_is_not_known_on_too_little_footage`;
+  each fails with its guard removed.
 
 ### 299. A template that was never provisioned is not the deployed infrastructure
 - **What happened:** on Oct 27, the day of the deadline, an audit found that the deployed API could

@@ -801,7 +801,9 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         assert page.locator("#roster .who").count() == 0
         tap_player(page)
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
-        assert re.fullmatch(r"(London|Lisbon) player|A player", page.inner_text("#player-title"))  # no number
+        title = page.inner_text("#player-title")  # no number, and never "a player" (Oct 27)
+        where = r"The player (on the left|in the middle|on the right) of the pitch"
+        assert re.fullmatch(rf"(London|Lisbon)'s \w+ \w+|{where}", title)
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors

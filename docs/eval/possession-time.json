@@ -1,0 +1,85 @@
+{
+ "plan": "docs/eval/possession-time-plan.md",
+ "command": "uv run python -m ninety.eval.possession_time",
+ "commit": "dfc8274f9803d2727fd39ac00855756f15e0f383",
+ "date": "2026-10-27",
+ "gate": {
+  "mae_points_at_most": 5.0,
+  "mae": 5.75,
+  "max_error": 8.1,
+  "windows": 6,
+  "met": false
+ },
+ "matches": [
+  {
+   "seed": "8080",
+   "windows": [
+    {
+     "window": "first half",
+     "minute_from": 1,
+     "minute_to": 45,
+     "live_home": 74,
+     "true_home": 76.5,
+     "seconds": 333,
+     "error": 2.5
+    },
+    {
+     "window": "second half",
+     "minute_from": 46,
+     "minute_to": 90,
+     "live_home": 56,
+     "true_home": 64.1,
+     "seconds": 515,
+     "error": 8.1
+    },
+    {
+     "window": "full match",
+     "minute_from": 1,
+     "minute_to": 90,
+     "live_home": 63,
+     "true_home": 69.1,
+     "seconds": 848,
+     "error": 6.1
+    }
+   ],
+   "so_far_bins": 16,
+   "so_far_mae": 4.42,
+   "so_far_max": 9.2
+  },
+  {
+   "seed": "8324",
+   "windows": [
+    {
+     "window": "first half",
+     "minute_from": 1,
+     "minute_to": 45,
+     "live_home": 60,
+     "true_home": 55.5,
+     "seconds": 475,
+     "error": 4.5
+    },
+    {
+     "window": "second half",
+     "minute_from": 46,
+     "minute_to": 90,
+     "live_home": 37,
+     "true_home": 29.5,
+     "seconds": 370,
+     "error": 7.5
+    },
+    {
+     "window": "full match",
+     "minute_from": 1,
+     "minute_to": 90,
+     "live_home": 50,
+     "true_home": 44.2,
+     "seconds": 845,
+     "error": 5.8
+    }
+   ],
+   "so_far_bins": 18,
+   "so_far_mae": 3.6,
+   "so_far_max": 6.3
+  }
+ ]
+}
