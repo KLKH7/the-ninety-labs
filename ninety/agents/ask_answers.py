@@ -1362,6 +1362,7 @@ def unmeasured(ctx: Ctx) -> Reply:
         closest = possession(ctx)
         if closest.status == "verified" and closest.lines:
             text, cited = closest.lines[0]
+            text = "i" + text[1:] if text.startswith("It's ") else text  # mid-sentence: "measure: it's even"
             closest.lines = [("Here's what it does measure: " + text, cited)]
     if closest.status != "verified":
         closest = Reply()
