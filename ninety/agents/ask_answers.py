@@ -775,7 +775,7 @@ def out_of_play(ctx: Ctx) -> Reply:
         r.say(
             f"{ctx.read.club} have had {_plural(n[t], one, many)} of them."
             if n[t]
-            else f"None of them were {possessive(ctx.read.club)}.",
+            else f"{ctx.read.club} haven't had any of them.",
             fc,
         )
     r.head = _plural(total, "time")
@@ -1171,7 +1171,7 @@ def _offside_reads(ctx: Ctx) -> Reply:
             + (
                 f"the line, with {_plural(off, 'pass', 'passes')} to a player beyond it."
                 if off
-                else "the line, and none to a player beyond it."
+                else "the line, and no pass to a player beyond it."
             ),
             f,
         )
