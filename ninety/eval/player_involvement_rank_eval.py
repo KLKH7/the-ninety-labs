@@ -2,7 +2,7 @@
 (docs/eval/player-involvement-rank-plan.md).
 
     uv run python -m ninety.eval.player_involvement_rank_eval --clip runs/demo-8080-hunt \\
-        --vision runs/demo-8080-hunt-work/vision --feed runs/demo-8080-hunt/final-work/identity_feed.jsonl \\
+        --feed runs/demo-8080-hunt/final-work/identity_feed.jsonl \\
         --truth-events ~/ninety-notes/footage-hunt/seed8080-v2/events.jsonl \\
         --truth-meta ~/ninety-notes/footage-hunt/seed8080-v2/meta.json
 
@@ -42,7 +42,8 @@ def truth_top3(counts: Counter, pool: list[str]) -> set[str]:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--clip", type=Path, required=True)
-    ap.add_argument("--vision", type=Path, required=True)
+    ap.add_argument("--vision", type=Path, default=None,
+                    help="the segments' broadcast vision runs; without them names cross the join only")
     ap.add_argument("--feed", type=Path, required=True)
     ap.add_argument("--truth-events", type=Path, required=True)
     ap.add_argument("--truth-meta", type=Path, required=True)
@@ -53,7 +54,7 @@ def main(argv: list[str] | None = None) -> None:
     frames = json.loads((clip / "tracked.json").read_text())["frames"]
     association = json.loads((clip / "association.json").read_text())["tracks"]
     events = detected.load(clip / "detected.jsonl")
-    b_frames = identity.broadcast_frames(args.vision, clip)
+    b_frames = identity.broadcast_frames(args.vision, clip) if args.vision else []
     feed = identity.load_for(args.feed, [*frames, *b_frames], load_fixture(clip / "clip.json"))
     tactical = identity.tactical(frames, feed)
     named_b = identity.named_broadcast(association, tactical, feed, events, b_frames)

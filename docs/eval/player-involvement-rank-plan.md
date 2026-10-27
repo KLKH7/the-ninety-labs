@@ -40,3 +40,11 @@ clip-window truth folders are dangling links, and none are needed, since this gr
 If the bar is met, `rank:involvement_order` is set on in `ninety/intel/player_stats_calibration.json`
 and `player_rank(club, "involvement", minute)` returns the order with no values. If it is missed,
 the result is reported, the flag stays off, and nothing is retuned.
+
+## Addendum, before any truth was read: the broadcast vision runs are gone
+
+`runs/demo-8080-hunt-work/vision/*` link to pod outputs that are no longer on the machine, so
+identity's step 6 (naming broadcast tracks directly from the feed) cannot run on 8080. The grade
+uses the live path as it runs without `--broadcast-vision`: names cross the camera join only
+(`identity.named_broadcast` with no broadcast frames). That names fewer events, so it is a harder
+test of the order, not an easier one. Nothing else changes.
