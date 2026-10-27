@@ -480,3 +480,16 @@ def test_territory_follows_each_halfs_direction():
 def test_completion_said_as_a_direction(home, away, text, ok):
     tv = {"footage": {"completion": {"home": home, "away": away, "total": None}}}
     assert G.comparison_direction(text, tv, CLUBS, TOL) is ok
+
+
+def test_a_recorded_drop_is_the_baseline_and_never_core_or_correct():
+    # #432 (Kian, Oct 27: "record as justified"): each drop is in ratchet_downs.json with its evidence,
+    # the baseline holds the recorded rate, and no core or correct cell may ever be recorded.
+    doc = json.loads((R.HERE / "ratchet_downs.json").read_text())
+    base = json.loads(R.BASELINE.read_text())
+    for d in doc["downs"]:
+        name, col = d["cell"].rsplit(" ", 1)
+        assert col not in ("core", "correct", "correct_strict"), d
+        block = base[name] if name in ("all", "chips") else base["intents"][name]
+        assert block[col] == d["to"] and (d["to"] is None or d["to"] < d["from"]), d
+        assert len(d["evidence"]) > 40, d

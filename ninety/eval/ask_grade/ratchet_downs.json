@@ -1,0 +1,42 @@
+{
+ "about": "Rates the ratchet (tests/test_ask_grade.py) let go down, each recorded as justified by Kian (Oct 27, #432): the cell, main's rate and #432's on the fixture rebuilt with #430/#431's build, and one line of evidence. No 'core' or 'correct' cell may be here; a cell not here may not go down.",
+ "pr": 432,
+ "downs": [
+  {
+   "cell": "chips relevant",
+   "from": 0.917,
+   "to": 0.714,
+   "evidence": "follows from the shots, on-target, corners and out-of-play chips leading with the scorebug's goals and territory (the three rows above); core and correct do not drop"
+  },
+  {
+   "cell": "chips consistent",
+   "from": 0.716,
+   "to": 0.667,
+   "evidence": "follows from the same chips answering with goals and territory; core and correct do not drop"
+  },
+  {
+   "cell": "completion coverage_honest",
+   "from": 0.0,
+   "to": null,
+   "evidence": "main at 60:00, 'what's the pass completion?': the canned 'I can't answer that one\u2026'; #432 says completion only as a direction ('London Athletic have passed more accurately than Lisbon Esportes in the footage so far'), no figure, so the footage check no longer applies (None)"
+  },
+  {
+   "cell": "shots relevant",
+   "from": 0.859,
+   "to": 0.0,
+   "evidence": "main at 60:00, 'How many shots?': 'There were 5 shots from minute 1 to minute 61.' (a count the detector gets wrong, recall 0.22; core 0); #432: the scorebug's goals, then where the ball has been (core 0 before and after)"
+  },
+  {
+   "cell": "corners relevant",
+   "from": 0.923,
+   "to": 0.0,
+   "evidence": "main at 60:00, 'How many corners?': 'There were 0 corners from minute 1 to minute 61.' (restart precision under 0.2; core 0); #432: where the ball has been, no restart count on air (core 0 before and after)"
+  },
+  {
+   "cell": "out_of_play relevant",
+   "from": 0.455,
+   "to": 0.0,
+   "evidence": "main at 60:00, 'How many times has the ball gone out of play?': the canned 'I can't answer that one\u2026' (core 0); #432: where the ball has been, no restart count on air (core 0 before and after)"
+  }
+ ]
+}
