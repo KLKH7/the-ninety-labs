@@ -1074,7 +1074,8 @@ def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing()
 
 
 def test_the_refusal_says_build_up_with_its_hyphen():
-    joke = Question("s1", None, "Tell me a joke", 80 * 60.0)
+    # A message about a club that no tool answers (lesson 287: "Tell me a joke" is small talk now).
+    joke = Question("s1", None, "Tell me a joke about London Athletic", 80 * 60.0)
     a = asyncio.run(companion.answer_match(joke, insights())).answer
     assert a.status == "unanswerable" and "goal build-up" in a.text and "build up" not in a.text
 
@@ -1211,3 +1212,55 @@ def test_the_model_citing_the_beaten_clubs_pass_is_refused():
     r = asyncio.run(companion.answer_match(q, mi, ask))
     assert r.source == "code" and r.reasons[0].startswith("the question asks for a pass that beat Lisbon")
     assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
+
+
+SMALL_TALK_PROBES = [
+    "hello", "Hi!", "hey there", "thanks", "Thank you so much", "cheers mate", "ok", "what can you do?",
+    "Who are you?", "help", "asdkjh qwe zzz", "What's the capital of France?", "will it rain tomorrow?",
+]
+STAT = re.compile(r"\d|%|\bminute\b")
+
+
+@pytest.mark.parametrize("text", SMALL_TALK_PROBES)
+def test_small_talk_gets_a_friendly_reply_and_suggestions_never_a_stat(text):
+    """Kian, Oct 27 (lesson 287): "hello" in the docked companion got "49% … Lisbon Esportes played most
+    through the left … minute 76 to minute 91": with an earlier question in the conversation, a message
+    that routed to no tool reused the last question's tools. Small talk is answered before any tool or
+    model call, with fixed words and questions the tools can answer, on the code path and the model's."""
+    mi = insights()
+    history = [{"question": "How are London Athletic playing?", "answer": "x",
+                "calls": [{"name": "line_breaks", "club": "London Athletic",
+                           "minute_from": 14, "minute_to": 28}]}]
+
+    async def ask(prompt):  # a model that would answer with a stat if it were ever asked
+        raise AssertionError(f"the model was called for small talk: {prompt[:80]}")
+
+    for h in ((), history):
+        for r in (asyncio.run(companion.answer_match(Question("s1", None, text, Q.t), mi, history=h)),
+                  asyncio.run(companion.answer_match(Question("s1", None, text, Q.t), mi, ask, history=h))):
+            a = r.answer
+            assert r.tools == () and a.evidence == () and a.value is None and a.headline is None, a
+            assert not STAT.search(a.text), a.text
+            assert 1 <= len(a.follow_ups) <= 3 and all(companion.route(q) for q in a.follow_ups), a.follow_ups
+
+
+@pytest.mark.parametrize("text", ["And in the first half?", "What about them?", "Which pass cut through?",
+                                  "Who is London Athletic's left-back?", "hi, which pass cut through?"])
+def test_a_question_or_a_follow_up_is_not_small_talk(text):
+    history = [{"question": "Which pass cut through?", "answer": "x",
+                "calls": [{"name": "line_breaks", "club": None, "minute_from": 14, "minute_to": 28}]}]
+    assert companion.chat_kind(text, insights(), history) is None
+
+
+def test_no_window_runs_past_full_time():
+    """Lesson 287: a question at 90:00 or after was read as minute 91; the window ends at full time
+    (Law 7's 90 minutes), on the code path and in the model's plan."""
+    mi = insights()
+    q = Question("s1", None, "Which pass cut through?", 90 * 60.0 + 45)
+    calls = companion.code_calls(q, mi)
+    assert calls and all(c["minute_to"] == 90 for c in calls)
+    plan = {"tools": [{"name": "line_breaks", "club": None, "minute_from": 80, "minute_to": 91}]}
+    minute = json.loads(companion.plan_prompt(q, mi))["minute"]
+    assert minute == 90 and companion._calls(plan, mi, minute)[0]["minute_to"] == 90
+    a, _ = companion.code_match_answer(q, mi)
+    assert "minute 91" not in a.text, a.text

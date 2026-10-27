@@ -250,6 +250,74 @@ def _minute_now(t: float) -> int:
     return int(t // 60) + 1
 
 
+FULL_TIME_MIN = 90  # Law 7's two halves of 45 (GROUNDING L3, I23): the engine plays no added time
+
+
+def _minute_in(t: float, insights) -> int:
+    """The minute now, never past full time: a question at 90:00 or after asks about minute 90, not a
+    "minute 91" the match does not have (lesson 287). A match tracked for longer keeps its minutes."""
+    return min(_minute_now(t), max(FULL_TIME_MIN, int(getattr(insights, "minutes", 0) or 0)))
+
+
+# A message that is not a question about the match: a greeting, thanks, small talk, a question about
+# the companion itself. Answered by code with a short reply and suggested questions, before any tool
+# or model call, so it never gets a statistic (lesson 287). The whole message must be one of these:
+# "hi, who's winning?" is a question.
+_CHAT_END = r"[\s!.,?:;)(*~^-]*(?:(?:mate|there|all|everyone|guys|team|buddy|pal|bot|companion)[\s!.,?]*)?$"
+SMALL_TALK = (
+    ("greeting", re.compile(
+        r"^\s*(?:h(?:i+|e+y+|ello+|ey+a|iya|owdy)|yo+|sup|wassup|what'?s up"
+        r"|good (?:morning|afternoon|evening)|morning|evening|alright|ola|hola)" + _CHAT_END, re.I)),
+    ("thanks", re.compile(
+        r"^\s*(?:thanks?(?: you)?(?: (?:so|very) much)?|thx|ty|cheers|ta|nice(?: one)?|great|cool|awesome"
+        r"|ok(?:ay)?|k|lol|haha+|perfect|got it|brilliant|bye|goodbye|see (?:you|ya)|cya|good night)"
+        + _CHAT_END, re.I)),
+    ("about", re.compile(
+        r"^\s*(?:(?:so |and )?(?:who|what) (?:are|r) (?:you|u)|what (?:can|do) (?:you|u) do|what do you know"
+        r"|how (?:does|do) (?:this|it|you) work|help|what is this|what'?s this"
+        r"|are you (?:a bot|an? ai|human|real)"
+        r"|what should i ask|what can i ask(?: you)?)" + _CHAT_END, re.I)),
+)
+CHAT_REPLIES = {
+    "greeting": "Hi! I'm your match companion. Ask me anything about this match, like one of these:",
+    "thanks": "You're welcome! Anything else about the match? Try one of these:",
+    "about": ("I'm your match companion: I answer questions about this match from what the cameras "
+              "tracked, and every number is checked before you see it. Try one of these:"),
+    "other": "I can only talk about this match. Try one of these:",
+}
+# A message that continues the last question ("and in the first half?", "what about them?"): it reuses
+# that question's tools. Anything else that routes to no tool is not about the match's facts.
+FOLLOW_ON = re.compile(
+    r"^\s*(?:and|but|so|what about|how about|same|then|now|in the|during|since|over|before|after)\b"
+    r"|\b(?:they|them|their|theirs|he|him|his)\b", re.I)
+
+
+def chat_kind(text: str, insights, history=()) -> str | None:
+    """Which kind of small talk a message is ("greeting", "thanks", "about"), "other" for one that is
+    not about the match at all (no tool, no club, not a follow-up: gibberish, the weather), or None
+    for a question the tools may answer."""
+    kind = next((k for k, pattern in SMALL_TALK if pattern.search(text)), None)
+    if kind is not None:
+        return kind
+    if route(text) or clubs_named(text, insights) or minutes_of(text, 90) is not None or asked_role(text):
+        return None
+    if history and FOLLOW_ON.search(text):
+        return None
+    return "other"
+
+
+def chat_answer(question: Question, insights, history=(), suggest: bool = True) -> Answer | None:
+    """The reply to small talk (chat_kind): fixed words that state no fact, and three questions the
+    tools can answer now. None for a question about the match."""
+    kind = chat_kind(question.text, insights, history)
+    if kind is None:
+        return None
+    t = 60.0 * _minute_in(question.t, insights)
+    asked = [*(h["question"] for h in history), question.text]
+    ups = follow_ups([], [], insights, asked, t) if suggest else ()
+    return Answer("unanswerable", CHAT_REPLIES[kind], None, None, None, (), None, None, follow_ups=ups)
+
+
 def first_object(reply: str) -> object:
     """The first JSON object in a model's reply, and nothing after it. The published Companion
     answers a plan with the plan and then goes on to write an "answer" step of its own, with facts
@@ -332,7 +400,7 @@ def plan_prompt(question: Question, insights, history=()) -> str:
             "question": question.text,
             "history": _history(history),
             "clubs": list(insights.fixture.clubs.values()),
-            "minute": _minute_now(question.t),
+            "minute": _minute_in(question.t, insights),
             "tools": TOOL_HELP,
         },
         separators=(",", ":"),
@@ -1035,9 +1103,9 @@ def _shape_texts(fact: dict, club: str, span: str) -> list[str]:
 def code_calls(question: Question, insights, history=()) -> list[dict]:
     """Code's plan: the routed tools, or a follow-up's ("and in the first half?") the last turn's
     tools; over the stretch the question names, else the last WINDOW_MIN minutes."""
-    minute = _minute_now(question.t)
+    minute = _minute_in(question.t, insights)
     names = route(question.text)
-    if not names and history:
+    if not names and history and chat_kind(question.text, insights, history) is None:
         names = [c["name"] for c in history[-1]["calls"]] if history[-1].get("calls") else []
     lo, hi = minutes_of(question.text, minute) or (max(1, minute - WINDOW_MIN + 1), minute)
     # The club the question is about: named, or "they" / "them" / "their" after a question that named one.
@@ -1206,6 +1274,10 @@ def code_match_answer(
 ) -> tuple[Answer, list[dict]]:
     """Code's answer: the routed tools' facts, the first one code can say and the check passes. A
     goal is told with the strongest thing that led to it."""
+    if calls is None:
+        chat = chat_answer(question, insights, history, suggest)
+        if chat is not None:  # small talk never gets a statistic (lesson 287)
+            return chat, []
     calls = calls if calls is not None else code_calls(question, insights, history)
     facts = run_tools(insights, calls)
     known = {f["id"]: f for f in facts}
@@ -1421,6 +1493,9 @@ async def answer_match(
     code's answer over the model's chosen tools (or code's, if the plan was unusable). `history` is
     the session's earlier turns ({question, answer, calls}), so a follow-up has its context."""
     history = list(history)
+    chat = chat_answer(question, insights, history)
+    if chat is not None:  # small talk: code's reply, before any tool or model call (lesson 287)
+        return MatchResult(chat, "code")
     if HOW_PLAYING.search(question.text):
         # "How are Lisbon playing?" is answered by code's overview in Live mode too: ranked by what
         # matters, never the first small count a model picks ("crossed 1 time and found a teammate 0
@@ -1433,7 +1508,7 @@ async def answer_match(
     if ask is None:
         a, calls = code_match_answer(question, insights, history=history)
         return MatchResult(a, "code", tuple(calls))
-    minute = _minute_now(question.t)
+    minute = _minute_in(question.t, insights)
 
     async def drafted():
         plan_reply = await ask(plan_prompt(question, insights, history))
