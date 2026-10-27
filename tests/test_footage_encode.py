@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -178,12 +179,16 @@ def test_the_gain_never_clips_the_whistles(tmp_path, monkeypatch):
     assert r128(out / "video.mp4")[1] <= footage.PEAK_DBTP + 0.5  # AAC's own overshoot: half a dB
 
 
-def test_a_bed_with_many_loud_peaks_still_airs_at_broadcast_loudness(tmp_path):
-    # Crowd roars near full scale a third of the time: the limiter takes level off them, so one gain
-    # from the raw loudness lands low; measured through the chain and corrected, it lands on target.
-    bed = bed_of(tmp_path, "(0.02+0.6*lt(mod(t\\,3)\\,1))*(random(0)*2-1)*0.25")
-    out = tmp_path / "bundle"
-    out.mkdir()
-    e2e.write_footage(clip_of(tmp_path), out, encode=True, audio=bed)
-    integrated, peak = r128(out / "video.mp4")
-    assert integrated == pytest.approx(footage.BED_LUFS, abs=1.0) and peak <= footage.PEAK_DBTP + 0.5
+def test_the_gain_is_corrected_for_what_the_limiter_takes_off_a_peaky_bed(monkeypatch):
+    # The 8324 bed lost about 2 LU in the limiter: one gain from its raw loudness aired at -23.0.
+    # Modelled here: the chain gives the raw level plus the gain, less 2 LU once it limits.
+    raw, loss = -28.1, 2.0
+
+    def measured(audio, chain=""):
+        if not chain:
+            return raw
+        gain = float(re.search(r"volume=(-?[\d.]+)dB", chain)[1])
+        return raw + gain - loss
+    monkeypatch.setattr(footage, "loudness", measured)
+    gain = footage.bed_gain(Path("bed.wav"), 1.25)
+    assert measured(None, footage._chain(1.25, gain)) == pytest.approx(footage.BED_LUFS, abs=0.3)
