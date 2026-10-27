@@ -16,7 +16,14 @@ import pytest
 
 from ninety.agents import live
 from ninety.intel import roles
-from ninety.intel.stats import calculate_facts, control_vs_chaos, goal_moments, pressure_facts, shot_facts
+from ninety.intel.stats import (
+    STRIKE_GAP_S,
+    calculate_facts,
+    control_vs_chaos,
+    goal_moments,
+    pressure_facts,
+    shot_facts,
+)
 from ninety.intel.teamsheet import possessive
 from ninety.intel.windows import WINDOW_S, agent_rows, territory_shifts, window_facts
 from ninety.match import detected
@@ -77,6 +84,17 @@ def test_a_goal_with_no_strike_seen_is_an_implied_shot_on_target_cited_by_the_go
     assert [f[f"{m}:team_home"].value for m in ("goals", "shots_on_target", "shots")] == [1, 1, 1]
     assert f["shots_on_target:team_home"].source_ids == ("g1",)
     assert f["shots:team_home"].source_ids == ("g1",)
+
+
+def test_a_shot_long_before_a_goal_is_not_its_strike():
+    """A goal 300 s after the side's last shot (another passage, or a cut between them): that shot keeps
+    its own outcome, and the goal is an implied shot on target (STRIKE_GAP_S)."""
+    events = [ev("s1", "shot", "home", 10.0, outcome="off_target"), ev("g1", "goal", "home", 310.0)]
+    f = by_id(shot_facts(events))
+    assert f["shots_on_target:team_home"].source_ids == ("g1",)
+    assert [f[f"{m}:team_home"].value for m in ("goals", "shots_on_target", "shots")] == [1, 1, 2]
+    near = [events[0], ev("g1", "goal", "home", 10.0 + STRIKE_GAP_S)]  # at the bound: still its strike
+    assert by_id(shot_facts(near))["shots_on_target:team_home"].source_ids == ("s1",)
 
 
 def test_a_goal_after_the_other_sides_shot_is_an_implied_shot_of_the_scoring_side():
@@ -249,3 +267,19 @@ def test_a_track_read_on_the_other_side_is_dropped_and_the_side_kept(tmp_path):
     assert (out["s07-v00002"]["team"], out["s07-v00002"]["player"]) == ("home", None)
     assert out["s07-v00001"]["player"] == "a-t7007"  # the feed sided him: his own side (lesson 283)
     assert out["s07-v00004"]["player"] == "h-t7001"
+
+
+def test_the_feed_names_a_mismatched_shooter_before_the_load_could_drop_him(tmp_path):
+    """The detector keeps a shot's player whose track was read on the other side: the feed's side step
+    (identity.sided, on the detector's raw file) may name him and give his side, and the load keeps him.
+    Dropped in the detector, the feed could not have named him."""
+    from ninety.intel import identity
+
+    raw = {"id": "s1", "t": 714.72, "frame": 17868, "type": "shot", "team": "home", "player": "a-t7007",
+           "x": 90.0, "y": 34.0, "end_x": None, "end_y": None, "outcome": "goal", "ball_speed_kmh": None,
+           "source": "vision", "confidence": 0.68, "team_confidence": None}
+    named = {"a-t7007": {"team": "home", "name": "Eli Hourrick"}}  # the feed: a home player after all
+    path = tmp_path / "detected.sided.jsonl"
+    path.write_text("".join(json.dumps(e) + "\n" for e in identity.sided([raw], named)))
+    (out,) = detected.load(path)
+    assert (out["team"], out["player"], out["team_source"]) == ("home", "a-t7007", "id_feed")

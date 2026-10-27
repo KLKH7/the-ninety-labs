@@ -3556,7 +3556,7 @@ short and actionable. This file is public: no research sources, product names or
   facts"); a count of a kind the source never detects is left out, not zero. A stat asked for at a
   minute counts nothing after it, and its window ends there. A possessive goes through
   `teamsheet.possessive`. A player whose track was read on the other side from a vision-sided event
-  is dropped, the side kept (`detected.attributed`); a feed-sided one keeps him (lesson 283).
+  is dropped, the side kept, at load (`detected.attributed`), after the feed's side step, so the feed can still name him; a feed-sided one keeps him (lesson 283). A goal's strike is a shot at most `STRIKE_GAP_S` before it (measured, GROUNDING I28).
 - **Check:** `tests/test_facts_invariants.py`: the 8324 cases by id, a property test over 200 random
   detector outputs (whole match, each 15-minute window, a random slice), minute 35 through
   `live.run`, and the attribution through `detected.load`. All fail on main 382996dc but the guard

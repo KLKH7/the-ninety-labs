@@ -22,6 +22,11 @@ SHOT_SPEED_COVERAGE = 0.5
 # A detector that writes none of these cannot count them as none (lesson 292): a count of them is
 # stated only when the events hold at least one (window_facts's rule for PPDA).
 PRESSING_TYPES = frozenset({"pressure", "tackle", "interception"})
+# The longest a goal may follow the scoring side's shot for that shot to be its strike (GROUNDING I28):
+# the longest shot-to-goal gap in the engine's ground truth, 2.16 s (42 goals over the 11 freeze-SHA
+# matches, runs/f*-65247ba3), plus the 1.0 s event-time tolerance (EVALUATION, Vision scoring) for each
+# of the two detected events. On seed 8324 the detected gaps are 0.52 to 2.12 s.
+STRIKE_GAP_S = 2.16 + 2 * 1.0
 
 
 @dataclass(frozen=True)
@@ -158,7 +163,8 @@ def goal_strikes(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | Non
     GROUNDING I24), so its strike was on target whatever outcome the detector gave it: the shot
     goal_moments pairs, else the event just before the goal when that is the scoring side's shot (on
     seed 8324 the 85th-minute goal follows a shot read `off_target`). An `out_of_play` between them is
-    looked past, as goal_moments does."""
+    looked past, as goal_moments does. A shot more than STRIKE_GAP_S before the goal is not its strike
+    (another passage of play, or a cut between them), so that goal is an implied shot instead."""
     rows = sorted(events, key=lambda e: (float(e["t"]), str(e["id"])))
     before: dict[str, Mapping] = {}
     last: Mapping | None = None
@@ -170,7 +176,8 @@ def goal_strikes(events: Iterable[Mapping]) -> list[tuple[Mapping, Mapping | Non
     out: list[tuple[Mapping, Mapping | None]] = []
     for goal, shot in goal_moments(rows):
         strike = shot if shot is not None else before.get(str(goal["id"]))
-        if strike is None or strike.get("type") != "shot" or strike.get("team") != goal.get("team"):
+        if (strike is None or strike.get("type") != "shot" or strike.get("team") != goal.get("team")
+                or float(goal["t"]) - float(strike["t"]) > STRIKE_GAP_S):
             strike = None
         out.append((goal, strike))
     return out

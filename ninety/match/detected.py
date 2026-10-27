@@ -92,7 +92,9 @@ def attributed(event: dict) -> dict:
     shot's side from the end it goes toward and its player from the track nearest the ball
     (ninety/vision/events.detect), so the two can disagree; it is not known which is wrong, and naming
     nobody is safer than naming the wrong side. A side the feed gave stays with its player: it is that
-    named player's own side, and the letter is the tracker's misread (identity.sided, lesson 283)."""
+    named player's own side, and the letter is the tracker's misread (identity.sided, lesson 283). It
+    runs here, at load, after the feed's side step (which reads the detector's raw file), never in the
+    detector: dropping him there would cost a name the feed could have given."""
     side = TRACK_SIDE.get(str(event.get("player") or "")[:2])
     if side is None or side == event.get("team") or event.get("team_source") == FEED_SIDE:
         return event
