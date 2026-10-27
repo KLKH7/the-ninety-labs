@@ -3489,7 +3489,11 @@ short and actionable. This file is public: no research sources, product names or
   memory of real football, but the engine never changes ends (`ninety/sim/engine.py`, GROUNDING
   L3), so every second-half territory truth had the clubs reversed until another session compared it
   with where the goals were scored (`test_the_teams_do_not_change_ends`). Ground every truth rule in
-  the engine's code, not in how football usually goes.
+  the engine's code, not in how football usually goes, and better, read it from the truth itself:
+  each half's direction now comes from where each side's shots and goals were
+  (`truth.attack_directions`; `test_attacking_directions_come_from_the_data_both_ways` fails both
+  for a kept and for a swapped end). A minute reader that took "to 28" as a minute had the same root:
+  read only explicit minutes (`test_only_explicit_minutes_are_minutes`).
 
 
 ### 294. A track's numbers are one stretch of tracking, not the player's match
