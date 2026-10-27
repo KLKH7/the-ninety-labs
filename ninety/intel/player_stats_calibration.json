@@ -51,6 +51,10 @@
   "rank:distance": {
    "on": true,
    "why": null
+  },
+  "rank:involvement_order": {
+   "on": true,
+   "why": null
   }
  },
  "source": "docs/eval/player-stats.json"

@@ -208,3 +208,28 @@ def test_the_live_module_never_reads_the_truth_or_the_feed_s_positions():
     src = ps.__file__ and open(ps.__file__).read()
     assert "ninety.eval" not in src and "ninety.sim" not in src and "frames.jsonl" not in src
     assert "at_ball" not in src and "feed.at" not in src  # names only; never the feed's own positions
+
+
+def test_the_involvement_order_names_three_with_no_count_and_only_while_on():
+    ev = [
+        {
+            "event": f"e{i}",
+            "t": 1.0 + i,
+            "type": "pass",
+            "player": p,
+            "role": "player",
+            "outcome": "success",
+            "had_shot": False,
+        }
+        for i, p in enumerate(["LON07", "LON07", "LON09"])
+    ]
+    raw = ps.stats(
+        body(frames(60, lambda t: [("h-t1", 50.0, 30.0)]), named("h-t1"), ev), 60.0, {}, withhold=False
+    )
+    on = ps.order(raw, {"rank:involvement_order": {"on": True}})
+    assert [f["name"] for f in on["facts"]] == ["Theo Dounton", "Alex Finnet"] and on[
+        "of"
+    ] == ps.ORDER_WORDING
+    assert all(set(f) == {"rank", "player", "name", "number", "team"} for f in on["facts"])  # no value leaves
+    off = ps.order(raw, {"rank:involvement_order": {"on": False, "why": "missed"}})
+    assert off["facts"] == [] and off["withheld"] == "missed"
