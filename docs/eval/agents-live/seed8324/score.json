@@ -1,0 +1,612 @@
+{
+ "moments": {
+  "goal-1": {
+   "minute": 12,
+   "question": "What led to that goal?",
+   "expected_tool": "goal_build_up",
+   "graph": {
+    "anchor_given": true,
+    "analyst_picked_anchor": true,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1,
+     "rewrites": 0
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 8096.9,
+    "model_calls": 3
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "goal_build_up",
+      "club": null,
+      "minute_from": 12,
+      "minute_to": 13
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "London Athletic scored in minute 12.",
+    "evidence": [
+     "goal:s07-v00003"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 12,
+    "ms": 5762.2
+   }
+  },
+  "goal-2": {
+   "minute": 35,
+   "question": "What led to that goal?",
+   "expected_tool": "goal_build_up",
+   "graph": {
+    "anchor_given": true,
+    "analyst_picked_anchor": true,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 1,
+     "rejected": 0,
+     "held": 0,
+     "rewrites": 1
+    },
+    "ends": {
+     "verified": 1,
+     "rejected": 0,
+     "held": 0
+    },
+    "aired": [
+     {
+      "text": "The goal scored by a-t18090 at 34:01 changed the scoreline in minute 35 and was immediately confirmed at 34:04, underscoring its impact on the match.",
+      "evidence": [
+       "s18-v00011",
+       "s18-v00012"
+      ]
+     }
+    ],
+    "grounded": true,
+    "templates": 498,
+    "ms": 19371.0,
+    "model_calls": 5
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "goal_build_up",
+      "club": null,
+      "minute_from": 34,
+      "minute_to": 35
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "a Lisbon Esportes player scored for Lisbon Esportes in minute 35.",
+    "evidence": [
+     "goal:s18-v00012"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 5,
+    "ms": 6095.0
+   }
+  },
+  "goal-3": {
+   "minute": 76,
+   "question": "What led to that goal?",
+   "expected_tool": "goal_build_up",
+   "graph": {
+    "anchor_given": true,
+    "analyst_picked_anchor": true,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 2,
+     "rewrites": 0
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 5919.1,
+    "model_calls": 3
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "goal_build_up",
+      "club": null,
+      "minute_from": 75,
+      "minute_to": 76
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "Lisbon Esportes scored in minute 76.",
+    "evidence": [
+     "goal:s38-v00003"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 12,
+    "ms": 5503.8
+   }
+  },
+  "goal-4": {
+   "minute": 85,
+   "question": "What led to that goal?",
+   "expected_tool": "goal_build_up",
+   "graph": {
+    "anchor_given": true,
+    "analyst_picked_anchor": true,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 1,
+     "held": 1,
+     "rewrites": 2
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 1,
+     "held": 0
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 15530.9,
+    "model_calls": 7
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "goal_build_up",
+      "club": null,
+      "minute_from": 84,
+      "minute_to": 85
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "Lisbon Esportes scored in minute 85.",
+    "evidence": [
+     "goal:g00001"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 5,
+    "ms": 6669.7
+   }
+  },
+  "line-break": {
+   "minute": 89,
+   "question": "Which pass cut through London Athletic's lines just now?",
+   "expected_tool": "line_breaks",
+   "graph": {
+    "anchor_given": true,
+    "analyst_picked_anchor": true,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1,
+     "rewrites": 1
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 7543.4,
+    "model_calls": 4
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "line_breaks",
+      "club": "Lisbon Esportes",
+      "minute_from": 74,
+      "minute_to": 89
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "In minute 89, a Lisbon Esportes player played a pass that took 5 London Athletic players out of the game.",
+    "evidence": [
+     "lb:s44-v00017"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 10,
+    "ms": 5602.5
+   }
+  },
+  "overload": {
+   "minute": 60,
+   "question": "Where are London Athletic outnumbering Lisbon Esportes?",
+   "expected_tool": "overloads",
+   "graph": {
+    "anchor_given": null,
+    "analyst_picked_anchor": null,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 2,
+     "rewrites": 2
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 8170.5,
+    "model_calls": 5
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "overloads",
+      "club": "London Athletic",
+      "minute_from": 46,
+      "minute_to": 61
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "London Athletic built 6 overloads from minute 46 to minute 61, most often in their middle third in the centre.",
+    "evidence": [
+     "ov:home:m46-61"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 10,
+    "ms": 5760.3
+   }
+  },
+  "quiet": {
+   "minute": 26,
+   "question": "Has anything happened in the last few minutes?",
+   "expected_tool": "key_moments",
+   "graph": {
+    "anchor_given": null,
+    "analyst_picked_anchor": null,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 2,
+     "rewrites": 0
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 8605.6,
+    "model_calls": 3
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "key_moments",
+      "club": null,
+      "minute_from": 11,
+      "minute_to": 26
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": null,
+    "source": "model",
+    "status": "verified",
+    "text": "In minute 15, a London Athletic player shot from 36 m out, where the posts were 8 degrees apart.",
+    "evidence": [
+     "shot:s08-v00015"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 12,
+    "ms": 5375.3
+   }
+  },
+  "half-time": {
+   "minute": 45,
+   "question": "Who had more of the ball in the first half?",
+   "expected_tool": "possession",
+   "graph": {
+    "anchor_given": null,
+    "analyst_picked_anchor": null,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 2,
+     "rewrites": 0
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 498,
+    "ms": 5612.3,
+    "model_calls": 3
+   },
+   "companion": {
+    "plan": [
+     {
+      "name": "possession",
+      "club": null,
+      "minute_from": 0,
+      "minute_to": 45
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": null,
+    "source": "code",
+    "status": "verified",
+    "text": "Possession can't be split between the clubs yet: vision could not tell surely which side made most of the passes.",
+    "evidence": [],
+    "reasons": [
+     "model: unanswerable"
+    ],
+    "grounded": false,
+    "mcp_calls": 5,
+    "ms": 3069.3
+   }
+  }
+ },
+ "totals": {
+  "tool_choice": "8/8",
+  "args": "8/8",
+  "plans_not_returned": 0,
+  "companion_target_given": "6/6",
+  "companion_model_verified": 7,
+  "companion_grounded": "7/8",
+  "anchor_given": "5/5",
+  "analyst_picked_anchor": "5/5",
+  "analyst_tool_calls": 0,
+  "tactician_context": "8/8",
+  "graph_aired": 1,
+  "graph_grounded": "1/1",
+  "graph_ends": {
+   "verified": 1,
+   "rejected": 1,
+   "held": 6
+  },
+  "graph_verdicts": {
+   "verified": 1,
+   "rejected": 1,
+   "held": 11,
+   "rewrites": 6
+  },
+  "graph_errors": 0
+ },
+ "drills": {
+  "drill:judge-down": {
+   "injected": "every Judge call raises ServiceRequestError",
+   "model_calls": 3,
+   "failed_calls": [],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 1
+   },
+   "aired": [],
+   "steps": [
+    "producer templates -: 498 template graphics on air",
+    "analyst pick m-s07-v00002: evidence ['s07-v00002', 's07-v00001', 's07-v00003']",
+    "tactician draft m-s07-v00002: \"At 11:54, a-t7007's goal from a 113 km/h shot, set up by a-t7002's precise 22-meter pass, highlights the home team's effective and swift attack in minute 12.\" evidence=['s07-v00001', 's07-v00002', 's07-v00003']",
+    "challenger agree m-s07-v00002: ",
+    "fact_checker hold m-s07-v00002: tactician's claim: event s07-v00001's ball speed is vision's, whose error is measured only for a pass along the ground (this pass is not marked on the ground): state it without the speed; event s07-v00002's ball speed is vision's, whose error is measured only for a pass along the ground (it is not a pass): state it without the speed; event s07-v00002's side was told with confidence unknown, not above 0.96: a claim naming a team waits for a surer side",
+    "producer template m-s07-v00002: cue-s07-v00002-analyst stays: held"
+   ],
+   "ms": 5980.2
+  },
+  "drill:judge-down-companion": {
+   "injected": null,
+   "model_calls": 4,
+   "failed_calls": [
+    "judge: ServiceRequestError: drill: the Judge's endpoint cannot be reached",
+    "judge: ServiceRequestError: drill: the Judge's endpoint cannot be reached"
+   ],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 0
+   },
+   "aired": [],
+   "steps": [],
+   "ms": 3008.9,
+   "companion": {
+    "source": "code",
+    "status": "verified",
+    "text": "London Athletic scored in minute 12.",
+    "reasons": [
+     "judge service error; claim held back"
+    ]
+   }
+  },
+  "drill:vision-dropout": {
+   "injected": "no detected events in the 60 s around the goal",
+   "model_calls": 1,
+   "failed_calls": [],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 0
+   },
+   "aired": [],
+   "steps": [
+    "producer templates -: 490 template graphics on air"
+   ],
+   "ms": 3176.9,
+   "dropped": 8,
+   "aired_cites_dropped": false,
+   "aired_says_goal": false
+  },
+  "drill:slow-tactician": {
+   "injected": "the Tactician answers after 65.0 s (budget 60.0 s)",
+   "model_calls": 2,
+   "failed_calls": [
+    "tactician: cancelled (caller's timeout)"
+   ],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 1
+   },
+   "aired": [],
+   "steps": [
+    "producer templates -: 498 template graphics on air",
+    "analyst pick m-s44-v00017: evidence ['s44-v00017', 's44-v00011', 's44-v00012', 's44-v00013', 's44-v00014', 's44-v00015', 's44-v00016']",
+    "tactician fail m-s44-v00017: TimeoutError: ; template stays",
+    "producer template m-s44-v00017: cue-s44-v00017-analyst stays: held"
+   ],
+   "ms": 63565.5
+  },
+  "drill:slow-companion": {
+   "injected": "the Companion answers after 12.0 s (budget 10.0 s)",
+   "model_calls": 1,
+   "failed_calls": [
+    "companion: cancelled (caller's timeout)"
+   ],
+   "ends": {
+    "verified": 0,
+    "rejected": 0,
+    "held": 0
+   },
+   "aired": [],
+   "steps": [],
+   "ms": 10038.8,
+   "companion": {
+    "source": "code",
+    "status": "verified",
+    "text": "London Athletic built 6 overloads from minute 47 to minute 61, most often in their middle third in the centre.",
+    "reasons": [
+     "model timeout"
+    ]
+   }
+  }
+ },
+ "latency": {
+  "model:analyst": {
+   "n": 11,
+   "p50_ms": 1416,
+   "max_ms": 4238
+  },
+  "model:challenger": {
+   "n": 10,
+   "p50_ms": 1363,
+   "max_ms": 10830
+  },
+  "model:companion": {
+   "n": 18,
+   "p50_ms": 1273,
+   "max_ms": 2790
+  },
+  "model:judge": {
+   "n": 10,
+   "p50_ms": 2280,
+   "max_ms": 3950
+  },
+  "model:tactician": {
+   "n": 14,
+   "p50_ms": 1401,
+   "max_ms": 1956
+  },
+  "mcp_call": {
+   "n": 94,
+   "p50_ms": 1,
+   "max_ms": 28
+  },
+  "graph_minute": {
+   "n": 8,
+   "p50_ms": 8134,
+   "max_ms": 19371
+  },
+  "companion_answer": {
+   "n": 8,
+   "p50_ms": 5681,
+   "max_ms": 6670
+  }
+ },
+ "cost": {
+  "calls": 67,
+  "usd": 0.0326,
+  "tokens_in": 65676,
+  "tokens_out": 4252,
+  "tokens_reported": true,
+  "prices": "2026-10-19"
+ },
+ "mcp": {
+  "calls": 94,
+  "same_as_in_process": true
+ },
+ "stopped": null,
+ "run": {
+  "calls": 67,
+  "usd": 0.0326
+ }
+}

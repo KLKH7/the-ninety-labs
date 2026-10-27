@@ -1,0 +1,101 @@
+{
+ "moments": {
+  "goal-1": {
+   "minute": 22,
+   "question": "What led to that goal?",
+   "expected_tool": "goal_build_up",
+   "companion": {
+    "plan": [
+     {
+      "name": "goal_build_up",
+      "club": null,
+      "minute_from": 21,
+      "minute_to": 22
+     }
+    ],
+    "tool_right": true,
+    "args_right": true,
+    "target_given": true,
+    "source": "model",
+    "status": "verified",
+    "text": "Lisbon Esportes scored in minute 22.",
+    "evidence": [
+     "goal:s09-v00003"
+    ],
+    "reasons": [],
+    "grounded": true,
+    "mcp_calls": 13,
+    "ms": 6267.4
+   }
+  }
+ },
+ "totals": {
+  "tool_choice": "1/1",
+  "args": "1/1",
+  "plans_not_returned": 0,
+  "companion_target_given": "1/1",
+  "companion_model_verified": 1,
+  "companion_grounded": "1/1",
+  "anchor_given": "0/0",
+  "analyst_picked_anchor": "0/0",
+  "analyst_tool_calls": 0,
+  "tactician_context": "0/0",
+  "graph_aired": 0,
+  "graph_grounded": "0/0",
+  "graph_ends": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 0
+  },
+  "graph_verdicts": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 0,
+   "rewrites": 0
+  },
+  "graph_errors": 0
+ },
+ "drills": {},
+ "latency": {
+  "model:companion": {
+   "n": 2,
+   "p50_ms": 2087,
+   "max_ms": 2750
+  },
+  "model:judge": {
+   "n": 1,
+   "p50_ms": 1906,
+   "max_ms": 1906
+  },
+  "mcp_call": {
+   "n": 13,
+   "p50_ms": 1,
+   "max_ms": 38
+  },
+  "graph_minute": {
+   "n": 0
+  },
+  "companion_answer": {
+   "n": 1,
+   "p50_ms": 6267,
+   "max_ms": 6267
+  }
+ },
+ "cost": {
+  "calls": 3,
+  "usd": 0.001,
+  "tokens_in": 2037,
+  "tokens_out": 128,
+  "tokens_reported": false,
+  "prices": "2026-10-19"
+ },
+ "mcp": {
+  "calls": 13,
+  "same_as_in_process": true
+ },
+ "stopped": null,
+ "run": {
+  "calls": 3,
+  "usd": 0.001
+ }
+}

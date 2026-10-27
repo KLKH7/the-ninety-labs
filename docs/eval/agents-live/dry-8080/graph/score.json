@@ -1,0 +1,104 @@
+{
+ "moments": {
+  "quiet": {
+   "minute": 2,
+   "question": "Has anything happened in the last few minutes?",
+   "expected_tool": "key_moments",
+   "graph": {
+    "anchor_given": null,
+    "analyst_picked_anchor": null,
+    "analyst_tool_calls": 0,
+    "tactician_context": true,
+    "moments": 1,
+    "verdicts": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 2,
+     "rewrites": 0
+    },
+    "ends": {
+     "verified": 0,
+     "rejected": 0,
+     "held": 1
+    },
+    "aired": [],
+    "grounded": true,
+    "templates": 534,
+    "ms": 62822.1,
+    "model_calls": 3
+   }
+  }
+ },
+ "totals": {
+  "tool_choice": "0/0",
+  "args": "0/0",
+  "plans_not_returned": 0,
+  "companion_target_given": "0/0",
+  "companion_model_verified": 0,
+  "companion_grounded": "0/0",
+  "anchor_given": "0/0",
+  "analyst_picked_anchor": "0/0",
+  "analyst_tool_calls": 0,
+  "tactician_context": "1/1",
+  "graph_aired": 0,
+  "graph_grounded": "0/0",
+  "graph_ends": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 1
+  },
+  "graph_verdicts": {
+   "verified": 0,
+   "rejected": 0,
+   "held": 2,
+   "rewrites": 0
+  },
+  "graph_errors": 0
+ },
+ "drills": {},
+ "latency": {
+  "model:analyst": {
+   "n": 1,
+   "p50_ms": 56251,
+   "max_ms": 56251
+  },
+  "model:challenger": {
+   "n": 1,
+   "p50_ms": 1750,
+   "max_ms": 1750
+  },
+  "model:tactician": {
+   "n": 1,
+   "p50_ms": 1763,
+   "max_ms": 1763
+  },
+  "mcp_call": {
+   "n": 0
+  },
+  "graph_minute": {
+   "n": 1,
+   "p50_ms": 62822,
+   "max_ms": 62822
+  },
+  "companion_answer": {
+   "n": 0
+  }
+ },
+ "cost": {
+  "calls": 3,
+  "usd": 0.0009,
+  "tokens_in": 1804,
+  "tokens_out": 129,
+  "tokens_reported": true,
+  "prices": "2026-10-19"
+ },
+ "mcp": {
+  "calls": 0,
+  "same_as_in_process": true
+ },
+ "stopped": null,
+ "run": {
+  "calls": 3,
+  "usd": 0.0009
+ }
+}
