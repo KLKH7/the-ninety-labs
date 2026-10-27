@@ -531,9 +531,12 @@ def on_top(ctx: Ctx, w: Window | None = None, broaden: bool = True) -> Reply:
     ball in its attacking third beats the other's most) and both shares, in one sentence. A stretch
     with too little of the ball seen is answered over the match so far (unless `broaden` is off)."""
     r, w = Reply(), w or ctx.read.window
+    asked = w
     if broaden and (w.empty or _no_footage(ctx, w) or _shares(ctx, w) is None):
         w = _so_far(ctx)
     got = _shares(ctx, w)
+    # A stretch the fan named but too little of it seen: said in one clause, then the match so far.
+    narrowed = asked.named and not asked.empty and w is not asked
     if got is None:
         # Too little of the ball seen to compare territory: the closest measured fact, who has passed
         # more (Kian, Oct 27: never "too early" while a related fact exists).
@@ -563,6 +566,8 @@ def on_top(ctx: Ctx, w: Window | None = None, broaden: bool = True) -> Reply:
         )
         r.head = _short(ctx, lead)
     del c1
+    if narrowed and got is not None:
+        r = _clause(r, "Too little of that stretch has been seen yet")
     return r
 
 
@@ -1081,6 +1086,7 @@ def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
     r = Reply()
     if what == "distance":
         km = round(row["distance_m"] / 1000, 1)
+        cover = round(100 * (row.get("footage_coverage") or 0))
         f = ctx.fact(
             f"km:{row['player']}",
             "ask_player_km",
@@ -1090,8 +1096,14 @@ def _player_running(ctx: Ctx, row: dict, what: str) -> Reply | None:
             w=_so_far(ctx),
             player_name=row["name"],
             name_source="id_feed",
+            also=[(cover, "%")],
         )
-        r.say(f"{row['name']} ({FEED}) has covered {km} km {SCOPE}.", f)
+        # His distance only while the video followed him: far below a full match's, so its scope is said.
+        r.say(
+            f"{row['name']} ({FEED}) has covered {km} km while the video tracked him, {cover}% of the "
+            "footage so far.",
+            f,
+        )
     else:
         f = ctx.fact(
             f"kmh:{row['player']}",

@@ -3,6 +3,12 @@
  "pr": 432,
  "downs": [
   {
+   "cell": "chips consistent",
+   "from": 0.716,
+   "to": 0.667,
+   "evidence": "all of it is the tactics chips inside the chips block (tactics_chip consistent 32/78 to 24/78, the row above); every other chip intent is unchanged (possession 6/6, shots 12/12, territory 6/6, corners 12/12, best_* 6/6, fastest 6/6, distance 6/6, why_goal 6/6, key_moments 12/12)"
+  },
+  {
    "cell": "completion coverage_honest",
    "from": 0.0,
    "to": null,

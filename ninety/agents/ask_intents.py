@@ -675,7 +675,7 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
         if done <= HALF_MIN:
             return Window(1, max(1, done), "so far", True, "The second half hasn't started yet.")
         return Window(HALF_MIN + 1, done, "in the second half", True)
-    if re.search(r"\bthis half\b", s):
+    if re.search(r"\bthis half\b(?![- ]hour)", s):
         return (
             span(half_lo, max(half_lo, done))
             if done <= HALF_MIN
@@ -689,7 +689,9 @@ def window_of(text: str, t: float, default: str = "so_far") -> Window:
     m = re.search(rf"\b(?:first|opening) {_N} ?min\w*\b", s)
     if m:
         return span(1, min(_n(m.group(1)), done))
-    if re.search(r"\b(?:since|in) the half[- ]hour\b|\bsince half an hour\b", s):
+    # "Since / in / over / during the half hour", "this half hour": from minute 31 to now (Kian's repro).
+    if re.search(r"\b(?:since|in|over|during) the half[- ]hour\b|\bthis half[- ]hour\b"
+                 r"|\bsince half an hour\b", s):
         if done <= 30:
             return Window(1, max(1, done), "so far", True, "The match hasn't reached the half hour yet.")
         return span(31, done)

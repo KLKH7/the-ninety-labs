@@ -478,7 +478,8 @@ def test_best_player_is_the_involvement_order_never_best_or_one_player(mi, monke
     [
         (
             "How far has Ben Vomble run?",
-            "Ben Vomble (Player ID feed) has covered 1.4 km in the footage so far.",
+            "Ben Vomble (Player ID feed) has covered 1.4 km while the video tracked him, 62% of the footage "
+            "so far.",
         ),
         (
             "how fast has Vomble been?",
@@ -560,3 +561,19 @@ def test_on_top_is_one_takeaway_and_one_number_pair(mi):
         a.text,
     ), a.text
     assert "at least" not in a.text
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "Who has been on top in the half hour",
+        "who's been on top over the half hour",
+        "who's been on top this half hour",
+    ],
+)
+def test_kians_half_hour_repro_reads_from_the_half_hour_to_now(mi, q):
+    """Kian's repro #2: "in the half hour" is minute 31 to now, as "since the half hour" is (Oct 27)."""
+    w = cm.read_question(q, mi, 2050.0).window
+    assert (w.lo, w.hi) == (31, 34), w
+    a, _ = cm.code_match_answer(Question("s", None, q, 2050.0), mi, suggest=False)
+    assert a.text.startswith("Lisbon Esportes have been on top from minute 31 to minute 34"), a.text
