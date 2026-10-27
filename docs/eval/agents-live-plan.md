@@ -20,7 +20,7 @@ For each moment below, with the published Foundry agents at the versions pinned 
    Tactician, Challenger, fact-checker (code checks, confidence gate, Judge), Producer. Events are
    the demo bundle's detected events, inline under an id no server serves (lesson 90: the deployed
    MCP server serves the deployed image's matches, and through Foundry took ~50 s a minute). The
-   minute's confident team-shape facts go to the writers as evidence (`shape`), as in the demo.
+   minute's confident team-shape facts (tracked positions) go to the writers as evidence, as `ninety-workflow --shape` does.
 2. **The Companion** (`companion_match.answer_match`, production timeout 10 s, with the Judge),
    asked the moment's pre-registered fan question 20 s after the moment. Every insight tool it
    chooses is executed **through the real MCP server** (`ninety/mcp/match_server.py`, stdio, the

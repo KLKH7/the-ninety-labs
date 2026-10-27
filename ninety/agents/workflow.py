@@ -849,6 +849,7 @@ async def run_live(
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
     personalizer: Personalize | None = None, shape: list[dict] | None = None, perceiver=None,
+    wrap: Callable[[str, str, str, object], object] | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
@@ -858,16 +859,18 @@ async def run_live(
     that calls the match tools anyway fails its call (foundry.ReadTheTools). `inject` swaps one of
     the live models for a failing one (ninety/eval/workflow_failures.py --live). A run of several
     minutes passes its one `credential`, signed in at its start (agents-live's sign-in lasts five
-    minutes); else this run makes and signs in its own."""
+    minutes); else this run makes and signs in its own. `wrap(role, name, version, agent)` returns
+    the object each role calls in place of the published agent: an observer that times and counts
+    each call (ninety/eval/agents_live.py), or one that injects a failure at the agent itself."""
     async with contextlib.AsyncExitStack() as owned:
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject, personalizer, shape, perceiver)
+                               content, personalize, inject, personalizer, shape, perceiver, wrap)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject, given_personalizer, shape=None, perceiver=None):
+                    personalize, inject, given_personalizer, shape=None, perceiver=None, wrap=None):
     from ninety import config
     from ninety.agents import foundry
 
@@ -887,6 +890,8 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
                 credential=credential,
             )
             agents[role] = await stack.enter_async_context(published)
+            if wrap is not None:
+                agents[role] = wrap(role, name, version, agents[role])
 
         def ask(role: str):
             async def answer(prompt: str) -> str:
