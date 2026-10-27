@@ -411,6 +411,17 @@ def _history(history) -> list[dict]:
     ]
 
 
+INTENT_ROWS = ("score", "scorers", "winning", "on_top", "momentum", "possession", "passes", "completion",
+               "shots", "on_target", "territory", "corners", "out_of_play", "best", "fastest", "distance",
+               "why_goal", "key_moments", "unmeasured")
+
+
+def _intent_menu() -> list[dict]:
+    from ninety.agents.ask_intents import model_menu
+
+    return [r for r in model_menu() if r["id"] in INTENT_ROWS]
+
+
 def plan_prompt(question: Question, insights, history=()) -> str:
     return json.dumps(
         {
@@ -420,6 +431,9 @@ def plan_prompt(question: Question, insights, history=()) -> str:
             "clubs": list(insights.fixture.clubs.values()),
             "minute": _minute_in(question.t, insights),
             "tools": TOOL_HELP,
+            # The intent table's rows: a plan may name one ({"intent": id}) instead of tools, and code
+            # answers from it (ninety/agents/ask_intents.py).
+            "intents": _intent_menu(),
         },
         separators=(",", ":"),
     )
@@ -1308,12 +1322,60 @@ def _overview(question: Question, calls: list[dict], insights, known: dict, hist
                          suggest=suggest)
 
 
+def read_question(text: str, insights, t: float, history=()):
+    """The question read against the intent table (ninety/agents/ask_intents.py): one intent and
+    its slots. The old tool routing only says whether it is a tactics question; a player or a
+    position named, or small talk, is told to the table so it never takes a statistic's row."""
+    from ninety.agents import ask_intents
+
+    fx = insights.fixture
+    small = next((k for k, pattern in SMALL_TALK if pattern.search(text)), None)
+    tactics = any(n in ask_intents.TACTICS_TOOLS for n in route(text))
+    lowered = text.lower()
+    player = bool(asked_role(text)) or any(re.search(rf"\b(?:{w})", lowered) for _, w in ROLE_WORDS)
+    if not player and hasattr(insights, "sheet_names"):
+        player = bool(asked_players(text, insights))
+    return ask_intents.classify(
+        text, clubs=dict(fx.clubs), codes={"home": fx.home_code, "away": fx.away_code}, t=float(t),
+        words=set(insights.sheet_names()) if hasattr(insights, "sheet_names") else set(),
+        tactics=tactics, player=player, small_talk=small)
+
+
+def table_answer(question: Question, insights, history=(), suggest: bool = True):
+    """Code's answer from the question's row of the intent table, or None when the row is left to the
+    tools' routing (tactics, one player, small talk, a follow-up of the last question)."""
+    from ninety.agents import ask_answers
+
+    if any(pattern.search(question.text) for _, pattern in SMALL_TALK):
+        return None
+    read = read_question(question.text, insights, question.t, history)
+    if read.intent == "small_talk" and read.topic in ask_answers.NOT_MATCH:
+        t = 60.0 * _minute_in(question.t, insights)
+        asked = [*(h["question"] for h in history), question.text]
+        ups = follow_ups([], [], insights, asked, t) if suggest else ()
+        return Answer("unanswerable", ask_answers.NOT_MATCH[read.topic], None, None, None, (), None, None,
+                      follow_ups=ups), []
+    if history and FOLLOW_ON.search(question.text) and read.intent in ("small_talk", "tactics"):
+        return None
+    got = ask_answers.build(question, insights, read)
+    if got is None:
+        return None
+    answer, calls = got
+    if suggest:
+        asked = [*(h["question"] for h in history), question.text]
+        answer = replace(answer, follow_ups=follow_ups([], [], insights, asked, question.t))
+    return answer, calls
+
+
 def code_match_answer(
     question: Question, insights, calls: list[dict] | None = None, history=(), suggest: bool = True
 ) -> tuple[Answer, list[dict]]:
     """Code's answer: the routed tools' facts, the first one code can say and the check passes. A
     goal is told with the strongest thing that led to it."""
     if calls is None:
+        tabled = table_answer(question, insights, history, suggest)
+        if tabled is not None:  # a row of the intent table: code's answer from that row (lesson 297)
+            return tabled
         chat = chat_answer(question, insights, history, suggest)
         if chat is not None:  # small talk never gets a statistic (lesson 287)
             return chat, []
@@ -1551,6 +1613,11 @@ async def answer_match(
     code's answer over the model's chosen tools (or code's, if the plan was unusable). `history` is
     the session's earlier turns ({question, answer, calls}), so a follow-up has its context."""
     history = list(history)
+    # A row of the intent table (lesson 297): code's answer from that row, with or without a model. The
+    # model plans only what the table leaves to the tools (tactics, one player, a question it can't read).
+    tabled = table_answer(question, insights, history)
+    if tabled is not None:
+        return MatchResult(tabled[0], "code", tuple(tabled[1]))
     # Small talk: code's reply, before any tool or model call (lesson 287). With a model, a message code
     # routes to no tool goes to its planner; an empty plan comes back to code, which says so.
     chat = chat_answer(question, insights, history, small_talk_only=ask is not None)
@@ -1576,6 +1643,9 @@ async def answer_match(
             plan = first_object(plan_reply)
         except (json.JSONDecodeError, TypeError, AttributeError, ValueError, RecursionError):
             raise _NotTheFormat("plan") from None
+        row = plan.get("intent") if isinstance(plan, dict) else None
+        if row in INTENT_ROWS:  # the model picked a row of the table: code answers from it
+            return [{"name": "intent", "intent": row}], None, None, []
         calls = _calls(plan, insights, minute)
         if not calls:
             return calls, None, None, []
@@ -1639,6 +1709,16 @@ async def answer_match(
         return fallback("model service error")
     except _NotTheFormat:
         return fallback("model reply is not the reply format")
+    if calls and calls[0]["name"] == "intent":
+        from dataclasses import replace as _with
+
+        from ninety.agents import ask_answers
+
+        read = _with(read_question(question.text, insights, question.t, history), intent=calls[0]["intent"])
+        got = ask_answers.build(question, insights, read)
+        if got is not None:
+            return MatchResult(got[0], "code", tuple(got[1]), ("model picked row " + read.intent,))
+        return fallback("model picked a row code leaves to the tools")
     if not calls:
         return fallback("model chose no tool")
     if verdict is None:

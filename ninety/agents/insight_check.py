@@ -95,6 +95,8 @@ UNIT_WORDS = {
     "long passes": ("long passes", "long pass"),
     "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
+    "shots on target": ("shots on target", "shot on target"),
+    "set pieces": ("set pieces", "set piece"),
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
