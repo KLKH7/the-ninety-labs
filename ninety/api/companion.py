@@ -20,7 +20,12 @@ budget count against it.
 Replay and Live (SECURITY.md): /api/ask answers in code unless the request carries the demo
 passcode in `x-ninety-passcode`. With it, the Companion agent drafts and the fact-checking agent
 gates the answer (ninety/agents/companion.py), within a per-session and per-day budget of model
-calls; once a budget is spent, code answers. Live needs NINETY_DEMO_PASSCODE (a Key Vault
+calls; once a budget is spent, code answers. A match question's answer is one of code's own checked
+sentences, so it is gated by the code check alone: the Judge runs where the model writes its own
+words, a player question (docs/eval/ask-model-path.md). Each model step has its own time budget
+(companion.STEP_S), a question is answered no later than the big screen's playhead, and every
+question leaves one trace record (ninety/agents/telemetry.py: no viewer text, only its length and
+a hash). Live needs NINETY_DEMO_PASSCODE (a Key Vault
 reference in Azure); without it a passcode is refused, so Live fails closed.
 
 Rooms, rate limits and budgets live in this process's memory: the API runs as one Container App
@@ -39,6 +44,7 @@ nothing.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hmac
 import json
 import logging
@@ -55,7 +61,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
-from ninety.agents import companion, companion_match
+from ninety.agents import companion, companion_match, telemetry
 from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validator
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
@@ -77,6 +83,11 @@ RELAYED = {"clock", "focus"}  # what a laptop may send; answers and cards come f
 FPS_CHOICES = (1, 5, 25)  # divisors of the engine's 25 fps, so frames are evenly spaced
 MINIMAP_PLACES = 1  # 0.1 m: finer than a phone's dot, coarser than the tracker's error
 PASSCODE_HEADER = "x-ninety-passcode"
+# design: how far past the room's playhead a question's match time may be. The laptop sends its clock
+# at least once a second (web/viewer/src/companion.ts, EVERY_MS) and the phone runs it on between
+# messages, so an honest phone leads the server's estimate by at most that second plus the relay's
+# latency; past that the question is about footage the big screen has not shown (a spoiler).
+PLAYHEAD_SLACK_S = 2.0
 MODES = ("on", "standin", "off")  # NINETY_COMPANION; unset means `on`
 # Every clip the companion knows: the simulator stand-ins (served only in `standin`) and the clips
 # served from tracked positions.
@@ -428,10 +439,26 @@ class Companion:
         out = []
         for kind, message in room.latest.items():
             if kind == "clock" and message.get("playing"):
-                held = max(0.0, self.clock() - room.stored_at.get(kind, self.clock()))
-                message = {**message, "t": round(message["t"] + held, 2)}
+                message = {**message, "t": round(self._playhead(room), 2)}
             out.append(message)
         return out
+
+    def _playhead(self, room: Room) -> float | None:
+        """Where the big screen is now: its last clock, run on since it was sent if it is playing.
+        None before the laptop has sent one."""
+        clock = room.latest.get("clock")
+        if clock is None:
+            return None
+        if not clock.get("playing"):
+            return clock["t"]
+        return clock["t"] + max(0.0, self.clock() - room.stored_at.get("clock", self.clock()))
+
+    def _asked_at(self, room: Room, track: tracking.Track, t: float) -> float:
+        """The match time a question is answered at: never past the room's playhead (plus
+        PLAYHEAD_SLACK_S) nor the clip's end, so a phone cannot ask about what the big screen has not
+        shown. Before the laptop has sent a clock nothing has been shown: the playhead is 0."""
+        playhead = self._playhead(room)
+        return min(t, (playhead or 0.0) + PLAYHEAD_SLACK_S, track.duration)
 
     @staticmethod
     async def _flush(room: Room, box: Outbox) -> None:
@@ -588,26 +615,37 @@ class Companion:
             return track
         if question.player is not None and question.player not in track.roster:
             return _error(422, f"{question.player!r} is not on the roster of {room.clip}")
+        asked_at = self._asked_at(room, track, question.t)
+        record_fields = {"clip": room.clip, "live": bool(live), "t_asked": question.t, "t_used": asked_at,
+                         "question": telemetry.text_digest(question.text)}
+        question = dataclasses.replace(question, t=asked_at)
+        with telemetry.ask_trace(**record_fields) as record:
+            message = await self._answer(question, room, track, live, record)
+        telemetry.finish_ask(record)
+        return JSONResponse(message)
+
+    async def _answer(self, question: Question, room: Room, track: tracking.Track, live: bool,
+                      record: dict) -> dict:
         if question.player is None:
             insights = _insights(room.clip)
             if insights is not None:
                 # A match question: the match Companion chooses the insight tools in Live mode (within
                 # the session's budget), with the pairing's earlier turns; code routes and answers
-                # otherwise or when it fails.
-                ask = judge = referee_ask = None
-                if live and self.budget.take(question.session):
-                    models = await self._live_models()
-                    if models is not None and models.match_ask is not None:
-                        ask, judge = models.match_ask, models.judge
-                        referee_ask = models.referee_ask
+                # otherwise or when it fails. The budget is taken on the first model call, so a
+                # question code answers on its own (small talk, an overview) spends none.
+                ask = referee_ask = None
+                if live:
+                    ask, referee_ask = self._metered(question.session, "match_ask", "referee_ask")
+                record["path"] = "match"
                 result = await companion_match.answer_match(
-                    question, insights, ask, judge, history=room.turns, referee_ask=referee_ask
+                    question, insights, ask, None, history=room.turns, referee_ask=referee_ask
                 )
                 turn = {"question": question.text, "answer": result.answer.text, "calls": list(result.tools)}
                 room.turns = [*room.turns, turn][-MAX_TURNS:]
-                return JSONResponse(
-                    _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
-                )
+                record.update(source=result.source, reasons=list(result.reasons),
+                              tools=[c["name"] for c in result.tools], status=result.answer.status)
+                return _send({"type": "answer", "answer": answer_json(result.answer),
+                              "source": result.source})
         window = None
         if question.player is not None:
             _, window = self._window(track, question.player, 0.0, question.t)
@@ -616,7 +654,10 @@ class Companion:
             models = await self._live_models()
             if models is not None:
                 ask, judge = models.ask, models.judge
+        record["path"] = "player"
         result = await companion.answer(question, window, ask, judge)
+        record.update(source=result.source, reasons=list(result.reasons), tools=[],
+                      status=result.answer.status)
         message = _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
         for said in (message["answer"].get("text"), message["answer"].get("spoken")):
             if isinstance(said, str) and said.strip():
@@ -624,7 +665,30 @@ class Companion:
                 self.spoken.move_to_end(voice.key(said))
         while len(self.spoken) > MAX_SPOKEN:
             self.spoken.popitem(last=False)
-        return JSONResponse(message)
+        return message
+
+    def _metered(self, session: str, *roles: str) -> tuple[Ask, ...]:
+        """The Live models as the match Companion calls them, one per role. The first call to any of
+        them takes one from the session's budget (one per question, however many steps); a spent
+        budget, or models that could not be built, raise NoModel, and code answers with that reason."""
+        taken: dict[str, bool] = {}
+
+        def metered(role: str) -> Ask:
+            async def call(prompt: str) -> str:
+                if "budget" not in taken:
+                    taken["budget"] = self.budget.take(session)
+                if not taken["budget"]:
+                    raise companion.NoModel("model budget spent")
+                models = await self._live_models()
+                # A role not published (no Referee) is answered by the first role, as before.
+                model = (getattr(models, role, None) or getattr(models, roles[0], None)) if models else None
+                if model is None:
+                    raise companion.NoModel("Live models unavailable")
+                return await model(prompt)
+
+            return call
+
+        return tuple(metered(role) for role in roles)
 
     def answered(self, key: str) -> bool:
         """Whether an answer with this text (ninety/speech/voice.key) was given lately."""
@@ -721,17 +785,31 @@ async def foundry_models() -> LiveModels:
         agents.append(await stack.enter_async_context(published))
     companion_ag, judge_ag, match_ag, referee_ag = agents
 
+    async def text_of(agent, prompt: str) -> str:
+        reply = await agent.run(prompt)
+        telemetry.note_usage(reply)  # its tokens, into the question's trace
+        return reply.text
+
+    class Noted:
+        """The Judge agent with each reply's tokens noted, as text_of notes the others'."""
+
+        async def run(self, prompt, **kwargs):
+            reply = await judge_ag.run(prompt, **kwargs)
+            telemetry.note_usage(reply)
+            return reply
+
     async def ask(prompt: str) -> str:
-        return (await companion_ag.run(prompt)).text
+        return await text_of(companion_ag, prompt)
 
     async def judge(claim: Claim, evidence: list[dict]) -> Verdict:
-        return await run_judge(judge_ag, claim, evidence)
+        # The step budget (companion.STEP_S) bounds it: the Judge's own 15 s and retry are the slice's.
+        return await run_judge(Noted(), claim, evidence)
 
     async def match_ask(prompt: str) -> str:
-        return (await match_ag.run(prompt)).text
+        return await text_of(match_ag, prompt)
 
     async def referee_ask(prompt: str) -> str:
-        return (await referee_ag.run(prompt)).text
+        return await text_of(referee_ag, prompt)
 
     return LiveModels(ask, judge, match_ask, referee_ask)
 
