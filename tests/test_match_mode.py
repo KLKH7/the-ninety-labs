@@ -640,9 +640,9 @@ def test_commentary_with_video_times_plays_by_the_video_clock(browser, site):  #
     ctx.close()
 
 
-def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_five(browser, site):  # noqa: F811
+def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_held_eight(browser, site):  # noqa: F811
     """No lower third for a routine pass (that stays in the phone's All plays); a shot, an insight
-    or a recap, at most one starting every 30 s, each held 5 s at most; one moment told for two
+    or a recap, at most one starting every 30 s, each held 8 s at most; one moment told for two
     personas airs once, and the insight wins a tie."""
     page, errors = open_viewer(browser, site + "?bundle=match/")
 
@@ -656,7 +656,239 @@ def test_the_big_screen_airs_only_moments_that_matter_one_every_thirty_seconds_h
             cue("recap-analyst", "recap", 80, persona="analyst", ev="e5"),
             cue("said", "audio_description", 90, persona="audio", ev="e6")]
     out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
-    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 15), ("recap", 41, 46)]
+    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [("insight", 10, 18), ("recap", 41, 49)]
+    assert not errors
+    page.context.close()
+
+
+def bar_cue(cid, t, text, ev=(), kind="insight", persona="analyst", hold=8.0, **more):
+    return {
+        "id": cid,
+        "kind": kind,
+        "slot": "lower_third",
+        "persona": persona,
+        "t_in": t,
+        "t_out": t + hold,
+        "text": text,
+        "evidence": list(ev),
+        "replaces": None,
+        "anchor": None,
+        "lang": "en",
+        "verified": True,
+        **more,
+    }
+
+
+def test_the_big_screen_airs_every_goal_then_insights_then_a_shot_where_there_is_room(browser, site):  # noqa: F811
+    """A goal's insight always airs, its own shot's graphic 1.5 s before it never; an insight beats a
+    template shot graphic 4 s ahead of it; one on air when the next comes is cut short; and two
+    insights read from positions (no event behind them) are two moments, not one."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    cues = [
+        bar_cue(
+            "shot-goal", 100, "A London player scores", ["s1"], kind="shot_speed", persona="casual", hold=5
+        ),
+        bar_cue("insight-goal:s1", 101.5, "London Athletic scored in minute 2.", ["s1"]),
+        bar_cue("shot", 200, "a shot", ["s9"], kind="shot_speed", persona="casual", hold=5),
+        bar_cue("insight-lb:s10", 204, "In minute 4, a London Athletic player played a pass.", ["s10"]),
+        bar_cue("insight-ov:home:a:1", 300, "In minute 5, London Athletic had 6 players against 1.", []),
+        bar_cue("insight-ov:home:a:2", 400, "In minute 7, London Athletic had 7 players against 2.", []),
+        bar_cue("insight-cp:home:m8-8", 440, "In minute 8, London Athletic won it back.", ["s20"]),
+        bar_cue("insight-goal:s21", 444, "London Athletic scored in minute 8.", ["s21"]),
+    ]
+    out = page.evaluate(f"window.ninetyMatch.broadcastSchedule({json.dumps(cues)})")
+    assert [(c["id"], c["t_in"], c["t_out"]) for c in out] == [
+        ("insight-goal:s1", 101.5, 109.5),
+        ("insight-lb:s10", 204, 212),
+        ("insight-ov:home:a:1", 300, 308),
+        ("insight-ov:home:a:2", 400, 408),
+        ("insight-goal:s21", 444, 452),
+    ]
+    assert not errors
+    page.context.close()
+
+
+LT_CONTEXT = {
+    "teams": {"home": "London", "away": "Lisbon"},
+    "names": ["Kai Laiddon", "Ilya Saindell"],
+    "goals": [{"t": 2244.2, "team": "home", "event": "g1"}],
+    "scorebug": [
+        {"type": "score_read", "t": 2000.0, "score": {"home": 0, "away": 1}},
+        {"type": "score_change", "t": 2244.3, "team": "home", "score": {"home": 1, "away": 1}},
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("cue", "want"),
+    [
+        (
+            bar_cue(
+                "insight-ov:away:middle-left:79185",
+                3167.4,
+                "In minute 53, Lisbon Esportes had 7 players against 1 player around the ball, "
+                "in their middle third on the left.",
+            ),
+            {
+                "label": "Overload · 53′",
+                "side": "away",
+                "head": "Lisbon Esportes had 7 players against 1 player around the ball",
+                "sub": "In their middle third on the left.",
+                "score": None,
+            },
+        ),
+        (
+            bar_cue(
+                "insight-lb:s12-v00010",
+                1517.4,
+                "In minute 26, a Lisbon Esportes player played a pass that took 3 London Athletic players "
+                "out of the game.",
+            ),
+            {
+                "label": "Line break · 26′",
+                "side": "away",
+                "sub": "",
+                "score": None,
+                "head": "A Lisbon Esportes player played a pass that took 3 London Athletic players "
+                "out of the game",
+            },
+        ),
+        (
+            bar_cue("insight-spell:s3", 3005.0, "In minute 51, one side strung 8 passes together in a row."),
+            {
+                "label": "Passing move · 51′",
+                "side": None,
+                "head": "One side strung 8 passes together in a row",
+                "sub": "",
+            },
+        ),
+        (
+            bar_cue(
+                "insight-goal:g1",
+                2244.2,
+                "London Athletic scored in minute 38. Just before it, Kai Laiddon played a pass.",
+            ),
+            {
+                "label": "Goal · 38′",
+                "side": "home",
+                "goal": True,
+                "head": "London Athletic scored",
+                "sub": "Just before it, Kai Laiddon played a pass.",
+                "score": {"home": 1, "away": 1},
+            },
+        ),
+        (
+            bar_cue(
+                "insight-goal:g9", 3000.0, "Kai Laiddon scored for Lisbon Esportes in minute 51."
+            ),  # no scorebug change: no score
+            {"goal": True, "side": "away", "score": None, "scorer": "Kai Laiddon"},
+        ),
+        (
+            bar_cue("cue-s1", 61.0, "A London player takes a shot", kind="shot_speed", persona="casual"),
+            {"label": "Shot · 2′", "side": "home", "goal": False},
+        ),
+    ],
+)
+def test_the_lower_third_lays_out_the_checked_words_never_new_ones(browser, site, cue, want):  # noqa: F811
+    """The label is the fact's kind and minute (from the cue's fact id and its sentence), the club the
+    one the sentence names first, the lead and second line the sentence's own words in order; a
+    goal's score is only the scorebug's change for it, its scorer only a feed name the sentence says
+    scored."""
+    page, errors = open_viewer(browser, site + "?bundle=match/")
+    got = page.evaluate(f"window.ninetyLowerThird.describe({json.dumps(cue)}, {json.dumps(LT_CONTEXT)})")
+    assert {k: got[k] for k in want} == want
+    # Every word on screen is the sentence's, in its order; only "in minute N" moves to the label.
+    words = lambda s: re.findall(r"[\w']+", s.lower())  # noqa: E731
+    said = iter(words(cue["text"]))
+    assert all(w in said for w in words(got["head"] + " " + got["sub"]))
+    assert not errors
+    page.context.close()
+
+
+def lower_third_page(browser, site, dock: str, cue=None, scorebug=None, image=10):  # noqa: F811
+    """The big screen with one line break on air at match time 60.2 s (or `cue`), its passer named by
+    the ID feed, between the demo's two clubs (the crests are theirs, src/crests.ts); `scorebug`: the
+    bundle's scorebug readings, through a measured reader's gate."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script(f"try {{ localStorage.setItem('ninety.dock', '{dock}'); }} catch (e) {{}}")
+    cue = cue or bar_cue(
+        "insight-lb:v1",
+        60.2,
+        "In minute 2, Kai Laiddon played a pass that took 4 Lisbon Esportes players out of the game.",
+        ["v1"],
+    )
+
+    def cues(route):
+        route.fulfill(body=route.fetch().text() + json.dumps(cue) + "\n", content_type="application/x-ndjson")
+
+    def match(route):
+        body = route.fetch().json()
+        route.fulfill(json={**body, "lineup": [{"id": "h-t1", "name": "Kai Laiddon", "source": "id_feed"}]})
+
+    def manifest(route):
+        gate = (
+            {"readings": len(scorebug), "measured": True, "min_confidence": MIN_CONFIDENCE}
+            if scorebug
+            else None
+        )
+        route.fulfill(
+            json={**route.fetch().json(), "teams": {"home": "LON", "away": "LIS"}, "scorebug": gate}
+        )
+
+    ctx.route("**/match/manifest.json", manifest)
+    if scorebug:
+        ctx.route(
+            "**/match/scorebug.jsonl",
+            lambda route: route.fulfill(
+                body="".join(json.dumps(r) + "\n" for r in scorebug), content_type="application/x-ndjson"
+            ),
+        )
+    ctx.route("**/match/cues.jsonl", cues)
+    ctx.route("**/match/match.json", match)
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site + "?bundle=match/")
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    seek(page, image)  # image 10: 60.4 s
+    page.wait_for_selector("#lower-third[data-on='1']")
+    page.wait_for_function(
+        "!document.querySelector('#lower-third .lt-strip').getAnimations().length"
+    )  # slid in
+    return page, errors
+
+
+@pytest.mark.parametrize("dock", ["open", "closed"])
+def test_the_lower_third_is_a_glass_panel_bottom_left_clear_of_the_scorebug(browser, site, dock):  # noqa: F811
+    """No white INSIGHT box: the fact's kind and minute in the club's colour beside its crest, the
+    sentence, a check glyph for the fact-check, the ID feed's name in bold; inside the picture's
+    title-safe area, bottom left, below the scorebug's band, docked or not."""
+    page, errors = lower_third_page(browser, site, dock)
+    lt = page.locator("#lower-third")
+    assert page.get_attribute("body", "data-dock") == dock
+    assert page.inner_text("#lower-third .lt-kind") == "LINE BREAK · 2′"
+    assert "INSIGHT" not in lt.inner_text()
+    assert (
+        page.inner_text("#lower-third .lt-head")
+        == "Kai Laiddon played a pass that took 4 Lisbon Esportes players out of the game"
+    )
+    assert page.inner_text("#lower-third .lt-head b") == "Kai Laiddon"
+    assert page.get_attribute("#lower-third .lt-check", "aria-label") == "Fact-checked"
+    assert (
+        page.locator("#lower-third .lt-label .lt-crest svg").count() == 1
+    )  # a club's crest, by the side it names
+    assert page.get_attribute("#lower-third", "data-side") == "away"  # the sentence names Lisbon first
+    style = page.evaluate("getComputedStyle(document.querySelector('#lower-third .lt-strip'))")
+    assert "blur" in (style.get("backdropFilter") or style.get("webkitBackdropFilter") or "")
+    stage = page.locator("#stage").bounding_box()
+    box = page.locator("#lower-third .lt-strip").bounding_box()
+    assert box["x"] >= stage["x"] + 0.05 * stage["width"] - 1  # title-safe, left
+    assert box["y"] + box["height"] <= stage["y"] + 0.95 * stage["height"]  # title-safe, bottom
+    assert box["y"] >= stage["y"] + 0.5 * stage["height"]  # the lower half: never the scorebug's band
+    assert (
+        box["x"] + box["width"] <= stage["x"] + 0.7 * stage["width"]
+    )  # compact: the play keeps the centre-right
+    assert "insight-lb:v1" in page.get_attribute("#overlay", "data-on-air")  # still said to a screen reader
     assert not errors
     page.context.close()
 
@@ -908,3 +1140,40 @@ def test_the_demo_passcode_goes_to_the_companion_and_nowhere_else(browser, site)
     origin = page.evaluate("location.origin")
     assert len(sent) >= 3 and all(target == origin for _, target in sent), sent
     ctx.close()
+
+
+def test_a_goal_is_a_full_card_with_the_scorebug_s_new_score_then_collapses_and_slides_out(browser, site):  # noqa: F811
+    """GOAL, the crest, the club and the score the scorebug changed to; after GOAL_CARD_S the strip;
+    half a second before its time is up it slides out. A reading under the gate gives no score."""
+    goal = bar_cue("insight-goal:v2", 59.0, "London Athletic scored in minute 1.", ["v2"], hold=4.2)
+    reads = [
+        {"type": "score_read", "t": 0.0, "score": {"home": 0, "away": 0}, "confidence": 0.99},
+        {
+            "type": "score_change",
+            "t": 59.1,
+            "team": "home",
+            "score": {"home": 1, "away": 0},
+            "confidence": 0.99,
+        },
+    ]
+    page, errors = lower_third_page(browser, site, "closed", cue=goal, scorebug=reads)  # 60.4 s: 1.4 s in
+    assert page.get_attribute("#lower-third", "data-card") == "1"
+    assert page.inner_text("#lower-third .lt-card-kind").startswith("GOAL")
+    assert page.inner_text("#lower-third .lt-card-club") == "London Athletic"
+    assert page.inner_text("#lower-third .lt-card-score") == "1–0"
+    assert page.locator("#lower-third .lt-card > .lt-crest svg").count() == 1
+    seek(page, 50)  # 62.4 s: 3.4 s in, the card still up
+    assert page.get_attribute("#lower-third", "data-card") == "1"
+    seek(page, 63)  # 62.94 s: past GOAL_CARD_S and within half a second of its end
+    assert page.get_attribute("#lower-third", "data-card") == "0"
+    assert page.get_attribute("#lower-third", "data-on") == "0"
+    assert (
+        page.inner_text("#lower-third .lt-strip .lt-club.scored") == "London"
+    )  # the strip: the score, the scorer's club lit
+    assert page.inner_text("#lower-third .lt-strip .lt-n.scored") == "1"
+    page.context.close()
+    weak = [{**r, "confidence": MIN_CONFIDENCE - 0.1} for r in reads]
+    page, errors2 = lower_third_page(browser, site, "closed", cue=goal, scorebug=weak)
+    assert page.locator("#lower-third .lt-card-score").count() == 0  # no score the gate does not pass
+    assert not errors and not errors2
+    page.context.close()

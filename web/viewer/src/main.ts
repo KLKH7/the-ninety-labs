@@ -5,6 +5,7 @@ import { AudioTracks, readCommentary } from "./commentary";
 import { setupDock } from "./dock";
 import { setupHud } from "./hud";
 import { broadcastSchedule, pairCardAt, setupMatch } from "./match";
+import { describe as describeLowerThird, setupLowerThird } from "./lowerthird";
 import { Narrator } from "./narrator";
 import { attachPlayer } from "./player";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
@@ -473,6 +474,12 @@ async function start() {
   });
 
   const broadcast = broadcastSchedule(b.cues);
+  // The big screen's lower third is HTML over the picture (src/lowerthird.ts); the canvas keeps the rest.
+  const feedNames = [...new Set((b.match?.lineup ?? []).filter((p) => p.source === "id_feed" && p.name).map((p) => p.name!))];
+  const lowerThird = big
+    ? setupLowerThird($("lower-third"), { teams, names: feedNames, goals: b.match?.goals ?? [], scorebug: b.scorebug })
+    : null;
+  (window as unknown as { ninetyLowerThird: unknown }).ninetyLowerThird = { describe: describeLowerThird }; // read by tests/test_match_mode.py
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
@@ -481,7 +488,8 @@ async function start() {
     const aired: Cue[] = big && persona !== "audio" ? broadcast.filter((c) => c.t_in <= t && t < c.t_out) : onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
-    drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
+    drawCues(ctx, lowerThird ? aired.filter((c) => c.slot !== "lower_third") : aired, { t, reduceMotion: reduceMotionBox.checked, onAir: aired });
+    lowerThird?.tick(aired, t, reduceMotionBox.checked);
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
     phone.tick();
     radar.tick(v);
