@@ -227,9 +227,12 @@ def test_the_involvement_order_names_three_with_no_count_and_only_while_on():
         body(frames(60, lambda t: [("h-t1", 50.0, 30.0)]), named("h-t1"), ev), 60.0, {}, withhold=False
     )
     on = ps.order(raw, {"rank:involvement_order": {"on": True}})
-    assert [f["name"] for f in on["facts"]] == ["Theo Dounton", "Alex Finnet"] and on[
-        "of"
-    ] == ps.ORDER_WORDING
-    assert all(set(f) == {"rank", "player", "name", "number", "team"} for f in on["facts"])  # no value leaves
+    assert [f["name"] for f in on["facts"]] == ["Theo Dounton", "Alex Finnet"]
+    assert "say" not in on  # fewer than three names: no sentence that could single one out
+    three = [*raw, {**raw[0], "player": "LON11", "name": "Gabe Komble", "number": 11, "involvements": 1}]
+    said = ps.order(three, {"rank:involvement_order": {"on": True}})["say"]
+    assert said == "Theo Dounton, then Alex Finnet, then Gabe Komble, in the moves the video picked up"
+    assert "most involved" not in said and "best" not in said
+    assert all(set(f) == {"player", "name", "number", "team"} for f in on["facts"])  # no value, no rank
     off = ps.order(raw, {"rank:involvement_order": {"on": False, "why": "missed"}})
     assert off["facts"] == [] and off["withheld"] == "missed"

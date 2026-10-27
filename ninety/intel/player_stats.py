@@ -354,24 +354,29 @@ def rank(rows: Sequence[Mapping], metric: str, cal: Mapping | None = None) -> di
     return out
 
 
-ORDER_WORDING = "most involved in the moves the video picked up, in order"  # said with it: three names,
-# never "the most involved player" (the leader was wrong in 1 of 4 held-out cases) and never "best"
+ORDER_WORDING = "{0}, then {1}, then {2}, in the moves the video picked up"  # the only way it is said:
+# no single player is ever "the most involved" (the leader was right in 3 of 4 held-out cases), never "best"
 
 
 def order(raw_rows: Sequence[Mapping], cal: Mapping | None = None) -> dict:
-    """Players by involvement in the detected events the feed names them in, most first, with no
-    count (docs/eval/player-involvement-rank-plan.md): said only while that order's held-out grading
-    met its bar. `raw_rows` are stats(..., withhold=False); no value leaves here."""
+    """A club's three players most involved in the detected events the feed names them in, as an
+    ordered list with no count and no rank (docs/eval/player-involvement-rank-plan.md), said only as
+    ORDER_WORDING: "A, then B, then C, in the moves the video picked up". No single player is ever
+    called "the most involved". Served only while the held-out grading met its bar. `raw_rows` are
+    stats(..., withhold=False); no value leaves here."""
     cal = calibration() if cal is None else cal
     flag = cal.get("rank:involvement_order") or {}
-    out = {"metric": "involvement", "order_only": True, "of": ORDER_WORDING, "source": identity.SOURCE,
+    out = {"metric": "involvement", "order_only": True, "of": "the moves the video picked up",
+           "source": identity.SOURCE,
            "source_label": identity.SOURCE_LABEL, "facts": [], "withheld": None}
     if not flag.get("on"):
         out["withheld"] = flag.get("why") or "not yet measured against the truth"
         return out
     ranked = sorted(raw_rows, key=lambda r: (-r["involvements"], r["name"]))
-    out["facts"] = [{"rank": i, "player": r["player"], "name": r["name"], "number": r["number"],
-                     "team": r["team"]} for i, r in enumerate(ranked[:3], 1)]
+    out["facts"] = [{"player": r["player"], "name": r["name"], "number": r["number"], "team": r["team"]}
+                    for r in ranked[:3]]
+    if len(out["facts"]) == 3:
+        out["say"] = ORDER_WORDING.format(*(f["name"] for f in out["facts"]))
     return out
 
 
