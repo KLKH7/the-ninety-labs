@@ -3441,3 +3441,25 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_companion_match.py::test_minute_zero_is_kick_off_not_a_bad_window` (fails
   with the fix removed); the live trace is `docs/eval/agents-live/seed8324` (PR #417).
 
+
+### 287. A message that routes to no tool is not a follow-up by default
+- **What happened:** in the 8324 preview's docked companion at 89:59, Kian typed "hello" and got a
+  statistic: "49% … Lisbon Esportes played most through the left … minute 76 to minute 91". With an
+  earlier question in the conversation, `code_calls` reused the last question's tools for any message
+  that routed to none, which is meant for "and in the first half?" but caught a greeting too. Nothing
+  told small talk apart, and a question at 90:00 or later was read as minute 91, a minute the match
+  does not have. The tests' unrouted messages were all asked with no history.
+- **Rule:** classify the intent before any tool or model call. Small talk (greetings, thanks,
+  questions about the companion) gets fixed words that state no fact, plus three questions the tools
+  can answer, and never reaches the model. A message code routes to no tool is not refused before the
+  planner sees it: "how many passes?" is the planner's to place (merge-queue review). Only an empty
+  plan, or the code path, gets the same friendly reply. Only a message that reads as a follow-up
+  ("and…", "what about…", "they") reuses the last tools. Every window ends at full time (Law 7's 90
+  minutes; the engine plays no added time). The planner prompt is unchanged: it is pinned by
+  `definition_sha`, and small talk never reaches it.
+- **Check:** `tests/test_companion_match.py::test_small_talk_gets_a_friendly_reply_and_suggestions_never_a_stat`
+  (13 probes, with and without history), `test_the_model_is_never_asked_about_small_talk`,
+  `test_off_topic_goes_to_the_planner_and_an_empty_plan_gets_the_friendly_reply`,
+  `test_a_question_code_does_not_route_is_answered_by_the_models_plan`,
+  `test_a_question_or_a_follow_up_is_not_small_talk` and `test_no_window_runs_past_full_time`. All fail
+  on main 14a33133, and each fails when its guard is removed.
