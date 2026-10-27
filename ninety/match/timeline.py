@@ -8,6 +8,7 @@ It reads no ground truth: the segments are the broadcast's own timecode.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -36,6 +37,14 @@ def segments(frames: list[int]) -> list[Segment]:
     return out
 
 
+def checked_timescale(value: float) -> float:
+    """A timescale (match seconds a video second): a finite number above 0, else ValueError."""
+    x = float(value)
+    if not math.isfinite(x) or x <= 0:
+        raise ValueError(f"timescale {value!r}: a finite number above 0 (match seconds a video second)")
+    return x
+
+
 class Timeline:
     """Video time against match time, for a clip whose picture cuts: a reader that shows or
     schedules anything by time (the viewer, the audio description) maps through this."""
@@ -43,33 +52,37 @@ class Timeline:
     @classmethod
     def of_clip(cls, clip: dict) -> Timeline:
         """A rendered clip's timeline from its clip.json: its segments, or for a clip rendered
-        before the broadcast cut, one run of frames from its start."""
+        before the broadcast cut, one run of frames from its start. `timescale` (match seconds per
+        video second, set by ninety-e2e for footage played faster, ninety/footage.py) defaults to 1."""
         fps = clip["fps"]
         whole = {"index": 0, "frame": round(clip["t_start"] * fps), "frames": clip["frames"]}
         segs = clip.get("segments") or [whole]
-        return cls(segs, fps)
+        return cls(segs, fps, clip.get("timescale", 1.0))
 
-    def __init__(self, segs: list[Segment] | list[dict], fps: float):
-        self.fps = fps
+    def __init__(self, segs: list[Segment] | list[dict], fps: float, timescale: float = 1.0):
+        self.fps = fps  # images a match second: one image is one match frame
+        self.timescale = checked_timescale(timescale)  # match seconds a video second: plays timescale x
+        self.video_fps = fps * timescale  # images a video second
         self.segs = [s if isinstance(s, Segment) else Segment(s["index"], s["frame"], s["frames"])
                      for s in segs]
 
     def to_match(self, video_t: float) -> float:
         """The match time shown at this video time."""
-        i = max(0, int(video_t * self.fps))
+        image = video_t * self.video_fps
+        i = max(0, int(image))
         seg = self.segs[0]
         for s in self.segs:
             if s.index <= i:
                 seg = s
-        return (seg.frame + (video_t * self.fps - seg.index)) / self.fps
+        return (seg.frame + (image - seg.index)) / self.fps
 
     def to_video(self, match_t: float) -> float:
         """When the video shows this match time; a time inside a cut is shown where the cut is."""
         f = match_t * self.fps
         for s in self.segs:
             if f < s.frame:
-                return s.index / self.fps
+                return s.index / self.video_fps
             if f < s.frame + s.frames:
-                return (s.index + f - s.frame) / self.fps
+                return (s.index + f - s.frame) / self.video_fps
         last = self.segs[-1]
-        return (last.index + last.frames) / self.fps
+        return (last.index + last.frames) / self.video_fps

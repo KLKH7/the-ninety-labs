@@ -568,10 +568,13 @@ def estimate(words: str, _ssml: str) -> tuple[float, str]:
 
 
 def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None = None,
-             names: dict[str, str] | None = None) -> Track:
+             names: dict[str, str] | None = None, timescale: float = 1.0) -> Track:
     """One voice in time order: each line starts when the last ended (plus GAP_S), at most
     MAX_LAG_S after its event; it shortens, then drops, rather than run late or push a more
-    important line coming up past MAX_LAG_S."""
+    important line coming up past MAX_LAG_S. Times are match times; a line spoken for s seconds
+    over footage played at `timescale` covers s x timescale of match, and the lag and the gap are
+    heard in video seconds, so both scale too (ninety/footage.py)."""
+    k = timescale  # match seconds a heard second
     said: list[Said] = []
     dropped: list[dict] = []
     free_at = float("-inf")
@@ -586,7 +589,7 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
                                 "reason": f"said in the same words within {REPEAT_S:g} s"})
                 continue
         start = max(line.t, free_at)
-        if start - line.t > MAX_LAG_S:
+        if start - line.t > MAX_LAG_S * k:
             dropped.append({"id": line.key, "t": line.t, "reason": f"voice busy until {free_at:.2f}"})
             continue
         upcoming = [n for n in lines[i + 1:] if n.priority < line.priority]
@@ -596,26 +599,26 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
             if line.score is not None:  # the scorebug's reading after a goal, said after it
                 words = f"{words} {score_said(line.score, clubs)}"
             seconds, how = duration(words, ssml(words, line.priority))
-            end = start + seconds
-            if all(end + GAP_S - n2.t <= MAX_LAG_S for n2 in upcoming if n2.t < end + GAP_S):
+            end = start + seconds * k
+            if all(end + GAP_S * k - n2.t <= MAX_LAG_S * k for n2 in upcoming if n2.t < end + GAP_S * k):
                 chosen = (n, text, words, seconds, how)
                 break
         if chosen is None:
             dropped.append({"id": line.key, "t": line.t, "reason": "would push a more important line late"})
             continue
         n, text, words, seconds, how = chosen
-        end = round(start + seconds, 2)
+        end = round(start + seconds * k, 2)
         # A model line that did not fit falls back to the claim's own (code) line.
         source = "insight" if line.source == "model" and n > 0 else line.source
         description = Description(line.key, words, ssml(words, line.priority), line.pan,
                                   "model" if source == "model" else "code")
         said.append(Said(
             id=f"ad-{line.key}", event=line.key, t_event=line.t, t_in=round(start, 2), t_out=end,
-            lag_s=round(start - line.t, 2), pan=description.pan, text=text, spoken=description.text,
+            lag_s=round((start - line.t) / k, 2), pan=description.pan, text=text, spoken=description.text,
             ssml=description.ssml, short=n > 0, source=source, evidence=line.evidence,
             duration_s=seconds, duration_source=how,
         ))
-        free_at = end + GAP_S
+        free_at = end + GAP_S * k
         if line.kind in REPEATS:
             last_said[spoken(line.versions[0], line.side_known, clubs=clubs, names=names)] = line.t
     return Track(said, dropped)
@@ -624,13 +627,13 @@ def schedule(lines: list[Line], duration: Duration, clubs: dict[str, str] | None
 def describe(events: list[dict], cues: list[dict], duration: Duration = estimate,
              upgrades: dict[str, str] | None = None, shape: list[dict] | None = None,
              clubs: dict[str, str] | None = None, names: dict[str, str] | None = None,
-             scores: list[dict] | None = None) -> tuple[Track, list[dict]]:
+             scores: list[dict] | None = None, timescale: float = 1.0) -> tuple[Track, list[dict]]:
     """The spoken track for detected `events` and the live path's `cues` (and the clip's shape facts,
     when it has tracked positions), and the refusals. `clubs` names the sides when the bundle knows
     its teams (see `spoken`); `names` the players the player-ID feed names, by track; `scores` the
     scorebug's readings ({t, home, away}), said after each goal."""
     lines, refused = candidates(events, cues, upgrades, shape, scores)
-    return schedule(lines, duration, clubs, names), refused
+    return schedule(lines, duration, clubs, names, timescale), refused
 
 
 # ---------------------------------------------------------------- real synthesis (behind a flag)
@@ -723,7 +726,7 @@ def webvtt(track: Track, t_start: float, timeline: Timeline | None = None) -> st
         position = round((s.pan + 1) * 50)
         position = min(90, max(10, position))
         start = timeline.to_video(s.t_in) if timeline is not None else s.t_in - t_start
-        end = start + (s.t_out - s.t_in)
+        end = start + s.duration_s  # as long as it is spoken, in video seconds
         blocks.append(
             f"{s.id}\n{_vtt_time(start)} --> {_vtt_time(end)} "
             f"position:{position}% align:center\n{s.spoken}\n"
