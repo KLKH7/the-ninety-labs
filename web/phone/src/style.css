@@ -1040,3 +1040,6 @@ body[data-embed] { background: #000; }
 /* The demo passcode: a plain field at the row's end. */
 .setting-row .passcode { width: 50%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: rgba(118, 118, 128, 0.24); color: var(--text); font-size: 17px; text-align: right; }
 .model-off { color: var(--text-3); }
+.compare-group + .compare-group { margin-top: 10px; }
+.compare-club { margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-2); }
+#compare-chips { display: block; }

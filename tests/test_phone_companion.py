@@ -832,11 +832,8 @@ def test_a_player_without_numbers_shows_no_dashes_heat_map_or_error_and_his_chip
     tap_player(page)
     page.wait_for_timeout(300)  # the card request has failed by now
     assert page.locator("#so-far-box").is_hidden() and page.locator("#heat-box").is_hidden()
-    chips = page.locator("#compare-chips button")
-    assert 0 < chips.count() <= 22  # who is on the pitch now, never every fragment
-    chips.first.click()
-    page.wait_for_selector("#compare-chips button[aria-disabled=true]")
-    assert page.locator("#compare-rows").is_hidden()
+    # The cut clip's feed names nobody: no one to compare with, never an unnamed track's chip.
+    assert page.locator("#compare-chips button").count() == 0 and page.locator("#compare-box").is_hidden()
     assert "Could not" not in page.inner_text("#player")
     assert not errors
 
@@ -1208,15 +1205,13 @@ def test_a_scorer_vision_could_not_name_is_his_club_s_goal_never_a_track_id(brow
     ctx.close()
 
 
-def test_unnamed_players_read_apart_and_a_button_s_name_contains_what_it_shows(browser, site):  # noqa: F811
-    """Merge-queue review of #371 (WCAG 2.5.3): with track numbers gone, every unnamed player was
-    "London player" or "A player" in a screen reader's ear while the screen showed where he plays."""
+def test_compare_with_never_lists_an_unnamed_track(browser, site):  # noqa: F811
+    """Kian (Oct 27): "A player, left of the pitch" chips looked broken on camera. With no Player ID
+    feed row in the cut clip, nobody is listed, never a bare or positional label."""
     laptop, page, errors = phone(browser, site, laptop_t=1505 / FPS)
     tap_player(page)
     chips = [c.inner_text() for c in page.locator("#compare-chips button").all()]
-    bare = {"A player", "Crowmere player", "Dunhollow player"}
-    assert chips and not bare & set(chips), chips
-    assert len(set(chips)) == len(chips), chips  # one chip a label (UI inventory #11)
+    assert chips == [], chips
     assert not errors
 
 
@@ -1882,7 +1877,7 @@ def test_every_key_moment_row_has_one_type_and_a_goal_is_told_by_its_label(brows
 
 # --- the player sheet on the demo (Oct 27): names on tap, every map findable ---------------------
 
-def named_phone(browser, site, t: float):  # noqa: F811
+def named_phone(browser, site, t: float, rows=None):  # noqa: F811
     """The phone with the ID feed naming a-t3 (match.json `lineup_tactical`), the big screen at t, on
     the 8324 bundle's shape: the feed's name is on the HOME team sheet (`sheets`), so the feed's side
     is not the track id's letter (the tracker's vote), and the manifest carries no `sides_known`."""
@@ -1890,8 +1885,7 @@ def named_phone(browser, site, t: float):  # noqa: F811
 
     def match(route):
         body = route.fetch().json()
-        body["lineup_tactical"] = [{"id": "a-t3", "name": "Tac Named", "number": 9, "position": "striker",
-                                    "confident": True, "source": "id_feed"}]
+        body["lineup_tactical"] = rows or feed_rows(("a-t3", "Tac Named"))
         nine = {"number": 9, "position": "striker", "line": "forward"}
         body["sheets"] = {"home": [{**nine, "name": "Tac Named"}], "away": [{**nine, "name": "Other Nine"}]}
         body["identity"] = {"source": "id_feed", "label": "Player ID feed", "provider": "sim"}
@@ -1906,7 +1900,7 @@ def named_phone(browser, site, t: float):  # noqa: F811
     ctx.route("**/bundle/manifest.json", manifest)
     laptop = ctx.new_page()
     laptop.goto(f"{site}phone/mock-laptop.html?code={MOCK_CODE}")
-    laptop.fill("#seek", str(t))
+    laptop.fill("#seek", f"{t:g}")
     page = ctx.new_page()
     errors = watch(page)
     page.goto(f"{site}phone/?mock=1&code={MOCK_CODE}&clip=mock&bundle=/bundle/")
@@ -2031,5 +2025,70 @@ def test_an_empty_pitch_says_players_appear_when_the_big_screen_shows_play(
     ctx, page, errors = named_phone(browser, site, 0)
     page.wait_for_selector("#map-empty:not([hidden])")
     assert page.get_attribute("#map", "data-dots") == "0"
+    assert not errors
+    ctx.close()
+
+
+def feed_rows(*named):
+    """match.json lineup_tactical rows: (track, name) pairs the Player ID feed names."""
+    return [{"id": i, "name": n, "number": 9, "position": "striker", "confident": True, "source": "id_feed"}
+            for i, n in named]
+
+
+def test_compare_with_lists_only_the_feed_s_names_one_chip_a_name_grouped_by_club(
+    browser, site,  # noqa: F811
+):
+    """Kian (Oct 27): only players the Player ID feed names, by name, under their club (the team
+    sheet's), one chip a name however many tracks it names him on; unnamed tracks never."""
+    rows = feed_rows(("a-t3", "Tac Named"), ("h-t2", "Tac Named"), ("h-t1", "Other Nine"))
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS, rows=rows)
+    page.evaluate("window.ninetyPhone.pick('a-t5')")  # a track the feed names nobody on
+    page.wait_for_selector("#compare-chips button")
+    groups = page.eval_on_selector_all(
+        "#compare-chips .compare-group",
+        "gs => gs.map(g => [g.querySelector('.compare-club').textContent,"
+        " [...g.querySelectorAll('button')].map(b => b.textContent)])")
+    teams = page.evaluate(
+        "['home', 'away'].map(s => document.querySelector('#compare-club-' + s).textContent)")
+    assert groups == [[teams[0], ["Tac Named"]], [teams[1], ["Other Nine"]]], groups
+    # His own name is never a choice.
+    page.evaluate("window.ninetyPhone.pick('a-t3')")
+    page.wait_for_function(
+        "[...document.querySelectorAll('#compare-chips button')].every(b => b.textContent !== 'Tac Named')")
+    assert page.locator("#compare-chips button").all_inner_texts() == ["Other Nine"]
+    assert not errors
+    ctx.close()
+
+
+def test_a_named_player_s_heat_map_is_every_track_the_feed_names_his_and_never_past_t(
+    browser, site,  # noqa: F811
+):
+    """The player heat map is his match in what we've seen, stitched by the feed's name as his
+    distance is (#439), never one track's fragment, and never a position later than the card's t."""
+    t = 60.0  # frames 1500 to 1505 are 60.0 s to 60.2 s: some after t (the slider steps 0.2 s)
+    rows = feed_rows(("a-t3", "Tac Named"), ("h-t2", "Tac Named"))
+    ctx, page, errors = named_phone(browser, site, t, rows=rows)
+    radar = json.loads(page.evaluate("fetch('/bundle/radar.json').then(r => r.text())"))
+    his = [(f["t"], p["id"]) for f in radar["frames"] for p in f["players"] if p["id"] in ("a-t3", "h-t2")]
+    assert any(ft > t for ft, _ in his)  # positions after t exist, so "never past t" is not vacuous
+    want = [x for x in his if x[0] <= t]
+    got = page.evaluate(f"window.ninetyPhone.heatOf('a-t3', {t})")
+    assert got["tracks"] == len({i for _, i in want}) == 2 and got["samples"] == len(want), got
+    assert got["last"] <= t
+    alone = page.evaluate(f"window.ninetyPhone.heatOf('h-t1', {t})")  # unnamed: his own track only
+    assert alone["tracks"] == 1
+    assert not errors
+    ctx.close()
+
+
+def test_the_wind_map_draws_flow_lines_on_the_live_pitch(browser, site):  # noqa: F811
+    """Live > Movement draws both teams' flow lines (wind.ts) on its canvas: ink, not an empty layer."""
+    ctx, page, errors = named_phone(browser, site, 1505 / FPS)
+    page.click("#pitch-mode ion-segment-button[value=flow]")
+    page.wait_for_selector("#wind:not([hidden])")
+    inked = """() => { const c = document.querySelector('#wind'); const d = c.getContext('2d')
+      .getImageData(0, 0, c.width, c.height).data; let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; }"""
+    page.wait_for_function(f"({inked})() > 200", timeout=10000)
     assert not errors
     ctx.close()

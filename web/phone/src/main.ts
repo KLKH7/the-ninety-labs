@@ -22,7 +22,7 @@ import { CLUBS, DEFAULT_TEAMS, fullName, nameIds, setSidesKnown, short, sideUnsu
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
-import { COLORS, type Positions, aspect, describeHeat, describePlay, drawHeat, drawPitch, fit, radarFromMinimap, zoneFor } from "./pitch";
+import { COLORS, type Positions, aspect, densityFromCells, densityFromPoints, describeHeat, describePlay, drawDensity, drawPitch, fit, radarFromMinimap, tint, zoneFor } from "./pitch";
 import {
   type AnswerMessage,
   type InsightCard,
@@ -163,6 +163,12 @@ function screenOf(x: number, y: number): [number, number] {
   name: playerName,
   say: (id: string) => sayPlayer(id), // how the sheet and its chips say him (never "a player")
   trackSpan: (id: string, t: number) => trackSpan(id, t),
+  // The player heat map's positions (every track the ID feed names his, to t) and the compare list.
+  heatOf: (id: string, t: number) => {
+    const s = playerPositions(id, t);
+    return { tracks: s.tracks, samples: s.points.length, last: s.last };
+  },
+  compareChoices: (id: string) => compareChoices(id),
   pick: (id: string | null) => select(id), // a tracked player's card, as a tap on his dot opens it
   // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
   drawable: (sv: ScoutVisual, t: number | null = null) => {
@@ -1324,22 +1330,54 @@ function showCard(c: PlayerCard) {
       ? `Covering ${said} of play: this track only, since the tracker last lost him behind others. The distance above covers every track the Player ID feed names his.`
       : `Covering ${said} of play: the stretch the tracker followed this player without losing him behind others.`;
   $("player").dataset.t = String(c.t_to);
+  // A player the Player ID feed names: every tracked position of every track it names his, to the
+  // card's time and never later (as his distance above, #439), so the heat map is his match in
+  // what we've seen, not one track's fragment. Else this track's own positions; else the card's grid.
+  const name = tacticalSheet[c.player]?.name;
+  const seen = playerPositions(c.player, c.t_to);
+  const stitched = !!name && seen.tracks > 1;
+  if (name && seen.points.length) {
+    const span = seen.seconds;
+    const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
+    const footage = footageSeconds(c.t_to);
+    const cover = footage > 0 ? `, ${Math.round((100 * Math.min(span, footage)) / footage)}% of the footage so far` : "";
+    $("heat-title").textContent = `Heat map, in what we've seen to ${clock(c.t_to)}`;
+    $("heat-span").textContent =
+      `Tracked ${said}${cover}, across ${seen.tracks} ${seen.tracks === 1 ? "track" : "tracks"} the Player ID feed names his. ` +
+      "Positions are tracked from the video; the name is the Player ID feed's.";
+  }
+  const heatGrid = seen.points.length ? densityFromPoints(seen.points) : densityFromCells(c.heat);
+  const coarse = seen.points.length ? cellsOf(seen.points, c.heat.nx, c.heat.ny) : c.heat;
   const heat = $<HTMLCanvasElement>("heat");
+  heat.dataset.tracks = String(seen.tracks);
+  heat.dataset.samples = String(seen.points.length);
+  heat.dataset.last = String(seen.last);
+  heat.dataset.stitched = String(stitched);
   const v = fit(heat);
   drawPitch(v);
-  drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${mid(sayPlayer(c.player))}: ${describeHeat(c.heat, team(c.player))}`);
-  // His average position: the heat map's own shares, weighted over its cells' centres.
-  const total = c.heat.cells.reduce((a, b) => a + b, 0);
+  const club = team(c.player) === "home" ? COLORS.home : COLORS.away;
+  drawDensity(v, heatGrid, tint(club, 0.2));
+  heat.setAttribute("aria-label", `Heat map of ${mid(sayPlayer(c.player))}: ${describeHeat(coarse, team(c.player))}`);
+  // His average position: the mean of the positions drawn (else the grid's shares over its cells).
+  const total = coarse.cells.reduce((a, b) => a + b, 0);
   if (total > 0) {
     let ax = 0;
     let ay = 0;
-    c.heat.cells.forEach((share, k) => {
-      ax += share * ((k % c.heat.nx) + 0.5) * (105 / c.heat.nx);
-      ay += share * (Math.floor(k / c.heat.nx) + 0.5) * (68 / c.heat.ny);
-    });
-    ax /= total;
-    ay /= total;
+    if (seen.points.length) {
+      for (const [x, y] of seen.points) {
+        ax += x;
+        ay += y;
+      }
+      ax /= seen.points.length;
+      ay /= seen.points.length;
+    } else {
+      coarse.cells.forEach((share, k) => {
+        ax += share * ((k % coarse.nx) + 0.5) * (105 / coarse.nx);
+        ay += share * (Math.floor(k / coarse.nx) + 0.5) * (68 / coarse.ny);
+      });
+      ax /= total;
+      ay /= total;
+    }
     v.ctx.beginPath();
     v.ctx.arc(v.X(ax), v.Y(ay), 6, 0, Math.PI * 2);
     v.ctx.lineWidth = 2.5;
@@ -1348,8 +1386,7 @@ function showCard(c: PlayerCard) {
     $("avg-pos").textContent = `The ring is his average position: his ${zoneFor(team(c.player), ax, ay)}.`;
   } else $("avg-pos").textContent = "";
   showInvolved(c.player, c.t_to);
-  const busiest = Math.max(...c.heat.cells);
-  $("heat-legend").textContent = `Brighter means more time there; the brightest square is ${Math.round(busiest * 100)}% of the time.`;
+  $("heat-legend").textContent = "Brighter means more time there; the whitest spot is where he spent the most.";
   $("card-note").textContent =
     `Updated at ${clock(c.t_to)}. Computed by code from ${feed.mock ? "the mock positions" : "positions tracked from the video"}; ` +
     "speed now is the average over the last second.";
@@ -1403,30 +1440,127 @@ function showInvolved(id: string, t: number) {
   );
 }
 
+/** Every tracked position of a player up to tTo, never later: where the Player ID feed names the
+ * track, every track it names that player (match.json lineup_tactical, the same rows that give the
+ * sheet his name); else this track alone. From the bundle's tracked frames, else the minimap feed. */
+function playerPositions(id: string, tTo: number): { points: [number, number][]; tracks: number; seconds: number; last: number } {
+  const name = tacticalSheet[id]?.name;
+  const his = (pid: string) => pid === id || (!!name && tacticalSheet[pid]?.name === name);
+  const points: [number, number][] = [];
+  const tracks = new Set<string>();
+  const times = new Set<number>();
+  let last = -Infinity;
+  const add = (pid: string, t: number, x: number, y: number) => {
+    if (!his(pid)) return;
+    points.push([x, y]);
+    tracks.add(pid);
+    times.add(t);
+    if (t > last) last = t;
+  };
+  let fps = 25;
+  if (bundleRadar) {
+    fps = bundleRadar.fps || fps;
+    for (const f of bundleRadar.data.frames) if (f.t <= tTo) for (const p of f.players) add(p.id, f.t, p.x, p.y);
+  } else if (state.minimap) {
+    fps = state.minimap.fps || fps;
+    for (const f of state.minimap.frames) if (f.t <= tTo) for (const [pid, x, y] of f.players) add(pid, f.t, x, y);
+  }
+  return { points, tracks: tracks.size, seconds: times.size / fps, last };
+}
+
+/** Seconds of footage tracked up to t: the bundle's frames, else the minimap feed's. */
+function footageSeconds(t: number): number {
+  if (bundleRadar) return bundleRadar.data.frames.filter((f) => f.t <= t).length / (bundleRadar.fps || 25);
+  if (state.minimap) return state.minimap.frames.filter((f) => f.t <= t).length / (state.minimap.fps || 25);
+  return 0;
+}
+
+/** Positions as the cards' coarse grid of shares, for the words a screen reader hears. */
+function cellsOf(points: [number, number][], nx: number, ny: number) {
+  const cells = new Array<number>(nx * ny).fill(0);
+  for (const [x, y] of points) {
+    cells[Math.min(ny - 1, Math.max(0, Math.floor((y / 68) * ny))) * nx + Math.min(nx - 1, Math.max(0, Math.floor((x / 105) * nx)))] += 1;
+  }
+  return { nx, ny, cells: cells.map((c) => c / points.length) };
+}
+
 /** Compare with another player: both cards, side by side as mirrored rows. */
 function renderCompareChips(id: string) {
-  // Who is on the pitch now, at most eleven a side: never every track fragment the clip had.
-  const side = { home: 0, away: 0 };
-  const byName = new Intl.Collator(undefined, { numeric: true }); // "Lisbon player 3" before "… 10"
-  const others = rosterIds()
-    .filter((o) => o !== id)
-    .sort((x, y) => (team(x) === team(y) ? byName.compare(playerName(x), playerName(y)) : team(x) === "home" ? -1 : 1))
-    // One chip a label (UI inventory #11): unnamed players who read alike are one choice, not a dozen.
-    .filter(((seen) => (o: string) => !seen.has(distinctName(o)) && !!seen.add(distinctName(o)))(new Set<string>()))
-    .filter((o) => ++side[team(o)] <= 11);
-  $("compare-box").hidden = others.length === 0;
+  // Only players the Player ID feed names, by name, grouped by club: never a track the feed names
+  // nobody on ("A player, left of the pitch" read as broken on camera, Kian, Oct 27). One chip a
+  // name: the track it names him on now, else the last one it named him on up to now.
+  const groups = compareChoices(id);
+  const total = groups.home.length + groups.away.length;
+  $("compare-box").hidden = total === 0;
   $("compare-rows").hidden = true;
-  $("compare-chips").replaceChildren(
-    ...others.map((o) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = `chip who-chip ${team(o)}`;
-      b.dataset.player = o;
-      b.textContent = distinctName(o);
-      b.addEventListener("click", () => void compare(id, o));
-      return b;
-    }),
+  const box = $("compare-chips");
+  box.replaceChildren(
+    ...(["home", "away"] as const)
+      .filter((side) => groups[side].length)
+      .map((side) => {
+        const group = document.createElement("div");
+        group.className = "compare-group";
+        group.setAttribute("role", "group");
+        const head = document.createElement("p");
+        head.className = "compare-club";
+        head.textContent = teams[side];
+        head.id = `compare-club-${side}`;
+        group.setAttribute("aria-labelledby", head.id);
+        const row = document.createElement("div");
+        row.className = "chips wrap";
+        row.append(
+          ...groups[side].map(([o, name]) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = `chip who-chip ${side}`;
+            b.dataset.player = o;
+            b.textContent = name;
+            b.addEventListener("click", () => void compare(id, o));
+            return b;
+          }),
+        );
+        group.append(head, row);
+        return group;
+      }),
   );
+}
+
+/** The players to compare with, per club, as [track, name]: every name the Player ID feed gives a
+ * track seen up to now (match.json lineup_tactical), in team-sheet order where the bundle carries
+ * one; the club from the team sheet, else the track's side. With no feed rows (the mock), the
+ * line-up's named players on the pitch now. Never an unnamed track. */
+function compareChoices(id: string): Record<"home" | "away", [string, string][]> {
+  const out: Record<"home" | "away", [string, string][]> = { home: [], away: [] };
+  const own = tacticalSheet[id]?.name ?? playerName(id);
+  const now = viewTime();
+  const sheets = (state.match as { sheets?: Record<"home" | "away", SheetPlayer[]> } | null)?.sheets;
+  const clubOf = new Map<string, "home" | "away">();
+  const order = new Map<string, number>();
+  for (const side of ["home", "away"] as const) {
+    (sheets?.[side] ?? []).forEach((p, i) => {
+      clubOf.set(p.name, side);
+      order.set(p.name, i);
+    });
+  }
+  const byName = new Map<string, string>(); // name -> the track to compare with
+  const onPitch = new Set(rosterIds());
+  const lastSeen = (o: string) => trackSpan(o, now)?.[1] ?? -Infinity;
+  for (const [o, row] of Object.entries(tacticalSheet)) {
+    if (!row.name || row.name === own) continue;
+    if (lastSeen(o) === -Infinity) continue; // not seen yet: no numbers to compare
+    const kept = byName.get(row.name);
+    const better = !kept || (onPitch.has(o) && !onPitch.has(kept)) || (onPitch.has(o) === onPitch.has(kept) && lastSeen(o) > lastSeen(kept));
+    if (better) byName.set(row.name, o);
+  }
+  if (!Object.keys(tacticalSheet).length) {
+    for (const o of rosterIds()) if (o !== id && !unnamedTrack(o) && playerName(o) !== own) byName.set(playerName(o), o);
+  }
+  const collator = new Intl.Collator(undefined, { numeric: true });
+  for (const [name, o] of byName) out[clubOf.get(name) ?? team(o)].push([o, name]);
+  for (const side of ["home", "away"] as const) {
+    out[side].sort(([, x], [, y]) => (order.get(x) ?? 99) - (order.get(y) ?? 99) || collator.compare(x, y));
+  }
+  return out;
 }
 
 async function compare(a: string, b: string) {
@@ -1443,10 +1577,14 @@ async function compare(a: string, b: string) {
     chip?.setAttribute("aria-label", `${playerName(b)}: no numbers yet`);
     return;
   }
+  // Where the Player ID feed names both, their match so far in what we've seen (#439), as the card.
+  const both = ca.player_total && cb.player_total;
+  const top = (c: PlayerCard) => (both ? c.player_total!.top_kmh ?? c.peak_kmh : c.peak_kmh);
+  const dist = (c: PlayerCard) => (both ? c.player_total!.distance_m ?? c.distance_m : c.distance_m);
   const rows: [string, number, number, number][] = [
     ["Speed now (km/h)", ca.speed_kmh, cb.speed_kmh, 1],
-    ["Top speed (km/h)", ca.peak_kmh, cb.peak_kmh, 1],
-    ["Distance (m)", ca.distance_m, cb.distance_m, 0],
+    ["Top speed (km/h)", top(ca), top(cb), 1],
+    ["Distance (m)", dist(ca), dist(cb), 0],
   ];
   const head = document.createElement("li");
   head.className = "compare-head";
@@ -3304,7 +3442,9 @@ function teamHeat(t: number) {
   const ny = 8;
   const cells = new Array<number>(nx * ny).fill(0);
   let n = 0;
+  const points: [number, number][] = [];
   const add = (x: number, y: number) => {
+    points.push([x, y]);
     const cx = Math.min(nx - 1, Math.max(0, Math.floor((x / 105) * nx)));
     const cy = Math.min(ny - 1, Math.max(0, Math.floor((y / 68) * ny)));
     cells[cy * nx + cx] += 1;
@@ -3315,7 +3455,7 @@ function teamHeat(t: number) {
   } else if (state.minimap) {
     for (const f of state.minimap.frames) if (f.t <= t) for (const [, x, y] of f.players) add(x, y);
   }
-  return { nx, ny, cells: n ? cells.map((c) => c / n) : cells, samples: n };
+  return { nx, ny, cells: n ? cells.map((c) => c / n) : cells, samples: n, fine: densityFromPoints(points) };
 }
 
 /** Where the play has mostly been, in a third of the pitch as the radar draws it. */
@@ -3332,9 +3472,7 @@ function drawTeamHeat(t: number) {
   const heat = teamHeat(t);
   const v = fit(teamHeatCanvas);
   v.ctx.clearRect(0, 0, v.w, v.h);
-  v.ctx.filter = `blur(${Math.round(v.w / 60)}px)`; // design: a soft field, not a grid of tiles
-  drawHeat(v, heat, HEAT_COLOUR);
-  v.ctx.filter = "none";
+  drawDensity(v, heat.fine, HEAT_COLOUR); // a soft field, not a grid of tiles (ctx.filter is not on iOS Safari)
   teamHeatCanvas.dataset.samples = String(heat.samples);
   $("team-heat-words").textContent = heat.samples
     ? `Every tracked player, to ${clock(t)}: most often in the ${busiestThird(heat)} of the pitch as drawn. Brighter means more time there.`
