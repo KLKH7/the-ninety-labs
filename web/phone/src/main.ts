@@ -25,6 +25,7 @@ import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
 import { COLORS, type Positions, aspect, describeHeat, describePlay, drawHeat, drawPitch, fit, radarFromMinimap, zoneFor } from "./pitch";
 import {
   type AnswerMessage,
+  type Chip,
   type InsightCard,
   MAX_QUESTION,
   type Minimap,
@@ -258,6 +259,7 @@ async function connect(code: string) {
   await Promise.all([loadMinimap(), loadBundle()]);
   buildRadar();
   void refreshInsights(true);
+  void refreshChips();
 }
 
 function onRelay(m: RelayMessage) {
@@ -341,7 +343,10 @@ function showTab(tab: Tab, focus = false) {
     unread = 0;
     showUnread();
   }
-  if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
+  if (tab === "ask") {
+    requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
+    void refreshChips();
+  }
 }
 
 // The big screen around an embedded phone may open a tab ("Ask anything about this match →").
@@ -1510,7 +1515,10 @@ function applyFan(rerender = false) {
     if (rerender) renderInsights();
   }
   syncAsk();
-  if (rerender) renderChips();
+  if (rerender) {
+    renderChips();
+    void refreshChips(); // the club-slot chips ("Why did {club} score?") name the fan's club
+  }
 }
 
 /** The side of this match the fan supports, when it is one of its two clubs. */
@@ -1561,17 +1569,42 @@ function playerQuestions(id: string): string[] {
   return [`How fast is ${n} running now?`, top, `How far has ${n} run?`];
 }
 
-/** The match questions the Companion's tools answer with a picture. */
+/** The server's chips (GET /api/chips): the intent table's questions code answers at the room's time,
+ * so none leads to a "can't" (Kian, Oct 27). Null until they come, or when the server cannot be
+ * reached: then only fans.SAFE_CHIPS, the three code answers at any minute. */
+let serverChips: Chip[] | null = null;
+/** The last answer's follow-ups (the server's, from the same table): the next chips, until the next
+ * question. */
+let nextChips: string[] = [];
+let chipsAsked = 0; // the newest request wins: an older reply never overwrites a newer one
+
+/** The match questions to suggest: the server's, in the fan's order (fan.ts, `ordered`). */
 function matchQuestions(): string[] {
+  return fans.ordered(serverChips ?? fans.SAFE_CHIPS, chosen()).map((c) => c.q);
+}
+
+/** Asks the server which questions code answers now: when Ask opens, after each answer, and when
+ * the fan's club changes. The fan's club goes with it only when it plays in this match. */
+async function refreshChips() {
+  if (!state.code) return;
+  const n = ++chipsAsked;
   const f = chosen();
-  if (f) return fans.questions(f, teams); // the fan's club and focus first
-  return [
-    `Where are ${teams.home} overloading?`,
-    `Which pass broke ${teams.away}'s lines?`,
-    `What are ${teams.home}'s passing options?`,
-    `How are ${teams.away} set up?`,
-    "How are the teams moving?",
-  ];
+  const club = f && usSide() ? CLUBS[f.club] : null;
+  const t = Math.max(0, laptop.time());
+  let got: Chip[] | null;
+  try {
+    got = await feed.chips(state.code, t, club);
+  } catch (e) {
+    // A club the server does not know for this clip (422): its chips without the club, never none.
+    try {
+      got = club && e instanceof ApiError && e.status === 422 ? await feed.chips(state.code, t, null) : null;
+    } catch {
+      got = null;
+    }
+  }
+  if (n !== chipsAsked) return;
+  serverChips = got && got.length ? got : null;
+  renderChips();
 }
 
 function chip(q: string, onTab: Tab | null) {
@@ -1652,7 +1685,9 @@ function renderChips() {
   const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
   $("chips").replaceChildren(...own);
   const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()].filter((q) => !asked.has(q));
-  $("ask-chips").replaceChildren(...all.slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
+  // After an answer, its follow-ups are the next chips; otherwise the server's (or the safe three).
+  const next = nextChips.filter((q) => !asked.has(q));
+  $("ask-chips").replaceChildren(...(next.length ? next : all).slice(0, 3).map((q) => chip(q, null))); // three, as a message app suggests
   // An empty conversation opens on a grid of questions (never a blank page), then the answers.
   $("ask-grid").replaceChildren(...all.slice(0, 6).map(card));
   // And about the players most in the game (the Scout's per-player numbers), when there are any.
@@ -1727,6 +1762,7 @@ async function ask(text: string) {
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
   asked.add(q);
+  nextChips = []; // this question's answer brings its own
   if (onboard.isOpen) onboard.close(); // a typed question wins over the choices: they wait
   renderChips();
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
@@ -1758,6 +1794,8 @@ async function ask(text: string) {
     fitQuestion();
   }
   pending.replaceWith(renderAnswer(q, at, answer, failed));
+  nextChips = answer?.status === "verified" ? (answer.follow_ups ?? []).filter((f) => typeof f === "string" && f.trim() !== "") : [];
+  void refreshChips(); // what code answers now, at the clock's new time
   // The new question at the top, whole, with its answer under it (Messages scrolls a new thread
   // turn into view; it never leaves the question cut under the bar).
   requestAnimationFrame(() => {
@@ -1821,9 +1859,6 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
     body.append(" ", howButton({ t: at, visual: a.visual ?? null, source: a.source ?? "code", evidence: a.evidence, names: a.names, answer: a }));
     if (a.visual) bubble.append(picture(a.visual, a.t_to, a.names));
     li.append(answerActions(a));
-    if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
-    // One set of suggestions at a time: an answer's follow-ups replace the starter chips.
-    $("ask-chips").hidden = !!a.follow_ups?.length;
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
   return li;
@@ -1864,26 +1899,6 @@ function answerActions(a: ViewerAnswer): HTMLElement {
   facts.textContent = `${n} ${n === 1 ? "fact" : "facts"} checked`;
   row.append(facts);
   return row;
-}
-
-/** The suggested next questions an answer carries, as Perplexity's "↳" rows: one tap asks it. */
-function followUps(qs: string[]): HTMLElement {
-  const box = document.createElement("ul");
-  box.className = "follow-ups";
-  box.setAttribute("aria-label", "Ask next");
-  box.append(
-    ...qs.slice(0, 3).map((q) => {
-      const li = document.createElement("li");
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "follow-up";
-      b.append(q);
-      b.addEventListener("click", () => void ask(q));
-      li.append(b);
-      return li;
-    }),
-  );
-  return box;
 }
 
 /** The answer's or card's picture, with its headline and its words for a screen reader: the agents'

@@ -7,38 +7,9 @@ changed from the settings sheet. Needs the built phone and Playwright's Chromium
 from __future__ import annotations
 
 import json
-import re
-from pathlib import Path
 
-import pytest
-
-from ninety.agents.companion_match import route
 from tests.test_phone import MOCK_CODE, PHONE_SIZE, browser, watch  # noqa: F401
-from tests.test_phone_companion import site  # noqa: F401
-
-FAN_TS = Path(__file__).resolve().parent.parent / "web" / "phone" / "src" / "fan.ts"
-
-
-def bank() -> list[str]:
-    """Every question template in fan.ts's BANK, read from the source the phone ships."""
-    src = FAN_TS.read_text()
-    block = src[src.index("const BANK"):src.index("};", src.index("const BANK"))]
-    return re.findall(r'"([^"]+\?)"', block)
-
-
-def test_the_bank_is_read():
-    assert len(bank()) >= 12
-
-
-@pytest.mark.parametrize("us,them", [("London", "Lisbon"), ("Lisbon", "London")])
-def test_every_suggested_question_reaches_one_of_the_companions_tools(us, them):
-    for q in bank():
-        filled = q.replace("{us}", us).replace("{them}", them)
-        assert route(filled), filled  # a suggestion no tool answers would be a dead end
-
-
-def test_a_question_no_tool_answers_routes_nowhere():
-    assert route("How are the teams moving?") == []  # why the bank has no such question
+from tests.test_phone_companion import CHIP_REQUESTS, site  # noqa: F401
 
 
 def open_phone(browser, site, init: str | None = None, bundle: bool = False):  # noqa: F811
@@ -60,7 +31,13 @@ def tap(page, label: str):
     page.locator(".onboard-option", has_text=label).click()
 
 
+GRID_NAMES_LISBON = ("[...document.querySelectorAll('#ask-grid .chip')]"
+                     ".some(c => c.textContent.includes('Lisbon'))")
+
+
 def grid(page) -> list[str]:
+    """The starter grid once the relay's chips came (more than the three safe ones)."""
+    page.wait_for_function("document.querySelectorAll('#ask-grid .chip').length > 3")
     return [c.inner_text() for c in page.locator("#ask-grid .chip").all()]
 
 
@@ -84,8 +61,8 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     assert page.is_hidden("#onboard")
     page.wait_for_selector("#ask-form:visible")  # the composer rises in once the choices are made
     assert page.is_visible("#panel-ask ion-header")  # and the match header is back
-    qs = grid(page)
-    assert qs[0] == "Where are London overloading?" and "Which pass broke Lisbon's lines?" in qs
+    qs = grid(page)  # the relay's chips (tests/test_phone_companion.py), the tactics rows first
+    assert qs[:3] == ["Who's on top?", "Where has the ball been?", "How are London Athletic playing?"]
     saved = json.loads(page.evaluate("localStorage.getItem('ninety.fan')"))
     assert saved == {"club": "LON", "mode": "analyst", "focus": "tactics"}
     assert page.get_attribute("#insights", "data-mode") == "all"  # an analyst opens on every play
@@ -94,7 +71,7 @@ def test_three_taps_choose_club_mode_and_focus_and_order_the_questions(browser, 
     page.wait_for_selector("body[data-state=live]")
     page.click("#tab-button-ask")
     page.wait_for_selector("#ask-start:visible")
-    assert page.is_hidden("#onboard") and grid(page)[0] == "Where are London overloading?"
+    assert page.is_hidden("#onboard") and grid(page)[0] == "Who's on top?"
     assert not errors
     ctx.close()
 
@@ -106,8 +83,10 @@ def test_a_casual_lisbon_fan_gets_lisbons_moments_first_and_the_key_plays(browse
     tap(page, "Casual fan")
     tap(page, "Goals and big moments")
     page.wait_for_selector("#ask-start:visible")
-    qs = grid(page)
-    assert qs[:2] == ["What have I missed?", "How many shots have Lisbon had?"]
+    page.wait_for_function(GRID_NAMES_LISBON)
+    qs = grid(page)  # the moments rows first, the club-slot ones about Lisbon (the club asked for)
+    assert qs[:3] == ["Who scored?", "Why did Lisbon Esportes score?", "What have I missed?"]
+    assert CHIP_REQUESTS[-1]["club"] == ["Lisbon Esportes"]
     assert page.get_attribute("#insights", "data-mode") == "key"
     page.click("#tab-button-insights")
     assert page.evaluate("document.getElementById('story-mode').value") == "key"
@@ -147,7 +126,7 @@ def test_skip_is_remembered_and_brings_the_composer(browser, site):  # noqa: F81
     page.wait_for_selector("#ask-start:visible")
     page.wait_for_selector("#ask-form:visible")
     assert json.loads(page.evaluate("localStorage.getItem('ninety.fan')")) == {"skipped": True}
-    assert grid(page)[0] == "Where are London overloading?"  # the unpersonalised grid, as before
+    assert grid(page)[0] == "What's the score?"  # unpersonalised: the server's own order
     page.reload()
     page.wait_for_selector("body[data-state=live]")
     page.click("#tab-button-ask")
@@ -167,7 +146,9 @@ def test_a_browser_that_refuses_storage_still_onboards(browser, site):  # noqa: 
     tap(page, "Analyst")
     tap(page, "Players")
     page.wait_for_selector("#ask-start:visible")
-    assert grid(page)[0] == "Who's been Lisbon's best player?"  # chosen, though nothing could be saved
+    # Chosen, though nothing could be saved: the relay measures no player row, so tactics come next.
+    page.wait_for_function(GRID_NAMES_LISBON)
+    assert grid(page)[0] == "Who's on top?" and "How are Lisbon Esportes playing?" in grid(page)
     assert not errors
     ctx.close()
 
@@ -182,8 +163,9 @@ def test_a_match_without_the_favourite_club_keeps_its_own_two_clubs(browser, sit
     tap(page, "Tactics")
     page.wait_for_selector("#ask-start:visible")
     home = page.inner_text(".home-name >> nth=0")
-    assert home != "Lisbon" and grid(page)[0] == f"Where are {home} overloading?"
+    assert home != "Lisbon" and grid(page)[0] == "Who's on top?"
     assert not any("Lisbon" in q for q in grid(page))
+    assert "club" not in CHIP_REQUESTS[-1]  # the fan's club is not in this match: never sent
     assert not errors
     ctx.close()
 

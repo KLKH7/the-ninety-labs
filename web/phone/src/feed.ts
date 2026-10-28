@@ -3,7 +3,7 @@
 // position, a card or a flow field computed from the ground-truth data (AGENTS.md: the answer key
 // is for training and grading only).
 
-import type { AnswerMessage, Flow, InsightCard, Minimap, PlayerCard, Question, RelayMessage, Team } from "./types";
+import type { AnswerMessage, Chip, ChipsMessage, Flow, InsightCard, Minimap, PlayerCard, Question, RelayMessage, Team } from "./types";
 
 /** Why the relay closed, from the API's close codes (ninety/api/companion.py, relay). */
 export type Closed = "unknown-code" | "room-full" | "expired" | "refused" | "lost" | "not-joined";
@@ -34,6 +34,8 @@ export interface Feed {
   ask(question: Question, passcode?: string | null): Promise<AnswerMessage>;
   /** The hidden-stat cards pushed so far, up to match time `tTo`. */
   insights(clip: string, tTo: number): Promise<InsightCard[]>;
+  /** The questions code answers at `t` (never past the room's playhead), the fan's club filled in. */
+  chips(code: string, t: number, club: string | null): Promise<Chip[]>;
 }
 
 /** A payload computed from the ground-truth data reached the phone; it is never shown. */
@@ -78,6 +80,7 @@ export function guarded(feed: Feed, seen: (payload: unknown) => void = () => {})
     // A card carries no positions' source of its own (its `source` is its author, code or model):
     // the Scout builds cards only from tracked facts, and the fact-checker passed each one.
     insights: async (clip, tTo) => (await feed.insights(clip, tTo)).map((c) => record(c)),
+    chips: (code, t, club) => feed.chips(code, t, club),
   };
 }
 
@@ -85,6 +88,19 @@ async function json<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(response.status, (body as { error?: string }).error ?? response.statusText);
   return body as T;
+}
+
+/** GET /api/chips on the API beside the phone (ninety/api/companion.py): only well-formed chips, a
+ * failure thrown (the caller falls back to its safe questions). The mock feed asks the same route,
+ * so a test's relay serves it and a dev build without one falls back. */
+export async function fetchChips(base: URL, code: string, t: number, club: string | null): Promise<Chip[]> {
+  const u = new URL("api/chips", base);
+  u.searchParams.set("session", code);
+  u.searchParams.set("t", String(Math.round(Math.max(0, t) * 100) / 100));
+  if (club) u.searchParams.set("club", club);
+  const body = await json<Partial<ChipsMessage>>(await fetch(u));
+  if (body.type !== "chips" || !Array.isArray(body.chips)) throw new ApiError(502, "not a chips message");
+  return body.chips.filter((c): c is Chip => !!c && typeof c.intent === "string" && typeof c.q === "string" && c.q.trim() !== "");
 }
 
 /** The companion API on this page's own origin (the API serves the phone at /phone/). */
@@ -163,5 +179,8 @@ export class HttpFeed implements Feed {
   async insights(clip: string, tTo: number): Promise<InsightCard[]> {
     const body = await json<{ cards: InsightCard[] }>(await fetch(this.url(`api/insights/${encodeURIComponent(clip)}`, { t_to: tTo })));
     return body.cards;
+  }
+  chips(code: string, t: number, club: string | null): Promise<Chip[]> {
+    return fetchChips(this.base, code, t, club);
   }
 }

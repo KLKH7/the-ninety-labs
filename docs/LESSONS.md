@@ -3686,3 +3686,18 @@ short and actionable. This file is public: no research sources, product names or
   run by live-smoke.yml once the repo secret `NINETY_DEMO_PASSCODE` is set; infra/README.md lists
   the two `az` commands that compare the deployed app with the file. `az deployment group what-if`
   shows the drift as Create or Modify rows before a provision.
+
+### 300. A suggestion the client hard-codes can offer a question the server cannot answer
+- **What happened:** the phone's Ask offered fixed question lists (`fan.ts` BANK, `main.ts`
+  `matchQuestions`): best player, furthest run, overloads, line breaks. A test checked only that each
+  one routed to some tool, not that code could answer it at that minute. With #430's per-player
+  numbers still off, a tapped "Who has run the furthest?" ended in a "can't", which breaks Kian's rule
+  that no chip leads to one.
+- **Rule:** suggestions come from whoever answers them. The phone shows `/api/chips`, the intent
+  table's questions that code answers at the playhead, and an answer's follow-ups from the same table.
+  The client may reorder them but never adds one. Offline, it offers only questions that code answers
+  at any minute (score, who's winning, possession), in the table's own words.
+- **Check:** `tests/test_phone_companion.py::test_no_fallback_chip_is_unmeasured_and_each_reads_as_its_own_row`
+  (fails with "Who is the fastest on the pitch?" added),
+  `::test_ask_s_chips_come_from_the_endpoint_at_the_playhead_with_the_fans_club` (fails when the phone
+  ignores the server's chips), and `::test_when_the_endpoint_fails_ask_offers_only_the_safe_questions`.
