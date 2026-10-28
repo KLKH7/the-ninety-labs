@@ -1115,3 +1115,35 @@ def test_the_step_budgets_are_the_measured_ones_and_fit_the_answers_limit():
     budgets = comp.companion.STEP_S
     assert budgets["plan"] + budgets["answer"] < comp.companion.TIMEOUT_S  # the match path
     assert budgets["answer"] + budgets["judge"] < comp.companion.TIMEOUT_S  # the player path
+
+
+# --- chips (lesson 297): the intent table's questions code answers by the playhead -----------------
+
+
+def test_chips_are_the_table_s_answered_by_the_playhead_never_past_it(setup, monkeypatch):
+    import gzip
+    from pathlib import Path
+
+    from ninety.agents import companion_match
+    from ninety.intel.match_insights import MatchInsights
+
+    fixture = Path(__file__).parent / "fixtures" / "ask-intents-insights-8324.json.gz"
+    mi = MatchInsights.from_dict(json.loads(gzip.decompress(fixture.read_bytes())))
+    monkeypatch.setattr(comp, "_insights", lambda clip: mi)
+    seen = []
+    real = companion_match.chips
+    monkeypatch.setattr(companion_match, "chips", lambda m, t, club=None: seen.append(t) or real(m, t, club))
+    client, _, _ = setup
+    code = pair(client)
+    show(client, code, 4.0)  # paused at 4 s; the stand-in clip is 10 s long
+    r = client.get(f"/api/chips?session={code}&t=3000")
+    body = r.json()
+    assert r.status_code == 200 and body["type"] == "chips", r.text
+    assert seen == [4.0 + comp.PLAYHEAD_SLACK_S] and body["t"] == 4.0 + comp.PLAYHEAD_SLACK_S  # clamped
+    assert body["chips"] == [{"intent": c["intent"], "q": c["q"]} for c in real(mi, body["t"])]
+    lisbon = client.get(f"/api/chips?session={code}&club=Lisbon Esportes").json()["chips"]
+    assert all("London Athletic" not in c["q"] for c in lisbon)
+    assert client.get("/api/chips?session=NOPE42").status_code == 404
+    assert client.get(f"/api/chips?session={code}&t=soon").status_code == 422
+    assert client.get(f"/api/chips?session={code}&player=h7").status_code == 422
+    assert client.get(f"/api/chips?session={code}&club=Real Madrid").status_code == 422
