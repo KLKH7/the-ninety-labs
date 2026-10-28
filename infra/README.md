@@ -192,13 +192,13 @@ NINETY_LIVE_URL="$(azd env get-value API_URL)" uv run pytest -q tests/test_live_
 Tasks), and [preprovision.sh](preprovision.sh) stops it early if a Key Vault secret or the budget
 address is missing. Set `RENDER_COMMIT` too if the render queue job should keep its commit.
 
-The pinned bundle (`replay-seed8324-match-b8bde43`, Oct 27): the demo match, seed 8324 on engine v2
+The pinned bundle (`replay-seed8324-match-947a157`, Oct 27): the demo match, seed 8324 on engine v2
 re-cut for watchability (footage hunt: 46 segments, 17.5 min, LON 1-3 LIS), from main's live path:
 vision's detected events sided by the player-ID feed (lesson 269), the offline agents, H.264/AAC
 footage with an HLS ladder (ninety/footage.py, #397, lesson 272) baked at footage.timescale 1.25
 (#413), the crowd bed at -21.6 LUFS (#416). The full sequence (identity feed, sided events, match
 insights, Scout cards, ninety-e2e and the bundle, on-air and audio checks) is the producer's
-`final-rebuild.sh`; its e2e step, at b8bde434 (main beb7f551 + #415 + #416):
+`final-rebuild.sh`; its e2e step, at main 947a1571:
 
 ```bash
 uv run ninety-e2e runs/demo-8324-final --out runs/demo-8324-bundle-final --demo --match --agents offline \
