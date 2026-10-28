@@ -64,3 +64,54 @@ A type passes only if all of these hold:
 A type that passes on 8080 gets a PR that uses the flight-on events for that type only, with
 tests that fail without it and PR #410's changes. If none passes, the numbers go in
 `docs/eval/ball-height-events.md` and the experiment stops. Hard stop 22:00 PT, 27 Oct.
+
+## Amendment 1 (before either variant was scored): variant B, "shot by outcome"
+
+Added on 2026-10-27 at the Coordinator's request, committed before any flight-on number of
+variant A or any number of variant B was computed. Variant A is everything above (today's event
+rules on flight-corrected observations). Variant B is a second shot rule, run on the same
+flight-corrected observations (flight on), graded with the same sets, matching rule and bars.
+
+**Who the keeper is.** Vision's keeper flag only (`track.Track.keeper`: a track in neither kit,
+whose mean place is inside a penalty area, `track.assign_teams` / `sides.assign`). The player-ID
+feed is not used: AGENTS.md allows the feed for identity and side only, never for an event or an
+outcome, so a feed role cannot decide a save.
+
+**A strike.** On `track.ball_path` of the flight-corrected observations, a frame i is a strike
+for side S when:
+
+- the ball's speed `events._speed_kmh(path, i)` is at least **10 m/s** (36 km/h): a struck ball
+  leaves at 10 m/s or more (events.CARRY_MPS comment, docs/eval/event-motion.md, measured);
+- `events.heads_for_goal(path, i, S)`: its line over the first SHOT_LOOK_S crosses the goal line S
+  attacks between the posts widened by SHOT_MARGIN_M, from within SHOT_MAX_M (35 m) of it (the
+  final third and the area just outside it; existing constants, not refit).
+
+Consecutive qualifying frames are one strike, at the first of them.
+
+**The window.** W = SHOT_MAX_M / 10 m/s = **3.5 s** after the strike: the longest time a strike
+at the floor speed takes to cover the farthest distance a strike may start from (derived from
+the two constants above, not fitted). For the scorebug, scorebug.LOOKBACK_S (10 s, the
+scorebug's own bound for linking a goal to its shot).
+
+**The outcome.** The first of these, after the strike and before the next strike:
+
+- (a) **keeper gains it**: within W, on at least events.MIN_SPELL_FRAMES (2) frames, the ball is
+  within CONTROL_M + RIVAL_M = **2.76 m** of a keeper track standing within PENALTY_AREA_X of the
+  goal line S attacks (CONTROL_M 1.5 m, GROUNDING P6, the ball at a player's feet or hands; RIVAL_M
+  1.26 m, the players' measured position error p90);
+- (b) **goal on the scorebug**: the first scorebug read after the strike that shows S's score
+  above the last read before it, within LOOKBACK_S;
+- (c) **over that goal line**: within W, events.out_of_play fires with the ball beyond the goal
+  line S attacks (x beyond it by BALL_R) and inside the touchlines (0 <= y <= 68).
+
+No outcome, no shot. Detected types:
+
+| Type | Detected (variant B) | Truth (unchanged) |
+|---|---|---|
+| shot | any of (a), (b), (c) | `shot` |
+| on target | (a) or (b) | `shot` with outcome `on_target` or `goal` |
+| save (keeper catch) | (a) with the ball's median speed over its frames at the keeper <= CARRY_MPS (4 m/s, events.py: below it the ball moves with the player) | `shot` with outcome `on_target` |
+
+The event's time is the strike frame's time, its team S. Out of play is not part of variant B.
+The bars, sets and order are those above; A and B are reported separately, and only a type that
+passes on held-out 8080 may ship.
