@@ -1,26 +1,21 @@
-// The wind map: each team's movement over the last WINDOW_S seconds, drawn as particles drifting
-// through its flow field (the API's `flow` message: mean player velocity per cell, computed in
-// ninety/intel/window.py). Our own code, no library.
+// The wind map: each team's movement over the last WINDOW_S seconds, drawn as a field of flow
+// lines on a fine lattice, smoothed between the cells of its flow field (the API's `flow` message:
+// mean player velocity per cell, computed in ninety/intel/window.py), each line fading in from its
+// tail, a light pulse running along it in the direction of play. Our own code, no library.
 //
 // It is the first thing to cut (the plan's cut order), so it stands alone: main.ts loads this
 // module only when the viewer turns the wind map on, and nothing else imports it. Deleting this
 // file and the `import("./wind")` in main.ts removes it.
 
-import { COLORS, type View, attacksRight, zoneFor } from "./pitch";
+import { COLORS, type View, attacksRight, tint, zoneFor } from "./pitch";
 import { type Flow, PITCH_X, PITCH_Y, type Team, teams } from "./types";
 
 export const WINDOW_S = 30; // design: about one phase of play
-const PER_TEAM = 140; // particles; design: enough to read the flow, few enough to see the dots
-const SPEED_UP = 5; // design: real running speeds (1 to 7 m/s) drift too slowly to read at a glance
-const LIFE_S = [1.2, 2.6] as const;
-const STILL_SPEED = 0.4; // m/s; design: slower than a walk reads as standing, so it draws no streak
-
-interface Particle {
-  x: number;
-  y: number;
-  age: number;
-  life: number;
-}
+export const LATTICE_M = 6; // design: one flow line every 6 m, about the gap between two players
+const METRES_PER_MS = 1.1; // design: a line's length per m/s, so a sprint (7 m/s) spans about two lattice steps
+const STILL_SPEED = 0.4; // m/s; design: slower than a walk reads as standing, so it draws no line
+const PULSE_S = 1.6; // design: a pulse runs tail to head in about the time a player covers the line
+const FRAME_MS = 33; // design: 30 frames a second is smooth for a pulse and spares a phone's battery
 
 /** The velocity at (x, y), blended from the centres of the cells around it that anyone crossed. */
 export function sample(f: Flow, x: number, y: number): [number, number] | null {
@@ -81,39 +76,12 @@ export function describe(f: Flow): string {
 
 export class WindMap {
   private flows = new Map<Team, Flow>();
-  private particles = new Map<Team, Particle[]>();
   private last = 0;
 
-  constructor(
-    private readonly canvasView: () => View,
-    private readonly random: () => number = Math.random,
-  ) {}
+  constructor(private readonly canvasView: () => View) {}
 
   set(flow: Flow) {
     this.flows.set(flow.team, flow);
-    if (!this.particles.has(flow.team)) {
-      this.particles.set(
-        flow.team,
-        Array.from({ length: PER_TEAM }, () => this.spawn(flow)),
-      );
-    }
-  }
-
-  /** A new particle in a cell the team crossed, more often where they crossed more. */
-  private spawn(f: Flow): Particle {
-    const total = f.count.reduce((a, b) => a + b, 0);
-    let pick = this.random() * total;
-    let k = 0;
-    while (k < f.count.length - 1 && pick >= f.count[k]) pick -= f.count[k++];
-    const cw = PITCH_X / f.nx;
-    const ch = PITCH_Y / f.ny;
-    const life = LIFE_S[0] + this.random() * (LIFE_S[1] - LIFE_S[0]);
-    return {
-      x: ((k % f.nx) + this.random()) * cw,
-      y: (Math.floor(k / f.nx) + this.random()) * ch,
-      age: this.random() * life,
-      life,
-    };
   }
 
   clear() {
@@ -121,74 +89,82 @@ export class WindMap {
     v.ctx.clearRect(0, 0, v.w, v.h);
   }
 
-  /** One animation frame: fade the trails, move every particle, draw its step. */
-  step(now: number) {
-    const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 1 / 60;
-    this.last = now;
-    const v = this.canvasView();
-    const { ctx, X, Y } = v;
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.fillStyle = "rgba(0,0,0,0.08)";
-    ctx.fillRect(0, 0, v.w, v.h);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.lineWidth = 1.8;
-    ctx.lineCap = "round";
-    for (const [team, flow] of this.flows) {
-      ctx.strokeStyle = team === "home" ? COLORS.home : COLORS.away;
-      const ps = this.particles.get(team)!;
-      ctx.beginPath();
-      for (let i = 0; i < ps.length; i++) {
-        const p = ps[i];
-        const vel = sample(flow, p.x, p.y);
-        p.age += dt;
-        if (!vel || Math.hypot(vel[0], vel[1]) < STILL_SPEED || p.age > p.life || p.x < 0 || p.y < 0 || p.x > PITCH_X || p.y > PITCH_Y) {
-          ps[i] = this.spawn(flow);
-          continue;
+  /** The flow lines: on a LATTICE_M lattice, the field's velocity blended from the cells around
+   * each point (sample), every team in its club's colour lightened to read on the grass. */
+  lines(): { team: Team; x: number; y: number; ux: number; uy: number; speed: number }[] {
+    const out: { team: Team; x: number; y: number; ux: number; uy: number; speed: number }[] = [];
+    for (const [team, f] of this.flows) {
+      for (let x = LATTICE_M / 2; x < PITCH_X; x += LATTICE_M) {
+        for (let y = LATTICE_M / 2; y < PITCH_Y; y += LATTICE_M) {
+          const vel = sample(f, x, y);
+          if (!vel) continue;
+          const speed = Math.hypot(vel[0], vel[1]);
+          if (speed < STILL_SPEED) continue;
+          out.push({ team, x, y, ux: vel[0] / speed, uy: vel[1] / speed, speed });
         }
-        const nx = p.x + vel[0] * SPEED_UP * dt;
-        const ny = p.y + vel[1] * SPEED_UP * dt;
-        ctx.moveTo(X(p.x), Y(p.y));
-        ctx.lineTo(X(nx), Y(ny));
-        p.x = nx;
-        p.y = ny;
       }
-      ctx.stroke();
     }
+    return out;
   }
 
-  /** Reduced motion, and an answer's picture: one still arrow per crossed cell, its length the
-   * cell's speed. `clear` false draws over what the canvas holds (the pitch). */
+  /** One animation frame: the field, with the pulse at this moment's phase. */
+  step(now: number) {
+    if (this.last && now - this.last < FRAME_MS) return;
+    this.last = now;
+    this.draw(((now / 1000) % PULSE_S) / PULSE_S, true);
+  }
+
+  /** Reduced motion, and an answer's picture: the same field, still. `clear` false draws over what
+   * the canvas holds (the pitch). */
   still(clear = true) {
+    this.draw(null, clear);
+  }
+
+  private draw(phase: number | null, clear: boolean) {
     const v = this.canvasView();
     const { ctx, X, Y } = v;
     if (clear) ctx.clearRect(0, 0, v.w, v.h);
-    ctx.lineWidth = 1.8;
-    for (const [team, f] of this.flows) {
-      ctx.strokeStyle = team === "home" ? COLORS.home : COLORS.away;
-      const cw = PITCH_X / f.nx;
-      const ch = PITCH_Y / f.ny;
-      f.count.forEach((c, k) => {
-        const ux = f.vx[k];
-        const uy = f.vy[k];
-        if (!c || ux === null || uy === null) return;
-        const cx = ((k % f.nx) + 0.5) * cw;
-        const cy = (Math.floor(k / f.nx) + 0.5) * ch;
-        const len = Math.min(cw * 0.9, Math.hypot(ux, uy) * 1.4);
-        if (len < 0.4) return;
-        const m = Math.atan2(uy, ux);
-        const x0 = X(cx);
-        const y0 = Y(cy);
-        const x1 = X(cx + Math.cos(m) * len);
-        const y1 = Y(cy + Math.sin(m) * len);
-        const a = Math.atan2(y1 - y0, x1 - x0); // on the canvas, where y runs the other way
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.lineTo(x1 - Math.cos(a - 0.5) * 5, y1 - Math.sin(a - 0.5) * 5);
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x1 - Math.cos(a + 0.5) * 5, y1 - Math.sin(a + 0.5) * 5);
-        ctx.stroke();
-      });
+    ctx.lineCap = "round";
+    const ink = { home: tint(COLORS.home, 0.45), away: tint(COLORS.away, 0.35) };
+    for (const l of this.lines()) {
+      const len = Math.min(LATTICE_M * 1.9, l.speed * METRES_PER_MS);
+      // Centred on its lattice point, so neighbouring lines read as one stream.
+      const x0 = X(l.x - (l.ux * len) / 2);
+      const y0 = Y(l.y - (l.uy * len) / 2);
+      const x1 = X(l.x + (l.ux * len) / 2);
+      const y1 = Y(l.y + (l.uy * len) / 2);
+      const strength = Math.min(1, 0.35 + l.speed / 6); // design: faster flow, stronger line (6 m/s full)
+      const color = ink[l.team];
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, `${color}00`);
+      if (phase !== null) {
+        const p = Math.min(0.9, Math.max(0.1, phase));
+        g.addColorStop(Math.max(0.05, p - 0.15), alpha(color, 0.6 * strength));
+        g.addColorStop(p, alpha(tint(color, 0.5), Math.min(1, strength + 0.15)));
+        g.addColorStop(Math.min(0.95, p + 0.15), alpha(color, 0.8 * strength));
+      }
+      g.addColorStop(1, alpha(color, strength));
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.4 + l.speed * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      // A small head, so the way of play reads at a glance.
+      const a = Math.atan2(y1 - y0, x1 - x0); // on the canvas, where y runs the other way
+      const h = 3 + l.speed * 0.6;
+      ctx.fillStyle = alpha(color, strength);
+      ctx.beginPath();
+      ctx.moveTo(x1 + Math.cos(a) * 1.5, y1 + Math.sin(a) * 1.5);
+      ctx.lineTo(x1 - Math.cos(a - 0.45) * h, y1 - Math.sin(a - 0.45) * h);
+      ctx.lineTo(x1 - Math.cos(a + 0.45) * h, y1 - Math.sin(a + 0.45) * h);
+      ctx.closePath();
+      ctx.fill();
     }
   }
+}
+
+/** "#rrggbb" with an alpha, as "#rrggbbaa". */
+function alpha(hex: string, a: number): string {
+  return `${hex}${Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, "0")}`;
 }
