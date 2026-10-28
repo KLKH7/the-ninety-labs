@@ -46,6 +46,24 @@ export interface PlayerCard {
   peak_kmh: number;
   distance_m: number;
   source: Source;
+  /** The match so far of the player the Player ID feed names on this track, over every track it
+   * names his, to the end of minute running_to_minute (ninety/intel/player_stats.py); absent when
+   * the feed names nobody there. A figure is null when withheld, its reason in `withheld`. */
+  player_total?: PlayerTotal;
+}
+
+export interface PlayerTotal {
+  player: string;
+  name: string;
+  source: "id_feed";
+  source_label: string;
+  running_to_minute: number;
+  footage_s: number;
+  tracked_s: number;
+  footage_coverage: number;
+  distance_m: number | null;
+  top_kmh: number | null;
+  withheld: Record<string, string>;
 }
 
 export interface Flow {

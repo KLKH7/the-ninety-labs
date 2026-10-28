@@ -586,6 +586,79 @@ def test_a_player_card_validates_and_carries_the_window_facts(setup):
     assert client.get("/api/card/seed7/h7?t_to=10&x=1").status_code == 422
 
 
+def stitched_track():
+    """One home player the tracker loses at 70 s and finds again at 72 s on a new track (h-t7, then
+    h-t9), running at 3 m/s; and an away track the Player ID feed names nobody on."""
+    frames = []
+    for i in range(150 * 25 + 1):
+        t = round(i / 25, 3)
+        tt = t % 40
+        x = 20.0 + 3.0 * (tt if tt < 20 else 40 - tt)
+        players = [{"id": "a-t5", "team": "away", "x": round(x, 3), "y": 50.0}]
+        if t < 70 or t >= 72:
+            players.append({"id": "h-t7" if t < 70 else "h-t9", "team": "home", "x": round(x, 3), "y": 30.0})
+        frames.append({"frame": i, "t": t, "source": "tracked", "ball": {"x": 52.5, "y": 34.0},
+                       "players": players})
+    return Track("seed7", tuple(frames), (0,))
+
+
+@pytest.fixture
+def stitched(monkeypatch):
+    return stitched_client(monkeypatch)
+
+
+def stitched_client(monkeypatch) -> TestClient:
+    """The API over stitched_track, with the feed naming h-t7 and h-t9 one player (LON07), as the
+    8324 insights name several tactical tracks each player's (identity_tracks), and a-t5 nobody."""
+    import functools
+    from types import SimpleNamespace
+
+    from ninety.intel import player_stats
+    from ninety.intel.match_insights import MatchInsights
+
+    tr = stitched_track()
+    named = {k: {"player": "LON07", "name": "Sam Test", "share": 1.0} for k in ("h-t7", "h-t9")}
+    run = player_stats.running(tr.frames, named)
+    body = {"source": "id_feed", "label": "Player ID feed",
+            "roster": [{"player": "LON07", "name": "Sam Test", "number": 7, "team": "home",
+                        "position": "CM"}],
+            "running": run["rows"], "footage": {str(k): v for k, v in run["footage"].items()}, "events": []}
+    monkeypatch.setattr(comp, "_track", lambda clip: tr)
+    insights = SimpleNamespace(identity=named, per_player=body)
+    insights.track_player_stats = functools.partial(MatchInsights.track_player_stats, insights)
+    monkeypatch.setattr(comp, "_insights", lambda clip: insights)
+    app = comp.Companion(passcode="", live=None, clock=Clock(), allow_truth=True)
+    return TestClient(api.build("k" * 64, app))
+
+
+def test_a_named_players_card_carries_his_match_so_far_across_a_lost_track(stitched):
+    """Kian, Oct 27: the card's distance reset whenever the tracker lost a player. The Player ID feed
+    names both tracks his, so the card carries his total over both: it never falls as t grows across
+    the change, and counts only minutes ended by t (never a later one)."""
+    totals = []
+    for t in range(5, 151, 5):
+        if 70 <= t < 72:
+            continue
+        card = stitched.get(f"/api/card/seed7/{'h-t7' if t < 70 else 'h-t9'}?t_to={t}").json()
+        MESSAGE.validate(card)
+        total = card["player_total"]
+        assert total["source"] == "id_feed" and total["name"] == "Sam Test"
+        assert total["running_to_minute"] == t // 60
+        if t < 60:  # no minute has ended: nothing counted yet, withheld with its reason
+            assert total["distance_m"] is None and total["withheld"]["distance_m"]
+            continue
+        totals.append((t, card["distance_m"], total["distance_m"]))
+    metres = [m for _, _, m in totals]
+    assert metres == sorted(metres)  # never falls, across the lost track
+    by_t = {t: (track_m, m) for t, track_m, m in totals}
+    assert by_t[60][1] == by_t[115][1] > 150  # minute 2 is not counted before it ends
+    assert by_t[100][0] < by_t[65][0]  # the new track's own distance restarted ...
+    assert by_t[100][1] >= by_t[65][1]  # ... his total did not
+    unnamed = stitched.get("/api/card/seed7/a-t5?t_to=100").json()
+    MESSAGE.validate(unnamed)
+    assert "player_total" not in unnamed  # the feed names nobody there: one track's numbers only
+
+
 # --- questions -------------------------------------------------------------------------------------
 
 

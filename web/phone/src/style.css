@@ -104,6 +104,7 @@ ion-modal { --border-radius: 20px; }
 .stat .value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat + .stat { border-left: 1px solid var(--hairline); padding-left: 12px; }
 .stat .label { font-size: 13px; color: var(--text-2); }
+.so-far-note { margin: 0; font-size: 13px; color: var(--text-2); }
 #player ion-list, #how-body ion-list { margin: 16px 0 0; background: transparent; }
 #player ion-list-header, #how-body ion-list-header { padding-left: 20px; min-height: 32px; }
 #player .pad-in, #how-body .pad-in { padding: 0 20px 8px; }
