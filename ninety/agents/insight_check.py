@@ -96,6 +96,8 @@ UNIT_WORDS = {
     "long passes": ("long passes", "long pass"),
     "degrees": ("degrees", "degree"),
     "m²": ("m²", "m2", "square metres", "square meters"),
+    "shots on target": ("shots on target", "shot on target"),
+    "set pieces": ("set pieces", "set piece"),
 }
 # What a word says the claim is about (case-insensitive, whole words). The lists are design: the
 # plain words fans and pundits use for each insight.
@@ -335,6 +337,10 @@ def check(
     # match_insights) is said by that name; vision's own record of him may be unsure.
     said_names |= {f["scorer_is"] for f in cited
                    if f.get("scorer_source") == "id_feed" and f.get("scorer_is")}
+    # A per-player figure keyed by the player-ID feed's name (ninety/intel/player_stats.py) is said by
+    # that name, as the scorer's is: the fact names him and says where the name comes from.
+    said_names |= {n for f in cited if f.get("name_source") == "id_feed"
+                   for n in (f.get("player_name"), *(f.get("player_names") or ())) if n}
     unsure_names = {w["sheet_name"] for w in about if w.get("sheet_name") and not w.get("name")}
     for name in sorted(set(sheet_names)):
         if not re.search(rf"\b{re.escape(name)}\b", claim.text):
@@ -432,7 +438,8 @@ def check(
 
     # A possession share missed its gate and is said only with its measured error (lesson 285): a
     # sentence citing one carries "give or take N points", N the fact's own (the number check above).
-    shares = [f for f in cited if f.get("metric") == "possession_share" and f.get("value") is not None]
+    shares = [f for f in cited if f.get("metric") in ("possession_share", "ask_possession_compare")
+              and f.get("value") is not None]
     if shares and not re.search(rf"\bgive or take {_N} points\b", text):
         reasons.append("a possession share is said with its error: 'give or take N points'")
 

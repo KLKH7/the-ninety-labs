@@ -270,6 +270,9 @@ class Answer:
     # The direct answer in a few words (companion_match.headline): a name, a number with its unit
     # or a place, by the question's kind; computed by code from the cited facts, never by a model.
     headline: str | None = None
+    # How the answer's figures are made, for the phone's "How we know" tab: the method, and the hit
+    # rate where one is measured (docs/EVALUATION.md); never in `text` (Kian, Oct 27). Fixed by code.
+    how: str | None = None
 
     def __post_init__(self) -> None:
         _require(self.status in get_args(AnswerStatus), f"unknown answer status {self.status!r}")

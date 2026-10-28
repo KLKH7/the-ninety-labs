@@ -769,6 +769,7 @@ def answer_json(answer: Answer) -> dict:
         "spoken": answer.spoken,
         "follow_ups": list(answer.follow_ups),
         "headline": answer.headline,
+        "how": answer.how,
     }
 
 

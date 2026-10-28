@@ -19,6 +19,7 @@
     "names": { "type": ["object", "null"], "additionalProperties": { "type": "string" }, "description": "Optional: how to label each player the visual or text shows, by track id (a gated team-sheet name or a role, never an id)." },
     "spoken": { "type": ["string", "null"], "description": "Optional: the answer as it is spoken to a screen-reader user or by the Describer, with no visual reference." },
     "follow_ups": { "type": "array", "items": { "type": "string" }, "maxItems": 3, "description": "Optional: suggested next questions." },
-    "headline": { "type": ["string", "null"], "maxLength": 48, "description": "Optional: the direct answer in a few words, by code from the question's kind and the cited facts: a name for who or which (the role when the name is not confident), a number with its unit for how many or how fast, a place for where; the supporting number stays in text. Null: the phone shows none." }
+    "headline": { "type": ["string", "null"], "maxLength": 48, "description": "Optional: the direct answer in a few words, by code from the question's kind and the cited facts: a name for who or which (the role when the name is not confident), a number with its unit for how many or how fast, a place for where; the supporting number stays in text. Null: the phone shows none." },
+    "how": { "type": ["string", "null"], "maxLength": 600, "description": "Optional: how the answer's figures are made, for the phone's How-we-know tab: the method, and the hit rate where docs/EVALUATION.md measures one. Never part of text. Null: the phone shows none." }
   }
 }

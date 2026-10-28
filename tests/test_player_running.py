@@ -328,13 +328,23 @@ def test_a_question_asking_no_place_is_never_answered_with_the_zone(q):
     # A model may plan the physical tool for a question that names no figure and no place: while
     # every running figure is held, the zone is not its answer.
     r = _zone_reply(_standin(), q)
-    assert r.source == "code" and r.answer.status == "unanswerable" and r.answer.headline is None
+    assert r.source == "code" and r.answer.headline is None and "most often in" not in r.answer.text
+    if q == "Who has been the best player?":
+        # Lesson 297 (Kian's voice): the intent table's best row answers with the closest measured fact,
+        # whose passes took out more opponents, cited, never the zone and never a "can't".
+        assert r.answer.status == "verified" and any(e.startswith("ask:bypassed") for e in r.answer.evidence)
+        assert "opponents out of the game" in r.answer.text and "can't" not in r.answer.text
+    else:
+        assert r.answer.status == "unanswerable"
 
 
 def test_once_a_figure_is_said_a_question_asking_no_figure_and_no_place_is_still_not_answered(monkeypatch):
     monkeypatch.setattr(physical, "labels", lambda: {"distance_pct": 10, "top_kmh": 1, "sprints_pct": 10})
     r = _zone_reply(_standin(), "Who has been the best player?")
-    assert r.source == "code" and r.answer.status == "unanswerable"
+    # Lesson 297: the best row's closest measured fact (whose passes took out more opponents), never a
+    # running figure or the zone, even once a figure is said.
+    assert r.source == "code" and any(e.startswith("ask:bypassed") for e in r.answer.evidence)
+    assert "km" not in r.answer.text and "most often in" not in r.answer.text
 
 
 @pytest.mark.parametrize("who", ["Alex Gumble", "Alex Purrow", "Mateo Vinnet", "Ilya Sarrow"])
