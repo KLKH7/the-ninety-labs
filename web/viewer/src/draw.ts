@@ -16,9 +16,18 @@ const KIND_LABEL: Record<string, string> = {
   audio_description: "DESCRIBED",
 };
 
-const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, sans-serif'; // style.css --g-font
 const INK = "#ffffff";
 const PANEL = "rgba(0, 0, 0, 0.82)";
+/** The scorebug's and the match-stats card's own colours (style.css --g-bug, --g-tab), a touch
+ * translucent: white type on them stays above 12:1 over any footage (WCAG AA asks 4.5:1). */
+const BUG = "rgba(13, 14, 18, 0.9)";
+const BUG_TAB = "rgba(28, 29, 34, 0.94)";
+/** Broadcast sizes, in px at a 1920 by 1080 picture (as style.css --v): a slim lower third, the
+ * type of a league's on-air graphics, not a subtitle wall (Kian, Oct 27). */
+const CAPTION_PX = 28, INSIGHT_PX = 20, LABEL_PX = 13;
+/** Title-safe: graphics stay inside the middle 90% of the picture (EBU R 95). */
+const TITLE_SAFE = 0.05;
 const ACCENT = "#ffffff"; // verified: strict Apple, no accent colour (the words say which)
 const TAG = "rgba(235, 235, 245, 0.6)"; // unverified, and the kind label's pill
 
@@ -41,6 +50,18 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, r);
   ctx.fill();
+}
+
+/** A rounded panel with its check down the left edge, as the stats card's side bar, kept inside the corners. */
+function panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, edge: string, ew: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+  ctx.clip();
+  ctx.fillStyle = edge;
+  ctx.fillRect(x, y, ew, h);
+  ctx.restore();
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
@@ -88,46 +109,58 @@ export function drawDetections(ctx: CanvasRenderingContext2D, frame: FrameDetect
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function drawLowerThird(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number, H: number) {
-  const x = 56 - (1 - a) * 40, y = H - 128, h = 64, pad = 20;
+  const u = W / 1920, safe = W * TITLE_SAFE;
+  const h = 46 * u, pad = 16 * u, x = safe - (1 - a) * 40 * u, y = H * (1 - TITLE_SAFE) - h - 24 * u;
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.font = `700 18px ${FONT}`;
+  ctx.font = `700 ${LABEL_PX * u}px ${FONT}`;
   const label = KIND_LABEL[cue.kind] ?? cue.kind.toUpperCase();
   const lw = ctx.measureText(label).width + pad * 2;
-  ctx.font = `600 28px ${FONT}`;
-  const tw = Math.min(ctx.measureText(cue.text).width, W - x - lw - 120) + pad * 2;
-  ctx.fillStyle = INK; // the kind's label: a white pill, black type
-  roundRect(ctx, x, y, lw, h, 6);
-  ctx.fillStyle = PANEL;
-  roundRect(ctx, x + lw, y, tw, h, 6);
-  ctx.fillStyle = "#000";
-  ctx.font = `700 18px ${FONT}`;
+  ctx.font = `600 ${22 * u}px ${FONT}`;
+  const tw = Math.min(ctx.measureText(cue.text).width, W - 2 * safe - lw - pad * 2) + pad * 2;
+  ctx.fillStyle = BUG_TAB; // the kind's label: the bug's tab, its type quiet
+  roundRect(ctx, x, y, lw + tw, h, 8 * u);
+  ctx.fillStyle = BUG;
+  roundRect(ctx, x + lw, y, tw, h, 8 * u);
+  ctx.fillStyle = TAG;
+  ctx.font = `700 ${LABEL_PX * u}px ${FONT}`;
   ctx.textBaseline = "middle";
   ctx.fillText(label, x + pad, y + h / 2);
   ctx.fillStyle = INK;
-  ctx.font = `600 28px ${FONT}`;
+  ctx.font = `600 ${22 * u}px ${FONT}`;
   ctx.fillText(sentence(cue.text), x + lw + pad, y + h / 2, tw - pad * 2);
   ctx.restore();
 }
 
-function drawInsight(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number) {
-  const w = 440, pad = 22, x = W - w - 40 + (1 - a) * 40, y = 40;
+/** The fact-checked insight, top right in title-safe, as the match-stats card: a dark header strip
+ * (its check) over the line, two lines at most. */
+function drawInsight(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number, H: number) {
+  const u = W / 1920, pad = 16 * u, size = INSIGHT_PX * u, head = 28 * u, lead = size * 1.3;
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.font = `600 26px ${FONT}`;
-  const lines = wrap(ctx, cue.text, w - pad * 2);
-  const h = 58 + lines.length * 34 + pad;
-  ctx.fillStyle = PANEL;
-  roundRect(ctx, x, y, w, h, 10);
+  ctx.font = `600 ${size}px ${FONT}`;
+  const lines = wrap(ctx, cue.text, 520 * u);
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
+  const h = head + lines.length * lead + pad;
+  const x = W * (1 - TITLE_SAFE) - w + (1 - a) * 40 * u, y = H * (24 / 720); // the bug's own top line (render.js layoutBug)
+  ctx.fillStyle = BUG;
+  panel(ctx, x, y, w, h, 8 * u, cue.verified ? ACCENT : TAG, 4 * u);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 8 * u);
+  ctx.clip();
+  ctx.fillStyle = BUG_TAB;
+  ctx.fillRect(x + 4 * u, y, w, head);
+  ctx.restore();
   ctx.fillStyle = cue.verified ? ACCENT : TAG;
-  roundRect(ctx, x, y, 6, h, 3);
-  ctx.font = `700 16px ${FONT}`;
-  ctx.textBaseline = "top";
+  ctx.font = `700 ${LABEL_PX * u}px ${FONT}`;
+  ctx.textBaseline = "middle";
   const label = cue.verified ? "✓ FACT-CHECKED" : "UNVERIFIED";
-  ctx.fillText(cue.fallback ? `${label} · FALLBACK` : label, x + pad, y + pad);
+  ctx.fillText(cue.fallback ? `${label} · FALLBACK` : label, x + pad, y + head / 2);
   ctx.fillStyle = INK;
-  ctx.font = `600 26px ${FONT}`;
-  lines.forEach((line, i) => ctx.fillText(line, x + pad, y + 54 + i * 34));
+  ctx.font = `600 ${size}px ${FONT}`;
+  ctx.textBaseline = "top";
+  lines.forEach((line, i) => ctx.fillText(line, x + pad, y + head + pad * 0.5 + i * lead));
   ctx.restore();
 }
 
@@ -146,26 +179,49 @@ function drawTag(ctx: CanvasRenderingContext2D, cue: Cue, a: number) {
   ctx.restore();
 }
 
-/** The spoken description as a large caption for low-vision fans, sitting across the frame
- * where the sound is (its `pan`), never off the edge. */
+export interface CaptionBox {
+  x: number; y: number; w: number; h: number;
+  size: number;
+  lines: string[];
+}
+
+/** Where the spoken description's caption sits: a slim broadcast lower third (CAPTION_PX at 1080
+ * lines), one line wherever it fits, across the frame where the sound is (its `pan`), inside
+ * title-safe, never off the edge. Read by tests (window.ninetyDraw). */
+export function captionBox(measure: (s: string) => number, text: string, pan: number, W: number, H: number): CaptionBox {
+  const u = W / 1920, size = CAPTION_PX * u, padX = 20 * u, padY = 10 * u, safe = W * TITLE_SAFE;
+  // One line up to about 85 characters (every line the 8324 bundle has); longer wraps, never shrinks or cuts.
+  const room = Math.min(W * 0.62, W - 2 * safe - padX * 2);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && measure(next) > room) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  const w = Math.min(W - 2 * safe, Math.max(...lines.map(measure), 0) + padX * 2);
+  const h = lines.length * size * 1.3 + padY * 2;
+  const centre = W / 2 + Math.max(-1, Math.min(1, pan)) * (W / 2 - w / 2 - safe);
+  const x = Math.max(safe, Math.min(W - w - safe, centre - w / 2));
+  // Bottom of title-safe, lifted clear of the player's scrub bar.
+  const y = H * (1 - TITLE_SAFE) - h - 24 * u;
+  return { x, y, w, h, size, lines };
+}
+
 function drawCaption(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number, H: number) {
-  const pad = 24, size = Math.round(H / 18);
   ctx.save();
   ctx.globalAlpha = a;
-  ctx.font = `700 ${size}px ${FONT}`;
-  const lines = wrap(ctx, cue.text, W * 0.6);
-  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
-  const h = lines.length * size * 1.25 + pad * 1.5;
-  const centre = W / 2 + (cue.pan ?? 0) * (W / 2 - w / 2 - 40);
-  const x = Math.max(40, Math.min(W - w - 40, centre - w / 2));
-  const y = H - h - 48;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
-  roundRect(ctx, x, y, w, h, 10);
-  ctx.fillStyle = cue.verified ? ACCENT : TAG;
-  roundRect(ctx, x, y, w, 6, 3);
+  const u = W / 1920;
+  ctx.font = `600 ${CAPTION_PX * u}px ${FONT}`;
+  const b = captionBox((s) => ctx.measureText(s).width, sentence(cue.text), cue.pan ?? 0, W, H);
+  ctx.fillStyle = BUG;
+  panel(ctx, b.x, b.y, b.w, b.h, 8 * u, cue.verified ? ACCENT : TAG, 4 * u);
   ctx.fillStyle = INK;
-  ctx.textBaseline = "top";
-  lines.forEach((line, i) => ctx.fillText(line, x + pad, y + pad * 0.9 + i * size * 1.25));
+  ctx.textBaseline = "middle";
+  b.lines.forEach((line, i) => ctx.fillText(line, b.x + 20 * u, b.y + 10 * u + (i + 0.5) * b.size * 1.3));
   ctx.restore();
 }
 
@@ -192,7 +248,7 @@ export function drawCues(ctx: CanvasRenderingContext2D, cues: Cue[], o: DrawOpti
     const a = presence(cue, o.t, o.reduceMotion);
     if (cue.anchor) drawTag(ctx, cue, a);
     else if (cue.kind === "audio_description") drawCaption(ctx, cue, a, W, H);
-    else if (cue.slot === "top_right") drawInsight(ctx, cue, a, W);
+    else if (cue.slot === "top_right") drawInsight(ctx, cue, a, W, H);
     else drawLowerThird(ctx, cue, a, W, H);
   }
   const fallback = (o.onAir ?? cues).find((c) => c.fallback && c.kind !== "insight");

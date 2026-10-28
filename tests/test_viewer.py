@@ -169,6 +169,37 @@ def test_reduced_motion_is_on_when_the_system_asks(browser, site):
     assert not errors
 
 
+def test_the_described_caption_is_a_slim_lower_third_inside_title_safe(browser, site):
+    """Audio description's caption as a broadcast lower third (Kian, Oct 27): about 28 px type at 1080
+    lines, one line where it fits, inside title-safe (EBU R 95: the middle 90%), placed by its pan,
+    and a long line wraps rather than leaving the picture."""
+    page, errors = open_viewer(browser, site)
+    W, H = 1920, 1080
+
+    def box(text, pan, w=W, h=H):  # type about 14 px a character at 1080 lines
+        measure = f"(s) => s.length * {w} / 1920 * 14"
+        return page.evaluate(f"window.ninetyDraw.captionBox({measure}, {json.dumps(text)}, {pan}, {w}, {h})")
+
+    short = "Goal! Ben Vomble scores for Lisbon, on the left. It's 1–1."
+    mid = box(short, 0)
+    assert 26 <= mid["size"] <= 30 and mid["lines"] == [short]
+    assert mid["h"] < 0.07 * H  # slim: one line, not a subtitle wall
+    left, right = box(short, -1), box(short, 1)
+    assert left["x"] < mid["x"] < right["x"]
+    # Hard left and hard right sit on title-safe's edges; centre is centred.
+    assert left["x"] == pytest.approx(0.05 * W) and right["x"] + right["w"] == pytest.approx(0.95 * W)
+    assert mid["x"] + mid["w"] / 2 == pytest.approx(W / 2)
+    line = "The pass from Isaac Thinton is cut out by a Lisbon player, in the middle, near side."
+    long = f"{line} {line}"
+    for b in (left, right, mid, box(long, -1), box(long, 1), box(long, 0, 1280, 720)):
+        w, h = (1280, 720) if b["size"] < 20 else (W, H)
+        assert 0.05 * w - 1e-6 <= b["x"] and b["x"] + b["w"] <= 0.95 * w + 1e-6
+        assert 0.05 * h <= b["y"] and b["y"] + b["h"] <= 0.95 * h + 1e-6
+    lines = box(long, 0)["lines"]
+    assert len(lines) == 2 and " ".join(lines) == long  # wrapped, every word kept
+    assert not errors
+
+
 def narrator(page) -> dict:
     return page.evaluate("({...window.ninetyNarrator.state})")
 
