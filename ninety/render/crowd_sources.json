@@ -1,0 +1,40 @@
+{
+  "about": "The recorded crowd's inputs (ninety/render/crowd_mix.py). The recordings are build inputs kept out of git: each is checked against its sha256 here before use. Times are seconds of the file. Every stretch not listed under bed or reactions is unused; 'excluded' names the ones held back on purpose.",
+  "sources": [
+    {
+      "name": "a829456",
+      "file": "a829456.wav",
+      "title": "CrwdReac Soccer Millerntor Stadium Crowd Reaction Mood Waves 01",
+      "author": "itmightgetloud (Philipp Feit)",
+      "url": "https://freesound.org/people/itmightgetloud/sounds/829456/",
+      "licence": "CC0-1.0",
+      "sha256": "6b7b66ba987efa49208ef3e650fa711501db305a0d673571fd0258a3c0f6d7d5",
+      "reactions": {
+        "roar": [[24.5, 25.9, 40.0], [44.8, 46.1, 60.0], [109.0, 109.9, 124.0]],
+        "ooh": [[124.0, 126.0, 136.0], [166.5, 169.5, 178.0], [182.5, 184.1, 193.0]],
+        "lift": [[233.5, 235.0, 241.0], [182.5, 184.1, 190.0]]
+      },
+      "excluded": [
+        [0.0, 24.0, "starts mid-roar, no onset"],
+        [73.0, 109.0, "rhythmic clapping, likely a chant: possible words (to confirm)"],
+        [149.0, 163.0, "sustained level, possibly singing: possible words (to confirm)"],
+        [194.0, 233.0, "sustained level, possibly singing: possible words (to confirm)"]
+      ]
+    },
+    {
+      "name": "b868982",
+      "file": "b868982.wav",
+      "title": "Norwegian football match, soccer game ambience (XY to ORTF, AB and binaural)",
+      "author": "vogyik",
+      "url": "https://freesound.org/people/vogyik/sounds/868982/",
+      "licence": "CC0-1.0",
+      "sha256": "66813ced4e730a960d7c54f656b9334ff3f50383a6136a276defc5981ca44048",
+      "bed": [[0.6, 20.4], [23.6, 42.8], [46.8, 65.8], [69.8, 89.4]],
+      "excluded": [
+        [20.4, 23.6, "silence between mic setups"],
+        [42.8, 46.8, "silence between mic setups"],
+        [65.8, 69.8, "silence between mic setups"]
+      ]
+    }
+  ]
+}
