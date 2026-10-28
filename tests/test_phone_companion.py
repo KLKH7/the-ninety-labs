@@ -549,19 +549,31 @@ def test_the_mocks_answers_and_cards_match_the_agents_schemas(browser, site):  #
     assert not errors
 
 
-def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_check(browser, site):  # noqa: F811
-    """At 61.2 s the cut clip's detections (tests/e2e_clip.py) are on the bundle's frame: the sheet
-    boxes each with its confidence, says so in words, and says which check passed the answer."""
+def last_answer(page) -> dict:
+    """The last answer the phone was sent, as the agents' schema writes it."""
+    return [p for p in page.evaluate("window.ninetyPhone.seen") if p.get("type") == "answer"][-1]["answer"]
+
+
+def test_how_do_we_know_shows_the_frame_for_a_moment_and_not_for_an_answer(browser, site):  # noqa: F811
+    """A moment (a card's visual, as its chip opens it) is one frame: its sheet shows the broadcast
+    frame with each box's confidence, in words too. An Ask answer covers a stretch or a measure, so
+    the detector's boxes on whatever frame its time falls on are no evidence for it (Kian, Oct 28):
+    its sheet has no frame. At 61.2 s the cut clip's detections (tests/e2e_clip.py) are on the frame."""
     laptop, page, errors = phone(browser, site, laptop_t=61.2)
     answer = ask(page, "Where are London overloading?")
     answer.locator(".how").click()
+    page.locator("#how-body .evidence").wait_for()
+    assert "What the cameras saw" not in page.inner_text("#how-body")
+    assert page.locator("#how-body canvas.seen").count() == 0
+    assert "Computed from tracking" in page.inner_text("#how-body")  # a code answer: no Judge to claim
+    assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn
+    page.click("#close-how")
+    visual = last_answer(page)["visual"]
+    page.evaluate("v => window.ninetyPhone.how(v)", {**visual, "t": 61.2})
     seen = "document.querySelector('#how-body canvas.seen')?.getAttribute('aria-label')"
     page.wait_for_function(f"({seen} || '').includes('percent')")
     words = page.get_attribute("#how-body canvas.seen", "aria-label")
     assert words.startswith("The broadcast picture at 1:01")
-    # a code answer: no Judge to claim
-    assert "Computed from tracking" in page.inner_text("#how-body")
-    assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
 
 
@@ -570,14 +582,29 @@ def test_how_do_we_know_shows_no_black_box_when_this_browser_cannot_show_the_fra
     bundle's video (Playwright's own Chromium has no H.264). With no picture, the step is not shown."""
     laptop, page, errors = phone(browser, site, laptop_t=61.2)
     page.context.route("**/bundle/frames/**", lambda route: route.fulfill(status=404, body=""))
-    answer = ask(page, "Where are London overloading?")
-    answer.locator(".how").click()
+    ask(page, "Where are London overloading?")
+    visual = last_answer(page)["visual"]
+    page.evaluate("v => window.ninetyPhone.how(v)", {**visual, "t": 61.2})
     page.wait_for_selector("#how-body .stepper")
     page.wait_for_function("!document.querySelector('#how-body canvas.seen')", timeout=10_000)
     assert "What the cameras saw" not in page.inner_text("#how-body")
-    assert page.inner_text("#how-body .count-line").startswith("2 checks")
+    steps = page.locator("#how-body .step").count()
+    assert page.inner_text("#how-body .count-line").startswith(f"{steps} checks")
     page.context.unroute("**/bundle/frames/**")
     assert not [e for e in errors if "404" not in e]
+
+
+def test_how_we_know_leaves_out_a_row_with_nothing_to_say(browser, site):  # noqa: F811
+    """Kian, Oct 28: an answer with no measure left "What" empty, and its label floated beside the
+    next row's value. A row with no value is not shown."""
+    laptop, page, errors = phone(browser, site, bundle=False, laptop_t=60)
+    ask(page, "Where are London overloading?")
+    unmeasured = {**last_answer(page), "metric": None, "value": None, "t_from": 55.0, "t_to": 55.0}
+    page.evaluate("a => window.ninetyPhone.answer('when?', a)", unmeasured)
+    page.locator("#answers > li").last.locator(".how").click()
+    page.locator("#how-body .evidence").wait_for()
+    assert page.locator("#how-body .evidence dt").all_inner_texts() == ["Over"]
+    assert not errors
 
 
 def test_live_has_a_players_list_and_the_play_in_words_appears_when_focus_reaches_it(browser, site):  # noqa: F811
