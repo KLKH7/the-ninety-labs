@@ -458,6 +458,15 @@ class MatchInsights:
         return {"facts": rows, "summary": [], "source": identity_mod.SOURCE_LABEL,
                 "note": "Running is while the video tracked him, in the footage shown, never a match total."}
 
+    def track_player_stats(self, track: str, t: float) -> dict | None:
+        """The stats row, at match second t, of the player the Player ID feed names on this tactical
+        track (the phone's player card), or None when it names nobody there or the match has no
+        per-player stats. Running counts only minutes ended by t, over every track named his."""
+        named = (self.identity.get(track) or {}).get("player") if self.per_player else None
+        if not named:
+            return None
+        return next((r for r in player_stats_mod.stats(self.per_player, t) if r["player"] == named), None)
+
     def player_rank(self, club: str | None, metric: str, minute: float) -> dict:
         """Players ranked by one metric up to the match minute, most first (`best` is a stated
         formula, never a model's view); fastest and furthest rank only players tracked enough."""

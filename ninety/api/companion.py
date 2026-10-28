@@ -555,7 +555,12 @@ class Companion:
         track, window = self._window(track, player, t_from, t_to)
         if window is None:
             return _error(404, f"no positions of {player} in that window")
-        return JSONResponse(_send(window.card(track.source)))
+        card = window.card(track.source)
+        if track.source == "tracked":
+            total = player_total(clip, player, t_to)
+            if total is not None:
+                card["player_total"] = total
+        return JSONResponse(_send(card))
 
     async def flow(self, request: Request) -> JSONResponse:
         if not self.limits["read"].allow(client_ip(request)):
@@ -719,6 +724,24 @@ class Companion:
 
 
 MAX_TURNS = 6  # design: a pairing remembers its last six exchanges, more than the model is shown
+
+
+PLAYER_TOTAL_KEYS = ("player", "name", "source", "source_label", "running_to_minute", "footage_s",
+                     "tracked_s", "footage_coverage", "distance_m", "top_kmh")
+
+
+def player_total(clip: str, track_id: str, t: float) -> dict | None:
+    """The match so far of the player the Player ID feed names on this tactical track: his running
+    over every track the feed names his, to the last minute ended by t and never later
+    (ninety/intel/player_stats.py, as the MCP tool serves it), with what it covers and why a figure
+    is withheld. None when the feed does not name the track, so the card keeps its per-track
+    numbers: one track's stretch, never said as his match."""
+    mi = _insights(clip)
+    row = mi.track_player_stats(track_id, t) if mi is not None else None
+    if row is None:
+        return None
+    withheld = {k: row["withheld"][k] for k in ("distance_m", "top_kmh") if k in row["withheld"]}
+    return {**{k: row[k] for k in PLAYER_TOTAL_KEYS}, "withheld": withheld}
 
 
 def _insights(clip: str):

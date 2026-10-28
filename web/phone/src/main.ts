@@ -29,6 +29,7 @@ import {
   MAX_QUESTION,
   type Minimap,
   type PlayerCard,
+  type PlayerTotal,
   type RelayMessage,
   type ViewerAnswer,
   type ScoutVisual,
@@ -162,6 +163,7 @@ function screenOf(x: number, y: number): [number, number] {
   name: playerName,
   say: (id: string) => sayPlayer(id), // how the sheet and its chips say him (never "a player")
   trackSpan: (id: string, t: number) => trackSpan(id, t),
+  pick: (id: string | null) => select(id), // a tracked player's card, as a tap on his dot opens it
   // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
   drawable: (sv: ScoutVisual, t: number | null = null) => {
     const v = fromScout(sv, t);
@@ -1293,8 +1295,6 @@ function showCard(c: PlayerCard) {
   $("so-far-box").hidden = false;
   $("heat-box").hidden = c.heat.cells.every((v) => v <= 0);
   $("speed").textContent = c.speed_kmh.toFixed(1);
-  $("peak").textContent = c.peak_kmh.toFixed(1);
-  $("distance").textContent = String(Math.round(c.distance_m));
   // The card covers t_from..t_to, but its numbers come only from the stretch this track was
   // followed: say that stretch, never "so far" since kick-off (a keeper's "43 metres run" at 29:46
   // was one track's few seconds; lesson 294).
@@ -1302,14 +1302,27 @@ function showCard(c: PlayerCard) {
   const from = Math.max(c.t_from, tracked?.[0] ?? state.minimap?.frames[0]?.t ?? c.t_from);
   const to = tracked?.[1] ?? c.t_to;
   const whole = from <= (state.minimap?.frames[0]?.t ?? 0) + 1;
-  $("so-far-title").textContent = whole ? "So far" : `Tracked ${clock(from)}–${clock(to)}`;
-  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(to)}`;
+  if (c.player_total) showTotal(c.player_total);
+  else {
+    // The feed names nobody on this track: its own stretch, said as that and never as his match.
+    $("so-far-title").textContent = whole ? "So far" : `Tracked ${clock(from)}–${clock(to)}`;
+    $("peak").textContent = c.peak_kmh.toFixed(1);
+    $("distance").textContent = String(Math.round(c.distance_m));
+    $("distance-unit").textContent = "metres run";
+    $("so-far-box").dataset.scope = "track";
+    $("so-far-note").hidden = true;
+  }
+  $("distance").dataset.m = String(c.player_total ? c.player_total.distance_m ?? "" : c.distance_m);
+  // With his total above, a heat map of one track's stretch says "only" (it is not his match so far).
+  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(to)}${c.player_total && !whole ? " only" : ""}`;
   // Always say how much play the card covers, so a short window is never mistaken for a match.
   const span = Math.max(0, to - from);
   const said = span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`;
   $("heat-span").textContent = whole
     ? `Covering ${said} of play` + (span < 60 ? ": the heat map means more as the match goes on." : ".")
-    : `Covering ${said} of play: the stretch the tracker followed this player without losing him behind others.`;
+    : c.player_total
+      ? `Covering ${said} of play: this track only, since the tracker last lost him behind others. The distance above covers every track the Player ID feed names his.`
+      : `Covering ${said} of play: the stretch the tracker followed this player without losing him behind others.`;
   $("player").dataset.t = String(c.t_to);
   const heat = $<HTMLCanvasElement>("heat");
   const v = fit(heat);
@@ -1340,6 +1353,30 @@ function showCard(c: PlayerCard) {
   $("card-note").textContent =
     `Updated at ${clock(c.t_to)}. Computed by code from ${feed.mock ? "the mock positions" : "positions tracked from the video"}; ` +
     "speed now is the average over the last second.";
+}
+
+/** His match so far where the Player ID feed names the track (ninety/intel/player_stats.py): every
+ * track it names his, stitched, to the last minute ended (never a later one), so losing him behind
+ * others never resets it. The condensed replay shows part of the match: said as "in what we've
+ * seen", with how much of that he was tracked. */
+function showTotal(p: PlayerTotal) {
+  const m = p.distance_m;
+  const km = m !== null && m >= 1000;
+  $("so-far-box").dataset.scope = "player";
+  $("so-far-title").textContent = "In what we've seen";
+  $("peak").textContent = p.top_kmh === null ? "–" : p.top_kmh.toFixed(1);
+  $("distance").textContent = m === null ? "–" : km ? (m / 1000).toFixed(1) : String(Math.round(m));
+  $("distance-unit").textContent = km ? "km run" : "metres run";
+  const note = $("so-far-note");
+  note.hidden = false;
+  const said = m === null ? "" : km ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} metres`;
+  const reason = p.withheld.distance_m ?? p.withheld.top_kmh;
+  note.textContent =
+    m === null
+      ? p.running_to_minute === 0
+        ? "His total counts from the end of the first minute."
+        : `His total is not said yet: ${reason}.`
+      : `${said} in what we've seen to ${clock(p.running_to_minute * 60)}, tracked ${Math.round(p.footage_coverage * 100)}% of it. ${p.source_label}.`;
 }
 
 /** His part in the play so far, counted from the detected events (hidden when there are none). */
