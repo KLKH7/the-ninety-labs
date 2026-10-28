@@ -1,6 +1,6 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
-import { drawCues, drawDetections } from "./draw";
+import { captionBox, drawCues, drawDetections } from "./draw";
 import { AudioTracks, readCommentary } from "./commentary";
 import { setupDock } from "./dock";
 import { setupHud } from "./hud";
@@ -508,6 +508,7 @@ async function start() {
   const footageStart = matchTime(0);
   (window as unknown as { ninetyScorebug: unknown }).ninetyScorebug = { bugAt, BAKED, rowsAt, statsGraphicAt }; // tests // read by tests/test_match_mode.py
   (window as unknown as { ninetyLowerThird: unknown }).ninetyLowerThird = { describe: describeLowerThird }; // read by tests/test_match_mode.py
+  (window as unknown as { ninetyDraw: unknown }).ninetyDraw = { captionBox }; // read by tests/test_viewer.py
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
