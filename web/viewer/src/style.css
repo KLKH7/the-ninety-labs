@@ -195,8 +195,10 @@ body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-te
    fade while it plays. Personas and motion are the phone's. */
 .hud { display: none; }
 /* Nothing shows until the layout is chosen (src/main.ts sets data-layout once the bundle has loaded):
-   the big screen never flashes the developer panels first. */
-body:not([data-layout]) { visibility: hidden; }
+   the big screen never flashes the developer panels first. Fail-safe: if a script never sets it, the
+   page shows anyway after 3 s, so the demo can never stay blank (tests/test_viewer_reveal.py). */
+body:not([data-layout]) { visibility: hidden; animation: ninety-reveal 0s 3s forwards; }
+@keyframes ninety-reveal { to { visibility: visible; } }
 body[data-screen="big"] { background: #000; overflow: hidden; }
 body[data-screen="big"] .bar,
 body[data-screen="big"] .keys,
