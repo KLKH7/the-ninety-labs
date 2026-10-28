@@ -1605,10 +1605,10 @@ def chips(insights, t: float, club: str | None = None) -> list[dict]:
     return out
 
 
-def table_answer(question: Question, insights, history=(), suggest: bool = True):
+def table_answer(question: Question, insights, history=(), suggest: bool = True, live: bool = False):
     """Code's answer from the question's row of the intent table, or None when the row is left to the
     tools' routing (tactics, one player, small talk, a follow-up of the last question)."""
-    from ninety.agents import ask_answers
+    from ninety.agents import ask_answers, ask_intents
 
     if any(pattern.search(question.text) for _, pattern in SMALL_TALK):
         return None
@@ -1619,6 +1619,11 @@ def table_answer(question: Question, insights, history=(), suggest: bool = True)
         ups = follow_ups([], [], insights, asked, t) if suggest else ()
         return Answer("unanswerable", ask_answers.NOT_MATCH[read.topic], None, None, None, (), None, None,
                       follow_ups=ups), []
+    moment = read.intent == "unmeasured" and ask_intents.MOMENT_CALL.search(read.text)
+    if moment and (read.topic == "offside" or live):
+        # "Was that offside?" (that moment's line, read), and in Live mode any call on one moment: the
+        # Referee answers from the reading and the Laws (ninety/agents/referee.py), checked the same way.
+        return None
     if read.intent == "how_known":
         # "How do you know?": how the last answer's figures were made (its How-we-know), fixed text with
         # only the rates docs/EVALUATION.md measures; with no last answer, how every answer is made.
@@ -2114,7 +2119,8 @@ async def answer_match(
     question = replace(question, text=normalise(question.text, insights)[:200])
     # A row of the intent table (lesson 297): code's answer from that row, with or without a model. The
     # model plans only what the table leaves to the tools (tactics, one player, a question it can't read).
-    tabled = None if WHY_RESULT.search(question.text) else table_answer(question, insights, history)
+    tabled = None if WHY_RESULT.search(question.text) else table_answer(question, insights, history,
+                                                                         live=ask is not None)
     if tabled is not None:
         return MatchResult(tabled[0], "code", tuple(tabled[1]))
     # Small talk: code's reply, before any tool or model call (lesson 287). With a model, a message code

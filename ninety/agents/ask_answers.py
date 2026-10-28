@@ -995,7 +995,7 @@ def best(ctx: Ctx) -> Reply:
     if quick is not None:
         r.say(_fastest_sentence(ctx, quick), _fastest_fact(ctx, quick))
     if not r.lines:
-        r = _bypassed(ctx)
+        r = _bypassed(ctx)  # the closest measured fact, said plainly (Kian, Oct 27): whose passes did most
     r.head = None
     return r
 
@@ -1384,6 +1384,21 @@ def unmeasured(ctx: Ctx) -> Reply:
     r = Reply()
     r.status = "verified"  # a plain, true reply: what is not measured, then something real
     real = [ln for ln in closest.lines if ln[1]][:1] if closest.status == "verified" else []
+    from ninety.agents.ask_intents import MOMENT_CALL
+
+    if topic in ("fouls", "cards", "referee") and MOMENT_CALL.search(ctx.read.text):
+        # A call on one moment ("was that a foul?"): the cameras' limit, from the Laws' own fact (it
+        # never rules on contact), then something real.
+        from ninety.agents.companion_match import code_texts
+        from ninety.agents.referee import law_facts
+
+        law = next(f for f in law_facts() if f["id"] == "law:contact")
+        r.say(code_texts({**law, "clubs": ctx.clubs})[0], law)
+        if real:
+            text, cited = real[0]
+            r.say("Here's what it does measure: " + _lower(text), *cited)
+        r.head = None
+        return r
     if real:
         text, cited = real[0]
         r.say(f"{UNMEASURED[topic]}, but {_lower(text)}", *cited)
@@ -1422,6 +1437,10 @@ def build(question: Question, insights, read: Read) -> tuple[Answer, list[dict]]
     and a lead that fails, or that does not carry the row's metric, gives the row's honest fallback."""
     fn = BUILDERS.get(read.intent)
     if fn is None:
+        return None
+    if read.intent in ("fastest", "distance") and not getattr(insights, "per_player", None):
+        # No per-player stats (a match without the Player ID feed): the physical tool's own gated path
+        # answers a player's running (ninety/intel/physical.py), as before the table.
         return None
     keeps = ("score", "scorers", "winning", "why_goal", "unmeasured")
     if not (read.window.empty or "").startswith("The second half"):

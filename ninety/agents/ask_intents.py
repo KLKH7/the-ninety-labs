@@ -365,9 +365,13 @@ def normalise(text: str, words: set[str] = frozenset()) -> str:
 # weighs more than a word several share.
 # ---------------------------------------------------------------------------------------------
 
+# "Was that offside?", "was it a foul?": a call on one moment, which the referee path answers from the
+# reading and the Laws (ninety/agents/referee.py); "how many fouls?" is the table's unmeasured row.
+MOMENT_CALL = re.compile(r"^\W*(?:was|is|were|did)\s+(?:that|it|this|he|she)\b", re.I)
 UNMEASURED_TOPICS = (
     ("offside", r"\boffsides?\b"),
-    ("fouls", r"\bfoul\w*|\bfouled\b|\bdive[ds]?\b|\bhand ?ball"),
+    ("fouls", r"\bfoul\w*|\bfouled\b|\bdive[ds]?\b|\bhand ?ball"
+              r"|\b(?:was|is) (?:that|it|this) a (?:penalty|pen)\b"),
     ("cards", r"\bcards?\b|\byellows?\b|\breds?\b|\bbook(?:ed|ing|ings)\b|\bsent off\b|\bcaution\w*"),
     ("saves", r"\bsaves?\b|\bsaved\b"),
     ("tackles", r"\btackl\w*"),
