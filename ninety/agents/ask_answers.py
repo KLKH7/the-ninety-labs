@@ -1327,7 +1327,8 @@ def key_moments(ctx: Ctx) -> Reply:
     if where.status == "verified" and where.lines:
         text, cited = where.lines[0]
         r.say(text, *cited)
-    r.head = f"{len(goals)} goal{'s' if len(goals) != 1 else ''}" if goals else "No goals"
+    # A recap leads with its latest goal, as the key moments always have (companion_match.headline).
+    r.head = f"Goal: {_short(ctx, goals[-1]['team'])}, minute {goals[-1]['minute']}" if goals else "No goals"
     return r
 
 
