@@ -59,7 +59,17 @@ The renderer runs in Chromium through Playwright. One package reaches the page, 
 
 The referee's whistle on the broadcast's mp4 is synthesised by our own code
 (`ninety/render/audio.py`: a tone with a flutter, generated sample by sample with the Python
-standard library). No recording or third-party sound is used, so there is nothing to license.
+standard library).
+
+The demo footage's crowd (`ninety/render/crowd_mix.py`) is mixed from two recordings, both dedicated
+to the public domain under CC0 1.0. They are build inputs, not committed: `ninety/render/crowd_sources.json`
+pins each by sha256 and lists the stretches used and excluded. `crowd_mix.py` refuses any source whose
+licence is not CC0-1.0.
+
+| Recording | Author | Source | Licence |
+|---|---|---|---|
+| CrwdReac Soccer Millerntor Stadium Crowd Reaction Mood Waves 01 (the reactions) | itmightgetloud (Philipp Feit) | https://freesound.org/people/itmightgetloud/sounds/829456/ | CC0-1.0 |
+| Norwegian football match, soccer game ambience (the bed) | vogyik | https://freesound.org/people/vogyik/sounds/868982/ | CC0-1.0 |
 
 ## Data
 
