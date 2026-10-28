@@ -148,6 +148,8 @@ rule's picks (seed 8076, then Kian's 8080) are recorded in [demo-match.md](docs/
 | Hidden-stat claims on the phone, code checks only, freeze match seed 8076 (an author's test) | 4,318 / 4,318 planted false claims caught, 0 / 596 true claims stopped | [insight-claims.md](docs/eval/insight-claims.md) |
 | Team sides confident enough to air a team claim (gate 0.96) | almost none: of 81 held claims on validation, 80 on an unsure side; a second look resolved 0 / 81 | [re-perceive.md](docs/eval/re-perceive.md) |
 | Player names: names come from a simulated tracking-provider ID feed; vision does not identify players. We simulate that feed, including occasional identity swaps that get corrected | vision's tracks matched to the feed's players, demo seed 8080, held-out half: 468 / 471 tracks right (0.994, 95% 0.98 to 1.00), 58 / 58 event actors right through the camera join; matched to the broadcast camera directly too (pre-registered), 106 / 106 held-out and 224 of 345 events named, 226 with a sure side (5 without the feed) | [identity.json](docs/eval/identity.json), [FEED_SPEC.md](docs/FEED_SPEC.md), [EVALUATION.md](docs/EVALUATION.md#player-names-from-the-id-feed) |
+| Possession, time on the ball (Stats tab, half-time and full-time panels), pre-registered, two matches | misses its gate: MAE 5.75 points over six windows against 5, largest 8.1; shown with ±10 pts | [possession-time.json](docs/eval/possession-time.json) |
+| Shooters named from the ball and the ID feed, pre-registered, held-out seed 8080 | misses its gate: 0.4 (2 / 5) against 0.95, the misses false shot detections; off | [scorer-feed.json](docs/eval/scorer-feed.json) |
 | Team distance on the phone | shown with ±21%, the worst five-minute bin over four freeze matches | [team-distance.md](docs/eval/team-distance.md) |
 | Personalizer over A2A, live evaluation (not yet in the demo path or deployed) | ninety-personalizer:1 run of 21 Oct, now stale (a newer version is published, not measured): the report counts 19 claims above tables of 20 requests per row (8 rows, 160 variants); p95 4.6 s (equal to the maximum) in a 6 s budget; 137 / 160 variants passed the re-check and aired | [personalizer.md](docs/eval/personalizer.md) |
 | Read-aloud in the pinned neural voice, pre-generated (not yet in the deployed Replay bundle) | 0.54 s p50, 0.85 s p95 a line | [speech-latency.md](docs/eval/speech-latency.md) |
@@ -161,7 +163,8 @@ hidden stats; player names from a simulated tracking-provider ID feed, as broadc
 identity (vision does not identify players: shirt numbers are too small on our renders, and names
 by role missed their gate). We simulate that feed, including occasional identity swaps that get
 corrected; it is the one engine output the live path reads, for identity and side only
-(AGENTS.md); the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
+(AGENTS.md): names on the line-up and on a goal whose player it names (naming shooters from the
+ball missed its gate and is off); the multi-agent graph with the fact-checking agent in the demo bundle (`ninety-e2e`,
 replayable without Azure); the Personalizer over A2A (evaluated live; off in `ninety-e2e` and not
 deployed).
 

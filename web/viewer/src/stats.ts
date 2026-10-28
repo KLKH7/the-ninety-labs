@@ -15,7 +15,7 @@ import { fullName } from "./teams";
 type Pair = { home: number; away: number };
 export interface Row { key: string; label: string; home: number; away: number; unit: string }
 
-interface ScoutRow { key: string; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }
+interface ScoutRow { key: string; label?: string; series: { minute_to: number; home: number | null; away: number | null; confident: boolean }[] }
 type Stats = MatchData & { insight_stats?: { rows?: ScoutRow[] } };
 
 /** A share of passes means something only over this many (web/phone MIN_SHARE_PASSES, ninety/agents
@@ -42,7 +42,10 @@ const SCOUT: [string, string, string][] = [
 export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
   const out: Row[] = [];
   const poss = scoutAt(m, "possession", t);
-  if (poss) out.push({ key: "possession", label: "Possession", ...poss, unit: "%" });
+  // The bundle's own label, which carries the measured error ("Possession (time on the ball, ±10 pts)"):
+  // a number that missed its gate is never on air without it (lesson 285).
+  const possLabel = m?.insight_stats?.rows?.find((r) => r.key === "possession")?.label ?? "Possession";
+  if (poss) out.push({ key: "possession", label: possLabel, ...poss, unit: "%" });
   let st: MatchData["stats"][number] | null = null;
   for (const s of m?.stats ?? []) if (s.t <= t + 1e-6) st = s;
   if (st) {
@@ -61,8 +64,15 @@ export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
     const v = scoutAt(m, key, t);
     if (v) out.push({ key, label, ...v, unit });
   }
-  return out;
+  // A row of 0 and 0 reads as broken on air (Kian's 8324 full-time panel: "Corners 0–0"); then the
+  // order leagues put them up in (the Coordinator, Oct 27), anything else after.
+  const rank = (k: string) => { const i = ROW_ORDER.indexOf(k); return i < 0 ? ROW_ORDER.length : i; };
+  return out.filter((r) => r.home !== 0 || r.away !== 0).sort((a, b) => rank(a.key) - rank(b.key));
 }
+
+/** The rows' order on the card and the half-time and full-time panels. */
+export const ROW_ORDER = ["possession", "passes", "accuracy", "shots", "on_target", "overload_moments",
+  "regains_within_5s", "crosses", "corner", "one_twos"];
 
 /** Which stats graphic is up at video time v (match time t): the panel at half-time (the first
  * PANEL_S of footage from the clock's 45:00) or full time (from the engine's 90:00, Law 7, or the
@@ -120,6 +130,8 @@ export function setupStats(card: HTMLElement, panel: HTMLElement, m: Stats | nul
       key = k;
       card.hidden = !(g?.kind === "card" && pick.length);
       panel.hidden = g?.kind !== "panel";
+      // Nothing else shows through a period panel (the time-skip label faded behind it at full time).
+      document.body.toggleAttribute("data-period-panel", g?.kind === "panel");
       if (g?.kind === "card" && pick.length) {
         card.replaceChildren(el("div", "card", cardHead("MATCH STATS", `${g.minute}′`, null, { teams, codes }),
           el("p", "card-row card-teams", el("span", "", codes.home), el("span", "", codes.away)),

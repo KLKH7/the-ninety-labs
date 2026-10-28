@@ -286,8 +286,10 @@ def test_no_goal_yet_must_be_said():
 
 
 def test_a_shares_range_is_not_a_minute():
-    said = ("London Athletic had the ball in their attacking third for 15% to 20% of the time in the footage "
-            "we've seen from minute 1 to minute 11.")
+    said = (
+        "London Athletic had the ball in their attacking third for 15% to 20% of the time in the footage "
+        "we've seen from minute 1 to minute 11."
+    )
     assert set(G.minutes_said(said)) == {1, 11}  # not 20
     assert graded("territory", "Where has the ball been?", 600.0, said)["no_future"] is True
 
@@ -298,3 +300,196 @@ def test_the_teams_do_not_change_ends():
     it = intent("on_top")
     tv = TABLE[G.wkey(it, 3600.0, (2700.0, 3600.0))]["match"]["territory"]
     assert tv["away"] > tv["home"]
+
+
+@pytest.mark.parametrize(
+    "text,minutes",
+    [
+        ("Lisbon had between 22% and 28% of it from minute 31 to minute 34.", {31, 34}),
+        ("London held 22% to 28% of the ball, up to 35′.", {35}),
+        ("In the last 15 minutes, up to 28 passes a minute.", set()),
+        ("Goals in minutes 35, 76 and 85.", {35, 76, 85}),
+        ("From minutes 20 to 34.", {20, 34}),
+        ("At 33:50, in the 34th minute.", {34}),
+        ("Lisbon pressed hardest from minute 20 to 34.", {20, 34}),
+        ("From minute 34 to 40 London kept the ball.", {34, 40}),
+        ("Between minute 41 until 43, 15% to 20% of it.", {41, 43}),
+        ("In minute 10, between 22% and 28% of the ball.", {10}),
+    ],
+)
+def test_only_explicit_minutes_are_minutes(text, minutes):
+    assert set(G.minutes_said(text)) == minutes
+
+
+def _shots(half_frame, home_xs, away_xs, start):
+    return [
+        {"type": "shot", "team": t, "x": x, "frame": start + i}
+        for i, (t, x) in enumerate([*(("home", x) for x in home_xs), *(("away", x) for x in away_xs)])
+    ]
+
+
+def test_attacking_directions_come_from_the_data_both_ways():
+    half = 1000
+    kept = _shots(half, [88, 92], [20, 30], 0) + _shots(half, [80, 95], [12, 25], half + 1)
+    assert T.attack_directions(kept, half) == (True, True)
+    swapped = _shots(half, [88, 92], [20, 30], 0) + _shots(half, [15, 22], [85, 90], half + 1)
+    assert T.attack_directions(swapped, half) == (True, False)
+    assert T.attack_directions(_shots(half, [], [], 0), half) == (None, None)
+
+
+def test_the_demo_match_keeps_its_ends():
+    # seed 8324, read from its truth when the table was written: home attacks x = 105 in both halves
+    assert TABLE["_directions"] == {"first_half_home_right": True, "second_half_home_right": True}
+
+
+def test_another_question_set_keeps_the_intents_rules(tmp_path):
+    flat = tmp_path / "flat.json"
+    flat.write_text(
+        json.dumps(
+            [
+                {"intent": "possession", "q": "who's seen more of it"},
+                {"intent": "score", "question": "where's the game at"},
+            ]
+        )
+    )
+    got = G.with_questions(INTENTS, flat)
+    assert [it["id"] for it in got] == ["score", "possession"]
+    assert got[1]["metric"] == intent("possession")["metric"] and got[1]["questions"] == [
+        {"q": "who's seen more of it"}
+    ]
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps([{"intent": "weather", "q": "is it raining"}]))
+    with pytest.raises(ValueError):
+        G.with_questions(INTENTS, bad)
+
+
+def _counts(home, away, slack=0):
+    band = {"home": home, "away": away, "total": home + away}
+    lo = {"home": home - slack, "away": away - slack, "total": home + away - 2 * slack}
+    hi = {"home": home + slack, "away": away + slack, "total": home + away + 2 * slack}
+    return {"footage": {"count": band, "count_lo": lo, "count_hi": hi}}
+
+
+@pytest.mark.parametrize(
+    "truth,text,ok",
+    [
+        (
+            _counts(3, 5),
+            "Lisbon Esportes have had more shots in the footage, 5 to London Athletic's 3.",
+            True,
+        ),
+        (
+            _counts(3, 5),
+            "London Athletic have had more shots in the footage, 3 to Lisbon Esportes' 5.",
+            False,
+        ),
+        (_counts(3, 5), "London Athletic have had fewer shots than Lisbon Esportes in the footage.", True),
+        (_counts(3, 5), "The two sides are level on shots in the footage.", False),
+        (_counts(3, 5), "There were 8 shots in the footage.", False),
+        (_counts(4, 4), "The two sides are level on shots in the footage, 4 each.", True),
+        (_counts(4, 4), "Lisbon Esportes have had more shots in the footage.", False),
+        (
+            _counts(4, 5, slack=1),
+            "London Athletic and Lisbon Esportes are level on shots in the footage.",
+            True,
+        ),
+        (_counts(4, 5, slack=1), "Lisbon Esportes have had more shots, 5 to 4.", True),
+        (_counts(4, 5, slack=1), "London Athletic have had more shots, 4 to 5.", False),
+        (
+            _counts(2, 2),
+            "London Athletic and Lisbon Esportes have had 2 shots each in the footage so far.",
+            True,
+        ),
+        (_counts(0, 0), "Neither side has had a corner in the footage so far.", True),
+        (_counts(0, 2), "Neither side has had a corner in the footage so far.", False),
+        (
+            _counts(3, 5),
+            "Lisbon Esportes have had more shots: 5 to London Athletic's 3 in the footage so far.",
+            True,
+        ),
+        (_counts(3, 5), "Each club's shots: London Athletic 3, Lisbon Esportes 5.", False),
+        (_counts(4, 5, slack=1), "Each club has had shots in the footage so far.", False),  # no comparison
+    ],
+)
+def test_a_count_leads_with_the_right_club(truth, text, ok):
+    assert G.comparison_direction(text, truth, CLUBS) is ok
+
+
+def test_comparison_direction_is_a_count_check_only():
+    shots = graded("shots", "How many shots?", 2700.0, "Lisbon Esportes have had more shots in the footage.")
+    assert shots["comparison_direction"] is not None
+    poss = graded("possession", "possession?", 2700.0, "London Athletic had 57% of the ball in the footage.")
+    assert poss["comparison_direction"] is None
+
+
+def test_territory_follows_each_halfs_direction():
+    # A tiny match whose ends change at half time (frame 4): home has the ball throughout, at x = 100
+    # in the first half and at x = 5 in the second. With home attacking right, then left, the ball is
+    # in home's attacking third the whole time; a Truth that ignored the second half's direction
+    # would put it in home's own third after the break.
+    import numpy as np
+
+    tr = T.Truth(
+        events=[],
+        shown=[(0, 7)],
+        side=np.array([1] * 8, np.int8),
+        ball_x=np.array([100.0] * 4 + [5.0] * 4, np.float32),
+        speed=np.zeros((8, 1), np.float32),
+        ids=["h1"],
+        home_right=True,
+        half_frame=4,
+        names={},
+        directions=(True, False),
+    )
+    assert tr.territory(0, 7 / T.FPS, "match")["home"] == 100.0
+    assert tr.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 100.0, "away": 0.0}
+    kept = T.Truth(**{**tr.__dict__, "directions": (True, True)})
+    assert kept.territory(4 / T.FPS, 7 / T.FPS, "match") == {"home": 0.0, "away": 100.0}
+
+
+@pytest.mark.parametrize(
+    "home,away,text,ok",
+    [
+        (
+            95.0,
+            80.0,
+            "London Athletic have passed more accurately than Lisbon Esportes in the footage so far.",
+            True,
+        ),
+        (
+            95.0,
+            80.0,
+            "Lisbon Esportes have passed more accurately than London Athletic in the footage so far.",
+            False,
+        ),
+        (
+            85.0,
+            90.0,
+            "Lisbon Esportes have passed more accurately than London Athletic in the footage so far.",
+            True,
+        ),
+        (
+            85.0,
+            90.0,
+            "London Athletic have passed more accurately than Lisbon Esportes in the footage so far.",
+            True,
+        ),
+        (95.0, 80.0, "Passes are finding a team-mate in the footage so far.", False),
+    ],
+)
+def test_completion_said_as_a_direction(home, away, text, ok):
+    tv = {"footage": {"completion": {"home": home, "away": away, "total": None}}}
+    assert G.comparison_direction(text, tv, CLUBS, TOL) is ok
+
+
+def test_a_recorded_drop_is_the_baseline_and_never_core_or_correct():
+    # #432 (Kian, Oct 27: "record as justified"): each drop is in ratchet_downs.json with its evidence,
+    # the baseline holds the recorded rate, and no core or correct cell may ever be recorded.
+    doc = json.loads((R.HERE / "ratchet_downs.json").read_text())
+    base = json.loads(R.BASELINE.read_text())
+    for d in doc["downs"]:
+        name, col = d["cell"].rsplit(" ", 1)
+        assert col not in ("core", "correct", "correct_strict"), d
+        block = base[name] if name in ("all", "chips") else base["intents"][name]
+        assert block[col] == d["to"] and (d["to"] is None or d["to"] < d["from"]), d
+        assert len(d["evidence"]) > 40, d

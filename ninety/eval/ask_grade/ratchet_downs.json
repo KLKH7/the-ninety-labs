@@ -1,0 +1,42 @@
+{
+ "about": "Rates the ratchet (tests/test_ask_grade.py) let go down, each recorded as justified by Kian (Oct 27, #432): the cell, main's rate and #432's on the fixture rebuilt with #430/#431's build, and one line of evidence. No 'core' or 'correct' cell may be here; a cell not here may not go down.",
+ "pr": 432,
+ "downs": [
+  {
+   "cell": "chips consistent",
+   "from": 0.716,
+   "to": 0.667,
+   "evidence": "all of it is the tactics chips inside the chips block (tactics_chip consistent 32/78 to 24/78, the row above); every other chip intent is unchanged (possession 6/6, shots 12/12, territory 6/6, corners 12/12, best_* 6/6, fastest 6/6, distance 6/6, why_goal 6/6, key_moments 12/12)"
+  },
+  {
+   "cell": "completion coverage_honest",
+   "from": 0.0,
+   "to": null,
+   "evidence": "main at 60:00, 'what's the pass completion?': the canned 'I can't answer that one\u2026' (core 0); #432 says completion only as a direction ('London Athletic have passed more accurately than Lisbon Esportes in the footage so far'), with no figure, so the footage check no longer applies (None)"
+  },
+  {
+   "cell": "best_home coverage_honest",
+   "from": 0.0,
+   "to": null,
+   "evidence": "main at 60:00, 'Who's been London's best player?': 'I can't single out London Athletic's most dangerous player\u2026' (core 0); #432: 'London Athletic's most involved players in the footage so far: Gabe Korrow, Dan Hirrick and Isaac Thinton (Player ID feed).' (core 100%), names with no figure, so the footage check no longer applies (None)"
+  },
+  {
+   "cell": "best_away coverage_honest",
+   "from": 0.0,
+   "to": null,
+   "evidence": "as best_home: main's 'I can't single out\u2026' (core 0) against #432's three most involved Lisbon Esportes players by name, with no figure (core 100%)"
+  },
+  {
+   "cell": "best_overall coverage_honest",
+   "from": 0.0,
+   "to": null,
+   "evidence": "as best_home: main's 'I can't single out\u2026' (core 0) against #432's most involved players of each club by name, with no figure (core 83%)"
+  },
+  {
+   "cell": "tactics_chip consistent",
+   "from": 0.41,
+   "to": 0.308,
+   "evidence": "the grader groups all 13 tactics chips at a time as one paraphrase set; on main several different questions got the same canned 'I can answer about goal build-up, players, style, referee and the team sheets.' and counted as consistent; #432 answers each (10:00: 'Which pass broke Lisbon's lines?', 'What shape are Lisbon in?', 'How compact are London?' each their own reply); 61 of 78 texts changed"
+  }
+ ]
+}

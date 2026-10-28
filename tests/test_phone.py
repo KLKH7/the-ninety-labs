@@ -348,6 +348,10 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     assert float(phone.inner_text("#peak")) >= float(phone.inner_text("#speed"))
     assert "Heat map of Lisbon 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
     assert phone.inner_text("#heat-span").startswith("Covering ")
+    # No Player ID feed names the mock's players: the card's own numbers, never said as his match.
+    assert phone.get_attribute("#so-far-box", "data-scope") == "track"
+    assert phone.locator("#so-far-note").is_hidden()
+    assert phone.inner_text("#distance-unit") == "metres run"
     # The same choice without the map, for a screen reader: the roster's buttons.
     phone.click("#close-player")
     sheet_closed(phone)
@@ -873,6 +877,68 @@ def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
     assert page.locator("#player").is_hidden()
     assert page.inner_text("#speed") == "–" and "12.4" not in page.inner_text("body")
     assert not errors
+
+
+def test_a_named_players_card_never_falls_across_a_lost_track_and_an_unnamed_one_stays_per_track(
+        browser, prod_site, monkeypatch):
+    """Kian, Oct 27: a player's distance kept resetting because the card counted one vision track,
+    and a new track starts each time the tracker loses him. The real API (tests/test_api_companion.py's
+    stitched clip, in the 8324 shape: the Player ID feed names two tactical tracks one player) answers
+    the phone's /api/card; his distance never falls as t grows across the change, is said as "in
+    what we've seen" with how much he was tracked, and a track the feed names nobody on keeps its
+    per-track wording."""
+    from tests.test_api_companion import stitched_client, stitched_track
+
+    api_client = stitched_client(monkeypatch)
+    frames = [{"t": f["t"], "ball": [52.5, 34.0],
+               "players": [[p["id"], p["x"], p["y"]] for p in f["players"]]}
+              for f in stitched_track().frames[::5]]
+    minimap = {"clip": "demo", "source": "tracked", "fps": 5, "roster": ["a-t5", "h-t7", "h-t9"],
+               "frames": frames}
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    sockets = []
+
+    def relay(ws):
+        sockets.append(ws)
+        ws.send(json.dumps({"type": "clock", "t": 65.0, "playing": False}))
+
+    def card(route, request):
+        path = request.url.split("/api/card/", 1)[1].replace("demo/", "seed7/", 1)
+        r = api_client.get(f"/api/card/{path}")
+        route.fulfill(status=r.status_code, content_type="application/json", body=r.text)
+
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), relay)
+    ctx.route(re.compile(r".*/api/minimap\b.*"), lambda route, _r: route.fulfill(
+        content_type="application/json", body=json.dumps(minimap)))
+    ctx.route(re.compile(r".*/api/card/.*"), card)
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{prod_site}?code=K7MP3Q&clip=demo")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("window.ninetyPhone.state.radar !== null")
+    shown = []
+    for t in (65.0, 69.0, 75.0, 100.0, 119.0, 125.0, 149.0):
+        sockets[-1].send(json.dumps({"type": "clock", "t": t, "playing": False}))
+        page.wait_for_function(f"window.ninetyPhone.laptop.time() === {t}")
+        track = "h-t7" if t < 70 else "h-t9"  # the dot that is him now, as a fan taps it
+        page.evaluate(f"window.ninetyPhone.pick('{track}')")
+        page.wait_for_selector(f"#player[data-t='{t:g}']")
+        assert page.get_attribute("#so-far-box", "data-scope") == "player"
+        assert page.inner_text("#so-far-title").lower() == "in what we've seen"
+        note = page.inner_text("#so-far-note")
+        assert "in what we've seen to" in note and "tracked" in note and "Player ID feed" in note
+        if t >= 72:  # on the new track the heat map is that track's stretch alone, and says so
+            assert "this track only" in page.text_content("#heat-span")
+            assert page.inner_text("#heat-title").endswith(" only")
+        shown.append(float(page.get_attribute("#distance", "data-m")))
+    assert shown == sorted(shown) and shown[0] > 150  # never falls, across the lost track
+    assert shown[0] == shown[4] < shown[5]  # 65 s to 119 s: minute 1 only; minute 2 once it has ended
+    page.evaluate("window.ninetyPhone.pick('a-t5')")  # a track the feed names nobody on
+    page.wait_for_function("document.querySelector('#so-far-box').dataset.scope === 'track'")
+    assert page.locator("#so-far-note").is_hidden()
+    assert "in what we've seen" not in page.inner_text("#so-far-box").lower()
+    assert not errors
+    ctx.close()
 
 
 def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):

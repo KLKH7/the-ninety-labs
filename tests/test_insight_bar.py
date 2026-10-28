@@ -29,8 +29,8 @@ def test_a_confident_insight_airs_checked_with_its_trace_and_an_unsure_one_never
     cues, claims = bar({"line_break": [LB], "spell": [SPELL]})
     texts = [c["text"] for c in cues]
     assert texts == ["In minute 6, one side strung 9 passes together in a row.",
-                     "In minute 31, a London Athletic player played a pass that took 5 Lisbon Esportes "
-                     "players out of the game."]
+                     "In minute 31, one of London Athletic's players played a pass that took 5 Lisbon "
+                     "Esportes players out of the game."]
     assert all(c["kind"] == "insight" and c["verified"] for c in cues)
     assert [c["evidence"] for c in cues] == [["s01-v00001", "s01-v00009"], ["s13-v00002"]]
     # How we know: one trace per insight, the same evidence (the viewer joins them by it).
@@ -74,7 +74,9 @@ def test_a_one_event_restatement_is_not_an_insight():
 def test_a_name_the_feed_does_not_give_never_reaches_the_bar():
     # The role gate's guess (roles.say) is not the feed: without the feed naming him, he is his club.
     cues, _ = bar({"line_break": [LB | {"passer_is": "Isaac Tendell"}]})
-    assert cues and "Isaac Tendell" not in cues[0]["text"] and "a London Athletic player" in cues[0]["text"]
+    # Unnamed, he is said as one of his club's players (lesson 297: never "a London Athletic player").
+    text = cues[0]["text"] if cues else ""
+    assert cues and "Isaac Tendell" not in text and "one of London Athletic's players" in text, text
 
 
 def test_the_bundle_takes_its_insight_bar_from_the_insights_file(tmp_path):

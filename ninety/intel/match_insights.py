@@ -38,6 +38,7 @@ from ninety.intel import (
     style,
 )
 from ninety.intel import identity as identity_mod
+from ninety.intel import player_stats as player_stats_mod
 from ninety.intel import team_stats as team_stats_mod
 from ninety.intel.scene import TEAMS, Frames, minute_of, xy
 from ninety.intel.teamsheet import Fixture
@@ -65,10 +66,13 @@ class MatchInsights:
     # through the camera join (ninety/intel/naming.broadcast_people); empty for a single camera.
     broadcast: dict = field(default_factory=dict)
     # Names from the player-ID feed (ninety/intel/identity.py), tactical and broadcast tracks: the
-    # bundle's line-up only. No fact, person record or statistic above reads them.
+    # bundle's line-up, and a goal's scorer's name. No statistic or person record reads them.
     identity: dict = field(default_factory=dict)
     identity_broadcast: dict = field(default_factory=dict)
     identity_source: dict = field(default_factory=dict)
+    # Per-player stats keyed by the feed's names (ninety/intel/player_stats.py; AGENTS.md, Kian's
+    # decision of Oct 26): running while tracked and the detected events the feed names him in.
+    per_player: dict = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -139,8 +143,8 @@ class MatchInsights:
         facts["pass"] = style.passes(events)
         facts["counter"] = style.counters(events)
         facts["one_two"] = style.one_twos(facts["pass"])
-        # Possession share (the pass ratio) and territory (where the ball was): GROUNDING I17, I18.
-        facts["possession"] = ball_share.possession_rows(events)
+        # Possession share (time in possession) and territory (where the ball was): GROUNDING I17b, I18.
+        facts["possession"] = ball_share.possession_rows(f.frames)
         facts["territory"] = ball_share.territory_rows(f.frames)
         facts["shot"] = shot_map.shots(events)  # the shot map (GROUNDING I19)
         facts["pass_type"] = passing.rows(events)  # what the passes did, and to whom (I20, I21)
@@ -178,6 +182,17 @@ class MatchInsights:
                 mi.identity_broadcast = identity_mod.named_broadcast(
                     association, mi.identity, feed, detected_events, broadcast_frames)
             mi.identity_source = identity_mod.disclosure(feed)
+            mi.per_player = player_stats_mod.build(f.frames, detected_events, feed, mi.identity,
+                                                        mi.identity_broadcast or mi.identity)
+            # A goal's scorer by name where the feed names the broadcast track vision says scored:
+            # a name, never whether, when or for whom (the goal and its side stay vision's).
+            by_id = {e["id"]: e for e in detected_events}
+            for g in mi.facts.get("goal", ()):
+                w = mi.identity_broadcast.get((by_id.get(g["event"]) or {}).get("player") or "")
+                if g.get("player") and w and w["team"] == g["team"]:
+                    g["scorer_is"], g["scorer_source"] = w["name"], identity_mod.SOURCE
+                else:  # with the feed, names are the feed's: never vision's guess at a role (AGENTS.md)
+                    g.pop("scorer_is", None)
         return mi
 
     # -- what the tools answer -------------------------------------------------------------
@@ -339,7 +354,7 @@ class MatchInsights:
         return {"facts": out, "summary": []}
 
     def possession(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
-        """Each club's share of the passes over the minutes, the pass ratio Opta publishes as possession;
+        """Each club's share of the time either had the ball over the minutes (time in possession);
         and the longest spells of passes in a row (a run vision followed receiver to passer, which
         needs no side told), longest first."""
         out = self._window_summary(ball_share.possession, "possession", minute_from, minute_to, club)
@@ -350,6 +365,27 @@ class MatchInsights:
     def territory(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Where the ball was over the minutes: each club's share with it in its attacking third."""
         return self._window_summary(ball_share.territory, "territory", minute_from, minute_to, club)
+
+    def on_top(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Which club has been on top over the minutes, by where the ball was (territory, I18): a club
+        leads only when the least share of the footage with the ball in its attacking third is more
+        than the other's most; else neither. Both clubs' territory beside it. Possession over an
+        arbitrary stretch is not used: it is measured only from kick-off and per half (I17b)."""
+        got = self._window_summary(ball_share.territory, "territory", minute_from, minute_to, None)
+        terr = {r["team"]: r for r in got["summary"]}
+        # Too little footage of the ball says nothing of who is on top: the same floor as possession
+        # (ball_share.MIN_POSSESSION_S, seconds the ball was seen), else not known yet.
+        sure = len(terr) == 2 and min(r["seconds"] for r in terr.values()) >= ball_share.MIN_POSSESSION_S
+        lead = None
+        if sure:
+            h, a = terr["home"], terr["away"]
+            lead = "home" if h["lo"] > a["hi"] else "away" if a["lo"] > h["hi"] else None
+        clubs = self.fixture.clubs
+        row = {"id": f"on_top:m{minute_from}-{minute_to}", "kind": "on_top", "metric": "on_top",
+               "team": lead, "club": clubs.get(lead), "clubs": clubs, "minute_from": minute_from,
+               "minute_to": minute_to, "confident": sure,
+               "evidence": [r["id"] for r in terr.values()]}
+        return {"facts": [], "summary": [row, *got["summary"]]}
 
     def shots(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """The shot map over the minutes: each shot's spot, its distance from the goal and the angle
@@ -405,6 +441,46 @@ class MatchInsights:
                 r["also"], r["within_pct"] = [[lb["distance_pct"], "%"]], lb["distance_pct"]
             facts.append(r)
         return {"facts": facts, "summary": []}
+
+    def _player_rows(self, minute: float) -> list[dict]:
+        if not self.per_player:
+            raise ValueError("this match has no Player ID feed, so no per-player stats")
+        return player_stats_mod.stats(self.per_player, 60.0 * float(minute))
+
+    def player_stats(self, minute: float, player: str | None = None, club: str | None = None) -> dict:
+        """Each player's stats up to the match minute, named by the Player ID feed: tracked seconds
+        and coverage, distance while tracked and top speed (a 3 s mean), and his detected events.
+        A figure not measured well enough is None, with its reason under `withheld`."""
+        team = self.team(club)
+        rows = [r for r in self._player_rows(minute) if team in (None, r["team"])]
+        if player:
+            rows = player_stats_mod.find(rows, player)
+        return {"facts": rows, "summary": [], "source": identity_mod.SOURCE_LABEL,
+                "note": "Running is while the video tracked him, in the footage shown, never a match total."}
+
+    def track_player_stats(self, track: str, t: float) -> dict | None:
+        """The stats row, at match second t, of the player the Player ID feed names on this tactical
+        track (the phone's player card), or None when it names nobody there or the match has no
+        per-player stats. Running counts only minutes ended by t, over every track named his."""
+        named = (self.identity.get(track) or {}).get("player") if self.per_player else None
+        if not named:
+            return None
+        return next((r for r in player_stats_mod.stats(self.per_player, t) if r["player"] == named), None)
+
+    def player_rank(self, club: str | None, metric: str, minute: float) -> dict:
+        """Players ranked by one metric up to the match minute, most first (`best` is a stated
+        formula, never a model's view); fastest and furthest rank only players tracked enough."""
+        team = self.team(club)
+        rows = [r for r in self._player_rows(minute) if team in (None, r["team"])]
+        got = player_stats_mod.rank(rows, metric)
+        if got["withheld"] and metric == "involvement" and team is not None:
+            # The count is off, but the order alone was graded on a held-out match: the top three,
+            # with no number, "of the moves the video picked up" (player-involvement-rank-plan.md).
+            raw = player_stats_mod.stats(self.per_player, 60.0 * float(minute), withhold=False)
+            ordered = player_stats_mod.order([r for r in raw if r["team"] == team])
+            if not ordered["withheld"]:
+                got = ordered
+        return {**got, "summary": [], "club": club}
 
     def set_pieces(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
         """Each kind of restart over the minutes: the total, and each club's count with bounds."""
@@ -555,6 +631,7 @@ class MatchInsights:
                 "lineup_tactical": identity_mod.lineup(self.identity)}
                if self.identity_source else {}),
             **({"lineup": identity_mod.lineup(self.identity_broadcast)} if self.identity_broadcast else {}),
+            **({"player_stats": self.per_player} if self.per_player else {}),
         }
 
     @classmethod
@@ -573,6 +650,7 @@ class MatchInsights:
             dict(body.get("identity_tracks") or {}),
             dict(body.get("identity_broadcast") or {}),
             dict(body.get("identity") or {}),
+            dict(body.get("player_stats") or {}),
         )
 
 

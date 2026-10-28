@@ -432,6 +432,9 @@ def detect(rows: list[dict], join_breaks: bool = True,
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)
         if shot:
+            # The shot's side is the end it goes toward, and `who` may be a track read on the other side.
+            # He is kept here: the player-ID feed may name him and give his side (identity.sided), and only
+            # then is it known which read was wrong. detected.load drops him if the feed did not (lesson 292).
             event("shot", a.last, shooter, path[i].x, path[i].y, conf, side_conf,
                   ball_speed_kmh=speed, player=who,
                   outcome=None if result.outcome == "on_target" and not saves else result.outcome)

@@ -124,11 +124,12 @@ def test_route_reads_the_question():
 def test_code_answers_without_a_model():
     r = asyncio.run(companion.answer_match(Q, insights()))
     assert r.source == "code" and r.answer.status == "verified"
-    assert r.answer.text == (
+    # The answer, then one more checked sentence of the same club's (lesson 288).
+    assert r.answer.text.startswith(
         "London Athletic lost the ball 7 times in open play from minute 15 to minute 29 and never won "
         "it back within 5 seconds."
     )
-    assert r.answer.evidence == ("cp:home:m15-29",)
+    assert r.answer.evidence[0] == "cp:home:m15-29"
 
 
 def said(fact_id, mi=None):
@@ -201,6 +202,7 @@ def test_the_question_is_data_inside_the_prompt():
         "clubs",
         "minute",
         "tools",
+        "intents",  # the intent table's rows the model may pick instead of tools (lesson 297)
     }
 
 
@@ -512,13 +514,16 @@ def test_why_did_that_goal_happen():
             "t": 1350.0,
             "event": "v90",
             "event_confidence": 0.9,
+            "side_known": True,
             "confident": True,
         }
     ]
     q = Question("s1", None, "Why did that goal happen?", 24 * 60.0)
     r = asyncio.run(companion.answer_match(q, mi))
     assert r.answer.evidence == ("goal:v90", "lb:v1")
-    assert r.answer.text.startswith("London Athletic scored in minute 23. Just before it, in minute 23, ")
+    assert r.answer.text.startswith(
+        "London Athletic scored in minute 23. Just before it, a London Athletic pass took "
+    )
 
 
 def test_who_has_been_the_best_player():
@@ -695,7 +700,9 @@ def test_who_is_best_is_never_answered_with_a_name_off_the_sheet(text):
     # The stand-in has no confident leader (the bounds overlap), so there is no honest name to give.
     mi = standin()
     r = asyncio.run(companion.answer_match(Question("s", None, text, 60.0 * mi.minutes - 1), mi))
-    assert r.answer.status == "unanswerable" and not any(e.startswith("sheet:") for e in r.answer.evidence)
+    # No name: the closest measured fact, said plainly, never "can't" (lesson 297, Kian's voice).
+    assert not re.search(r"can't|\bbest\b", r.answer.text), r.answer.text
+    assert not any(e.startswith("sheet:") for e in r.answer.evidence)
 
 
 def test_a_sheet_row_says_only_its_own_name_position_and_club():
@@ -958,13 +965,16 @@ def _score_answer(goals, question="What's the score?"):
     return asyncio.run(companion.answer_match(Question("s1", None, question, 80 * 60.0), mi)).answer
 
 
-@pytest.mark.parametrize("goals, said, minutes", [
-    ([_goal("v90", 23)], "London Athletic scored in minute 23.", {"23"}),  # spotted and placed
-    ([_goal("v91", 43, side_known=False)], "a goal in minute 43 too, without telling whose", {"43"}),
-    ([_goal("v92", 43, confidence=0.3)], "no goal it can vouch for", set()),  # under the detection gate
-    ([], "no goal it can vouch for", set()),
-    ([_goal("v90", 23), _goal("v91", 61, side_known=False)], "scored in minute 23.", {"23", "61"}),
-])
+@pytest.mark.parametrize(
+    "goals, said, minutes",
+    [
+        ([_goal("v90", 23)], "London Athletic scored in minute 23.", {"23"}),  # spotted and placed
+        ([_goal("v91", 43, side_known=False)], "There was also a goal in minute 43.", {"43"}),
+        ([_goal("v92", 43, confidence=0.3)], "No goals yet.", set()),  # under the detection gate
+        ([], "No goals yet.", set()),
+        ([_goal("v90", 23), _goal("v91", 61, side_known=False)], "scored in minute 23.", {"23", "61"}),
+    ],
+)
 def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, said, minutes):
     # Kian, Oct 26 (option B): the scorebug shows the score; the answer names the goals vision spotted.
     a = _score_answer(goals)
@@ -972,6 +982,18 @@ def test_whats_the_score_names_the_goals_spotted_and_never_a_scoreline(goals, sa
     assert set(re.findall(r"\d+", a.text)) == minutes  # the only numbers are the goals' minutes
     assert a.metric is None and a.value is None  # never the score's counts as the answer's number
     assert a.headline in ("Goals spotted by vision", "See the scorebug")
+
+
+@pytest.mark.parametrize("scorer, said", [
+    ("Ben Vomble", "Ben Vomble scored for London Athletic in minute 23."),
+    ("London Athletic's striker", None),  # a role with the club in it: the club would be said twice
+    ("a London Athletic player", None),  # lesson 286: only the club, in a name's slot
+])
+def test_a_scorer_who_is_only_his_club_is_not_said_twice(scorer, said):
+    texts = companion.code_texts({**_goal("v90", 23), "scorer_is": scorer})
+    assert texts[-1] == "London Athletic scored in minute 23."
+    assert all(t.count("London Athletic") == 1 for t in texts), texts
+    assert (said in texts) if said else len(texts) == 1
 
 
 def test_who_is_winning_is_headed_by_the_scorebug_not_a_scorer():
@@ -1059,18 +1081,74 @@ def test_a_ranked_player_without_a_name_is_his_club_and_an_unsure_ranking_says_w
 
 def test_possession_unknown_is_said_as_unknown_with_the_longest_run_of_passing():
     mi = insights()
-    mi.facts["spell"] = [{"id": "spell:v9", "kind": "spell", "metric": "spell_passes", "team": None,
-                          "minute": 31, "t": 1850.0, "value": 7, "unit": "passes", "confident": True,
-                          "club": None, "events": []}]
-    # Every pass's side unsure: the share is unknown (bounds 0 to 100), not 0 or 100.
-    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
-                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
-                              for i in range(20)]
-    a = asyncio.run(companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0),
-                                           mi)).answer
-    assert a.text.startswith(companion.POSSESSION_UNKNOWN), a.text
-    assert "7 passes in a row, in minute 31" in a.text
-    assert "%" not in a.text  # no share said
+    mi.facts["spell"] = [
+        {
+            "id": "spell:v9",
+            "kind": "spell",
+            "metric": "spell_passes",
+            "team": None,
+            "minute": 31,
+            "t": 1850.0,
+            "value": 7,
+            "unit": "passes",
+            "confident": True,
+            "club": None,
+            "events": [],
+        }
+    ]
+    # Under a minute of possession seen in the window: the share is unknown, not 0 or 100.
+    mi.facts["possession"] = [
+        {
+            "id": f"poss:m{10 + i}",
+            "kind": "possession_minute",
+            "minute": 10 + i,
+            "frames": 2.0,
+            "home": 1.0,
+            "away": 1.0,
+            "club": None,
+        }
+        for i in range(20)
+    ]
+    a = asyncio.run(
+        companion.answer_match(Question("s1", None, "Who has had more possession?", 80 * 60.0), mi)
+    ).answer
+    # Kian, Oct 27: never "not known" while a related measured fact exists; no share is said.
+    assert not re.search(r"can't|not known|too early", a.text) and "%" not in a.text, a.text
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "Who has had more possession?",
+        "Who has had more of the ball?",
+        "Who's dominating possession?",
+        # "Are London dominating?" without "possession" asks who is on top (the Ask grader's pre-registered
+        # set reads "who's dominating" so): lesson 297's table, not this list.
+        "Which team has been better in possession?",
+        "Who has the ball more?",
+    ],
+)
+def test_possession_is_one_answer_however_it_is_asked(q):
+    # Paraphrases never flip it: the same coverage-honest sentence with its window and its error.
+    mi = insights()
+    mi.facts["possession"] = [
+        {
+            "id": f"poss:m{m}",
+            "kind": "possession_minute",
+            "minute": m,
+            "frames": 60.0,
+            "home": 30.0,
+            "away": 20.0,
+            "club": None,
+        }
+        for m in range(1, 36)
+    ]
+    a = asyncio.run(companion.answer_match(Question("s1", None, q, 34.5 * 60.0), mi)).answer
+    # Both clubs, over the minutes played by 34:30 (lesson 297).
+    assert a.text == (
+        "London Athletic have had more of the ball: 60% to Lisbon Esportes' 40% in the footage "
+        "so far, give or take 10 points."
+    ), (q, a.text)
 
 
 def test_the_refusal_says_build_up_with_its_hyphen():
@@ -1086,12 +1164,21 @@ def test_who_scored_is_headed_by_the_score_and_unknown_possession_by_not_known()
     mi.facts["goal"], mi.facts["scorebug"] = [_goal("v90", 23)], [_bug("s1", 23, 1, 0)]
     a = asyncio.run(companion.answer_match(Question("s1", None, "Who scored?", 80 * 60.0), mi)).answer
     assert a.headline == "London 1, Lisbon 0", a.headline
-    mi.facts["possession"] = [{"id": f"poss:v{i}", "kind": "possession_pass", "team": "home",
-                               "minute": 10 + i, "side_known": False, "club": "London Athletic"}
-                              for i in range(20)]
+    mi.facts["possession"] = [
+        {
+            "id": f"poss:m{10 + i}",
+            "kind": "possession_minute",
+            "minute": 10 + i,
+            "frames": 2.0,
+            "home": 1.0,
+            "away": 1.0,
+            "club": None,
+        }
+        for i in range(20)
+    ]
     for q in ("Who has more of the ball?", "Who has had more possession?"):
         a = asyncio.run(companion.answer_match(Question("s1", None, q, 80 * 60.0), mi)).answer
-        assert a.status == "verified" and a.headline == "Not known yet", (q, a.headline, a.text)
+        assert a.headline != "Not known yet" and "%" not in a.text, (q, a.headline, a.text)  # no share said
 
 
 # -- Kian's preview probe (Oct 26): the named club, a share's sample, no degenerate window -----------
@@ -1214,15 +1301,124 @@ def test_the_model_citing_the_beaten_clubs_pass_is_refused():
     assert "took 3 Lisbon Esportes players" in r.answer.text, r.answer.text
 
 
+# -- "Who's been on top?" (Kian and Jayden's 8324 preview, Oct 27): both clubs, over the stretch asked --
+
+
+def _territory_minute(team, minute, final, near=0, seen=60):
+    return {"id": f"terr:{team}:m{minute}", "kind": "territory_minute", "team": team, "minute": minute,
+            "seconds": 60, "seen": seen, "near_line": near, "own": seen - final - near, "middle": 0,
+            "final": final, "club": None}
+
+
+def _on_top_insights(home_final, away_final, home_early=50):
+    mi = insights()
+    # Minutes 1 to 30: London camped in Lisbon's half; from minute 31, the shares asked about.
+    rows = [_territory_minute("home", m, home_early) for m in range(1, 31)]
+    rows += [_territory_minute("away", m, 2) for m in range(1, 31)]
+    rows += [_territory_minute("home", m, home_final, near=2) for m in range(31, 36)]
+    rows += [_territory_minute("away", m, away_final, near=2) for m in range(31, 36)]
+    mi.facts["territory"] = rows
+    return mi
+
+
+@pytest.mark.parametrize(
+    "q, t, window",
+    [
+        # Whole minutes played only (lesson 297): at 34:10 minute 35's bin runs past now, so it is not read.
+        ("Who's been on top since the half hour?", 2050.0, (31, 34)),
+        ("Who has been on top in the half hour", 2030.0, (31, 33)),  # 33:50, the second repro
+        ("Who has been on top in the last half hour?", 2050.0, (5, 34)),
+    ],
+)
+def test_on_top_compares_both_clubs_over_the_stretch_asked(q, t, window):
+    mi = _on_top_insights(home_final=6, away_final=15)  # Lisbon's least (25%) beats London's most (13%)
+    r = asyncio.run(companion.answer_match(Question("s1", None, q, t), mi))
+    assert r.tools[0]["name"] == "on_top" and (r.tools[0]["minute_from"], r.tools[0]["minute_to"]) == window
+    a = r.answer
+    span = f"from minute {window[0]} to minute {window[1]}"
+    assert "Lisbon Esportes" in a.text and "London Athletic" in a.text and "attacking third" in a.text, a.text
+    # The verdict and both clubs in one sentence, over the stretch asked, never minutes 1 to now.
+    assert a.text.count(span) == 1, a.text
+    assert re.match(rf"(?:London Athletic|Lisbon Esportes) have been on top {span}", a.text), a.text
+    assert a.t_to <= t  # the answer is about what was seen by now, never the rest of the minute
+    if window[0] == 31:
+        assert a.headline == "Lisbon", a.headline  # the comparison's verdict, not one club's number
+        assert a.text.index("Lisbon") < a.text.index("London")  # the leader first
+
+
+def test_on_top_is_too_close_to_call_when_the_ranges_overlap():
+    mi = _on_top_insights(home_final=10, away_final=11)
+    a = asyncio.run(
+        companion.answer_match(Question("s1", None, "Who's been on top since the half hour?", 2050.0), mi)
+    ).answer
+    assert a.headline == "Even", a.headline
+    assert a.text.startswith("It's been even from minute 31 to minute 34: "), a.text
+
+
+@pytest.mark.parametrize("seen", [2, 0])  # two seconds of the ball; none at all (no territory yet)
+def test_on_top_is_not_known_on_too_little_footage(seen):
+    mi = insights()
+    mi.facts["territory"] = [
+        _territory_minute(t, 35, final=seen, seen=seen) for t in ("home", "away") if seen
+    ]
+    a = asyncio.run(
+        companion.answer_match(Question("s1", None, "Who has been on top in the last minute?", 2120.0), mi)
+    ).answer
+    # Too little of the ball to compare: the closest measured fact, never "too early" (Kian, Oct 27).
+    assert a.status == "unanswerable" and not re.search(r"too early|can't|not known", a.text), a.text
+
+
+def test_possession_is_not_said_for_a_stretch_it_was_not_measured_on():
+    from ninety.intel import ball_share
+
+    rows = [{"id": f"poss:m{m}", "kind": "possession_minute", "team": None, "minute": m, "frames": 60.0,
+             "home": 30.0, "away": 20.0} for m in range(1, 40)]
+    assert ball_share.possession(rows, 1, 35)["home"]["value"] == 60  # from kick-off: measured
+    assert ball_share.possession(rows, 46, 39) == {}  # nothing in the window yet
+    late = ball_share.possession(rows, 31, 35)["home"]
+    assert late["value"] is None and not late["confident"]  # minutes 31 to 35: never measured
+
+
+@pytest.mark.parametrize("scorer, source, said", [
+    ("Ben Vomble", "id_feed", True),  # the feed's name for the goal's own player
+    ("a Lisbon Esportes player", None, False),  # a Lisbon label on a London goal: never
+    ("Lisbon Esportes's right winger", None, False),
+])
+def test_a_scorer_is_said_only_by_a_name_with_no_club_in_it(scorer, source, said):
+    mi = insights()
+    goal = {**_goal("v90", 23), "scorer_is": scorer, "clubs": mi.fixture.clubs,
+            **({"scorer_source": source} if source else {})}
+    texts = companion.code_texts(goal)
+    assert any(scorer in t for t in texts) is said
+    assert all("Lisbon" not in t for t in texts if "scored for London" in t), texts
+    if said:  # the fact-checker passes the feed's name although vision's record of him is unsure
+        from ninety.agents.factcheck import Claim
+
+        text = f"{scorer} scored for London Athletic in minute 23."
+        assert companion._verify(Claim(text, [goal["id"]]), {goal["id"]: goal}, mi).ok
+
+
 SMALL_TALK_PROBES = [
-    "hello", "Hi!", "hey there", "thanks", "Thank you so much", "cheers mate", "ok", "what can you do?",
-    "Who are you?", "help",
+    "hello",
+    "Hi!",
+    "hey there",
+    "thanks",
+    "Thank you so much",
+    "cheers mate",
+    "ok",
+    "what can you do?",
+    "Who are you?",
+    "help",
 ]
 OFF_TOPIC_PROBES = ["asdkjh qwe zzz", "What's the capital of France?", "will it rain tomorrow?"]
 STAT = re.compile(r"\d|%|\bminute\b")
-HISTORY = [{"question": "How are London Athletic playing?", "answer": "x",
-            "calls": [{"name": "line_breaks", "club": "London Athletic",
-                       "minute_from": 14, "minute_to": 28}]}]
+HISTORY = [
+    {
+        "question": "How are London Athletic playing?",
+        "answer": "x",
+        "calls": [{"name": "line_breaks", "club": "London Athletic", "minute_from": 14, "minute_to": 28}],
+    }
+]
 
 
 def _a_friendly_reply(r):
@@ -1270,8 +1466,9 @@ def test_a_question_code_does_not_route_is_answered_by_the_models_plan():
     and a plan it makes is answered and checked as any other."""
     plan = json.dumps({"tools": [{"name": "line_breaks", "club": None, "minute_from": 1, "minute_to": 28}]})
     ask, _ = scripted(plan, json.dumps({"text": said("lb:v1"), "evidence": ["lb:v1"]}))
-    q = Question("s1", None, "how many passes?", Q.t)
+    q = Question("s1", None, "what's going on out there?", Q.t)
     assert companion.route(q.text) == [] and companion.chat_kind(q.text, insights()) == "other"
+    assert companion.read_question(q.text, insights(), q.t).intent == "small_talk"  # no row of the table
     r = asyncio.run(companion.answer_match(q, insights(), ask))
     assert r.source == "model" and r.answer.status == "verified", (r.reasons, r.answer.text)
 

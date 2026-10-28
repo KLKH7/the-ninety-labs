@@ -465,7 +465,12 @@ body[data-screen="big"] .sp[hidden] { display: none; }
 }
 @keyframes sp-in { from { opacity: 0; } }
 .sp p { margin: 0; }
-.sp-stack { width: calc(720 * var(--v)); display: grid; gap: calc(10 * var(--v)); }
+/* An opaque backing: the footage under the dim (an edit's stinger, held at full time) never shows
+   through the stack (Kian's 8324 full-time panel); at full time the picture is covered. */
+.sp-stack { width: calc(720 * var(--v)); display: grid; gap: calc(10 * var(--v)); padding: calc(28 * var(--v));
+  border-radius: calc(var(--g-radius-card) * 2 * var(--v)); background: var(--g-bug); }
+body[data-screen="big"] .sp[data-period="FT"] { background: var(--g-bug); }
+body[data-period-panel] .time-skip { visibility: hidden; }
 .sp-period { text-align: center; font-size: calc(14 * var(--t)); font-weight: 600; letter-spacing: 0.2em; color: var(--g-ink2); }
 .sp-head { display: flex; align-items: center; justify-content: center; gap: calc(36 * var(--v)); }
 .sp-crest { display: inline-flex; width: calc(64 * var(--v)); height: calc(76 * var(--v)); }

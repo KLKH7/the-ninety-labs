@@ -1,0 +1,2168 @@
+{
+ "spend": {
+  "calls": 73,
+  "tokens_in": 72270,
+  "tokens_out": 1939,
+  "usd": 0.03521,
+  "cap_usd": 0.5,
+  "latency_p50_s": 1.387,
+  "latency_p95_s": 2.475
+ },
+ "estimate": {
+  "calls": 73,
+  "tokens_in": 72270,
+  "tokens_out": 2920,
+  "usd": 0.0369
+ },
+ "rows": [
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 2257,
+    "frame": 4964,
+    "why": "at a line",
+    "ball": [
+     63.51,
+     73.73
+    ]
+   },
+   "indices": [
+    2257,
+    2295,
+    2332
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball near touchline, no throw-in or set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.5804330420214683,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 2259,
+    "frame": 4966,
+    "why": "fast toward goal",
+    "ball": [
+     72.09,
+     69.61
+    ]
+   },
+   "indices": [
+    2249,
+    2269,
+    2289
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball in open play, no set piece or throw-in visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 2.415912540978752,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 2569,
+    "frame": 5276,
+    "why": "fast toward goal",
+    "ball": [
+     32.63,
+     24.98
+    ]
+   },
+   "indices": [
+    2559,
+    2579,
+    2599
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 2.119285833032336,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 2654,
+    "frame": 8113,
+    "why": "at a line",
+    "ball": [
+     104.45,
+     67.47
+    ]
+   },
+   "indices": [
+    2654,
+    2692,
+    2729
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball in play near corner, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.8835945830214769,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 3059,
+    "frame": 9386,
+    "why": "at a line",
+    "ball": [
+     104.27,
+     47.42
+    ]
+   },
+   "indices": [
+    3059,
+    3097,
+    3134
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Player kicking ball toward goal, ball flying near goal",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.374316125002224,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 3671,
+    "frame": 11045,
+    "why": "fast toward goal",
+    "ball": [
+     14.17,
+     43.03
+    ]
+   },
+   "indices": [
+    3661,
+    3681,
+    3701
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Player striking ball toward goal, ball flying at keeper",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.672630916989874,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 3694,
+    "frame": 11068,
+    "why": "set ball",
+    "ball": [
+     3.76,
+     40.35
+    ]
+   },
+   "indices": [
+    3694,
+    3732,
+    3747
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.6961257079965435,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 4831,
+    "frame": 17829,
+    "why": "fast toward goal",
+    "ball": [
+     71.64,
+     14.43
+    ]
+   },
+   "indices": [
+    4821,
+    4841,
+    4861
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play, ball in midfield and attacking areas",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.3382043330348097,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 4892,
+    "frame": 17890,
+    "why": "at a line",
+    "ball": [
+     104.2,
+     33.98
+    ]
+   },
+   "indices": [
+    4892,
+    4930,
+    4967
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Ball flying near goal, players reacting, goalkeeper ready",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.5453423750004731,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 5168,
+    "frame": 20447,
+    "why": "at a line",
+    "ball": [
+     0.34,
+     66.85
+    ]
+   },
+   "indices": [
+    5168,
+    5206,
+    5243
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in penalty area, no ball visible for set piece",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.4900827090023085,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 5872,
+    "frame": 21151,
+    "why": "vision shot",
+    "ball": [
+     80.02,
+     60.32
+    ]
+   },
+   "indices": [
+    5862,
+    5882,
+    5902
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players running in open play, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.3870588749996386,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 5937,
+    "frame": 21216,
+    "why": "at a line",
+    "ball": [
+     89.58,
+     67.24
+    ]
+   },
+   "indices": [
+    5937,
+    5975,
+    6012
+   ],
+   "label": "none",
+   "confidence": 0.8,
+   "seen": "Players spread out, no ball at corner or goal area, no throw-in visible",
+   "tokens_in": 990,
+   "tokens_out": 31,
+   "latency_s": 1.4738170839846134,
+   "cost_usd": 0.00049016,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 6021,
+    "frame": 21300,
+    "why": "at a line",
+    "ball": [
+     115.77,
+     62.7
+    ]
+   },
+   "indices": [
+    6021,
+    6059,
+    6064
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper preparing to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1766006250400096,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 6042,
+    "frame": 21321,
+    "why": "fast toward goal",
+    "ball": [
+     112.12,
+     41.49
+    ]
+   },
+   "indices": [
+    6032,
+    6052,
+    6064
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.1851828750222921,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 6736,
+    "frame": 30547,
+    "why": "at a line",
+    "ball": [
+     14.03,
+     67.42
+    ]
+   },
+   "indices": [
+    6736,
+    6774,
+    6811
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, no set piece or throw-in visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 2.1094191250158474,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 6901,
+    "frame": 30712,
+    "why": "fast toward goal",
+    "ball": [
+     36.85,
+     11.12
+    ]
+   },
+   "indices": [
+    6891,
+    6911,
+    6931
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players passing ball in open field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.9971616250113584,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 7131,
+    "frame": 30942,
+    "why": "fast toward goal",
+    "ball": [
+     9.2,
+     45.95
+    ]
+   },
+   "indices": [
+    7121,
+    7141,
+    7161
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.9045904999948107,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 7748,
+    "frame": 40373,
+    "why": "at a line",
+    "ball": [
+     5.2,
+     70.48
+    ]
+   },
+   "indices": [
+    7748,
+    7786,
+    7818
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Open play with players on field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.2781216250150464,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 7853,
+    "frame": 41205,
+    "why": "at a line",
+    "ball": [
+     1.24,
+     53.77
+    ]
+   },
+   "indices": [
+    7853,
+    7891,
+    7928
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players running in open play, ball on field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 29,
+   "latency_s": 1.7054452919983305,
+   "cost_usd": 0.00048664,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 7981,
+    "frame": 41333,
+    "why": "at a line",
+    "ball": [
+     3.85,
+     68.74
+    ]
+   },
+   "indices": [
+    7981,
+    8019,
+    8056
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper preparing to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.3850185829796828,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 8255,
+    "frame": 42419,
+    "why": "fast toward goal",
+    "ball": [
+     31.23,
+     50.1
+    ]
+   },
+   "indices": [
+    8245,
+    8265,
+    8285
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play, ball in midfield, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.6679681249661371,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 8299,
+    "frame": 42463,
+    "why": "at a line",
+    "ball": [
+     20.85,
+     67.84
+    ]
+   },
+   "indices": [
+    8299,
+    8337,
+    8374
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, no ball placement or kicking visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.6882997499778867,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 9549,
+    "frame": 45156,
+    "why": "at a line",
+    "ball": [
+     79.91,
+     67.24
+    ]
+   },
+   "indices": [
+    9549,
+    9587,
+    9624
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players spread across midfield, no ball placement or kicking visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.713904541975353,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 10558,
+    "frame": 47816,
+    "why": "at a line",
+    "ball": [
+     62.71,
+     68.78
+    ]
+   },
+   "indices": [
+    10558,
+    10596,
+    10633
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Open play with players running and ball in field center",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.878779584018048,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 10619,
+    "frame": 47877,
+    "why": "fast toward goal",
+    "ball": [
+     70.7,
+     54.9
+    ]
+   },
+   "indices": [
+    10609,
+    10629,
+    10639
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Open play with players and ball, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1776301670470275,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 10929,
+    "frame": 50477,
+    "why": "at a line",
+    "ball": [
+     28.77,
+     1.13
+    ]
+   },
+   "indices": [
+    10929,
+    10967,
+    11004
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players running near sideline, no ball or set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.4215732499724254,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 11043,
+    "frame": 50759,
+    "why": "at a line",
+    "ball": [
+     26.85,
+     -0.23
+    ]
+   },
+   "indices": [
+    11043,
+    11081,
+    11118
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players standing near midfield line, no ball visible, no set piece",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.3957591250073165,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 11093,
+    "frame": 50809,
+    "why": "fast toward goal",
+    "ball": [
+     25.05,
+     5.51
+    ]
+   },
+   "indices": [
+    11083,
+    11103,
+    11123
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball in open field, players spread out, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.383796124951914,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 11279,
+    "frame": 50995,
+    "why": "fast toward goal",
+    "ball": [
+     36.58,
+     35.43
+    ]
+   },
+   "indices": [
+    11269,
+    11289,
+    11309
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players spread out, ball in open field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.2358806660049595,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 11368,
+    "frame": 51084,
+    "why": "fast toward goal",
+    "ball": [
+     6.25,
+     31.63
+    ]
+   },
+   "indices": [
+    11358,
+    11378,
+    11398
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.3187704590382054,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 11378,
+    "frame": 51094,
+    "why": "at a line",
+    "ball": [
+     1.26,
+     36.76
+    ]
+   },
+   "indices": [
+    11378,
+    11416,
+    11453
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Ball flying toward goal, goalkeeper reacting, players near penalty area",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.5854479169938713,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 11660,
+    "frame": 54475,
+    "why": "at a line",
+    "ball": [
+     14.19,
+     69.44
+    ]
+   },
+   "indices": [
+    11660,
+    11698,
+    11735
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, no ball placement or kicking visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.5505169589887373,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 12476,
+    "frame": 56411,
+    "why": "at a line",
+    "ball": [
+     47.81,
+     66.76
+    ]
+   },
+   "indices": [
+    12476,
+    12514,
+    12521
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in midfield, no ball visible, no set piece",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1895360830239952,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 12528,
+    "frame": 61432,
+    "why": "fast toward goal",
+    "ball": [
+     24.82,
+     -0.26
+    ]
+   },
+   "indices": [
+    12522,
+    12538,
+    12558
+   ],
+   "label": "throw_in",
+   "confidence": 0.9,
+   "seen": "Player holding ball with both hands at touchline preparing to throw",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.5063353340374306,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 12685,
+    "frame": 61589,
+    "why": "fast toward goal",
+    "ball": [
+     37.06,
+     9.07
+    ]
+   },
+   "indices": [
+    12675,
+    12695,
+    12715
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Open play with ball passing, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.2261995000299066,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 14129,
+    "frame": 64874,
+    "why": "at a line",
+    "ball": [
+     0.9,
+     48.19
+    ]
+   },
+   "indices": [
+    14129,
+    14167,
+    14180
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball near goal, no clear shot or set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1156679170089774,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 14158,
+    "frame": 64903,
+    "why": "fast toward goal",
+    "ball": [
+     -3.87,
+     32.42
+    ]
+   },
+   "indices": [
+    14148,
+    14168,
+    14180
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.2253875830210745,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 14470,
+    "frame": 65942,
+    "why": "at a line",
+    "ball": [
+     1.14,
+     48.95
+    ]
+   },
+   "indices": [
+    14470,
+    14508,
+    14535
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "goalkeeper with ball, players not near corner or throw-in",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.1317081250017509,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 14488,
+    "frame": 65960,
+    "why": "fast toward goal",
+    "ball": [
+     3.09,
+     28.67
+    ]
+   },
+   "indices": [
+    14478,
+    14498,
+    14518
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper preparing to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1596838749828748,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 15365,
+    "frame": 69730,
+    "why": "at a line",
+    "ball": [
+     40.04,
+     68.63
+    ]
+   },
+   "indices": [
+    15365,
+    15403,
+    15440
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Open play, ball in midfield, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.1566469999961555,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 15385,
+    "frame": 69750,
+    "why": "fast toward goal",
+    "ball": [
+     24.98,
+     89.82
+    ]
+   },
+   "indices": [
+    15375,
+    15395,
+    15415
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players running in open field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.3021788750193082,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 15448,
+    "frame": 69813,
+    "why": "at a line",
+    "ball": [
+     24.91,
+     67.79
+    ]
+   },
+   "indices": [
+    15448,
+    15486,
+    15523
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, ball in play, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.3980391250224784,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 16530,
+    "frame": 80360,
+    "why": "at a line",
+    "ball": [
+     15.66,
+     -0.25
+    ]
+   },
+   "indices": [
+    16530,
+    16568,
+    16605
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper ready to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.3563291669706814,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 16698,
+    "frame": 80528,
+    "why": "at a line",
+    "ball": [
+     1.05,
+     46.38
+    ]
+   },
+   "indices": [
+    16698,
+    16736,
+    16773
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper preparing to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 2.5397586670005694,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 16758,
+    "frame": 80588,
+    "why": "fast toward goal",
+    "ball": [
+     11.29,
+     33.45
+    ]
+   },
+   "indices": [
+    16748,
+    16768,
+    16788
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper ready to kick",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 2.26415508298669,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 16790,
+    "frame": 80620,
+    "why": "at a line",
+    "ball": [
+     -0.21,
+     37.35
+    ]
+   },
+   "indices": [
+    16790,
+    16828,
+    16865
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Ball flying toward goal, goalkeeper and players reacting",
+   "tokens_in": 990,
+   "tokens_out": 24,
+   "latency_s": 1.0216840829816647,
+   "cost_usd": 0.00047784,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 16843,
+    "frame": 80673,
+    "why": "fast toward goal",
+    "ball": [
+     1.21,
+     34.12
+    ]
+   },
+   "indices": [
+    16833,
+    16853,
+    16873
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.3752609579823911,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 17165,
+    "frame": 80995,
+    "why": "at a line",
+    "ball": [
+     17.27,
+     67.05
+    ]
+   },
+   "indices": [
+    17165,
+    17203,
+    17240
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, no set piece or ball placement visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.1424288339912891,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 17867,
+    "frame": 87504,
+    "why": "at a line",
+    "ball": [
+     29.37,
+     1.26
+    ]
+   },
+   "indices": [
+    17867,
+    17905,
+    17942
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball in open play near midfield, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 2.474611542013008,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 18172,
+    "frame": 87809,
+    "why": "at a line",
+    "ball": [
+     19.83,
+     82.38
+    ]
+   },
+   "indices": [
+    18172,
+    18210,
+    18247
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players running near touchline, no ball visible for set piece",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.3755390000296757,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 18483,
+    "frame": 88120,
+    "why": "fast toward goal",
+    "ball": [
+     10.92,
+     35.28
+    ]
+   },
+   "indices": [
+    18473,
+    18493,
+    18513
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play near penalty area, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.2880283750128,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 18489,
+    "frame": 88126,
+    "why": "at a line",
+    "ball": [
+     0.62,
+     41.94
+    ]
+   },
+   "indices": [
+    18489,
+    18527,
+    18538
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.3808583750505932,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 18575,
+    "frame": 89590,
+    "why": "at a line",
+    "ball": [
+     81.25,
+     69.29
+    ]
+   },
+   "indices": [
+    18575,
+    18613,
+    18650
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, ball in play, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.229813666024711,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 18912,
+    "frame": 97111,
+    "why": "at a line",
+    "ball": [
+     1.08,
+     7.12
+    ]
+   },
+   "indices": [
+    18912,
+    18950,
+    18987
+   ],
+   "label": "corner",
+   "confidence": 0.9,
+   "seen": "Ball near corner arc, player about to kick, others in box",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 2.0228252499946393,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 19573,
+    "frame": 98665,
+    "why": "fast toward goal",
+    "ball": [
+     37.62,
+     20.61
+    ]
+   },
+   "indices": [
+    19563,
+    19583,
+    19603
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Ball in open play, players spread out, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 3.015288042020984,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 19654,
+    "frame": 98746,
+    "why": "at a line",
+    "ball": [
+     11.31,
+     67.49
+    ]
+   },
+   "indices": [
+    19654,
+    19692,
+    19729
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, no ball placement or kicking visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 2.3383827079669572,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 19791,
+    "frame": 98883,
+    "why": "fast toward goal",
+    "ball": [
+     37.69,
+     23.18
+    ]
+   },
+   "indices": [
+    19781,
+    19801,
+    19821
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players spread out, ball on field, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 2.3751856249873526,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 20193,
+    "frame": 99285,
+    "why": "at a line",
+    "ball": [
+     47.09,
+     72.4
+    ]
+   },
+   "indices": [
+    20193,
+    20195,
+    20195
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "No football action visible, only text and partial field",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.184908416995313,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 20427,
+    "frame": 100630,
+    "why": "at a line",
+    "ball": [
+     13.19,
+     66.92
+    ]
+   },
+   "indices": [
+    20427,
+    20465,
+    20502
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play, ball not near corner, goal area, or touchline",
+   "tokens_in": 990,
+   "tokens_out": 31,
+   "latency_s": 1.221426666015759,
+   "cost_usd": 0.00049016,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 20515,
+    "frame": 104366,
+    "why": "fast toward goal",
+    "ball": [
+     96.82,
+     28.16
+    ]
+   },
+   "indices": [
+    20511,
+    20525,
+    20545
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.3794368340168148,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 21453,
+    "frame": 110240,
+    "why": "at a line",
+    "ball": [
+     1.24,
+     46.07
+    ]
+   },
+   "indices": [
+    21453,
+    21491,
+    21528
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.2752896250458434,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 21458,
+    "frame": 110245,
+    "why": "fast toward goal",
+    "ball": [
+     -0.8,
+     56.77
+    ]
+   },
+   "indices": [
+    21448,
+    21468,
+    21488
+   ],
+   "label": "goal_kick",
+   "confidence": 0.9,
+   "seen": "Ball in goal area, goalkeeper about to kick it",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.1698902919888496,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 21537,
+    "frame": 110324,
+    "why": "at a line",
+    "ball": [
+     26.73,
+     67.22
+    ]
+   },
+   "indices": [
+    21537,
+    21575,
+    21612
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, ball in mid-play, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 29,
+   "latency_s": 1.4914386250311509,
+   "cost_usd": 0.00048664,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 22241,
+    "frame": 113010,
+    "why": "fast toward goal",
+    "ball": [
+     16.98,
+     19.7
+    ]
+   },
+   "indices": [
+    22231,
+    22251,
+    22271
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Player striking ball toward goal, ball flying near goalkeeper",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.5290424999548122,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 22258,
+    "frame": 113027,
+    "why": "at a line",
+    "ball": [
+     0.67,
+     36.91
+    ]
+   },
+   "indices": [
+    22258,
+    22296,
+    22333
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players near goal, no ball placement or kicking action visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 1.5134894999791868,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 23425,
+    "frame": 118557,
+    "why": "fast toward goal",
+    "ball": [
+     28.63,
+     10.83
+    ]
+   },
+   "indices": [
+    23415,
+    23435,
+    23455
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play, no ball placement or kicking visible",
+   "tokens_in": 990,
+   "tokens_out": 26,
+   "latency_s": 49.16559604200302,
+   "cost_usd": 0.00048136,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 23551,
+    "frame": 118683,
+    "why": "fast toward goal",
+    "ball": [
+     27.55,
+     14.65
+    ]
+   },
+   "indices": [
+    23541,
+    23561,
+    23581
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open field, ball in play, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.1830967079731636,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 24245,
+    "frame": 126435,
+    "why": "fast toward goal",
+    "ball": [
+     36.88,
+     39.99
+    ]
+   },
+   "indices": [
+    24235,
+    24255,
+    24275
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players spread out, ball in center circle, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 28,
+   "latency_s": 1.387004040996544,
+   "cost_usd": 0.00048488000000000003,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 24303,
+    "frame": 126493,
+    "why": "at a line",
+    "ball": [
+     25.64,
+     67.19
+    ]
+   },
+   "indices": [
+    24303,
+    24341,
+    24378
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players in open play near penalty area, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 27,
+   "latency_s": 1.242531833006069,
+   "cost_usd": 0.00048312,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 24409,
+    "frame": 126599,
+    "why": "at a line",
+    "ball": [
+     14.94,
+     67.54
+    ]
+   },
+   "indices": [
+    24409,
+    24447,
+    24484
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Ball flying toward goal, players in penalty area",
+   "tokens_in": 990,
+   "tokens_out": 24,
+   "latency_s": 1.3473794590099715,
+   "cost_usd": 0.00047784,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "shot",
+    "index": 24491,
+    "frame": 126681,
+    "why": "vision shot",
+    "ball": [
+     8.4,
+     26.75
+    ]
+   },
+   "indices": [
+    24481,
+    24501,
+    24521
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Player in red kicking ball toward goal, goalkeeper ready",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.5249687080504373,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 24514,
+    "frame": 126704,
+    "why": "at a line",
+    "ball": [
+     0.65,
+     33.88
+    ]
+   },
+   "indices": [
+    24514,
+    24552,
+    24589
+   ],
+   "label": "shot",
+   "confidence": 0.9,
+   "seen": "Player kicking ball toward goal, ball flying near goal",
+   "tokens_in": 990,
+   "tokens_out": 25,
+   "latency_s": 1.8941028749686666,
+   "cost_usd": 0.0004796,
+   "error": null
+  },
+  {
+   "candidate": {
+    "family": "restart",
+    "index": 25009,
+    "frame": 131190,
+    "why": "at a line",
+    "ball": [
+     47.21,
+     0.98
+    ]
+   },
+   "indices": [
+    25009,
+    25047,
+    25048
+   ],
+   "label": "none",
+   "confidence": 0.9,
+   "seen": "Players near midfield, no set piece visible",
+   "tokens_in": 990,
+   "tokens_out": 23,
+   "latency_s": 1.0769485409837216,
+   "cost_usd": 0.00047608000000000004,
+   "error": null
+  }
+ ],
+ "events": [
+  {
+   "id": "fc-0001",
+   "t": 211.04,
+   "frame": 5276,
+   "video_index": 2569,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 32.63,
+   "y": 24.98,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0002",
+   "t": 375.44,
+   "frame": 9386,
+   "video_index": 3059,
+   "type": "shot",
+   "restart": null,
+   "team": "home",
+   "x": 104.27,
+   "y": 47.42,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0003",
+   "t": 441.8,
+   "frame": 11045,
+   "video_index": 3671,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": 14.17,
+   "y": 43.03,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0004",
+   "t": 442.72,
+   "frame": 11068,
+   "video_index": 3694,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 3.76,
+   "y": 40.35,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "set ball"
+  },
+  {
+   "id": "fc-0005",
+   "t": 715.6,
+   "frame": 17890,
+   "video_index": 4892,
+   "type": "shot",
+   "restart": null,
+   "team": "home",
+   "x": 104.2,
+   "y": 33.98,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0006",
+   "t": 852.0,
+   "frame": 21300,
+   "video_index": 6021,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "away",
+   "x": 115.77,
+   "y": 62.7,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0007",
+   "t": 1237.68,
+   "frame": 30942,
+   "video_index": 7131,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 9.2,
+   "y": 45.95,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0008",
+   "t": 1653.32,
+   "frame": 41333,
+   "video_index": 7981,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 3.85,
+   "y": 68.74,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0009",
+   "t": 2043.36,
+   "frame": 51084,
+   "video_index": 11368,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 6.25,
+   "y": 31.63,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0010",
+   "t": 2043.76,
+   "frame": 51094,
+   "video_index": 11378,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": 1.26,
+   "y": 36.76,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0011",
+   "t": 2457.28,
+   "frame": 61432,
+   "video_index": 12528,
+   "type": "set_piece",
+   "restart": "throw_in",
+   "team": null,
+   "x": 24.82,
+   "y": -0.26,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0012",
+   "t": 2596.12,
+   "frame": 64903,
+   "video_index": 14158,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": -3.87,
+   "y": 32.42,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0013",
+   "t": 2638.4,
+   "frame": 65960,
+   "video_index": 14488,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 3.09,
+   "y": 28.67,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0014",
+   "t": 3214.4,
+   "frame": 80360,
+   "video_index": 16530,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 15.66,
+   "y": -0.25,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0015",
+   "t": 3224.8,
+   "frame": 80620,
+   "video_index": 16790,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": -0.21,
+   "y": 37.35,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0016",
+   "t": 3226.92,
+   "frame": 80673,
+   "video_index": 16843,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 1.21,
+   "y": 34.12,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0017",
+   "t": 3525.04,
+   "frame": 88126,
+   "video_index": 18489,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 0.62,
+   "y": 41.94,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0018",
+   "t": 3884.44,
+   "frame": 97111,
+   "video_index": 18912,
+   "type": "set_piece",
+   "restart": "corner",
+   "team": "away",
+   "x": 1.08,
+   "y": 7.12,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0019",
+   "t": 4174.64,
+   "frame": 104366,
+   "video_index": 20515,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "away",
+   "x": 96.82,
+   "y": 28.16,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0020",
+   "t": 4409.6,
+   "frame": 110240,
+   "video_index": 21453,
+   "type": "set_piece",
+   "restart": "goal_kick",
+   "team": "home",
+   "x": 1.24,
+   "y": 46.07,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0021",
+   "t": 4520.4,
+   "frame": 113010,
+   "video_index": 22241,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": 16.98,
+   "y": 19.7,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "fast toward goal"
+  },
+  {
+   "id": "fc-0022",
+   "t": 5063.96,
+   "frame": 126599,
+   "video_index": 24409,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": 14.94,
+   "y": 67.54,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "at a line"
+  },
+  {
+   "id": "fc-0023",
+   "t": 5067.24,
+   "frame": 126681,
+   "video_index": 24491,
+   "type": "shot",
+   "restart": null,
+   "team": "away",
+   "x": 8.4,
+   "y": 26.75,
+   "source": "foundry_check",
+   "confidence": 0.9,
+   "candidate": "vision shot"
+  }
+ ]
+}

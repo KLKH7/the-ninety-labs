@@ -43,5 +43,9 @@
  "consistency": {
   "value": "same headline", "unit": "normalised lead sentence",
   "why": "Design: paraphrases of one intent at one time pass when their lead sentences are the same after lower-casing and removing the question-specific club order; the modal headline is the reference."
+ },
+ "comparison_direction": {
+  "value": "the footage count's edge bands", "unit": "club named first in the lead sentence",
+  "why": "Added Oct 27 on Kian's decision that detector-bound counts (shots, on target, passes, corners, out of play) lead with a club comparison; committed with its test before any answer was graded with it (the rest of this file is unchanged since 3766efbe). Passes when the answer's lead sentence names the club that truly has more over the footage shown, or says 'level' when the truth is level. The truth is ordered only where the clubs' count bands (count_edge_s above, the strict 1.0 s event timing) do not overlap; where they overlap, 'level' or the club ahead on the central count passes. Amended before any graded run (ask-intents, #432): level is also said as 'N each' or 'neither side has had'; completion said as a direction ('X have passed more accurately than Y') is checked the same way on the footage completion, level within completion_points (10)."
  }
 }
