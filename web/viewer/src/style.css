@@ -194,6 +194,9 @@ body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-te
    it. The score is the broadcast's own scorebug; the controls (src/hud.ts) sit on the picture and
    fade while it plays. Personas and motion are the phone's. */
 .hud { display: none; }
+/* Nothing shows until the layout is chosen (src/main.ts sets data-layout once the bundle has loaded):
+   the big screen never flashes the developer panels first. */
+body:not([data-layout]) { visibility: hidden; }
 body[data-screen="big"] { background: #000; overflow: hidden; }
 body[data-screen="big"] .bar,
 body[data-screen="big"] .keys,
