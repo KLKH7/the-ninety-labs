@@ -59,8 +59,8 @@ assert all((pathlib.Path(m.MATCH_DIR) / 'frames' / f'{k}.json').exists() for k i
 # Replay mode: one clip already through the whole chain (ninety-e2e), packed by infra/replay.py and
 # published as a release asset. Refused unless its bytes match the pinned hash, so a changed or
 # replaced asset fails the build instead of reaching the demo. A new bundle changes both lines.
-ARG REPLAY_URL=https://github.com/KLKH7/the-ninety-labs/releases/download/replay-seed900001-0f101db/replay.tar.gz
-ARG REPLAY_SHA256=a5591d2666949076e5e81ccae616ca478c299067824dd46417a208d61e4fa9b9
+ARG REPLAY_URL=https://github.com/KLKH7/the-ninety-labs/releases/download/replay-seed8324-match-947a157/replay.tar.gz
+ARG REPLAY_SHA256=9da6b0f427c692f39b384069c3854bda29d5fee1d6e4cbddab1a1719ca124fa2
 ENV NINETY_REPLAY_DIR=/app/replay NINETY_VIEWER_DIR=/app/viewer NINETY_PHONE_DIR=/app/phone
 # infra/replay.py unpack checks the hash, then the same allow-list pack applied (no answer-key file).
 COPY infra/replay.py /tmp/replay.py
@@ -68,6 +68,20 @@ RUN python -c "import sys,urllib.request as u; open(sys.argv[2], 'wb').write(u.u
     "$REPLAY_URL" /tmp/replay.tar.gz \
     && python /tmp/replay.py unpack /tmp/replay.tar.gz /app/replay "$REPLAY_SHA256" \
     && test -f /app/replay/manifest.json && rm /tmp/replay.tar.gz /tmp/replay.py
+# The match the Replay bundle plays, served to Ask, the wind map and the player card
+# (ninety/match/tracking.py, served_clips): its tracked positions, detected events, clip.json and
+# scorebug readings, packed by infra/served.py and pinned the same way. No answer-key file passes it.
+ARG SERVED_URL=https://github.com/KLKH7/the-ninety-labs/releases/download/replay-seed8324-match-947a157/served.tar.gz
+ARG SERVED_SHA256=34244a75386d1a798ff9b11fc2a92fbdf8b30fe952ba7845ea9885a342633e94
+ENV NINETY_SERVED_DIR=/app/served
+COPY infra/served.py /tmp/served.py
+RUN python -c "import sys,urllib.request as u; open(sys.argv[2], 'wb').write(u.urlopen(sys.argv[1], timeout=120).read())" \
+    "$SERVED_URL" /tmp/served.tar.gz \
+    && python /tmp/served.py unpack /tmp/served.tar.gz /app/served "$SERVED_SHA256" \
+    && test -f /app/served/seed8324-match/tracked.json && rm /tmp/served.tar.gz /tmp/served.py \
+    && mkdir -p /app/matches/insights \
+    && for d in /app/served/*/; do c=$(basename "$d"); \
+         if [ -f "$d/insights.json" ]; then mv "$d/insights.json" "/app/matches/insights/$c.json"; fi; done
 COPY --from=viewer /viewer/dist /app/viewer
 COPY --from=phone /phone/dist /app/phone
 

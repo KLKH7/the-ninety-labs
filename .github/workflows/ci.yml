@@ -203,8 +203,15 @@ jobs:
         run: |
           url=$(sed -n 's/^ARG REPLAY_URL=//p' Dockerfile)
           sha=$(sed -n 's/^ARG REPLAY_SHA256=//p' Dockerfile)
-          curl -fsSL --max-time 120 "$url" -o pinned.tar.gz
-          python3 infra/replay.py unpack pinned.tar.gz runs/pinned "$sha"
+          curl -fsSL --max-time 600 "$url" -o pinned.tar.gz  # the demo match's bundle is about 1 GB
+          python3 infra/replay.py unpack pinned.tar.gz runs/pinned "$sha" && rm -rf pinned.tar.gz runs/pinned
+      - name: The Dockerfile's pinned served match package exists and matches its hash
+        # The build below downloads it as pinned (3 MB), so this names the failure if it does not.
+        run: |
+          url=$(sed -n 's/^ARG SERVED_URL=//p' Dockerfile)
+          sha=$(sed -n 's/^ARG SERVED_SHA256=//p' Dockerfile)
+          curl -fsSL --max-time 120 "$url" -o served.tar.gz
+          python3 infra/served.py unpack served.tar.gz runs/served "$sha"
       - name: Pack a fixture Replay bundle and serve it to the build
         id: replay
         run: |

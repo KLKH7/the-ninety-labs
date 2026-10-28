@@ -15,6 +15,7 @@ tests
 docs
 infra
 !infra/replay.py
+!infra/served.py
 web/node_modules
 .env
 .env.*
