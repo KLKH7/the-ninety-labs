@@ -238,6 +238,7 @@ async function start() {
     b = await loadBundle(base.endsWith("/") ? base : `${base}/`);
   } catch (e) {
     document.body.dataset.state = "error";
+    document.body.dataset.layout = "dev"; // show the panels, so the error is seen
     $("claims").textContent = `Could not open the bundle: ${(e as Error).message}. Run ninety-e2e first.`;
     return;
   }
@@ -263,6 +264,9 @@ async function start() {
   if (b.audio) b.audio = { ...b.audio, said: spokenSpeeds(b.audio.said, m.speed) };
   (window as unknown as { ninetyCues: Cue[] }).ninetyCues = b.cues; // what can air; read by tests/test_viewer.py
   (window as unknown as { ninetySpeed: typeof airSpeed }).ninetySpeed = airSpeed; // read by tests/test_viewer.py
+  // The layout is known only once the bundle says whether this is a match; until then the page stays
+  // dark (style.css, body:not([data-layout])), so the developer panels never flash on the big screen.
+  document.body.dataset.layout = big ? "big" : "dev";
   if (big) {
     document.body.dataset.screen = "big";
     showBoxes.checked = false; // the detector's boxes are the pipeline's view, not the broadcast's
