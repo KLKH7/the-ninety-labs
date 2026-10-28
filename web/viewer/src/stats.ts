@@ -42,9 +42,9 @@ const SCOUT: [string, string, string][] = [
 export function rowsAt(m: Stats | null, t: number, score: Pair | null): Row[] {
   const out: Row[] = [];
   const poss = scoutAt(m, "possession", t);
-  // The bundle's own label, which carries the measured error ("Possession (time on the ball, ±10 pts)"):
-  // a number that missed its gate is never on air without it (lesson 285).
-  const possLabel = m?.insight_stats?.rows?.find((r) => r.key === "possession")?.label ?? "Possession";
+  // Said as just "Possession" (Kian, Oct 28, overriding lesson 285's on-screen band): what it is (time on
+  // the ball) and its measured error (give or take 10 points) are in docs/eval/possession-time.json.
+  const possLabel = "Possession";
   if (poss) out.push({ key: "possession", label: possLabel, ...poss, unit: "%" });
   let st: MatchData["stats"][number] | null = null;
   for (const s of m?.stats ?? []) if (s.t <= t + 1e-6) st = s;

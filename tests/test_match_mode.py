@@ -1404,8 +1404,8 @@ def test_the_stats_graphics_show_only_rows_the_bundle_measured_surely(browser, s
     page, errors = open_viewer(browser, site + "?bundle=match/")
     rows = page.evaluate(f"window.ninetyScorebug.rowsAt({json.dumps(match)}, 400, {json.dumps(score)})")
     assert [(r["key"], r["home"], r["away"]) for r in rows] == want
-    # Possession is on air with the bundle's label, which carries its measured error (lesson 285).
-    assert all(r["label"] == "possession" for r in rows if r["key"] == "possession")
+    # Possession is said as just "Possession" (Kian, Oct 28); its error is documented, not on screen.
+    assert all(r["label"] == "Possession" for r in rows if r["key"] == "possession")
     assert not errors
     page.context.close()
 
@@ -1480,15 +1480,17 @@ def test_footage_at_a_baked_speed_maps_video_time_to_match_time(browser, site): 
     ctx.close()
 
 
-def test_possession_is_on_air_with_its_measured_error(browser, site):  # noqa: F811
+def test_possession_is_said_as_possession(browser, site):  # noqa: F811
+    # Kian, Oct 28: the row is just "Possession"; its definition and measured error (time on the ball,
+    # give or take 10 points) are documented in docs/eval/possession-time.json, not on screen.
     from ninety.intel import ball_share
 
     match = stats_match(possession_sure=True)
-    label = f"Possession (time on the ball, \u00b1{ball_share.ERROR_POINTS} pts)"
-    match["insight_stats"]["rows"][0]["label"] = label
+    bundle_label = f"Possession (time on the ball, \u00b1{ball_share.ERROR_POINTS} pts)"
+    match["insight_stats"]["rows"][0]["label"] = bundle_label
     page, errors = open_viewer(browser, site + "?bundle=match/")
     rows = page.evaluate(f"window.ninetyScorebug.rowsAt({json.dumps(match)}, 400, null)")
-    assert [r["label"] for r in rows if r["key"] == "possession"] == [label]
+    assert [r["label"] for r in rows if r["key"] == "possession"] == ["Possession"]
     assert not errors
     page.context.close()
 

@@ -2943,6 +2943,13 @@ interface TeamStatsFacts {
 const shownStats = new Map<string, [number, number]>();
 /** A row's label with its unit, unless the unit says nothing new: a count of what the label names
  * ("Corners", not "Corners (corners)") or one of the plain counting units. */
+/** A stats row's label on screen. Possession is said as just "Possession" (Kian, Oct 28): what it is
+ * (time on the ball) and its measured error (give or take 10 points) are documented in
+ * docs/eval/possession-time.json and docs/EVALUATION.md, not crowded into the row. */
+function shown(r: { key: string; label: string; unit: string | null }): string {
+  return r.key === "possession" ? "Possession" : withUnit(r.label, r.unit);
+}
+
 function withUnit(label: string, unit: string | null): string {
   if (!unit || /^(opponents|passes|players|times|turnovers|regains|overloads|moments)$/.test(unit)) return label;
   const stem = (w: string) => w.toLowerCase().replace(/s$/, "");
@@ -2987,7 +2994,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const v = [...r.series].reverse().find((x) => x.minute_to <= minute);
     if (!v || v.home === null || v.away === null || v.home === undefined || v.away === undefined) continue;
     if (r.key === "distance_km" && groups.some(([, rows]) => rows.some(([l]) => l === "Distance (km)"))) continue;
-    const label = withUnit(r.label, r.unit);
+    const label = shown(r);
     if (!v.confident) unsure.add(label);
     groups.find(([g]) => g === r.group)?.[1].push([label, round1(v.home), round1(v.away)]);
   }
@@ -3049,7 +3056,7 @@ function renderStats(st: MatchData["stats"][number]) {
     const byGroup: [string, Row[]][] = ["Attack", "Passing", "Pressing", "Shape", "Physical"].map((g) => [g, []]);
     for (const r of half.rows) {
       if (r.home === null || r.away === null) continue;
-      const label = withUnit(r.label, r.unit);
+      const label = shown(r);
       if (!r.confident) unsure.add(label);
       byGroup.find(([g]) => g === r.group)?.[1].push([label, round1(r.home), round1(r.away)]);
     }
