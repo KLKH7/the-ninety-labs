@@ -2105,13 +2105,15 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   if (a.t_from !== null && a.t_to !== null) rows.push(["Over", a.t_from === a.t_to ? `${clock(a.t_from)} of the match` : `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
 
   for (const [k, v] of rows) {
+    if (!v) continue; // an empty value would leave its label to float beside the next row's
     const dt = document.createElement("dt");
     dt.textContent = k;
     const dd = document.createElement("dd");
     dd.textContent = v;
     panel.append(dt, dd);
   }
-  if (!a.evidence.length) return [panel]; // nothing to cite: no empty "Facts cited" heading
+  const shown = panel.children.length ? [panel] : []; // no rows: no empty box
+  if (!a.evidence.length) return shown; // nothing to cite: no empty "Facts cited" heading
   const technical = document.createElement("details");
   technical.className = "technical";
   const summary = document.createElement("summary");
@@ -2120,7 +2122,7 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   ids.className = "ids";
   ids.textContent = a.evidence.join(", ");
   technical.append(summary, ids);
-  return [panel, technical];
+  return [...shown, technical];
 }
 
 $("ask-form").addEventListener("submit", (e) => {
@@ -2335,7 +2337,10 @@ async function openHow(h: How) {
   const steps: HTMLElement[] = [];
   const list = document.createElement("ol");
   list.className = "stepper";
-  if (bundle) {
+  // An Ask answer covers a stretch or a measure, not one frame: the detector's boxes on whatever frame
+  // its time falls on are not evidence for it (Kian, Oct 28: "completely irrelevant"). A moment (a
+  // card, a goal, a VAR check) is one frame, and its frame is shown.
+  if (bundle && !h.answer) {
     const canvas = document.createElement("canvas");
     canvas.className = "seen";
     canvas.setAttribute("role", "img");
