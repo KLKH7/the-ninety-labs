@@ -11,6 +11,19 @@ personalized for every viewer, including live audio description for blind and lo
 
 All clubs, players and matches are synthetic. No real match data or footage is used.
 
+**[Open the live demo](https://ca-api-icrxiozwmmxmg.blackmoss-2f143091.northcentralus.azurecontainerapps.io/)**
+· [phone companion](https://ca-api-icrxiozwmmxmg.blackmoss-2f143091.northcentralus.azurecontainerapps.io/phone/)
+· [demo video](https://youtu.be/QPqH59TcP6I)
+
+| | |
+|---|---|
+| ![A goal, drawn on the synthetic broadcast](docs/images/readme/goal.jpg) | ![An insight drawn on the footage](docs/images/readme/insight.jpg) |
+| ![Half-time stats](docs/images/readme/half-time.jpg) | ![Full-time stats](docs/images/readme/full-time.jpg) |
+
+| Phone: live match | Phone: Ask | Phone: how we know |
+|---|---|---|
+| ![Phone companion, live match](docs/images/readme/phone-live.jpg) | ![Phone companion, Ask](docs/images/readme/phone-ask.jpg) | ![Phone companion, how we know](docs/images/readme/phone-how-we-know.jpg) |
+
 That is the design. What runs and is measured today, and what is still being built, is in
 [Status](#status).
 
@@ -186,7 +199,7 @@ carries neither), and the phone companion (radar, player cards, Ask; read-aloud 
   off until the shot-flight measurement runs.
 - Team sides good enough to air most team claims (a spatial side model is built, #283, but its sides are right for about 0.75 of tracks on validation and its confidence does not separate right from wrong, so the 0.96 gate still holds back most team-named claims).
 - The demo match rendered, with its render checks and its detected events.
-- Player tags on the video, player cam, recaps, a voice per language, the 2-minute video.
+- Player tags on the video, player cam, recaps, a voice per language.
 - The ball when mostly hidden (recall 0.425, above); validation seed 2044, whose broadcast camera
   fit is about 14 m wrong in every frame ([gate-b3.md](docs/eval/gate-b3.md)).
 - Known engine gaps at the freeze: too much sideways passing, long shots taken with no defender
