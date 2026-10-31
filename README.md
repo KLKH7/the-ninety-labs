@@ -27,6 +27,41 @@ All clubs, players and matches are synthetic. No real match data or footage is u
 That is the design. What runs and is measured today, and what is still being built, is in
 [Status](#status).
 
+## The model we trained
+
+An off-the-shelf detector cannot see our ball. So we trained our own: RF-DETR Small (Apache-2.0),
+fine-tuned only on footage our own engine rendered. The engine that draws each frame also writes
+its answer key, so every label is exact and free, and no frame was labelled by hand or came from a
+real match. When the detector is weak somewhere, we render more of that situation and train again.
+
+![Early render and the final demo render](docs/images/readme/renders-early-vs-final.jpg)
+
+On a frozen test set the detector never trained on (1,249 ball labels, 11,759 player labels),
+against the same model straight off the shelf
+([vision-report-coco-mesh.md](docs/eval/vision-report-coco-mesh.md)):
+
+| Precision / recall | Off the shelf (COCO) | Fine-tuned on our renders |
+|---|---|---|
+| Ball | 0.879 / **0.175** | 0.991 / **0.931** |
+| Ball, partly hidden | 0.000 / 0.000 | 0.962 / 0.817 |
+| Ball, mostly hidden | 0.000 / 0.000 | 0.940 / 0.573 |
+| Players | 0.986 / 0.940 | 0.998 / 0.995 |
+| False detections | 187 | 35 |
+
+![Players found 99.7%, ball found 88%, on clips it never trained on](docs/images/readme/detector-held-out.jpg)
+
+The detector in the demo (*ours-freeze*) was then trained on 245 clips (12,250 images) rendered in
+the demo's look, for 8 epochs (30 minutes) on one rented RTX 4090. Each run is pre-registered
+and its checkpoint is checked by hash. On 30 held-out clips (7,500 frames) it finds 99.7% of players
+and 88.4% of balls (95% 0.877 to 0.891). A second detector, trained for the two fixed tactical
+cameras, finds 99.8% of players and 69.2% of balls
+([finetune-v2freeze](docs/eval/finetune-v2freeze/PLAN.md),
+[finetune-tactical](docs/eval/finetune-tactical/RESULTS.md)).
+
+We report what did not work too. Our first round of targeted data did no better than the same
+number of untargeted clips ([round1/RESULT.md](docs/eval/round1/RESULT.md)), and a mostly hidden
+ball is still the detector's weakness (recall 0.425 on the demo's test set).
+
 ## Why
 
 Football event data is still typed by hand. Opta assigns three analysts per match, StatsBomb two
