@@ -1,0 +1,244 @@
+{
+ "rule": "docs/eval/ball-audit-plan.md",
+ "dead_mps": 0.1,
+ "line_m": 2.0,
+ "clips": 87,
+ "balls": 23254,
+ "groups": {
+  "dead at a line": {
+   "n": 5501,
+   "found": 1854,
+   "recall": 0.337,
+   "ci95": [
+    0.32,
+    0.35
+   ]
+  },
+  "dead away from lines": {
+   "n": 2993,
+   "found": 1293,
+   "recall": 0.432,
+   "ci95": [
+    0.41,
+    0.45
+   ]
+  },
+  "moving at a line": {
+   "n": 4470,
+   "found": 3411,
+   "recall": 0.763,
+   "ci95": [
+    0.75,
+    0.78
+   ]
+  },
+  "moving away from lines": {
+   "n": 10290,
+   "found": 8385,
+   "recall": 0.815,
+   "ci95": [
+    0.81,
+    0.82
+   ]
+  }
+ },
+ "dead_at_a_line_by_place": {
+  "goal line": {
+   "n": 910,
+   "found": 599,
+   "recall": 0.658
+  },
+  "halfway and centre circle": {
+   "n": 28,
+   "found": 28,
+   "recall": 1.0
+  },
+  "penalty and goal areas": {
+   "n": 4520,
+   "found": 1218,
+   "recall": 0.269
+  },
+  "touchline": {
+   "n": 43,
+   "found": 9,
+   "recall": 0.209
+  }
+ },
+ "dead_at_a_line_by_size": {
+  "10-20 px": {
+   "n": 4224,
+   "found": 1291,
+   "recall": 0.306
+  },
+  "under 10 px": {
+   "n": 1277,
+   "found": 563,
+   "recall": 0.441
+  }
+ },
+ "moving_away_by_size": {
+  "10-20 px": {
+   "n": 2424,
+   "found": 2105,
+   "recall": 0.868
+  },
+  "20 px or more": {
+   "n": 1,
+   "found": 1,
+   "recall": 1.0
+  },
+  "under 10 px": {
+   "n": 7865,
+   "found": 6279,
+   "recall": 0.798
+  }
+ },
+ "dead_by_height_post_hoc": {
+  "dead at a line, held or up": {
+   "n": 4522,
+   "found": 997,
+   "recall": 0.22
+  },
+  "dead at a line, on the ground": {
+   "n": 979,
+   "found": 857,
+   "recall": 0.875
+  },
+  "dead away from lines, held or up": {
+   "n": 2164,
+   "found": 751,
+   "recall": 0.347
+  },
+  "dead away from lines, on the ground": {
+   "n": 829,
+   "found": 542,
+   "recall": 0.654
+  }
+ },
+ "dead_at_a_line_by_place_and_height_post_hoc": {
+  "goal line, held or up": {
+   "n": 265,
+   "found": 19,
+   "recall": 0.072
+  },
+  "goal line, on the ground": {
+   "n": 645,
+   "found": 580,
+   "recall": 0.899
+  },
+  "halfway and centre circle, on the ground": {
+   "n": 28,
+   "found": 28,
+   "recall": 1.0
+  },
+  "penalty and goal areas, held or up": {
+   "n": 4248,
+   "found": 975,
+   "recall": 0.23
+  },
+  "penalty and goal areas, on the ground": {
+   "n": 272,
+   "found": 243,
+   "recall": 0.893
+  },
+  "touchline, held or up": {
+   "n": 9,
+   "found": 3,
+   "recall": 0.333
+  },
+  "touchline, on the ground": {
+   "n": 34,
+   "found": 6,
+   "recall": 0.176
+  }
+ },
+ "per_clip": {
+  "seed910001-t009044": 248,
+  "seed910001-t010051": 248,
+  "seed910001-t013560": 248,
+  "seed910001-t029456": 248,
+  "seed910001-t031824": 247,
+  "seed910001-t038092": 247,
+  "seed910001-t054715": 248,
+  "seed910001-t076806": 248,
+  "seed910001-t098798": 247,
+  "seed910001-t112344": 247,
+  "seed910001-t118339": 246,
+  "seed910002-t002678": 248,
+  "seed910002-t003656": 436,
+  "seed910002-t006248": 248,
+  "seed910002-t009688": 248,
+  "seed910002-t024491": 420,
+  "seed910002-t025633": 244,
+  "seed910002-t034686": 247,
+  "seed910002-t035661": 245,
+  "seed910002-t041736": 248,
+  "seed910002-t045527": 246,
+  "seed910002-t098428": 248,
+  "seed910003-t012112": 247,
+  "seed910003-t013337": 247,
+  "seed910003-t018159": 248,
+  "seed910003-t024121": 179,
+  "seed910003-t037535": 248,
+  "seed910003-t047434": 161,
+  "seed910003-t055164": 347,
+  "seed910003-t058990": 365,
+  "seed910003-t074333": 248,
+  "seed910004-t001003": 245,
+  "seed910004-t001770": 248,
+  "seed910004-t002930": 248,
+  "seed910004-t016497": 245,
+  "seed910004-t021318": 248,
+  "seed910004-t022620": 247,
+  "seed910004-t023628": 248,
+  "seed910004-t030821": 248,
+  "seed910004-t041696": 344,
+  "seed910004-t087766": 248,
+  "seed910004-t114624": 248,
+  "seed910005-t000426": 248,
+  "seed910005-t000717": 248,
+  "seed910005-t007214": 248,
+  "seed910005-t028554": 248,
+  "seed910005-t042004": 248,
+  "seed910005-t049379": 248,
+  "seed910005-t073508": 248,
+  "seed910005-t077303": 247,
+  "seed910006-t005749": 248,
+  "seed910006-t010840": 248,
+  "seed910006-t011589": 242,
+  "seed910006-t012320": 243,
+  "seed910006-t025620": 444,
+  "seed910006-t028945": 248,
+  "seed910006-t032639": 442,
+  "seed910006-t036959": 247,
+  "seed910006-t038663": 248,
+  "seed910006-t042401": 242,
+  "seed910006-t045474": 248,
+  "seed910007-t005677": 247,
+  "seed910007-t013636": 297,
+  "seed910007-t015741": 245,
+  "seed910007-t022626": 248,
+  "seed910007-t026714": 248,
+  "seed910007-t038856": 248,
+  "seed910007-t039752": 275,
+  "seed910007-t040110": 248,
+  "seed910007-t125222": 491,
+  "seed910008-t003470": 299,
+  "seed910008-t005224": 248,
+  "seed910008-t016737": 248,
+  "seed910008-t017411": 248,
+  "seed910008-t019309": 248,
+  "seed910008-t025082": 245,
+  "seed910008-t029767": 479,
+  "seed910008-t053299": 473,
+  "seed910008-t063508": 248,
+  "seed910008-t112955": 246,
+  "seed108": 247,
+  "seed109": 248,
+  "seed110": 248,
+  "seed113": 248,
+  "seed114": 248,
+  "seed115": 248,
+  "seed116": 248
+ }
+}
